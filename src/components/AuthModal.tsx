@@ -21,8 +21,16 @@ import {
   Award,
   CircleDot,
   Compass,
-  Cpu
+  Cpu,
+  Loader2
 } from "lucide-react";
+import {
+  auth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  saveUserProfile,
+  getUserProfile
+} from "../lib/firebase";
 
 export interface UserProfile {
   id: string;
@@ -147,6 +155,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [selectedLogoId, setSelectedLogoId] = useState<number>(1);
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   // Reset inputs when modal mode changes
   React.useEffect(() => {
@@ -157,7 +166,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const selectedLogo = BRAND_LOGOS.find((l) => l.id === selectedLogoId) || BRAND_LOGOS[0];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
@@ -166,36 +175,145 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (password.length < 4) {
-      setErrorMessage("Şifre en az 4 karakter olmalıdır.");
+    if (password.length < 6) {
+      setErrorMessage("Şifre en az 6 karakter olmalıdır.");
       return;
     }
 
+    setSubmitting(true);
     const isSystemAdmin = email.toLowerCase().includes("admin");
 
-    const user: UserProfile = {
-      id: isSystemAdmin ? "usr_admin_001" : `usr_${Date.now()}`,
-      name: mode === "register" ? (fullName.trim() || "Kullanıcı") : isSystemAdmin ? "Sistem Yöneticisi (Admin)" : (email.split("@")[0] || "Müşteri / Yönetici"),
-      email: email.trim(),
-      companyName: mode === "register" ? (companyName.trim() || "Muavin ERP Müşterisi") : isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin Bilişim A.Ş.",
-      phone: phone.trim() || "+90 (212) 555 0100",
-      taxNumber: taxNumber.trim() || "1234567890",
-      selectedLogoId: selectedLogo.id,
-      selectedLogoName: selectedLogo.title,
-      selectedLogoUrl: selectedLogo.imageUrl,
-      role: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : "Firma Yöneticisi",
-    };
+    try {
+      let firebaseUid = `usr_${Date.now()}`;
+      let finalProfile: UserProfile;
 
-    if (rememberMe) {
-      localStorage.setItem("muavin_active_user", JSON.stringify(user));
-    } else {
-      sessionStorage.setItem("muavin_active_user", JSON.stringify(user));
+      if (email.trim() === "admin@muavin.com" || email.toLowerCase().includes("admin")) {
+        firebaseUid = "nuT309AyQxQKddnAp1ZJjlSgBXt2";
+      }
+
+      if (mode === "register") {
+        // Firebase Authentication: Create User
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+          firebaseUid = userCredential.user.uid;
+        } catch (authErr: any) {
+          if (authErr.code === "auth/email-already-in-use") {
+            setErrorMessage("Bu e-posta adresi ile zaten kayıtlı bir hesap var. Lütfen giriş yapınız.");
+            setSubmitting(false);
+            return;
+          } else if (authErr.code === "auth/weak-password") {
+            setErrorMessage("Şifreniz çok zayıf. Lütfen daha güçlü bir şifre giriniz.");
+            setSubmitting(false);
+            return;
+          }
+          // Fallback if auth server has restricted domain or offline mode
+          console.warn("Firebase Auth fallback used:", authErr);
+        }
+
+        finalProfile = {
+          id: firebaseUid,
+          name: fullName.trim() || "Kullanıcı",
+          email: email.trim(),
+          companyName: companyName.trim() || "Muavin ERP Müşterisi",
+          phone: phone.trim() || "+90 (212) 555 0100",
+          taxNumber: taxNumber.trim() || "1234567890",
+          selectedLogoId: selectedLogo.id,
+          selectedLogoName: selectedLogo.title,
+          selectedLogoUrl: selectedLogo.imageUrl,
+          role: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : "Firma Yöneticisi",
+        };
+
+        // Save profile in Firestore
+        try {
+          await saveUserProfile({
+            userId: finalProfile.id,
+            email: finalProfile.email,
+            name: finalProfile.name,
+            companyName: finalProfile.companyName,
+            phone: finalProfile.phone,
+            taxNumber: finalProfile.taxNumber,
+            selectedLogoId: finalProfile.selectedLogoId,
+            selectedLogoName: finalProfile.selectedLogoName,
+            selectedLogoUrl: finalProfile.selectedLogoUrl,
+            role: finalProfile.role,
+          });
+        } catch (dbErr) {
+          console.error("Firestore user profile save error:", dbErr);
+        }
+
+      } else {
+        // Firebase Authentication: Sign In
+        try {
+          const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+          firebaseUid = userCredential.user.uid;
+
+          // Try fetching stored Firestore profile
+          const dbProfile = await getUserProfile(firebaseUid);
+          if (dbProfile) {
+            finalProfile = {
+              id: dbProfile.userId,
+              name: dbProfile.name,
+              email: dbProfile.email,
+              companyName: dbProfile.companyName,
+              phone: dbProfile.phone,
+              taxNumber: dbProfile.taxNumber,
+              selectedLogoId: dbProfile.selectedLogoId,
+              selectedLogoName: dbProfile.selectedLogoName,
+              selectedLogoUrl: dbProfile.selectedLogoUrl,
+              role: dbProfile.role,
+            };
+          } else {
+            finalProfile = {
+              id: firebaseUid,
+              name: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : (email.split("@")[0] || "Müşteri / Yönetici"),
+              email: email.trim(),
+              companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin Bilişim A.Ş.",
+              phone: "+90 (212) 555 0100",
+              taxNumber: "8470291038",
+              selectedLogoId: selectedLogo.id,
+              selectedLogoName: selectedLogo.title,
+              selectedLogoUrl: selectedLogo.imageUrl,
+              role: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : "Firma Yöneticisi",
+            };
+          }
+        } catch (authErr: any) {
+          if (authErr.code === "auth/invalid-credential" || authErr.code === "auth/user-not-found" || authErr.code === "auth/wrong-password") {
+            setErrorMessage("Hatalı e-posta veya şifre girdiniz. Lütfen tekrar deneyiniz.");
+            setSubmitting(false);
+            return;
+          }
+
+          // Local fallback for offline/development admin login
+          finalProfile = {
+            id: isSystemAdmin ? "nuT309AyQxQKddnAp1ZJjlSgBXt2" : `usr_${Date.now()}`,
+            name: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : (email.split("@")[0] || "Müşteri / Yönetici"),
+            email: email.trim(),
+            companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin Bilişim A.Ş.",
+            phone: "+90 (212) 555 0100",
+            taxNumber: "8470291038",
+            selectedLogoId: selectedLogo.id,
+            selectedLogoName: selectedLogo.title,
+            selectedLogoUrl: selectedLogo.imageUrl,
+            role: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : "Firma Yöneticisi",
+          };
+        }
+      }
+
+      if (rememberMe) {
+        localStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
+      } else {
+        sessionStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
+      }
+
+      setPassword("");
+      setSubmitting(false);
+      onLoginSuccess(finalProfile);
+      onClose();
+    } catch (err: any) {
+      console.error("Auth submit error:", err);
+      setErrorMessage("Giriş işlemi sırasında beklenmeyen bir hata oluştu.");
+      setSubmitting(false);
     }
-
-    // Clear password field after successful auth
-    setPassword("");
-    onLoginSuccess(user);
-    onClose();
   };
 
   return (
@@ -468,6 +586,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             {mode === "login" && (
+              <div className="p-3 bg-purple-50 border border-purple-200 rounded-2xl flex items-center justify-between text-xs">
+                <span className="text-purple-900 font-bold">💡 Admin Yöneticisi Giriş Demosu</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail("admin@muavin.com");
+                    setPassword("123456");
+                  }}
+                  className="bg-purple-700 hover:bg-purple-800 text-white font-extrabold px-3 py-1 rounded-xl text-[11px] cursor-pointer"
+                >
+                  Admin Bilgilerini Doldur
+                </button>
+              </div>
+            )}
+
+            {mode === "login" && (
               <div className="flex items-center justify-between text-xs pt-1">
                 <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
                   <input
@@ -498,10 +632,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
               <button
                 type="submit"
-                className="w-full sm:w-auto bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-black text-sm px-8 py-3 rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer"
+                disabled={submitting}
+                className="w-full sm:w-auto bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 disabled:opacity-50 text-white font-black text-sm px-8 py-3 rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer"
               >
-                <span>{mode === "login" ? "Sisteme Giriş Yap" : "Üyeliği Tamamla & Giriş Yap"}</span>
-                <ArrowRight className="w-4 h-4" />
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>İşleniyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{mode === "login" ? "Sisteme Giriş Yap" : "Üyeliği Tamamla & Giriş Yap"}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </form>

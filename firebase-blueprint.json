@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "users": {
+      "title": "Users",
+      "description": "User profile data",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "companyName": { "type": "string" },
+        "role": { "type": "string" },
+        "selectedLogoId": { "type": "number" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "user_files": {
+      "title": "User Files",
+      "description": "User uploaded files and metadata",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "number" },
+        "fileType": { "type": "string" },
+        "uploadDate": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "fileData": { "type": "string" }
+      }
+    },
+    "user_accounts": {
+      "title": "User Accounts",
+      "description": "User bank/cash account data",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "balance": { "type": "number" },
+        "currency": { "type": "string" }
+      }
+    }
+  }
+}

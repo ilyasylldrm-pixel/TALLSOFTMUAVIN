@@ -13,6 +13,8 @@ import { AiAssistant } from "./components/AiAssistant";
 import { Settings } from "./components/Settings";
 import { CompanyManagement, CompanySubTab } from "./components/CompanyManagement";
 import { HRManagement } from "./components/HRManagement";
+import { FileManager } from "./components/FileManager";
+import { AdminDashboard } from "./components/AdminDashboard";
 import { AuthModal, UserProfile, BRAND_LOGOS } from "./components/AuthModal";
 
 import {
@@ -71,6 +73,13 @@ export default function App() {
   });
   const [authModalOpen, setAuthModalOpen] = useState(() => currentUser === null);
   const [authModalMode, setAuthModalMode] = useState<"login" | "register">("login");
+
+  // Auto switch admin to admin tab on login
+  useEffect(() => {
+    if (currentUser && (currentUser.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" || currentUser.id === "usr_admin_001" || currentUser.role?.includes("Admin"))) {
+      setCurrentTab("admin");
+    }
+  }, [currentUser]);
 
   const handleOpenAuthModal = (mode: "login" | "register") => {
     setAuthModalMode(mode);
@@ -708,6 +717,8 @@ export default function App() {
         return "Firma Depoları";
       case "settings":
         return "Sistem Ayarları";
+      case "admin":
+        return "Admin Yönetici Paneli";
       default:
         return "Ana Sayfa";
     }
@@ -723,6 +734,7 @@ export default function App() {
         onSelectFinanceSubTab={setFinanceSubTab}
         settings={data.settings}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+        currentUser={currentUser}
       />
 
       {/* Main App Content Area */}
@@ -891,6 +903,14 @@ export default function App() {
               onUpdateLegalDeduction={handleUpdateLegalDeduction}
               onDeleteLegalDeduction={handleDeleteLegalDeduction}
             />
+          )}
+
+          {currentTab === "files" && currentUser && (
+            <FileManager currentUser={currentUser} />
+          )}
+
+          {currentTab === "admin" && currentUser && (
+            <AdminDashboard currentUser={currentUser} />
           )}
 
           {currentTab === "reports" && (

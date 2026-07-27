@@ -25,10 +25,13 @@ import {
   MapPin,
   Sliders,
   UserCheck,
+  HardDrive,
+  ShieldAlert,
 } from "lucide-react";
 import { CompanySettings } from "../types";
 import { Logo } from "./Logo";
 import { FinanceSubModule } from "./Accounts";
+import { UserProfile } from "./AuthModal";
 
 export type NavItem =
   | "dashboard"
@@ -43,13 +46,15 @@ export type NavItem =
   | "expenses"
   | "products"
   | "hr"
+  | "files"
   | "reports"
   | "ai"
   | "company"
   | "company_profile"
   | "company_branches"
   | "company_warehouses"
-  | "settings";
+  | "settings"
+  | "admin";
 
 interface SidebarProps {
   currentTab: NavItem;
@@ -58,6 +63,7 @@ interface SidebarProps {
   onSelectFinanceSubTab?: (subTab: FinanceSubModule) => void;
   settings: CompanySettings;
   onOpenQuickAdd: () => void;
+  currentUser?: UserProfile | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -67,12 +73,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectFinanceSubTab,
   settings,
   onOpenQuickAdd,
+  currentUser,
 }) => {
   const [isFinanceExpanded, setIsFinanceExpanded] = useState(true);
   const [isInvoicesExpanded, setIsInvoicesExpanded] = useState(true);
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
 
+  const isAdmin =
+    currentUser?.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" ||
+    currentUser?.id === "usr_admin_001" ||
+    currentUser?.role?.includes("Admin");
+
   const navItems = [
+    ...(isAdmin
+      ? [{ id: "admin", label: "Admin Yönetici Paneli", icon: ShieldAlert, badge: "Admin" }]
+      : []),
     { id: "dashboard", label: "Ana Sayfa", icon: LayoutDashboard },
     { id: "company", label: "Firma Bilgileri", icon: Building2, hasSubItems: true },
     { id: "invoices", label: "Faturalar & Fişler", icon: FileText, hasSubItems: true },
@@ -80,6 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "accounts", label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
     { id: "products", label: "Stok & Hizmetler", icon: PackageIcon },
     { id: "hr", label: "İnsan Kaynakları", icon: UserCheck },
+    { id: "files", label: "Bulut Dosya Deposu", icon: HardDrive },
     { id: "reports", label: "Vergilendirme", icon: BarChart3 },
     { id: "ai", label: "AI Muavin Asistanı", icon: Sparkles, badge: "Canlı" },
     { id: "settings", label: "Sistem Ayarları", icon: Settings },
