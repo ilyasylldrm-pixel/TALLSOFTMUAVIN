@@ -1,0 +1,342 @@
+import React, { useState } from "react";
+import {
+  LayoutDashboard,
+  Users,
+  FileText,
+  FileSpreadsheet,
+  Wallet,
+  BarChart3,
+  Sparkles,
+  Settings,
+  Plus,
+  Building2,
+  ChevronRight,
+  ChevronDown,
+  Banknote,
+  Building,
+  FileCheck2,
+  Stamp,
+  ArrowRightLeft,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Package as PackageIcon,
+  Store,
+  Warehouse as WarehouseIcon,
+  MapPin,
+  Sliders,
+  UserCheck,
+} from "lucide-react";
+import { CompanySettings } from "../types";
+import { Logo } from "./Logo";
+import { FinanceSubModule } from "./Accounts";
+
+export type NavItem =
+  | "dashboard"
+  | "contacts"
+  | "invoices"
+  | "invoices_sales"
+  | "invoices_purchase"
+  | "quotes"
+  | "accounts"
+  | "transactions"
+  | "income_slips"
+  | "expenses"
+  | "products"
+  | "hr"
+  | "reports"
+  | "ai"
+  | "company"
+  | "company_profile"
+  | "company_branches"
+  | "company_warehouses"
+  | "settings";
+
+interface SidebarProps {
+  currentTab: NavItem;
+  onSelectTab: (tab: NavItem) => void;
+  activeFinanceSubTab?: FinanceSubModule;
+  onSelectFinanceSubTab?: (subTab: FinanceSubModule) => void;
+  settings: CompanySettings;
+  onOpenQuickAdd: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  currentTab,
+  onSelectTab,
+  activeFinanceSubTab = "kasa",
+  onSelectFinanceSubTab,
+  settings,
+  onOpenQuickAdd,
+}) => {
+  const [isFinanceExpanded, setIsFinanceExpanded] = useState(true);
+  const [isInvoicesExpanded, setIsInvoicesExpanded] = useState(true);
+  const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
+
+  const navItems = [
+    { id: "dashboard", label: "Ana Sayfa", icon: LayoutDashboard },
+    { id: "company", label: "Firma Bilgileri", icon: Building2, hasSubItems: true },
+    { id: "invoices", label: "Faturalar & Fişler", icon: FileText, hasSubItems: true },
+    { id: "contacts", label: "Cari Hesaplar", icon: Users },
+    { id: "accounts", label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
+    { id: "products", label: "Stok & Hizmetler", icon: PackageIcon },
+    { id: "hr", label: "İnsan Kaynakları", icon: UserCheck },
+    { id: "reports", label: "Vergilendirme", icon: BarChart3 },
+    { id: "ai", label: "AI Muavin Asistanı", icon: Sparkles, badge: "Canlı" },
+    { id: "settings", label: "Sistem Ayarları", icon: Settings },
+  ];
+
+  const companySubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
+    { id: "company_profile", label: "Firma Profili & Adres", icon: Building },
+    { id: "company_branches", label: "Şubeler", icon: Store },
+    { id: "company_warehouses", label: "Depolar", icon: WarehouseIcon },
+  ];
+
+  const invoiceSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
+    { id: "invoices_sales", label: "Gelir Faturası", icon: FileText },
+    { id: "invoices_purchase", label: "Gider Faturası", icon: FileText },
+    { id: "quotes", label: "Teklifler & Proforma", icon: FileSpreadsheet },
+    { id: "income_slips", label: "Gelir Fişi", icon: ArrowDownLeft },
+    { id: "expenses", label: "Gider Fişi", icon: ArrowUpRight },
+  ];
+
+  const financeSubModules: { id: FinanceSubModule; label: string; icon: React.ElementType }[] = [
+    { id: "kasa", label: "Kasa (Nakit)", icon: Banknote },
+    { id: "banka", label: "Banka Hesapları", icon: Building },
+    { id: "cek", label: "Çek Yönetimi", icon: FileCheck2 },
+    { id: "senet", label: "Senet Yönetimi", icon: Stamp },
+    { id: "virman", label: "Hesaplar Arası Virman", icon: ArrowRightLeft },
+  ];
+
+  return (
+    <aside className="w-64 bg-white text-slate-800 flex flex-col shrink-0 h-screen sticky top-0 border-r border-slate-200 shadow-sm z-20">
+      {/* Brand Header */}
+      <div className="p-4 border-b border-slate-200 flex flex-col justify-center">
+        <div className="flex items-center justify-between">
+          <Logo size="md" />
+        </div>
+        <p className="text-xs text-slate-500 font-medium truncate mt-1">
+          {settings.companyName}
+        </p>
+      </div>
+
+      {/* Quick Add Button */}
+      <div className="p-4">
+        <button
+          onClick={onOpenQuickAdd}
+          className="w-full bg-[#8252F6] hover:bg-[#703EE5] active:scale-[0.98] text-white font-medium text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+        >
+          <Plus className="w-4 h-4 text-[#EF7D2C]" />
+          <span>Hızlı İşlem Ekle</span>
+        </button>
+      </div>
+
+      {/* Navigation Links */}
+      <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto custom-scrollbar">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isInvoiceItem = item.id === "invoices";
+          const isFinanceItem = item.id === "accounts";
+          const isCompanyItem = item.id === "company";
+
+          const isActive = isInvoiceItem
+            ? [
+                "invoices",
+                "invoices_sales",
+                "invoices_purchase",
+                "quotes",
+                "transactions",
+                "income_slips",
+                "expenses",
+              ].includes(currentTab)
+            : isFinanceItem
+            ? currentTab === "accounts"
+            : isCompanyItem
+            ? ["company", "company_profile", "company_branches", "company_warehouses"].includes(currentTab)
+            : currentTab === item.id;
+
+          return (
+            <div key={item.id} className="space-y-1">
+              <button
+                onClick={() => {
+                  if (isInvoiceItem) {
+                    setIsInvoicesExpanded((prev) => !prev);
+                    if (
+                      ![
+                        "invoices",
+                        "invoices_sales",
+                        "invoices_purchase",
+                        "quotes",
+                        "transactions",
+                        "income_slips",
+                        "expenses",
+                      ].includes(currentTab)
+                    ) {
+                      onSelectTab("invoices_sales");
+                    }
+                  } else if (isFinanceItem) {
+                    setIsFinanceExpanded((prev) => !prev);
+                    if (currentTab !== "accounts") {
+                      onSelectTab("accounts");
+                    }
+                  } else if (isCompanyItem) {
+                    setIsCompanyExpanded((prev) => !prev);
+                    if (!["company", "company_profile", "company_branches", "company_warehouses"].includes(currentTab)) {
+                      onSelectTab("company_profile");
+                    }
+                  } else {
+                    onSelectTab(item.id as NavItem);
+                  }
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-[#F3EFFF] text-[#8252F6] border border-[#E4D7FF] shadow-2xs font-semibold"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon
+                    className={`w-4 h-4 ${
+                      isActive ? "text-[#8252F6]" : "text-slate-500"
+                    }`}
+                  />
+                  <span>{item.label}</span>
+                </div>
+                {item.badge ? (
+                  <span className="text-[10px] font-medium bg-[#fff6ef] text-[#EF7D2C] px-1.5 py-0.5 rounded-full border border-[#fcdac2] animate-pulse">
+                    {item.badge}
+                  </span>
+                ) : isInvoiceItem ? (
+                  isInvoicesExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )
+                ) : isFinanceItem ? (
+                  isFinanceExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )
+                ) : isCompanyItem ? (
+                  isCompanyExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )
+                ) : (
+                  isActive && <ChevronRight className="w-3.5 h-3.5 text-[#EF7D2C]" />
+                )}
+              </button>
+
+              {/* Sub-modules for Faturalar */}
+              {isInvoiceItem && isInvoicesExpanded && (
+                <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
+                  {invoiceSubModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubActive = currentTab === sub.id;
+
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => onSelectTab(sub.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          isSubActive
+                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        <SubIcon
+                          className={`w-3.5 h-3.5 ${
+                            isSubActive ? "text-white" : "text-slate-400"
+                          }`}
+                        />
+                        <span>{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Sub-modules for Finans Yönetimi */}
+              {isFinanceItem && isFinanceExpanded && (
+                <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
+                  {financeSubModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubActive = isActive && activeFinanceSubTab === sub.id;
+
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => {
+                          onSelectTab("accounts");
+                          if (onSelectFinanceSubTab) {
+                            onSelectFinanceSubTab(sub.id);
+                          }
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          isSubActive
+                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        <SubIcon
+                          className={`w-3.5 h-3.5 ${
+                            isSubActive ? "text-white" : "text-slate-400"
+                          }`}
+                        />
+                        <span>{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Sub-modules for Firma Bilgileri */}
+              {isCompanyItem && isCompanyExpanded && (
+                <div className="pl-6 space-y-1 my-1 border-l-2 border-purple-100 ml-5">
+                  {companySubModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubActive = currentTab === sub.id;
+
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => onSelectTab(sub.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          isSubActive
+                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        <SubIcon
+                          className={`w-3.5 h-3.5 ${
+                            isSubActive ? "text-white" : "text-slate-400"
+                          }`}
+                        />
+                        <span>{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* Company Info Footer */}
+      <div className="p-4 border-t border-slate-200 bg-slate-50 text-xs text-slate-600">
+        <div className="flex items-center gap-2.5 mb-1.5">
+          <Building2 className="w-4 h-4 text-[#8252F6] shrink-0" />
+          <span className="font-medium text-slate-800 truncate">
+            {settings.companyName}
+          </span>
+        </div>
+        <div className="text-[11px] text-slate-500 flex justify-between">
+          <span>VKN: {settings.taxNumber}</span>
+          <span className="text-emerald-600 font-medium">Bakiye Aktif</span>
+        </div>
+      </div>
+    </aside>
+  );
+};

@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .bg-brand-purple {
+    background-color: #8252f6;
+  }
+  .bg-brand-purple-dark {
+    background-color: #703ee5;
+  }
+  .bg-brand-purple-light {
+    background-color: #f3efff;
+  }
+  .text-brand-purple {
+    color: #8252f6;
+  }
+  .border-brand-purple {
+    border-color: #8252f6;
+  }
+  .border-brand-purple-light {
+    border-color: #e4d7ff;
+  }
+
+  .bg-brand-orange {
+    background-color: #ef7d2c;
+  }
+  .bg-brand-orange-dark {
+    background-color: #d96a1c;
+  }
+  .bg-brand-orange-light {
+    background-color: #fff6ef;
+  }
+  .text-brand-orange {
+    color: #ef7d2c;
+  }
+  .border-brand-orange {
+    border-color: #ef7d2c;
+  }
+  .border-brand-orange-light {
+    border-color: #fcdac2;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: #f8fafc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+/* Typography refinement: normalize heavy font weights for an elegant editorial look */
+.font-black,
+.font-extrabold,
+.font-bold {
+  font-weight: 600;
+}
+
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  #printable-ledger {
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+  }
+}
+
+
