@@ -1,0 +1,2 @@
+watchedFiles: web.config;*.cjs;dist\*.cjs
+loggingEnabled: true
