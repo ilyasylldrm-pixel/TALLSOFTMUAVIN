@@ -40,6 +40,7 @@ interface ProductsProps {
   invoices?: Invoice[];
   contacts?: Contact[];
   warehouses?: Warehouse[];
+  globalSearchTerm?: string;
   onAddProduct: (product: Product) => void;
   onUpdateProduct?: (product: Product) => void;
   onDeleteProduct: (id: string) => void;
@@ -253,6 +254,7 @@ export const Products: React.FC<ProductsProps> = ({
   invoices = [],
   contacts = [],
   warehouses = [],
+  globalSearchTerm = "",
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
@@ -462,13 +464,15 @@ export const Products: React.FC<ProductsProps> = ({
   };
 
   // Filter products by search and selected warehouse
+  const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
   const filteredProducts = products.filter((p) => {
     const matchesSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.code.toLowerCase().includes(search.toLowerCase()) ||
-      (p.barcode && p.barcode.includes(search)) ||
-      (p.imeiOrSerialNo && p.imeiOrSerialNo.toLowerCase().includes(search.toLowerCase())) ||
-      (p.stockType && p.stockType.toLowerCase().includes(search.toLowerCase()));
+      !activeSearchQuery ||
+      p.name.toLowerCase().includes(activeSearchQuery) ||
+      p.code.toLowerCase().includes(activeSearchQuery) ||
+      (p.barcode && p.barcode.toLowerCase().includes(activeSearchQuery)) ||
+      (p.imeiOrSerialNo && p.imeiOrSerialNo.toLowerCase().includes(activeSearchQuery)) ||
+      (p.stockType && p.stockType.toLowerCase().includes(activeSearchQuery));
 
     if (!matchesSearch) return false;
 

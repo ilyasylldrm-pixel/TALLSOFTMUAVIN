@@ -5,6 +5,8 @@ import { Dashboard } from "./components/Dashboard";
 import { Contacts } from "./components/Contacts";
 import { Invoices } from "./components/Invoices";
 import { Quotes } from "./components/Quotes";
+import { Orders } from "./components/Orders";
+import { Waybills } from "./components/Waybills";
 import { Accounts } from "./components/Accounts";
 import { Transactions } from "./components/Transactions";
 import { Products } from "./components/Products";
@@ -32,6 +34,8 @@ import {
   Transaction,
   Product,
   Quote,
+  Order,
+  Waybill,
   CompanySettings,
   Cheque,
   ChequeStatus,
@@ -103,12 +107,212 @@ export default function App() {
     saveStoredData("TRANSACTIONS", data.transactions);
     saveStoredData("PRODUCTS", data.products);
     saveStoredData("QUOTES", data.quotes);
+    if (data.orders) saveStoredData("ORDERS", data.orders);
+    if (data.waybills) saveStoredData("WAYBILLS", data.waybills);
     saveStoredData("CHEQUES", data.cheques);
     saveStoredData("PROMISSORY_NOTES", data.promissoryNotes);
     saveStoredData("BRANCHES", data.branches);
     saveStoredData("WAREHOUSES", data.warehouses);
     if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions);
   }, [data]);
+
+  // Handlers for Waybills (İrsaliyeler)
+  const handleAddWaybill = (newWaybill: Waybill) => {
+    setData((prev) => ({
+      ...prev,
+      waybills: [newWaybill, ...(prev.waybills || [])],
+    }));
+  };
+
+  const handleUpdateWaybill = (updatedWaybill: Waybill) => {
+    setData((prev) => ({
+      ...prev,
+      waybills: (prev.waybills || []).map((w) => (w.id === updatedWaybill.id ? updatedWaybill : w)),
+    }));
+  };
+
+  const handleDeleteWaybill = (waybillId: string) => {
+    setData((prev) => ({
+      ...prev,
+      waybills: (prev.waybills || []).filter((w) => w.id !== waybillId),
+    }));
+  };
+
+  const handleConvertWaybillToInvoice = (waybill: Waybill) => {
+    const prefix = waybill.type === "dispatch" ? "FAT-SEVK-" : "FAT-AL-";
+    const nextSeq = String((data.invoices || []).length + 1).padStart(6, "0");
+
+    const newInvoice: Invoice = {
+      id: "inv_" + Date.now(),
+      invoiceNumber: `${prefix}${nextSeq}`,
+      type: waybill.type === "dispatch" ? "sales" : "purchase",
+      contactId: waybill.contactId,
+      contactName: waybill.contactName,
+      issueDate: new Date().toISOString().split("T")[0],
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      items: waybill.items.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        productCode: item.productCode,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        vatRate: item.vatRate,
+        discountRate: item.discountRate || 0,
+        totalWithoutVat: item.totalWithoutVat,
+        vatAmount: item.vatAmount,
+        totalWithVat: item.totalWithVat,
+      })),
+      subtotal: waybill.subtotal,
+      totalVat: waybill.totalVat,
+      grandTotal: waybill.grandTotal,
+      currency: waybill.currency || "₺",
+      paymentStatus: "unpaid",
+      paidAmount: 0,
+      remainingAmount: waybill.grandTotal,
+      status: "sent",
+      notes: `İrsaliye No: ${waybill.waybillNumber} faturalandırıldı. (Plaka: ${waybill.vehiclePlate || "-"}, Sürücü: ${waybill.driverName || "-"})`,
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+
+    const updatedWaybill: Waybill = {
+      ...waybill,
+      status: "invoiced",
+      invoicedInvoiceId: newInvoice.id,
+      invoicedInvoiceNumber: newInvoice.invoiceNumber,
+    };
+
+    setData((prev) => {
+      const updatedWaybills = (prev.waybills || []).map((w) => (w.id === waybill.id ? updatedWaybill : w));
+      const updatedInvoices = [newInvoice, ...prev.invoices];
+
+      const updatedProducts = prev.products.map((p) => {
+        const item = waybill.items.find((i) => i.productId === p.id);
+        if (!item) return p;
+        const qty = item.quantity;
+        const newStock = waybill.type === "dispatch" ? p.stockQuantity - qty : p.stockQuantity + qty;
+        return { ...p, stockQuantity: newStock < 0 ? 0 : newStock };
+      });
+
+      const updatedContacts = prev.contacts.map((c) => {
+        if (c.id !== waybill.contactId) return c;
+        const currentBal = c.balance || 0;
+        const change = waybill.type === "dispatch" ? waybill.grandTotal : -waybill.grandTotal;
+        const newBal = currentBal + change;
+        return {
+          ...c,
+          balance: newBal,
+          balanceType: newBal > 0 ? ("receivable" as const) : newBal < 0 ? ("payable" as const) : ("balanced" as const),
+        };
+      });
+
+      return {
+        ...prev,
+        invoices: updatedInvoices,
+        waybills: updatedWaybills,
+        products: updatedProducts,
+        contacts: updatedContacts,
+      };
+    });
+
+    setCurrentTab("invoices");
+  };
+
+  // Handlers for Orders
+  const handleAddOrder = (newOrder: Order) => {
+    setData((prev) => ({
+      ...prev,
+      orders: [newOrder, ...(prev.orders || [])],
+    }));
+  };
+
+  const handleUpdateOrder = (updatedOrder: Order) => {
+    setData((prev) => ({
+      ...prev,
+      orders: (prev.orders || []).map((o) => (o.id === updatedOrder.id ? updatedOrder : o)),
+    }));
+  };
+
+  const handleDeleteOrder = (orderId: string) => {
+    setData((prev) => ({
+      ...prev,
+      orders: (prev.orders || []).filter((o) => o.id !== orderId),
+    }));
+  };
+
+  const handleConvertOrderToInvoice = (order: Order) => {
+    // 1. Create a new Invoice from Order
+    const newInvoice: Invoice = {
+      id: "inv_" + Date.now(),
+      invoiceNumber:
+        order.type === "sales"
+          ? "FAT-SAT-" + Date.now().toString().slice(-6)
+          : "FAT-AL-" + Date.now().toString().slice(-6),
+      type: order.type === "sales" ? "sales" : "purchase",
+      contactId: order.contactId,
+      contactName: order.contactName,
+      issueDate: new Date().toISOString().split("T")[0],
+      dueDate: order.deliveryDate || new Date().toISOString().split("T")[0],
+      items: order.items.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        productCode: item.productCode,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        vatRate: item.vatRate,
+        discountRate: item.discountRate || 0,
+        totalWithoutVat: item.totalWithoutVat,
+        vatAmount: item.vatAmount,
+        totalWithVat: item.totalWithVat,
+      })),
+      subtotal: order.subtotal,
+      totalVat: order.totalVat,
+      grandTotal: order.grandTotal,
+      currency: order.currency || "₺",
+      paymentStatus: "unpaid",
+      remainingAmount: order.grandTotal,
+      notes: `Sipariş No: ${order.orderNumber} faturaya dönüştürüldü. ${order.notes || ""}`,
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+
+    // 2. Update Order status to 'converted'
+    const updatedOrder: Order = {
+      ...order,
+      status: "converted",
+    };
+
+    // 3. Update products stock and contacts balance
+    setData((prev) => {
+      const updatedInvoices = [newInvoice, ...prev.invoices];
+      const updatedOrders = (prev.orders || []).map((o) => (o.id === order.id ? updatedOrder : o));
+
+      const updatedProducts = prev.products.map((p) => {
+        const item = order.items.find((i) => i.productId === p.id);
+        if (!item) return p;
+        const qty = item.quantity;
+        const newStock = order.type === "sales" ? p.stockQuantity - qty : p.stockQuantity + qty;
+        return { ...p, stockQuantity: newStock < 0 ? 0 : newStock };
+      });
+
+      const updatedContacts = prev.contacts.map((c) => {
+        if (c.id !== order.contactId) return c;
+        const currentBal = c.balance || 0;
+        const change = order.type === "sales" ? order.grandTotal : -order.grandTotal;
+        return { ...c, balance: currentBal + change };
+      });
+
+      return {
+        ...prev,
+        invoices: updatedInvoices,
+        orders: updatedOrders,
+        products: updatedProducts,
+        contacts: updatedContacts,
+      };
+    });
+  };
 
   // Handlers for Branches
   const handleAddBranch = (branch: Branch) => {
@@ -692,6 +896,8 @@ export default function App() {
         return "Gider Faturası";
       case "quotes":
         return "Teklifler & Proforma";
+      case "waybills":
+        return "İrsaliye Yönetimi & İrsaliye Oluştur";
       case "accounts":
         return "Finans Yönetimi";
       case "transactions":
@@ -761,6 +967,7 @@ export default function App() {
               accounts={data.accounts}
               transactions={data.transactions}
               settings={data.settings}
+              globalSearchTerm={searchTerm}
               onSelectTab={setCurrentTab}
               onOpenQuickAdd={() => setIsQuickAddOpen(true)}
               onOpenAiModal={() => setCurrentTab("ai")}
@@ -776,6 +983,7 @@ export default function App() {
               cheques={data.cheques}
               promissoryNotes={data.promissoryNotes}
               companySettings={data.settings}
+              globalSearchTerm={searchTerm}
               onAddContact={handleAddContact}
               onUpdateContact={handleUpdateContact}
               onDeleteContact={handleDeleteContact}
@@ -800,6 +1008,7 @@ export default function App() {
               products={data.products}
               accounts={data.accounts}
               companySettings={data.settings}
+              globalSearchTerm={searchTerm}
               forcedType={
                 currentTab === "invoices_sales"
                   ? "sales"
@@ -821,6 +1030,7 @@ export default function App() {
               contacts={data.contacts}
               products={data.products}
               companySettings={data.companySettings}
+              globalSearchTerm={searchTerm}
               onAddQuote={handleAddQuote}
               onConvertQuoteToInvoice={handleConvertQuoteToInvoice}
               onDeleteQuote={handleDeleteQuote}
@@ -835,6 +1045,7 @@ export default function App() {
               cheques={data.cheques || []}
               promissoryNotes={data.promissoryNotes || []}
               activeFinanceSubTab={financeSubTab}
+              globalSearchTerm={searchTerm}
               onSelectFinanceSubTab={setFinanceSubTab}
               onAddAccount={(acc) =>
                 setData((p) => ({ ...p, accounts: [...p.accounts, acc] }))
@@ -859,6 +1070,7 @@ export default function App() {
               transactions={data.transactions}
               accounts={data.accounts}
               contacts={data.contacts}
+              globalSearchTerm={searchTerm}
               forcedType={
                 currentTab === "income_slips"
                   ? "income"
@@ -871,15 +1083,46 @@ export default function App() {
             />
           )}
 
-          {currentTab === "products" && (
+          {(currentTab === "products" || currentTab === "products_list") && (
             <Products
               products={data.products}
               invoices={data.invoices}
               contacts={data.contacts}
               warehouses={data.warehouses || []}
+              globalSearchTerm={searchTerm}
               onAddProduct={handleAddProduct}
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
+            />
+          )}
+
+          {currentTab === "orders" && (
+            <Orders
+              orders={data.orders || []}
+              contacts={data.contacts}
+              products={data.products}
+              warehouses={data.warehouses || []}
+              companySettings={data.settings}
+              globalSearchTerm={searchTerm}
+              onAddOrder={handleAddOrder}
+              onUpdateOrder={handleUpdateOrder}
+              onConvertOrderToInvoice={handleConvertOrderToInvoice}
+              onDeleteOrder={handleDeleteOrder}
+            />
+          )}
+
+          {currentTab === "waybills" && (
+            <Waybills
+              waybills={data.waybills || []}
+              contacts={data.contacts}
+              products={data.products}
+              warehouses={data.warehouses || []}
+              companySettings={data.settings}
+              globalSearchTerm={searchTerm}
+              onAddWaybill={handleAddWaybill}
+              onUpdateWaybill={handleUpdateWaybill}
+              onConvertWaybillToInvoice={handleConvertWaybillToInvoice}
+              onDeleteWaybill={handleDeleteWaybill}
             />
           )}
 

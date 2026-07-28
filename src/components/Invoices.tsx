@@ -37,6 +37,7 @@ interface InvoicesProps {
   accounts: Account[];
   companySettings: CompanySettings;
   forcedType?: "sales" | "purchase";
+  globalSearchTerm?: string;
   onAddInvoice: (invoice: Invoice) => void;
   onUpdateInvoice: (invoice: Invoice) => void;
   onDeleteInvoice: (id: string) => void;
@@ -55,6 +56,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   accounts,
   companySettings,
   forcedType,
+  globalSearchTerm = "",
   onAddInvoice,
   onUpdateInvoice,
   onDeleteInvoice,
@@ -221,10 +223,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
   };
 
   // Filter logic
+  const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
   const filteredInvoices = invoices.filter((inv) => {
     const matchesSearch =
-      inv.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      inv.contactName.toLowerCase().includes(search.toLowerCase());
+      !activeSearchQuery ||
+      inv.invoiceNumber.toLowerCase().includes(activeSearchQuery) ||
+      inv.contactName.toLowerCase().includes(activeSearchQuery) ||
+      (inv.notes && inv.notes.toLowerCase().includes(activeSearchQuery)) ||
+      inv.items.some((item) => item.description.toLowerCase().includes(activeSearchQuery));
 
     if (!matchesSearch) return false;
 

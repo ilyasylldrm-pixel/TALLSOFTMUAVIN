@@ -7,6 +7,7 @@ import {
   LogIn,
   UserPlus,
   LogOut,
+  X,
 } from "lucide-react";
 import { Account } from "../types";
 import { UserProfile } from "./AuthModal";
@@ -68,15 +69,25 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Global Search & Action Bar */}
       <div className="flex flex-wrap items-center gap-3 relative z-10">
         {/* Search Bar */}
-        <div className="relative w-full sm:w-52">
+        <div className="relative w-full sm:w-60">
           <Search className="w-4 h-4 text-purple-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Cari, Fatura no..."
+            placeholder="Cari, Fatura, Ürün ara..."
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-white/80 hover:bg-white focus:bg-white text-slate-900 placeholder-purple-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/80 focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 transition-all shadow-2xs"
+            className="w-full bg-white/80 hover:bg-white focus:bg-white text-slate-900 placeholder-purple-400 text-xs rounded-xl pl-9 pr-7 py-2 border border-purple-200/80 focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 transition-all shadow-2xs"
           />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => onSearchChange("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-purple-400 hover:text-purple-700 cursor-pointer p-0.5 rounded-md hover:bg-purple-100/50 transition-all"
+              title="Aramayı Temizle"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Total Cash Balance Pill */}

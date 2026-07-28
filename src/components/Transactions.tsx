@@ -18,6 +18,7 @@ interface TransactionsProps {
   accounts: Account[];
   contacts: Contact[];
   forcedType?: "income" | "expense";
+  globalSearchTerm?: string;
   onAddTransaction: (tx: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
 }
@@ -27,6 +28,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
   accounts,
   contacts,
   forcedType,
+  globalSearchTerm = "",
   onAddTransaction,
   onDeleteTransaction,
 }) => {
@@ -91,11 +93,15 @@ export const Transactions: React.FC<TransactionsProps> = ({
     setDocumentNo("");
   };
 
+  const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
   const filteredTxs = transactions.filter((t) => {
     const matchesSearch =
-      t.description.toLowerCase().includes(search.toLowerCase()) ||
-      t.category.toLowerCase().includes(search.toLowerCase()) ||
-      (t.contactName && t.contactName.toLowerCase().includes(search.toLowerCase()));
+      !activeSearchQuery ||
+      t.description.toLowerCase().includes(activeSearchQuery) ||
+      t.category.toLowerCase().includes(activeSearchQuery) ||
+      (t.contactName && t.contactName.toLowerCase().includes(activeSearchQuery)) ||
+      (t.documentNo && t.documentNo.toLowerCase().includes(activeSearchQuery)) ||
+      (t.accountName && t.accountName.toLowerCase().includes(activeSearchQuery));
 
     if (!matchesSearch) return false;
 

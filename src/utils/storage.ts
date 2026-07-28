@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction } from "../types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction } from "../types";
 import {
   initialCompanySettings,
   initialContacts,
@@ -7,6 +7,8 @@ import {
   initialTransactions,
   initialProducts,
   initialQuotes,
+  initialOrders,
+  initialWaybills,
   initialCheques,
   initialPromissoryNotes,
   initialBranches,
@@ -25,6 +27,8 @@ const STORAGE_KEYS = {
   TRANSACTIONS: "muavin_transactions",
   PRODUCTS: "muavin_products",
   QUOTES: "muavin_quotes",
+  ORDERS: "muavin_orders",
+  WAYBILLS: "muavin_waybills",
   CHEQUES: "muavin_cheques",
   PROMISSORY_NOTES: "muavin_promissory_notes",
   BRANCHES: "muavin_branches",
@@ -60,6 +64,8 @@ export function getStoredData() {
       transactions: initialTransactions,
       products: initialProducts,
       quotes: initialQuotes,
+      orders: initialOrders,
+      waybills: initialWaybills,
       cheques: initialCheques,
       promissoryNotes: initialPromissoryNotes,
       branches: initialBranches,
@@ -79,6 +85,8 @@ export function getStoredData() {
     transactions: get<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions),
     products: get<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts),
     quotes: get<Quote[]>(STORAGE_KEYS.QUOTES, initialQuotes),
+    orders: get<Order[]>(STORAGE_KEYS.ORDERS, initialOrders),
+    waybills: get<Waybill[]>(STORAGE_KEYS.WAYBILLS, initialWaybills),
     cheques: get<Cheque[]>(STORAGE_KEYS.CHEQUES, initialCheques),
     promissoryNotes: get<PromissoryNote[]>(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes),
     branches: get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches),
@@ -106,6 +114,8 @@ export function resetToDemoData() {
   localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(initialTransactions));
   localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(initialProducts));
   localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(initialQuotes));
+  localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(initialOrders));
+  localStorage.setItem(STORAGE_KEYS.WAYBILLS, JSON.stringify(initialWaybills));
   localStorage.setItem(STORAGE_KEYS.CHEQUES, JSON.stringify(initialCheques));
   localStorage.setItem(STORAGE_KEYS.PROMISSORY_NOTES, JSON.stringify(initialPromissoryNotes));
   localStorage.setItem(STORAGE_KEYS.BRANCHES, JSON.stringify(initialBranches));

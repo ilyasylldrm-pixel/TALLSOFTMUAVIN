@@ -25,6 +25,7 @@ interface QuotesProps {
   contacts: Contact[];
   products: Product[];
   companySettings?: CompanySettings;
+  globalSearchTerm?: string;
   onAddQuote: (quote: Quote) => void;
   onConvertQuoteToInvoice: (quote: Quote) => void;
   onDeleteQuote: (id: string) => void;
@@ -35,6 +36,7 @@ export const Quotes: React.FC<QuotesProps> = ({
   contacts,
   products,
   companySettings,
+  globalSearchTerm = "",
   onAddQuote,
   onConvertQuoteToInvoice,
   onDeleteQuote,
@@ -200,10 +202,13 @@ export const Quotes: React.FC<QuotesProps> = ({
     setIsModalOpen(false);
   };
 
+  const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
   const filteredQuotes = quotes.filter(
     (q) =>
-      q.quoteNumber.toLowerCase().includes(search.toLowerCase()) ||
-      q.contactName.toLowerCase().includes(search.toLowerCase())
+      !activeSearchQuery ||
+      q.quoteNumber.toLowerCase().includes(activeSearchQuery) ||
+      q.contactName.toLowerCase().includes(activeSearchQuery) ||
+      (q.notes && q.notes.toLowerCase().includes(activeSearchQuery))
   );
 
   return (

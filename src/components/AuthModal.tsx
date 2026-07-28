@@ -244,7 +244,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       } else {
         // Firebase Authentication: Sign In
         try {
-          const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+          let userCredential;
+          try {
+            userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+          } catch (signInErr: any) {
+            // Auto-create admin account in Firebase Auth if it doesn't exist yet
+            if ((signInErr.code === "auth/user-not-found" || signInErr.code === "auth/invalid-credential" || signInErr.code === "auth/invalid-email") && isSystemAdmin) {
+              try {
+                userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+              } catch (createErr) {
+                console.warn("Could not auto-create admin Firebase auth user:", createErr);
+                throw signInErr;
+              }
+            } else {
+              throw signInErr;
+            }
+          }
+
           firebaseUid = userCredential.user.uid;
 
           // Try fetching stored Firestore profile
@@ -275,6 +291,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               selectedLogoUrl: selectedLogo.imageUrl,
               role: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : "Firma Yöneticisi",
             };
+
+            // Save admin profile to Firestore if missing
+            try {
+              await saveUserProfile({
+                userId: finalProfile.id,
+                email: finalProfile.email,
+                name: finalProfile.name,
+                companyName: finalProfile.companyName,
+                phone: finalProfile.phone,
+                taxNumber: finalProfile.taxNumber,
+                selectedLogoId: finalProfile.selectedLogoId,
+                selectedLogoName: finalProfile.selectedLogoName,
+                selectedLogoUrl: finalProfile.selectedLogoUrl,
+                role: finalProfile.role,
+              });
+            } catch (err) {
+              console.warn("Could not save initial admin profile:", err);
+            }
           }
         } catch (authErr: any) {
           if (authErr.code === "auth/invalid-credential" || authErr.code === "auth/user-not-found" || authErr.code === "auth/wrong-password") {

@@ -1,0 +1,1209 @@
+import React, { useState } from "react";
+import { Waybill, WaybillItem, WaybillType, WaybillStatus, Contact, Product, Warehouse, CompanySettings } from "../types";
+import { ExportButtons } from "./ExportButtons";
+import { ExportData, formatCurrency } from "../utils/exportUtils";
+import {
+  Truck,
+  Plus,
+  Search,
+  FileText,
+  CheckCircle2,
+  Clock,
+  PackageCheck,
+  XCircle,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Calendar,
+  Building2,
+  Users,
+  Package,
+  Trash2,
+  Edit2,
+  Eye,
+  Send,
+  AlertCircle,
+  X,
+  Warehouse as WarehouseIcon,
+  Filter,
+  DollarSign,
+  FileSpreadsheet,
+  Printer,
+  Navigation,
+  User,
+} from "lucide-react";
+
+interface WaybillsProps {
+  waybills: Waybill[];
+  contacts: Contact[];
+  products: Product[];
+  warehouses?: Warehouse[];
+  companySettings?: CompanySettings;
+  globalSearchTerm?: string;
+  onAddWaybill: (waybill: Waybill) => void;
+  onUpdateWaybill: (waybill: Waybill) => void;
+  onConvertWaybillToInvoice: (waybill: Waybill) => void;
+  onDeleteWaybill: (id: string) => void;
+}
+
+export const Waybills: React.FC<WaybillsProps> = ({
+  waybills = [],
+  contacts = [],
+  products = [],
+  warehouses = [],
+  companySettings,
+  globalSearchTerm = "",
+  onAddWaybill,
+  onUpdateWaybill,
+  onConvertWaybillToInvoice,
+  onDeleteWaybill,
+}) => {
+  const [activeTab, setActiveTab] = useState<"all" | "dispatch" | "receipt">("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedWaybillForView, setSelectedWaybillForView] = useState<Waybill | null>(null);
+  const [convertConfirmWaybill, setConvertConfirmWaybill] = useState<Waybill | null>(null);
+
+  // New Waybill Form State
+  const [waybillType, setWaybillType] = useState<WaybillType>("dispatch");
+  const [waybillNumber, setWaybillNumber] = useState("");
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const [waybillDate, setWaybillDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [dispatchDate, setDispatchDate] = useState(() => {
+    const now = new Date();
+    return `${now.toISOString().split("T")[0]} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  });
+  const [vehiclePlate, setVehiclePlate] = useState("34 BRS 102");
+  const [driverName, setDriverName] = useState("Ahmet Demir");
+  const [driverTckn, setDriverTckn] = useState("10293847562");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState(warehouses[0]?.id || "");
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<WaybillItem[]>([
+    {
+      id: "item_1",
+      productId: "",
+      productCode: "",
+      description: "",
+      quantity: 1,
+      unit: "Adet",
+      unitPrice: 0,
+      vatRate: 20,
+      discountRate: 0,
+      totalWithoutVat: 0,
+      vatAmount: 0,
+      totalWithVat: 0,
+    },
+  ]);
+
+  // Open Modal Helper
+  const handleOpenNewWaybillModal = (type: WaybillType = "dispatch") => {
+    setWaybillType(type);
+    const prefix = type === "dispatch" ? "IRS-SEVK-" : "IRS-AL-";
+    const num = Math.floor(10000 + Math.random() * 90000);
+    const newNo = `${prefix}2026-${num}`;
+    setWaybillNumber(newNo);
+
+    if (contacts.length > 0) {
+      const filtered = contacts.filter((c) =>
+        type === "dispatch" ? c.contactType !== "vendor" : c.contactType !== "customer"
+      );
+      const chosen = filtered[0] || contacts[0];
+      setSelectedContactId(chosen?.id || "");
+      setDeliveryAddress(chosen?.address || chosen?.addressDetails?.fullAddress || "");
+    } else {
+      setSelectedContactId("");
+      setDeliveryAddress("");
+    }
+
+    setWaybillDate(new Date().toISOString().split("T")[0]);
+    const now = new Date();
+    setDispatchDate(`${now.toISOString().split("T")[0]} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+    setSelectedWarehouseId(warehouses[0]?.id || "");
+    setNotes("");
+
+    // Initial first line
+    const firstProd = products[0];
+    if (firstProd) {
+      const price = type === "dispatch" ? firstProd.sellPrice : firstProd.buyPrice;
+      const totalWithout = price * 1;
+      const vat = (totalWithout * (firstProd.vatRate || 20)) / 100;
+      setItems([
+        {
+          id: "item_" + Date.now(),
+          productId: firstProd.id,
+          productCode: firstProd.code,
+          description: firstProd.name,
+          quantity: 1,
+          unit: firstProd.unit || "Adet",
+          unitPrice: price,
+          vatRate: firstProd.vatRate || 20,
+          discountRate: 0,
+          totalWithoutVat: totalWithout,
+          vatAmount: vat,
+          totalWithVat: totalWithout + vat,
+        },
+      ]);
+    } else {
+      setItems([
+        {
+          id: "item_" + Date.now(),
+          productId: "",
+          productCode: "",
+          description: "",
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: 0,
+          vatRate: 20,
+          discountRate: 0,
+          totalWithoutVat: 0,
+          vatAmount: 0,
+          totalWithVat: 0,
+        },
+      ]);
+    }
+
+    setIsModalOpen(true);
+  };
+
+  // Contact Selection Change
+  const handleContactChange = (cId: string) => {
+    setSelectedContactId(cId);
+    const c = contacts.find((item) => item.id === cId);
+    if (c) {
+      setDeliveryAddress(c.address || c.addressDetails?.fullAddress || "");
+    }
+  };
+
+  // Item change handler
+  const handleItemProductSelect = (index: number, productId: string) => {
+    const prod = products.find((p) => p.id === productId);
+    const updated = [...items];
+    if (prod) {
+      const price = waybillType === "dispatch" ? prod.sellPrice : prod.buyPrice;
+      const qty = updated[index].quantity || 1;
+      const discount = updated[index].discountRate || 0;
+      const totalWithout = qty * price * (1 - discount / 100);
+      const vat = (totalWithout * (prod.vatRate || 20)) / 100;
+
+      updated[index] = {
+        ...updated[index],
+        productId: prod.id,
+        productCode: prod.code,
+        description: prod.name,
+        unit: prod.unit || "Adet",
+        unitPrice: price,
+        vatRate: prod.vatRate || 20,
+        totalWithoutVat: totalWithout,
+        vatAmount: vat,
+        totalWithVat: totalWithout + vat,
+      };
+    } else {
+      updated[index].productId = "";
+    }
+    setItems(updated);
+  };
+
+  const handleItemChange = (index: number, field: keyof WaybillItem, val: any) => {
+    const updated = [...items];
+    const item = { ...updated[index], [field]: val };
+
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.unitPrice) || 0;
+    const discount = Number(item.discountRate) || 0;
+    const vatRate = Number(item.vatRate) || 0;
+
+    const totalWithout = qty * price * (1 - discount / 100);
+    const vat = (totalWithout * vatRate) / 100;
+
+    item.totalWithoutVat = totalWithout;
+    item.vatAmount = vat;
+    item.totalWithVat = totalWithout + vat;
+
+    updated[index] = item;
+    setItems(updated);
+  };
+
+  const handleAddItemRow = () => {
+    setItems((prev) => [
+      ...prev,
+      {
+        id: "item_" + Date.now(),
+        productId: "",
+        productCode: "",
+        description: "",
+        quantity: 1,
+        unit: "Adet",
+        unitPrice: 0,
+        vatRate: 20,
+        discountRate: 0,
+        totalWithoutVat: 0,
+        vatAmount: 0,
+        totalWithVat: 0,
+      },
+    ]);
+  };
+
+  const handleRemoveItemRow = (index: number) => {
+    if (items.length === 1) return;
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Calculations for New Waybill
+  const subtotal = items.reduce((acc, i) => acc + (i.totalWithoutVat || 0), 0);
+  const totalVat = items.reduce((acc, i) => acc + (i.vatAmount || 0), 0);
+  const grandTotal = subtotal + totalVat;
+
+  // Submit New Waybill
+  const handleSaveWaybill = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedContactId) {
+      alert("Lütfen irsaliye için bir Cari Firma / Kişi seçiniz.");
+      return;
+    }
+    const contactObj = contacts.find((c) => c.id === selectedContactId);
+    if (!contactObj) return;
+
+    const whObj = warehouses.find((w) => w.id === selectedWarehouseId);
+
+    const newWaybill: Waybill = {
+      id: "way_" + Date.now(),
+      waybillNumber,
+      type: waybillType,
+      contactId: contactObj.id,
+      contactName: contactObj.name,
+      contactPhone: contactObj.phone,
+      contactEmail: contactObj.email,
+      taxNumber: contactObj.taxNumber,
+      waybillDate,
+      dispatchDate,
+      vehiclePlate,
+      driverName,
+      driverTckn,
+      deliveryAddress,
+      warehouseId: whObj?.id,
+      warehouseName: whObj?.name,
+      items,
+      subtotal,
+      totalVat,
+      grandTotal,
+      currency: "₺",
+      status: "shipped",
+      notes,
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+
+    onAddWaybill(newWaybill);
+    setIsModalOpen(false);
+  };
+
+  // Filtering
+  const activeSearchQuery = (globalSearchTerm || searchTerm).toLowerCase().trim();
+  const filteredWaybills = waybills.filter((w) => {
+    // Type Filter
+    if (activeTab === "dispatch" && w.type !== "dispatch") return false;
+    if (activeTab === "receipt" && w.type !== "receipt") return false;
+
+    // Status Filter
+    if (statusFilter !== "all" && w.status !== statusFilter) return false;
+
+    // Search
+    if (activeSearchQuery) {
+      const match =
+        w.waybillNumber.toLowerCase().includes(activeSearchQuery) ||
+        w.contactName.toLowerCase().includes(activeSearchQuery) ||
+        (w.vehiclePlate && w.vehiclePlate.toLowerCase().includes(activeSearchQuery)) ||
+        (w.driverName && w.driverName.toLowerCase().includes(activeSearchQuery)) ||
+        (w.notes && w.notes.toLowerCase().includes(activeSearchQuery)) ||
+        w.items.some((i) => i.description.toLowerCase().includes(activeSearchQuery));
+      if (!match) return false;
+    }
+
+    return true;
+  });
+
+  // Analytics Metrics
+  const totalWaybillsCount = waybills.length;
+  const dispatchWaybillsTotal = waybills
+    .filter((w) => w.type === "dispatch" && w.status !== "cancelled")
+    .reduce((acc, w) => acc + w.grandTotal, 0);
+  const receiptWaybillsTotal = waybills
+    .filter((w) => w.type === "receipt" && w.status !== "cancelled")
+    .reduce((acc, w) => acc + w.grandTotal, 0);
+  const pendingWaybillsCount = waybills.filter((w) => w.status === "pending" || w.status === "shipped").length;
+  const invoicedWaybillsCount = waybills.filter((w) => w.status === "invoiced").length;
+
+  // Status Badge Helper
+  const getStatusBadge = (status: WaybillStatus) => {
+    switch (status) {
+      case "pending":
+        return <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-fit"><Clock className="w-3 h-3" /> Hazırlanıyor</span>;
+      case "shipped":
+        return <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-fit"><Truck className="w-3 h-3" /> Sevk Edildi</span>;
+      case "delivered":
+        return <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-fit"><CheckCircle2 className="w-3 h-3" /> Teslim Edildi</span>;
+      case "invoiced":
+        return <span className="bg-teal-100 text-teal-800 border border-teal-200 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-fit"><FileText className="w-3 h-3" /> Faturalandırıldı</span>;
+      case "cancelled":
+        return <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-fit"><XCircle className="w-3 h-3" /> İptal Edildi</span>;
+      default:
+        return <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full text-xs font-medium">{status}</span>;
+    }
+  };
+
+  // Export Data Builder
+  const getWaybillsExportData = (): ExportData => {
+    const headers = [
+      "İrsaliye No",
+      "İrsaliye Tipi",
+      "İrsaliye Tarihi",
+      "Fiili Sevk Tarihi",
+      "Cari Unvanı",
+      "Araç Plaka / Sürücü",
+      "Depo",
+      "Kalem Sayısı",
+      "Ara Toplam",
+      "KDV Tutarı",
+      "Genel Toplam",
+      "Durum",
+    ];
+    const rows = filteredWaybills.map((w) => [
+      w.waybillNumber,
+      w.type === "dispatch" ? "Sevk İrsaliyesi (Giden)" : "Alış İrsaliyesi (Gelen)",
+      w.waybillDate,
+      w.dispatchDate || "-",
+      w.contactName,
+      `${w.vehiclePlate || "-"} / ${w.driverName || "-"}`,
+      w.warehouseName || "-",
+      w.items.length,
+      formatCurrency(w.subtotal, w.currency || "TRY"),
+      formatCurrency(w.totalVat, w.currency || "TRY"),
+      formatCurrency(w.grandTotal, w.currency || "TRY"),
+      w.status,
+    ]);
+    return {
+      filename: `Irsaliyeler_Listesi_${new Date().toISOString().split("T")[0]}`,
+      title: "İRSALİYE YÖNETİM LİSTESİ",
+      subtitle: activeTab === "all" ? "Tüm İrsaliyeler" : activeTab === "dispatch" ? "Sevk İrsaliyeleri (Giden)" : "Alış İrsaliyeleri (Gelen)",
+      headers,
+      rows,
+    };
+  };
+
+  return (
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header Title & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-blue-100 rounded-xl text-blue-700">
+              <Truck className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">İrsaliye Yönetimi & İrsaliye Oluştur</h1>
+              <p className="text-xs text-slate-500 font-medium">
+                Sevk ve alış irsaliyeleri takibi, sevkiyat araç & sürücü kaydı ve tek tıkla faturalandırma modülü
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <ExportButtons getExportData={getWaybillsExportData} />
+          <button
+            onClick={() => handleOpenNewWaybillModal("dispatch")}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Yeni Sevk İrsaliyesi</span>
+          </button>
+          <button
+            onClick={() => handleOpenNewWaybillModal("receipt")}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Yeni Alış İrsaliyesi</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Waybills */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam İrsaliye</span>
+            <div className="text-2xl font-bold text-slate-900 mt-1">{totalWaybillsCount} Adet</div>
+            <span className="text-[11px] text-blue-600 font-medium mt-1 inline-block">Sistemde kayıtlı irsaliyeler</span>
+          </div>
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+            <Truck className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Dispatch Total */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Giden Sevk İrsaliyeleri</span>
+            <div className="text-xl font-bold text-emerald-600 mt-1">
+              ₺{dispatchWaybillsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+            </div>
+            <span className="text-[11px] text-emerald-600 font-medium mt-1 inline-block">Müşterilere sevk edilen mallar</span>
+          </div>
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+            <ArrowUpRight className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Receipt Total */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gelen Alış İrsaliyeleri</span>
+            <div className="text-xl font-bold text-indigo-600 mt-1">
+              ₺{receiptWaybillsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+            </div>
+            <span className="text-[11px] text-indigo-600 font-medium mt-1 inline-block">Tedarikçilerden gelen teslimatlar</span>
+          </div>
+          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+            <ArrowDownLeft className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Invoiced Status */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Açık Sevkiyat & Faturalanan</span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-lg font-bold text-amber-600">{pendingWaybillsCount} Açık</span>
+              <span className="text-slate-300">/</span>
+              <span className="text-lg font-bold text-teal-600">{invoicedWaybillsCount} Fatura</span>
+            </div>
+            <span className="text-[11px] text-slate-500 font-medium mt-1 inline-block">Faturalandırma durumu</span>
+          </div>
+          <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl">
+            <FileText className="w-6 h-6" />
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation Tabs & Filters Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Main Tabs */}
+          <div className="flex items-center p-1 bg-slate-100/80 rounded-xl w-fit">
+            <button
+              onClick={() => setActiveTab("all")}
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "all"
+                  ? "bg-white text-blue-700 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Tüm İrsaliyeler ({waybills.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("dispatch")}
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "dispatch"
+                  ? "bg-blue-600 text-white shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Sevk İrsaliyeleri (Giden) ({waybills.filter((w) => w.type === "dispatch").length})
+            </button>
+            <button
+              onClick={() => setActiveTab("receipt")}
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "receipt"
+                  ? "bg-indigo-600 text-white shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Alış İrsaliyeleri (Gelen) ({waybills.filter((w) => w.type === "receipt").length})
+            </button>
+          </div>
+
+          {/* Search & Status Filter */}
+          <div className="flex items-center gap-3">
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-blue-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="İrsaliye No, Cari, Plaka, Sürücü..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-50 text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </div>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-slate-50 text-slate-700 text-xs rounded-xl px-3 py-2 border border-slate-200 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
+              <option value="all">Tüm Durumlar</option>
+              <option value="pending">Hazırlanıyor</option>
+              <option value="shipped">Sevk Edildi</option>
+              <option value="delivered">Teslim Edildi</option>
+              <option value="invoiced">Faturalandırıldı</option>
+              <option value="cancelled">İptal Edilenler</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Waybills Table */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/80 text-slate-500 text-[11px] uppercase tracking-wider font-semibold border-b border-slate-200">
+                <th className="py-3.5 px-4">İrsaliye No / Tarih</th>
+                <th className="py-3.5 px-4">İrsaliye Tipi</th>
+                <th className="py-3.5 px-4">Cari Firma / VKN</th>
+                <th className="py-3.5 px-4">Plaka & Sürücü / Depo</th>
+                <th className="py-3.5 px-4 text-center">Kalem</th>
+                <th className="py-3.5 px-4 text-right">Genel Toplam</th>
+                <th className="py-3.5 px-4">Durum</th>
+                <th className="py-3.5 px-4 text-right">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+              {filteredWaybills.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <Truck className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                    <p className="font-semibold">Kriterlere uygun irsaliye kaydı bulunamadı.</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Yeni bir sevk veya alış irsaliyesi oluşturmak için yukarıdaki butonları kullanabilirsiniz.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filteredWaybills.map((waybill) => (
+                  <tr key={waybill.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3.5 px-4">
+                      <div className="font-bold text-slate-900">{waybill.waybillNumber}</div>
+                      <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <Calendar className="w-3 h-3 text-slate-400" />
+                        <span>{waybill.waybillDate}</span>
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      {waybill.type === "dispatch" ? (
+                        <span className="bg-blue-100 text-blue-800 border border-blue-200/80 px-2.5 py-1 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
+                          <ArrowUpRight className="w-3 h-3 text-blue-600" /> Sevk İrsaliyesi
+                        </span>
+                      ) : (
+                        <span className="bg-indigo-100 text-indigo-800 border border-indigo-200/80 px-2.5 py-1 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
+                          <ArrowDownLeft className="w-3 h-3 text-indigo-600" /> Alış İrsaliyesi
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-slate-900">{waybill.contactName}</div>
+                      {waybill.taxNumber && (
+                        <div className="text-[11px] text-slate-400">VKN/TCKN: {waybill.taxNumber}</div>
+                      )}
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <div className="text-slate-800 font-bold flex items-center gap-1">
+                        <Truck className="w-3 h-3 text-slate-400" />
+                        <span>{waybill.vehiclePlate || "Plakasız"}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <User className="w-3 h-3 text-slate-400" />
+                        <span>{waybill.driverName || "Sürücü Belirtilmedi"}</span>
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                        {waybill.items.length} Kalem
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="font-bold text-slate-900 text-sm">
+                        ₺{waybill.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        KDV: ₺{waybill.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4">{getStatusBadge(waybill.status)}</td>
+
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* View Waybill Detail & Document */}
+                        <button
+                          onClick={() => setSelectedWaybillForView(waybill)}
+                          className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
+                          title="İrsaliye Belgesi & Yazdır"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+
+                        {/* Convert to Invoice */}
+                        {waybill.status !== "invoiced" && waybill.status !== "cancelled" && (
+                          <button
+                            onClick={() => setConvertConfirmWaybill(waybill)}
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                            title="İrsaliyeyi Faturalandır"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Faturalandır</span>
+                          </button>
+                        )}
+
+                        {/* Delete Waybill */}
+                        <button
+                          onClick={() => {
+                            if (confirm(`'${waybill.waybillNumber}' numaralı irsaliyeyi silmek istediğinize emin misiniz?`)) {
+                              onDeleteWaybill(waybill.id);
+                            }
+                          }}
+                          className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="İrsaliyeyi Sil"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* NEW WAYBILL MODAL */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
+            {/* Modal Header */}
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-500/20 rounded-xl text-blue-300 border border-blue-400/30">
+                  <Truck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold">
+                    Yeni {waybillType === "dispatch" ? "Sevk" : "Alış"} İrsaliyesi Düzenle
+                  </h2>
+                  <p className="text-xs text-slate-300 font-medium">
+                    Cari firma, araç plaka, sürücü ve stok kalemlerini girin
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveWaybill} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+              {/* Type Switcher & Waybill Number */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">İrsaliye Tipi</label>
+                  <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white p-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWaybillType("dispatch");
+                        setWaybillNumber("IRS-SEVK-2026-" + Math.floor(10000 + Math.random() * 90000));
+                      }}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                        waybillType === "dispatch" ? "bg-blue-600 text-white" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Sevk İrsaliyesi (Giden)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWaybillType("receipt");
+                        setWaybillNumber("IRS-AL-2026-" + Math.floor(10000 + Math.random() * 90000));
+                      }}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                        waybillType === "receipt" ? "bg-indigo-600 text-white" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Alış İrsaliyesi (Gelen)
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">İrsaliye Numarası</label>
+                  <input
+                    type="text"
+                    required
+                    value={waybillNumber}
+                    onChange={(e) => setWaybillNumber(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Çıkış / Varış Deposu</label>
+                  <select
+                    value={selectedWarehouseId}
+                    onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  >
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Contact & Dates */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Cari Firma / Müşteri / Tedarikçi <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={selectedContactId}
+                    onChange={(e) => handleContactChange(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  >
+                    <option value="">-- Cari Seçiniz --</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.companyTitle ? `(${c.companyTitle})` : ""} - VKN: {c.taxNumber || "-"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">İrsaliye Tarihi</label>
+                  <input
+                    type="date"
+                    required
+                    value={waybillDate}
+                    onChange={(e) => setWaybillDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Fiili Sevk Tarihi / Saati</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="YYYY-AA-GG HH:MM"
+                    value={dispatchDate}
+                    onChange={(e) => setDispatchDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+              </div>
+
+              {/* Logistics & Driver Information */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Araç Plakası</label>
+                  <input
+                    type="text"
+                    placeholder="34 ABC 123"
+                    value={vehiclePlate}
+                    onChange={(e) => setVehiclePlate(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 uppercase"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sürücü Adı Soyadı</label>
+                  <input
+                    type="text"
+                    placeholder="Ahmet Yılmaz"
+                    value={driverName}
+                    onChange={(e) => setDriverName(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sürücü TCKN</label>
+                  <input
+                    type="text"
+                    maxLength={11}
+                    placeholder="10293847562"
+                    value={driverTckn}
+                    onChange={(e) => setDriverTckn(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Teslimat Adresi</label>
+                  <input
+                    type="text"
+                    placeholder="Sevkiyatın teslim edileceği açık adres..."
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+              </div>
+
+              {/* Items Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-blue-600" />
+                    <span>İrsaliye Kalemleri (Sevk Edilen Stoklar)</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleAddItemRow}
+                    className="text-xs text-blue-700 hover:text-blue-900 font-semibold flex items-center gap-1 cursor-pointer bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Kalem Ekle
+                  </button>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600 text-[11px] font-bold uppercase tracking-wider">
+                        <th className="py-2.5 px-3">Ürün / Stok Seçimi</th>
+                        <th className="py-2.5 px-3 w-20">Miktar</th>
+                        <th className="py-2.5 px-3 w-20">Birim</th>
+                        <th className="py-2.5 px-3 w-28 text-right">Birim Fiyat (₺)</th>
+                        <th className="py-2.5 px-3 w-20 text-right">KDV (%)</th>
+                        <th className="py-2.5 px-3 w-32 text-right">Toplam (KDV Dahil)</th>
+                        <th className="py-2.5 px-2 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {items.map((item, idx) => {
+                        const prod = products.find((p) => p.id === item.productId);
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50/60">
+                            <td className="p-2">
+                              <select
+                                value={item.productId || ""}
+                                onChange={(e) => handleItemProductSelect(idx, e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-900 mb-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="">-- Listeden Ürün Seçiniz --</option>
+                                {products.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    [{p.code}] {p.name} - Stok: {p.stockQuantity} {p.unit} (Satış: ₺{p.sellPrice})
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                placeholder="Kalem açıklaması..."
+                                value={item.description}
+                                onChange={(e) => handleItemChange(idx, "description", e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] text-slate-700"
+                              />
+                            </td>
+
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="any"
+                                required
+                                value={item.quantity}
+                                onChange={(e) => handleItemChange(idx, "quantity", e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-center font-bold text-slate-900"
+                              />
+                            </td>
+
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                value={item.unit}
+                                onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center font-medium text-slate-700"
+                              />
+                            </td>
+
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                required
+                                value={item.unitPrice}
+                                onChange={(e) => handleItemChange(idx, "unitPrice", e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-right font-bold text-slate-900"
+                              />
+                            </td>
+
+                            <td className="p-2">
+                              <select
+                                value={item.vatRate}
+                                onChange={(e) => handleItemChange(idx, "vatRate", e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1 py-1 text-xs text-center font-medium text-slate-800"
+                              >
+                                <option value={0}>%0</option>
+                                <option value={1}>%1</option>
+                                <option value={10}>%10</option>
+                                <option value={20}>%20</option>
+                              </select>
+                            </td>
+
+                            <td className="p-2 text-right font-bold text-slate-900">
+                              ₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </td>
+
+                            <td className="p-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItemRow(idx)}
+                                className="p-1 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Totals Summary & Notes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">İrsaliye Notu & Teslim Şartları</label>
+                  <textarea
+                    rows={3}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Teslimat notu, şoför imzası vb. detaylar yazabilirsiniz..."
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+
+                <div className="space-y-2 text-xs font-semibold text-slate-700 justify-self-end w-full max-w-xs">
+                  <div className="flex justify-between py-1 border-b border-slate-200">
+                    <span className="text-slate-500">Ara Toplam (KDV Hariç):</span>
+                    <span className="text-slate-900 font-bold">
+                      ₺{subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-200">
+                    <span className="text-slate-500">Toplam KDV Tutarı:</span>
+                    <span className="text-blue-700 font-bold">
+                      ₺{totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2 text-sm text-slate-900 font-bold bg-blue-100/60 px-3 rounded-xl border border-blue-200/80">
+                    <span>Genel Toplam:</span>
+                    <span className="text-blue-900">
+                      ₺{grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>İrsaliyeyi Kaydet & Sevk Et</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW / PRINT WAYBILL DOCUMENT PREVIEW MODAL */}
+      {selectedWaybillForView && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8 p-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-xl text-blue-700">
+                  <Truck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">{selectedWaybillForView.waybillNumber}</h2>
+                  <p className="text-xs text-slate-500 font-medium">Resmi Sevk İrsaliyesi Belge Önizlemesi</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Yazdır</span>
+                </button>
+                <button
+                  onClick={() => setSelectedWaybillForView(null)}
+                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Waybill Document Body */}
+            <div className="border border-slate-200 rounded-2xl p-6 bg-slate-50/50 space-y-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">{companySettings?.companyName || "Muavin Bilişim A.Ş."}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">{companySettings?.address || "Mecidiyeköy, İstanbul"}</p>
+                  <p className="text-xs text-slate-500">VKN: {companySettings?.taxNumber || "8470291038"}</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-extrabold text-blue-700">{selectedWaybillForView.waybillNumber}</div>
+                  <div className="text-xs text-slate-500">Düzenlenme: {selectedWaybillForView.waybillDate}</div>
+                  <div className="text-xs text-slate-500">Fiili Sevk: {selectedWaybillForView.dispatchDate || "-"}</div>
+                </div>
+              </div>
+
+              {/* Driver & Vehicle Box */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cari Firma Bilgileri</div>
+                  <div className="text-sm font-bold text-slate-900">{selectedWaybillForView.contactName}</div>
+                  {selectedWaybillForView.taxNumber && (
+                    <div className="text-xs text-slate-600">VKN/TCKN: {selectedWaybillForView.taxNumber}</div>
+                  )}
+                  {selectedWaybillForView.deliveryAddress && (
+                    <div className="text-xs text-slate-600">Teslimat Adresi: {selectedWaybillForView.deliveryAddress}</div>
+                  )}
+                </div>
+
+                <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1">
+                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Lojistik & Sürücü Bilgileri</div>
+                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Araç Plakası: {selectedWaybillForView.vehiclePlate || "Belirtilmedi"}</span>
+                  </div>
+                  <div className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Sürücü: {selectedWaybillForView.driverName || "Belirtilmedi"}</span>
+                  </div>
+                  {selectedWaybillForView.driverTckn && (
+                    <div className="text-[11px] text-slate-500">Sürücü TC: {selectedWaybillForView.driverTckn}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                    <th className="p-2">Açıklama / Ürün</th>
+                    <th className="p-2 text-center">Miktar</th>
+                    <th className="p-2 text-right">Birim Fiyat</th>
+                    <th className="p-2 text-right">KDV</th>
+                    <th className="p-2 text-right">Toplam</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {selectedWaybillForView.items.map((item, i) => (
+                    <tr key={i}>
+                      <td className="p-2 font-medium text-slate-800">{item.description}</td>
+                      <td className="p-2 text-center font-bold">{item.quantity} {item.unit}</td>
+                      <td className="p-2 text-right">₺{(item.unitPrice || 0).toLocaleString("tr-TR")}</td>
+                      <td className="p-2 text-right">%{item.vatRate}</td>
+                      <td className="p-2 text-right font-bold">₺{(item.totalWithVat || 0).toLocaleString("tr-TR")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="flex justify-between items-end pt-4 border-t border-slate-200">
+                <div className="text-xs text-slate-500 max-w-sm">
+                  <strong>Notlar:</strong> {selectedWaybillForView.notes || "Mal teslimatı sırasında eksiksiz ve hasarsız teslim alınmıştır."}
+                </div>
+                <div className="text-right space-y-1">
+                  <div className="text-xs text-slate-500">
+                    Ara Toplam: ₺{selectedWaybillForView.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    KDV: ₺{selectedWaybillForView.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-base font-bold text-slate-900">
+                    Genel Toplam: ₺{selectedWaybillForView.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONVERT TO INVOICE CONFIRM MODAL */}
+      {convertConfirmWaybill && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 text-emerald-600">
+              <div className="p-2.5 bg-emerald-100 rounded-xl">
+                <FileText className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">İrsaliyeyi Faturalandır</h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              <strong className="text-slate-900">{convertConfirmWaybill.waybillNumber}</strong> numaralı irsaliye,{" "}
+              <strong>₺{convertConfirmWaybill.grandTotal.toLocaleString("tr-TR")}</strong> tutarında resmi e-Faturaya dönüştürülecektir.
+            </p>
+
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1 text-slate-700">
+              <div>• Ürün stok miktarları otomatik düşürülecektir/artırılacaktır.</div>
+              <div>• Cari hesaba ₺{convertConfirmWaybill.grandTotal.toLocaleString("tr-TR")} borç/alacak işlenecektir.</div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setConvertConfirmWaybill(null)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                onClick={() => {
+                  onConvertWaybillToInvoice(convertConfirmWaybill);
+                  setConvertConfirmWaybill(null);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Onayla ve Faturayı Kes</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

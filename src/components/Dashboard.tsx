@@ -25,6 +25,7 @@ import {
   Receipt,
   FileCheck,
   Calendar,
+  Search,
 } from "lucide-react";
 import {
   BarChart,
@@ -43,6 +44,7 @@ interface DashboardProps {
   accounts: Account[];
   transactions: Transaction[];
   settings: CompanySettings;
+  globalSearchTerm?: string;
   onSelectTab: (tab: any) => void;
   onOpenQuickAdd: () => void;
   onOpenAiModal: () => void;
@@ -54,6 +56,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   accounts,
   transactions,
   settings,
+  globalSearchTerm = "",
   onSelectTab,
   onOpenQuickAdd,
   onOpenAiModal,
@@ -284,6 +287,75 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="w-full px-6 py-6 space-y-6">
+      {/* Search Results Banner if search term is entered */}
+      {globalSearchTerm.trim() && (
+        <div className="bg-purple-900 text-white p-5 rounded-2xl shadow-md border border-purple-700/60 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Search className="w-5 h-5 text-purple-300" />
+              <h3 className="font-bold text-base text-purple-100">
+                "{globalSearchTerm}" için Arama Sonuçları Özet Görünümü
+              </h3>
+            </div>
+            <span className="text-xs text-purple-300 bg-purple-800/80 px-2.5 py-1 rounded-full border border-purple-700">
+              Aramaya uygun tüm modüller filtrelendi
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Matching Contacts */}
+            <div
+              onClick={() => onSelectTab("contacts")}
+              className="bg-purple-950/60 hover:bg-purple-800/60 p-3.5 rounded-xl border border-purple-700/50 cursor-pointer transition-all flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <Users className="w-5 h-5 text-purple-300" />
+                <div>
+                  <div className="text-xs text-purple-300">Cari / Müşteriler</div>
+                  <div className="text-sm font-bold text-white">
+                    {contacts.filter((c) => c.name.toLowerCase().includes(globalSearchTerm.toLowerCase())).length} Eşleşen Cari
+                  </div>
+                </div>
+              </div>
+              <ArrowUpRight className="w-4 h-4 text-purple-300" />
+            </div>
+
+            {/* Matching Invoices */}
+            <div
+              onClick={() => onSelectTab("invoices")}
+              className="bg-purple-950/60 hover:bg-purple-800/60 p-3.5 rounded-xl border border-purple-700/50 cursor-pointer transition-all flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-purple-300" />
+                <div>
+                  <div className="text-xs text-purple-300">Faturalar</div>
+                  <div className="text-sm font-bold text-white">
+                    {invoices.filter((i) => i.invoiceNumber.toLowerCase().includes(globalSearchTerm.toLowerCase()) || i.contactName.toLowerCase().includes(globalSearchTerm.toLowerCase())).length} Eşleşen Fatura
+                  </div>
+                </div>
+              </div>
+              <ArrowUpRight className="w-4 h-4 text-purple-300" />
+            </div>
+
+            {/* Matching Transactions */}
+            <div
+              onClick={() => onSelectTab("transactions")}
+              className="bg-purple-950/60 hover:bg-purple-800/60 p-3.5 rounded-xl border border-purple-700/50 cursor-pointer transition-all flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <Receipt className="w-5 h-5 text-purple-300" />
+                <div>
+                  <div className="text-xs text-purple-300">Finansal İşlemler</div>
+                  <div className="text-sm font-bold text-white">
+                    {transactions.filter((t) => t.description.toLowerCase().includes(globalSearchTerm.toLowerCase()) || (t.contactName && t.contactName.toLowerCase().includes(globalSearchTerm.toLowerCase()))).length} Eşleşen İşlem
+                  </div>
+                </div>
+              </div>
+              <ArrowUpRight className="w-4 h-4 text-purple-300" />
+            </div>
+          </div>
+        </div>
+      )}
       {/* AI Financial Health Banner (Lila Konsepti) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 text-slate-900 shadow-2xs border border-purple-200/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}

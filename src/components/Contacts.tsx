@@ -53,6 +53,7 @@ interface ContactsProps {
   cheques?: Cheque[];
   promissoryNotes?: PromissoryNote[];
   companySettings?: CompanySettings;
+  globalSearchTerm?: string;
   onAddContact: (contact: Contact) => void;
   onUpdateContact: (contact: Contact) => void;
   onDeleteContact: (id: string) => void;
@@ -72,6 +73,7 @@ export const Contacts: React.FC<ContactsProps> = ({
   cheques = [],
   promissoryNotes = [],
   companySettings,
+  globalSearchTerm = "",
   onAddContact,
   onUpdateContact,
   onDeleteContact,
@@ -490,11 +492,15 @@ export const Contacts: React.FC<ContactsProps> = ({
   };
 
   // Filter Contacts
+  const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
   const filteredContacts = contacts.filter((c) => {
     const matchesSearch =
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      (c.taxNumber && c.taxNumber.includes(search)) ||
-      (c.companyTitle && c.companyTitle.toLowerCase().includes(search.toLowerCase()));
+      !activeSearchQuery ||
+      c.name.toLowerCase().includes(activeSearchQuery) ||
+      (c.taxNumber && c.taxNumber.toLowerCase().includes(activeSearchQuery)) ||
+      (c.companyTitle && c.companyTitle.toLowerCase().includes(activeSearchQuery)) ||
+      (c.phone && c.phone.toLowerCase().includes(activeSearchQuery)) ||
+      (c.email && c.email.toLowerCase().includes(activeSearchQuery));
 
     if (!matchesSearch) return false;
 

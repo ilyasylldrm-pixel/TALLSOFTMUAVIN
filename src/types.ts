@@ -189,6 +189,49 @@ export interface Quote {
   notes?: string;
 }
 
+export type OrderType = "sales" | "purchase"; // Satış Siparişi (Müşteriden Alınan) / Alış Siparişi (Tedarikçiye Verilen)
+export type OrderStatus = "pending" | "approved" | "processing" | "shipped" | "delivered" | "cancelled" | "converted";
+
+export interface OrderItem {
+  id: string;
+  productId?: string;
+  productCode?: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  vatRate: number;
+  discountRate?: number;
+  totalWithoutVat: number;
+  vatAmount: number;
+  totalWithVat: number;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: string; // ör: SIP-2026-00001
+  type: OrderType;
+  contactId: string;
+  contactName: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  taxNumber?: string;
+  orderDate: string; // Sipariş Tarihi
+  deliveryDate?: string; // Teslimat / Termin Tarihi
+  items: OrderItem[];
+  subtotal: number;
+  totalVat: number;
+  grandTotal: number;
+  currency: string; // TRY, USD, EUR
+  status: OrderStatus;
+  warehouseId?: string;
+  warehouseName?: string;
+  notes?: string;
+  convertedToInvoiceId?: string;
+  convertedToInvoiceNumber?: string;
+  createdAt: string;
+}
+
 export interface AddressDetails {
   country?: string; // ör: "Türkiye"
   city: string; // İl (ör: "İstanbul")
@@ -404,21 +447,52 @@ export interface AdvanceRequest {
   createdAt: string;
 }
 
-export interface LegalDeduction {
+
+export type WaybillType = "dispatch" | "receipt"; // Sevk İrsaliyesi (Giden) / Alış İrsaliyesi (Gelen)
+export type WaybillStatus = "pending" | "shipped" | "delivered" | "invoiced" | "cancelled";
+
+export interface WaybillItem {
   id: string;
-  employeeId: string;
-  employeeName: string;
-  type: "İcra Kesintisi" | "Nafaka Kesintisi" | "Diğer Yasal Kesinti";
-  fileNumber: string; // Dosya Numarası (ör: "İstanbul 8. İcra Dairesi 2025/11204 Esas")
-  creditorName?: string; // Alacaklı / Kurum / İcra Dairesi Unvanı
-  iban: string; // Kesintinin Yatırılacağı IBAN Numarası
-  totalDebtAmount: number; // Toplam Borç Tutarı (0 ise süresiz/nafaka)
-  paidAmount: number; // Şimdiye kadar Ödenen Toplam Tutar
-  monthlyAmount: number; // Aylık Kesinti Tutarı (₺)
-  calculationType: "quarter_salary" | "fixed"; // Maaşın 1/4'ü (%25) veya Sabit Tutar
-  priorityOrder: number; // İcra Sırası (1, 2, 3...)
-  status: "active" | "queued" | "completed" | "passive"; // Aktif, Sırada Bekliyor, Borç Bitti, Pasif
+  productId?: string;
+  productCode?: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  vatRate: number;
+  discountRate?: number;
+  totalWithoutVat: number;
+  vatAmount: number;
+  totalWithVat: number;
+}
+
+export interface Waybill {
+  id: string;
+  waybillNumber: string; // ör: IRS-2026-00102
+  type: WaybillType;
+  contactId: string;
+  contactName: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  taxNumber?: string;
+  waybillDate: string; // İrsaliye Düzenlenme Tarihi
+  dispatchDate?: string; // Fiili Sevk Tarihi / Saati
+  vehiclePlate?: string; // Araç Plakası (ör: 34 ABC 123)
+  driverName?: string; // Sürücü Adı Soyadı & TCKN
+  driverTckn?: string;
+  deliveryAddress?: string; // Teslimat Adresi
+  items: WaybillItem[];
+  subtotal: number;
+  totalVat: number;
+  grandTotal: number;
+  currency: string;
+  status: WaybillStatus;
+  warehouseId?: string;
+  warehouseName?: string;
   notes?: string;
+  invoicedInvoiceId?: string;
+  invoicedInvoiceNumber?: string;
   createdAt: string;
 }
+
 

@@ -43,6 +43,7 @@ interface AccountsProps {
   cheques?: Cheque[];
   promissoryNotes?: PromissoryNote[];
   activeFinanceSubTab?: FinanceSubModule;
+  globalSearchTerm?: string;
   onSelectFinanceSubTab?: (subTab: FinanceSubModule) => void;
   onAddAccount: (account: Account) => void;
   onTransferBetweenAccounts: (
@@ -79,6 +80,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   cheques = [],
   promissoryNotes = [],
   activeFinanceSubTab,
+  globalSearchTerm = "",
   onSelectFinanceSubTab,
   onAddAccount,
   onTransferBetweenAccounts,
@@ -465,13 +467,23 @@ export const Accounts: React.FC<AccountsProps> = ({
     setNtNotes("");
   };
 
-  // Filtered lists with Date Range filtering
+  // Filtered lists with Date Range & Search filtering
+  const activeSearchQuery = (globalSearchTerm || searchQuery).toLowerCase().trim();
+
   const kasaTransactions = transactions.filter((t) => {
     const acc = accounts.find((a) => a.id === t.accountId);
     if (acc?.type !== "cash") return false;
     if (selectedCashAccountId && t.accountId !== selectedCashAccountId) return false;
     if (startDate && t.date < startDate) return false;
     if (endDate && t.date > endDate) return false;
+    if (activeSearchQuery) {
+      const match =
+        t.description.toLowerCase().includes(activeSearchQuery) ||
+        (t.contactName && t.contactName.toLowerCase().includes(activeSearchQuery)) ||
+        (t.documentNo && t.documentNo.toLowerCase().includes(activeSearchQuery)) ||
+        t.category.toLowerCase().includes(activeSearchQuery);
+      if (!match) return false;
+    }
     return true;
   });
 
@@ -481,15 +493,24 @@ export const Accounts: React.FC<AccountsProps> = ({
     if (selectedBankAccountId && t.accountId !== selectedBankAccountId) return false;
     if (startDate && t.date < startDate) return false;
     if (endDate && t.date > endDate) return false;
+    if (activeSearchQuery) {
+      const match =
+        t.description.toLowerCase().includes(activeSearchQuery) ||
+        (t.contactName && t.contactName.toLowerCase().includes(activeSearchQuery)) ||
+        (t.documentNo && t.documentNo.toLowerCase().includes(activeSearchQuery)) ||
+        t.category.toLowerCase().includes(activeSearchQuery);
+      if (!match) return false;
+    }
     return true;
   });
 
   const filteredCheques = cheques.filter((c) => {
     const matchesType = chequeFilterType === "all" || c.type === chequeFilterType;
     const matchesQuery =
-      c.chequeNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.bankName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.contactName.toLowerCase().includes(searchQuery.toLowerCase());
+      !activeSearchQuery ||
+      c.chequeNumber.toLowerCase().includes(activeSearchQuery) ||
+      c.bankName.toLowerCase().includes(activeSearchQuery) ||
+      c.contactName.toLowerCase().includes(activeSearchQuery);
 
     let matchesDate = true;
     if (startDate) {
@@ -507,9 +528,10 @@ export const Accounts: React.FC<AccountsProps> = ({
   const filteredNotes = promissoryNotes.filter((n) => {
     const matchesType = noteFilterType === "all" || n.type === noteFilterType;
     const matchesQuery =
-      n.noteNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      n.debtorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      n.contactName.toLowerCase().includes(searchQuery.toLowerCase());
+      !activeSearchQuery ||
+      n.noteNumber.toLowerCase().includes(activeSearchQuery) ||
+      n.debtorName.toLowerCase().includes(activeSearchQuery) ||
+      n.contactName.toLowerCase().includes(activeSearchQuery);
 
     let matchesDate = true;
     if (startDate) {

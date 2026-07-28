@@ -27,6 +27,8 @@ import {
   UserCheck,
   HardDrive,
   ShieldAlert,
+  ShoppingCart,
+  Truck,
 } from "lucide-react";
 import { CompanySettings } from "../types";
 import { Logo } from "./Logo";
@@ -40,11 +42,14 @@ export type NavItem =
   | "invoices_sales"
   | "invoices_purchase"
   | "quotes"
+  | "waybills"
   | "accounts"
   | "transactions"
   | "income_slips"
   | "expenses"
   | "products"
+  | "products_list"
+  | "orders"
   | "hr"
   | "files"
   | "reports"
@@ -94,12 +99,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "contacts", label: "Cari Hesaplar", icon: Users },
     { id: "accounts", label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
     { id: "products", label: "Stok & Hizmetler", icon: PackageIcon },
+    { id: "orders", label: "Sipariş Oluştur & Siparişler", icon: ShoppingCart },
     { id: "hr", label: "İnsan Kaynakları", icon: UserCheck },
     { id: "files", label: "Bulut Dosya Deposu", icon: HardDrive },
     { id: "reports", label: "Vergilendirme", icon: BarChart3 },
     { id: "ai", label: "AI Muavin Asistanı", icon: Sparkles, badge: "Canlı" },
     { id: "settings", label: "Sistem Ayarları", icon: Settings },
   ];
+
 
   const companySubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "company_profile", label: "Firma Profili & Adres", icon: Building },
@@ -111,6 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "invoices_sales", label: "Gelir Faturası", icon: FileText },
     { id: "invoices_purchase", label: "Gider Faturası", icon: FileText },
     { id: "quotes", label: "Teklifler & Proforma", icon: FileSpreadsheet },
+    { id: "waybills", label: "İrsaliyeler", icon: Truck },
     { id: "income_slips", label: "Gelir Fişi", icon: ArrowDownLeft },
     { id: "expenses", label: "Gider Fişi", icon: ArrowUpRight },
   ];
@@ -153,6 +161,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const isInvoiceItem = item.id === "invoices";
           const isFinanceItem = item.id === "accounts";
           const isCompanyItem = item.id === "company";
+          const isProductItem = item.id === "products";
 
           const isActive = isInvoiceItem
             ? [
@@ -160,6 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 "invoices_sales",
                 "invoices_purchase",
                 "quotes",
+                "waybills",
                 "transactions",
                 "income_slips",
                 "expenses",
@@ -168,6 +178,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ? currentTab === "accounts"
             : isCompanyItem
             ? ["company", "company_profile", "company_branches", "company_warehouses"].includes(currentTab)
+            : isProductItem
+            ? ["products", "products_list"].includes(currentTab)
             : currentTab === item.id;
 
           return (
@@ -182,6 +194,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         "invoices_sales",
                         "invoices_purchase",
                         "quotes",
+                        "waybills",
                         "transactions",
                         "income_slips",
                         "expenses",
@@ -272,6 +285,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   })}
                 </div>
               )}
+
 
               {/* Sub-modules for Finans Yönetimi */}
               {isFinanceItem && isFinanceExpanded && (
