@@ -25,11 +25,10 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
-var import_vite = require("vite");
 var import_genai = require("@google/genai");
-import_dotenv.default.config();
+import_dotenv.default.config({ path: import_path.default.join(__dirname, "..", ".env") });
 var app = (0, import_express.default)();
-var PORT = 3e3;
+var PORT = process.env.PORT || 3e3;
 app.use(import_express.default.json({ limit: "10mb" }));
 var genAI = null;
 function getGenAI() {
@@ -80,7 +79,7 @@ Schema:
 }`;
     }
     const response = await aiClient.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
       contents: [
         {
           text: `Kullan\u0131c\u0131 \u0130letisi / Komutu: ${prompt}
@@ -106,19 +105,20 @@ ${JSON.stringify(
 });
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
-    const vite = await (0, import_vite.createServer)({
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa"
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = import_path.default.join(process.cwd(), "dist");
+    const distPath = __dirname;
     app.use(import_express.default.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(import_path.default.join(distPath, "index.html"));
     });
   }
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, () => {
     console.log(`Muavin Muhasebe sunucusu \xE7al\u0131\u015F\u0131yor: http://0.0.0.0:${PORT}`);
   });
 }
