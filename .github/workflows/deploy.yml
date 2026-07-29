@@ -1,0 +1,42 @@
+name: Build & Deploy to tallsoft.org
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-tallsoft
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: server.ts Windows/IIS duzeltmeleri
+        run: |
+          perl -0pi -e 's/const PORT = 3000;/const PORT = process.env.PORT || 3000;/g' server.ts
+          perl -0pi -e 's/app\.listen\(PORT, "0\.0\.0\.0", \(\) => \{/app.listen(PORT, () => {/g' server.ts
+          perl -0pi -e 's/dotenv\.config\(\);/dotenv.config({ path: path.join(__dirname, "..", ".env") });/g' server.ts
+          perl -0pi -e 's{const distPath = path\.join\(process\.cwd\(\), "dist"\);}{const distPath = __dirname;}g' server.ts
+          perl -0pi -e 's/model: "gemini-3\.6-flash",/model: process.env.GEMINI_MODEL || "gemini-2.5-flash",/g' server.ts
+          if grep -q 'import { createServer as createViteServer } from "vite";' server.ts; then
+            perl -0pi -e 's/import \{ createServer as createViteServer \} from "vite";\n//' server.ts
+            perl -0pi -e 's/const vite = await createViteServer\(\{/const { createServer: createViteServer } = await import("vite");\n    const vite = await createViteServer({/' server.ts
+          fi
+      - name: Derleme
+        run: |
+          npm install
+          npm run build
+      - name: Deploy kaniti
+        run: echo "actions-deploy OK | $(date -u +%FT%TZ) | ${GITHUB_SHA}" > dist/actions-deploy.txt
+      - name: FTP deploy
+        env:
+          FTP_PASS: ${{ secrets.FTP_PASS }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+          lftp -u "tal2e0ftorg,$FTP_PASS" "31.186.11.163" -e "set ftp:ssl-allow no; set net:max-retries 3; set net:timeout 30; mirror -R --delete --no-perms dist httpdocs/dist; put server.ts -o httpdocs/server.ts; get httpdocs/web.config -o /tmp/wc; put /tmp/wc -o httpdocs/web.config; bye"
