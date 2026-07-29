@@ -2,14 +2,16 @@ import React from "react";
 import { Invoice, CompanySettings, Contact } from "../types";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { getCurrencySymbol } from "../utils/exportUtils";
-import { Printer, Download, X, QrCode, Building2, CheckCircle2 } from "lucide-react";
+import { Printer, Download, X, QrCode, Building2, CheckCircle2, Users, Package, ExternalLink } from "lucide-react";
 import { Logo } from "./Logo";
+import { NavItem } from "./Sidebar";
 
 interface InvoicePrintModalProps {
   invoice: Invoice;
   companySettings: CompanySettings;
   contact?: Contact;
   onClose: () => void;
+  onSelectTab?: (tab: NavItem) => void;
 }
 
 export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
@@ -17,6 +19,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
   companySettings,
   contact,
   onClose,
+  onSelectTab,
 }) => {
   const handlePrint = () => {
     window.print();
@@ -25,38 +28,42 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
   const writtenAmount = numberToTurkishWords(invoice.grandTotal);
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-4xl w-full p-8 shadow-2xl space-y-6 my-8 print:p-0 print:shadow-none print:m-0 print:w-full print:max-w-none print:border-none print:bg-white print:text-black">
-        {/* Top Control Bar (Hidden on print) */}
-        <div className="flex items-center justify-between border-b border-slate-200 pb-4 print:hidden">
-          <div className="flex items-center gap-2">
-            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-black px-2.5 py-1 rounded-md uppercase tracking-wide">
+    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in">
+      <div className="bg-white border border-purple-200 text-slate-900 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto print:max-h-none print:shadow-none print:m-0 print:w-full print:max-w-none print:border-none print:bg-white print:text-black">
+        {/* Top Control Bar (Sticky at Top - Hidden on print) */}
+        <div className="sticky top-0 bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-3.5 sm:px-6 flex items-center justify-between z-20 border-b border-purple-800/40 shadow-sm shrink-0 print:hidden">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="bg-purple-500/20 text-purple-200 border border-purple-400/30 text-xs font-extrabold px-3 py-1 rounded-lg uppercase tracking-wide shrink-0">
               {invoice.type === "sales" ? "Satış e-Arşiv Faturası" : "Alış Faturası"}
             </span>
-            <span className="text-xs text-slate-500 font-mono">
+            <span className="text-xs text-purple-200/90 font-mono font-bold truncate">
               Fatura No: {invoice.invoiceNumber}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 shrink-0">
             <button
               onClick={handlePrint}
-              className="bg-[#8252F6] hover:bg-[#703EE5] text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+              className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
             >
-              <Printer className="w-4 h-4 text-[#EF7D2C]" />
+              <Printer className="w-4 h-4 text-purple-200" />
               <span>Yazdır / PDF İndir</span>
             </button>
+
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 p-2 rounded-xl cursor-pointer"
+              className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              title="Pencereyi Kapat"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 text-rose-300" />
+              <span>Kapat</span>
             </button>
           </div>
         </div>
 
-        {/* Printable Invoice Page Area */}
-        <div id="printable-invoice" className="bg-white text-slate-900 p-8 border border-slate-200 rounded-xl space-y-6 print:border-none print:p-0">
+        {/* Scrollable Printable Invoice Document */}
+        <div className="p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:overflow-visible custom-scrollbar">
+          <div id="printable-invoice" className="bg-white text-slate-900 p-6 sm:p-8 border border-purple-100 rounded-xl space-y-6 print:border-none print:p-0">
           {/* Header Banner */}
           <div className="flex items-start justify-between border-b-2 border-slate-900 pb-6">
             <div className="space-y-1">
@@ -114,11 +121,41 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
             </div>
 
             {/* Buyer */}
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-              <span className="text-[10px] font-black uppercase text-indigo-700 block tracking-wider">
-                ALICI BİLGİLERİ
-              </span>
-              <p className="font-extrabold text-slate-900">{invoice.contactName}</p>
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1 relative group">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-indigo-700 block tracking-wider">
+                  ALICI BİLGİLERİ
+                </span>
+                {onSelectTab && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onSelectTab("contacts");
+                    }}
+                    className="print:hidden text-[10px] font-bold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1 cursor-pointer bg-purple-100/80 px-2 py-0.5 rounded"
+                    title="Cari Hesaplar Listesine Git"
+                  >
+                    <Users className="w-3 h-3" />
+                    <span>Cari Listesi</span>
+                  </button>
+                )}
+              </div>
+              {onSelectTab ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onSelectTab("contacts");
+                  }}
+                  className="font-extrabold text-slate-900 hover:text-purple-800 hover:underline text-left cursor-pointer flex items-center gap-1 group/carilink print:no-underline print:text-black"
+                >
+                  <span>{invoice.contactName}</span>
+                  <ExternalLink className="w-3 h-3 text-purple-600 opacity-0 group-hover/carilink:opacity-100 transition-opacity print:hidden" />
+                </button>
+              ) : (
+                <p className="font-extrabold text-slate-900">{invoice.contactName}</p>
+              )}
               <p>
                 Vergi Dairesi: <strong>{contact?.taxOffice || invoice.taxNumber || "-"}</strong>
               </p>
@@ -138,7 +175,25 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
               <thead>
                 <tr className="bg-slate-900 text-white font-bold uppercase text-[10px] tracking-wider">
                   <th className="py-2.5 px-3">Sıra</th>
-                  <th className="py-2.5 px-3">Mal / Hizmet Açıklaması</th>
+                  <th className="py-2.5 px-3">
+                    <div className="flex items-center justify-between">
+                      <span>Mal / Hizmet Açıklaması</span>
+                      {onSelectTab && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onSelectTab("products");
+                          }}
+                          className="print:hidden text-[9px] font-bold text-purple-200 hover:text-white hover:underline flex items-center gap-1 cursor-pointer bg-purple-800/80 px-2 py-0.5 rounded capitalize"
+                          title="Stok & Hizmet Listesine Git"
+                        >
+                          <Package className="w-3 h-3 text-purple-300" />
+                          <span>Stok Listesi</span>
+                        </button>
+                      )}
+                    </div>
+                  </th>
                   <th className="py-2.5 px-3 text-center">Miktar</th>
                   <th className="py-2.5 px-3 text-center">Birim</th>
                   <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
@@ -153,7 +208,24 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                   return (
                     <tr key={item.id || idx} className="hover:bg-slate-50">
                       <td className="py-3 px-3 font-mono text-slate-500">{idx + 1}</td>
-                      <td className="py-3 px-3 font-semibold text-slate-900">{item.description}</td>
+                      <td className="py-3 px-3 font-semibold text-slate-900">
+                        {onSelectTab ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              onSelectTab("products");
+                            }}
+                            className="hover:text-purple-700 hover:underline text-left cursor-pointer flex items-center gap-1 group/itemlink print:no-underline print:text-black"
+                            title="Stok Listesine Git"
+                          >
+                            <span>{item.description}</span>
+                            <Package className="w-3 h-3 text-purple-500 opacity-0 group-hover/itemlink:opacity-100 transition-opacity print:hidden shrink-0" />
+                          </button>
+                        ) : (
+                          item.description
+                        )}
+                      </td>
                       <td className="py-3 px-3 text-center font-bold">{item.quantity}</td>
                       <td className="py-3 px-3 text-center text-slate-600">{item.unit}</td>
                       <td className="py-3 px-3 text-right font-mono">
@@ -258,5 +330,6 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };

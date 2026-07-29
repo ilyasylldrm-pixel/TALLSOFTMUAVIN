@@ -1,6 +1,6 @@
 node_modules/
 build/
-# dist/ repoya dahil (Windows Plesk sunucuda build yapamiyor - nodenv yok)
+dist/
 coverage/
 .DS_Store
 *.log

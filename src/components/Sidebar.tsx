@@ -43,6 +43,9 @@ export type NavItem =
   | "invoices_purchase"
   | "quotes"
   | "waybills"
+  | "waybills_dispatch"
+  | "waybills_receipt"
+  | "quotes_and_slips"
   | "accounts"
   | "transactions"
   | "income_slips"
@@ -50,6 +53,7 @@ export type NavItem =
   | "products"
   | "products_list"
   | "orders"
+  | "orders_module"
   | "hr"
   | "files"
   | "reports"
@@ -80,8 +84,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenQuickAdd,
   currentUser,
 }) => {
+  const [isOrdersExpanded, setIsOrdersExpanded] = useState(true);
   const [isFinanceExpanded, setIsFinanceExpanded] = useState(true);
   const [isInvoicesExpanded, setIsInvoicesExpanded] = useState(true);
+  const [isQuotesAndSlipsExpanded, setIsQuotesAndSlipsExpanded] = useState(true);
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
 
   const isAdmin =
@@ -95,11 +101,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       : []),
     { id: "dashboard", label: "Ana Sayfa", icon: LayoutDashboard },
     { id: "company", label: "Firma Bilgileri", icon: Building2, hasSubItems: true },
-    { id: "invoices", label: "Faturalar & Fişler", icon: FileText, hasSubItems: true },
+    { id: "invoices", label: "E-Belgeler", icon: FileText, hasSubItems: true },
+    { id: "orders_module", label: "Sipariş & Proforma", icon: ShoppingCart, hasSubItems: true },
+    { id: "quotes_and_slips", label: "Gelir & Gider Fişleri", icon: FileSpreadsheet, hasSubItems: true },
     { id: "contacts", label: "Cari Hesaplar", icon: Users },
     { id: "accounts", label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
     { id: "products", label: "Stok & Hizmetler", icon: PackageIcon },
-    { id: "orders", label: "Sipariş Oluştur & Siparişler", icon: ShoppingCart },
     { id: "hr", label: "İnsan Kaynakları", icon: UserCheck },
     { id: "files", label: "Bulut Dosya Deposu", icon: HardDrive },
     { id: "reports", label: "Vergilendirme", icon: BarChart3 },
@@ -117,8 +124,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const invoiceSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "invoices_sales", label: "Gelir Faturası", icon: FileText },
     { id: "invoices_purchase", label: "Gider Faturası", icon: FileText },
-    { id: "quotes", label: "Teklifler & Proforma", icon: FileSpreadsheet },
-    { id: "waybills", label: "İrsaliyeler", icon: Truck },
+    { id: "waybills_dispatch", label: "Giden İrsaliyeler", icon: ArrowUpRight },
+    { id: "waybills_receipt", label: "Gelen İrsaliyeler", icon: ArrowDownLeft },
+  ];
+
+  const orderSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
+    { id: "orders", label: "Siparişler & Sipariş Oluştur", icon: ShoppingCart },
+    { id: "quotes", label: "Proforma Faturalar", icon: FileSpreadsheet },
+  ];
+
+  const quotesAndSlipsSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "income_slips", label: "Gelir Fişi", icon: ArrowDownLeft },
     { id: "expenses", label: "Gider Fişi", icon: ArrowUpRight },
   ];
@@ -158,19 +173,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto custom-scrollbar">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const isOrderItem = item.id === "orders_module" || item.id === "orders";
           const isInvoiceItem = item.id === "invoices";
+          const isQuotesAndSlipsItem = item.id === "quotes_and_slips";
           const isFinanceItem = item.id === "accounts";
           const isCompanyItem = item.id === "company";
           const isProductItem = item.id === "products";
 
-          const isActive = isInvoiceItem
+          const isActive = isOrderItem
+            ? ["orders", "orders_module", "quotes"].includes(currentTab)
+            : isInvoiceItem
             ? [
                 "invoices",
                 "invoices_sales",
                 "invoices_purchase",
-                "quotes",
                 "waybills",
-                "transactions",
+                "waybills_dispatch",
+                "waybills_receipt",
+              ].includes(currentTab)
+            : isQuotesAndSlipsItem
+            ? [
+                "quotes_and_slips",
                 "income_slips",
                 "expenses",
               ].includes(currentTab)
@@ -186,21 +209,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div key={item.id} className="space-y-1">
               <button
                 onClick={() => {
-                  if (isInvoiceItem) {
+                  if (isOrderItem) {
+                    setIsOrdersExpanded((prev) => !prev);
+                    if (!["orders", "orders_module", "quotes"].includes(currentTab)) {
+                      onSelectTab("orders");
+                    }
+                  } else if (isInvoiceItem) {
                     setIsInvoicesExpanded((prev) => !prev);
                     if (
                       ![
                         "invoices",
                         "invoices_sales",
                         "invoices_purchase",
-                        "quotes",
                         "waybills",
-                        "transactions",
+                        "waybills_dispatch",
+                        "waybills_receipt",
+                      ].includes(currentTab)
+                    ) {
+                      onSelectTab("invoices_sales");
+                    }
+                  } else if (isQuotesAndSlipsItem) {
+                    setIsQuotesAndSlipsExpanded((prev) => !prev);
+                    if (
+                      ![
+                        "quotes_and_slips",
                         "income_slips",
                         "expenses",
                       ].includes(currentTab)
                     ) {
-                      onSelectTab("invoices_sales");
+                      onSelectTab("income_slips");
                     }
                   } else if (isFinanceItem) {
                     setIsFinanceExpanded((prev) => !prev);
@@ -234,8 +271,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span className="text-[10px] font-medium bg-[#fff6ef] text-[#EF7D2C] px-1.5 py-0.5 rounded-full border border-[#fcdac2] animate-pulse">
                     {item.badge}
                   </span>
+                ) : isOrderItem ? (
+                  isOrdersExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )
                 ) : isInvoiceItem ? (
                   isInvoicesExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )
+                ) : isQuotesAndSlipsItem ? (
+                  isQuotesAndSlipsExpanded ? (
                     <ChevronDown className="w-4 h-4 text-slate-400" />
                   ) : (
                     <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -257,10 +306,68 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
               </button>
 
-              {/* Sub-modules for Faturalar */}
+              {/* Sub-modules for Sipariş & Proforma */}
+              {isOrderItem && isOrdersExpanded && (
+                <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
+                  {orderSubModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubActive = currentTab === sub.id;
+
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => onSelectTab(sub.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          isSubActive
+                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        <SubIcon
+                          className={`w-3.5 h-3.5 ${
+                            isSubActive ? "text-white" : "text-slate-400"
+                          }`}
+                        />
+                        <span>{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Sub-modules for Faturalar & İrsaliyeler */}
               {isInvoiceItem && isInvoicesExpanded && (
                 <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
                   {invoiceSubModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubActive = currentTab === sub.id;
+
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => onSelectTab(sub.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          isSubActive
+                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        <SubIcon
+                          className={`w-3.5 h-3.5 ${
+                            isSubActive ? "text-white" : "text-slate-400"
+                          }`}
+                        />
+                        <span>{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Sub-modules for Gelir & Gider Fişleri */}
+              {isQuotesAndSlipsItem && isQuotesAndSlipsExpanded && (
+                <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
+                  {quotesAndSlipsSubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive = currentTab === sub.id;
 

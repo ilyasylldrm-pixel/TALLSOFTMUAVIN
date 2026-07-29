@@ -336,19 +336,9 @@ export function generateMonthlyIntegratedData() {
       const totalVat = items.reduce((s, x) => s + x.vatAmount, 0);
       const grandTotal = subtotal + totalVat;
 
-      let status: Invoice["status"] = "paid";
-      let paidAmount = grandTotal;
-      let remainingAmount = 0;
-
-      if ((m.num === "07" || m.num === "12") && invIdx > 18) {
-        status = "sent";
-        paidAmount = 0;
-        remainingAmount = grandTotal;
-      } else if (invIdx % 5 === 0) {
-        status = "partial";
-        paidAmount = Math.floor(grandTotal / 2);
-        remainingAmount = grandTotal - paidAmount;
-      }
+      const status: Invoice["status"] = "paid";
+      const paidAmount = grandTotal;
+      const remainingAmount = 0;
 
       const inv: Invoice = {
         id: `inv_${invCounter}`,

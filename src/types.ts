@@ -136,6 +136,9 @@ export interface Transaction {
   description: string;
   documentNo?: string;
   receiptImage?: string; // Bakiye/Fiş görseli simülasyonu
+  items?: InvoiceItem[];
+  subtotal?: number;
+  totalVat?: number;
 }
 
 export interface Product {
@@ -185,6 +188,7 @@ export interface Quote {
   validUntil: string;
   items: InvoiceItem[];
   grandTotal: number;
+  currency?: string;
   status: QuoteStatus;
   notes?: string;
 }
@@ -444,6 +448,28 @@ export interface AdvanceRequest {
   requestDate: string;
   description: string;
   status: "paid" | "approved" | "pending" | "rejected";
+  createdAt: string;
+}
+
+export interface LegalDeduction {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  type: string;
+  totalDebt?: number;
+  totalDebtAmount?: number;
+  monthlyDeduction?: number;
+  monthlyAmount?: number;
+  paidAmount: number;
+  remainingAmount?: number;
+  creditorTitle?: string;
+  creditorName?: string;
+  fileNumber?: string;
+  iban?: string;
+  calculationType?: string;
+  priorityOrder?: number;
+  notes?: string;
+  status: "active" | "completed" | "paused" | "queued" | string;
   createdAt: string;
 }
 

@@ -39,6 +39,7 @@ interface WaybillsProps {
   warehouses?: Warehouse[];
   companySettings?: CompanySettings;
   globalSearchTerm?: string;
+  forcedType?: "dispatch" | "receipt";
   onAddWaybill: (waybill: Waybill) => void;
   onUpdateWaybill: (waybill: Waybill) => void;
   onConvertWaybillToInvoice: (waybill: Waybill) => void;
@@ -52,13 +53,20 @@ export const Waybills: React.FC<WaybillsProps> = ({
   warehouses = [],
   companySettings,
   globalSearchTerm = "",
+  forcedType,
   onAddWaybill,
   onUpdateWaybill,
   onConvertWaybillToInvoice,
   onDeleteWaybill,
 }) => {
-  const [activeTab, setActiveTab] = useState<"all" | "dispatch" | "receipt">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "dispatch" | "receipt">(forcedType || "all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  React.useEffect(() => {
+    if (forcedType) {
+      setActiveTab(forcedType);
+    }
+  }, [forcedType]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedWaybillForView, setSelectedWaybillForView] = useState<Waybill | null>(null);
@@ -390,269 +398,453 @@ export const Waybills: React.FC<WaybillsProps> = ({
     };
   };
 
+  // Header and Description based on forcedType or active view
+  const pageTitle =
+    forcedType === "receipt"
+      ? "Gelen İrsaliyeler (Alış İrsaliyeleri)"
+      : forcedType === "dispatch"
+      ? "Giden İrsaliyeler (Sevk İrsaliyeleri)"
+      : "İrsaliye Yönetimi & İrsaliye Oluştur";
+
+  const pageDescription =
+    forcedType === "receipt"
+      ? "Tedarikçilerden gelen alış irsaliyeleri takibi, tesellüm kayıtları, sürücü/plaka ve irsaliye detayları"
+      : forcedType === "dispatch"
+      ? "Müşterilere sevk edilen malzeme irsaliyeleri, sürücü & plaka kaydı ve faturalandırma modülü"
+      : "Sevk ve alış irsaliyeleri takibi, sevkiyat araç & sürücü kaydı ve tek tıkla faturalandırma modülü";
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Header Title & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 bg-blue-100 rounded-xl text-blue-700">
-              <Truck className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">İrsaliye Yönetimi & İrsaliye Oluştur</h1>
-              <p className="text-xs text-slate-500 font-medium">
-                Sevk ve alış irsaliyeleri takibi, sevkiyat araç & sürücü kaydı ve tek tıkla faturalandırma modülü
-              </p>
-            </div>
-          </div>
+      {/* Top Header (Lila Bal Peteği & Geometrik Desen - Faturalar Tasarımı ile Aynı) */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
+            backgroundSize: "20px 35px",
+          }}
+        />
+
+        {/* Dekoratif Geometrik Vektör Şekiller */}
+        <svg
+          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
+          viewBox="0 0 200 200"
+          fill="none"
+        >
+          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
+          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
+          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
+          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
+          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
+          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
+        </svg>
+
+        <svg
+          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-400/10"
+          viewBox="0 0 160 160"
+          fill="none"
+        >
+          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
+          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
+          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
+          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
+        </svg>
+
+        <div className="relative z-10">
+          <h2 className="text-lg font-extrabold text-slate-950">
+            {pageTitle}
+          </h2>
+          <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
+            {pageDescription}
+          </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <ExportButtons getExportData={getWaybillsExportData} />
-          <button
-            onClick={() => handleOpenNewWaybillModal("dispatch")}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Yeni Sevk İrsaliyesi</span>
-          </button>
-          <button
-            onClick={() => handleOpenNewWaybillModal("receipt")}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Yeni Alış İrsaliyesi</span>
-          </button>
+        <div className="relative z-10 flex flex-wrap items-center gap-2">
+          {(!forcedType || forcedType === "dispatch") && (
+            <button
+              onClick={() => handleOpenNewWaybillModal("dispatch")}
+              className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4 text-purple-800 font-bold" />
+              <span>Yeni Sevk İrsaliyesi</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Waybills */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam İrsaliye</span>
-            <div className="text-2xl font-bold text-slate-900 mt-1">{totalWaybillsCount} Adet</div>
-            <span className="text-[11px] text-blue-600 font-medium mt-1 inline-block">Sistemde kayıtlı irsaliyeler</span>
-          </div>
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
-            <Truck className="w-6 h-6" />
-          </div>
-        </div>
-
-        {/* Dispatch Total */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Giden Sevk İrsaliyeleri</span>
-            <div className="text-xl font-bold text-emerald-600 mt-1">
-              ₺{dispatchWaybillsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+        {forcedType === "receipt" ? (
+          <>
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam Gelen İrsaliye</span>
+                <div className="text-2xl font-bold text-slate-900 mt-1">
+                  {waybills.filter((w) => w.type === "receipt").length} Adet
+                </div>
+                <span className="text-[11px] text-indigo-600 font-medium mt-1 inline-block">Alış irsaliye kayıtları</span>
+              </div>
+              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                <ArrowDownLeft className="w-6 h-6" />
+              </div>
             </div>
-            <span className="text-[11px] text-emerald-600 font-medium mt-1 inline-block">Müşterilere sevk edilen mallar</span>
-          </div>
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
-            <ArrowUpRight className="w-6 h-6" />
-          </div>
-        </div>
 
-        {/* Receipt Total */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gelen Alış İrsaliyeleri</span>
-            <div className="text-xl font-bold text-indigo-600 mt-1">
-              ₺{receiptWaybillsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam Alış Tutar</span>
+                <div className="text-xl font-bold text-indigo-600 mt-1">
+                  ₺{receiptWaybillsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+                <span className="text-[11px] text-indigo-600 font-medium mt-1 inline-block">Tedarikçi teslimat toplamı</span>
+              </div>
+              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                <DollarSign className="w-6 h-6" />
+              </div>
             </div>
-            <span className="text-[11px] text-indigo-600 font-medium mt-1 inline-block">Tedarikçilerden gelen teslimatlar</span>
-          </div>
-          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-            <ArrowDownLeft className="w-6 h-6" />
-          </div>
-        </div>
 
-        {/* Invoiced Status */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Açık Sevkiyat & Faturalanan</span>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-lg font-bold text-amber-600">{pendingWaybillsCount} Açık</span>
-              <span className="text-slate-300">/</span>
-              <span className="text-lg font-bold text-teal-600">{invoicedWaybillsCount} Fatura</span>
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tesellüm Bekleyen</span>
+                <div className="text-2xl font-bold text-amber-600 mt-1">
+                  {waybills.filter((w) => w.type === "receipt" && (w.status === "pending" || w.status === "shipped")).length} Adet
+                </div>
+                <span className="text-[11px] text-amber-600 font-medium mt-1 inline-block">Açık alış sevkiyatı</span>
+              </div>
+              <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
+                <Clock className="w-6 h-6" />
+              </div>
             </div>
-            <span className="text-[11px] text-slate-500 font-medium mt-1 inline-block">Faturalandırma durumu</span>
-          </div>
-          <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl">
-            <FileText className="w-6 h-6" />
-          </div>
-        </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Faturalandırılan Alışlar</span>
+                <div className="text-2xl font-bold text-teal-600 mt-1">
+                  {waybills.filter((w) => w.type === "receipt" && w.status === "invoiced").length} Adet
+                </div>
+                <span className="text-[11px] text-teal-600 font-medium mt-1 inline-block">Gider faturasına dönüştürülen</span>
+              </div>
+              <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl">
+                <FileText className="w-6 h-6" />
+              </div>
+            </div>
+          </>
+        ) : forcedType === "dispatch" ? (
+          <>
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam Giden İrsaliye</span>
+                <div className="text-2xl font-bold text-slate-900 mt-1">
+                  {waybills.filter((w) => w.type === "dispatch").length} Adet
+                </div>
+                <span className="text-[11px] text-blue-600 font-medium mt-1 inline-block">Sevk irsaliye kayıtları</span>
+              </div>
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+                <ArrowUpRight className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam Sevk Tutarı</span>
+                <div className="text-xl font-bold text-emerald-600 mt-1">
+                  ₺{dispatchWaybillsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+                <span className="text-[11px] text-emerald-600 font-medium mt-1 inline-block">Müşteri sevkiyat toplamı</span>
+              </div>
+              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+                <DollarSign className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sevkiyattaki Mallar</span>
+                <div className="text-2xl font-bold text-amber-600 mt-1">
+                  {waybills.filter((w) => w.type === "dispatch" && (w.status === "pending" || w.status === "shipped")).length} Adet
+                </div>
+                <span className="text-[11px] text-amber-600 font-medium mt-1 inline-block">Açık sevk irsaliyesi</span>
+              </div>
+              <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
+                <Truck className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Faturalandırılan Sevkler</span>
+                <div className="text-2xl font-bold text-teal-600 mt-1">
+                  {waybills.filter((w) => w.type === "dispatch" && w.status === "invoiced").length} Adet
+                </div>
+                <span className="text-[11px] text-teal-600 font-medium mt-1 inline-block">Gelir faturasına dönüştürülen</span>
+              </div>
+              <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl">
+                <FileText className="w-6 h-6" />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Total Waybills */}
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam İrsaliye</span>
+                <div className="text-2xl font-bold text-slate-900 mt-1">{totalWaybillsCount} Adet</div>
+                <span className="text-[11px] text-blue-600 font-medium mt-1 inline-block">Sistemde kayıtlı irsaliyeler</span>
+              </div>
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+                <Truck className="w-6 h-6" />
+              </div>
+            </div>
+
+            {/* Dispatch Total */}
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Giden Sevk İrsaliyeleri</span>
+                <div className="text-xl font-bold text-emerald-600 mt-1">
+                  ₺{dispatchWaybillsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+                <span className="text-[11px] text-emerald-600 font-medium mt-1 inline-block">Müşterilere sevk edilen mallar</span>
+              </div>
+              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+                <ArrowUpRight className="w-6 h-6" />
+              </div>
+            </div>
+
+            {/* Receipt Total */}
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gelen Alış İrsaliyeleri</span>
+                <div className="text-xl font-bold text-indigo-600 mt-1">
+                  ₺{receiptWaybillsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+                <span className="text-[11px] text-indigo-600 font-medium mt-1 inline-block">Tedarikçilerden gelen teslimatlar</span>
+              </div>
+              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                <ArrowDownLeft className="w-6 h-6" />
+              </div>
+            </div>
+
+            {/* Invoiced Status */}
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Açık Sevkiyat & Faturalanan</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-lg font-bold text-amber-600">{pendingWaybillsCount} Açık</span>
+                  <span className="text-slate-300">/</span>
+                  <span className="text-lg font-bold text-teal-600">{invoicedWaybillsCount} Fatura</span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-medium mt-1 inline-block">Faturalandırma durumu</span>
+              </div>
+              <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl">
+                <FileText className="w-6 h-6" />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Navigation Tabs & Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Main Tabs */}
-          <div className="flex items-center p-1 bg-slate-100/80 rounded-xl w-fit">
+      {/* Navigation Tabs & Search Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Main Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs">
+          {!forcedType ? (
+            <>
+              <button
+                onClick={() => setActiveTab("all")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  activeTab === "all"
+                    ? "bg-white text-purple-950 font-bold shadow-2xs border border-purple-200/60"
+                    : "text-purple-900/70 hover:text-purple-950"
+                }`}
+              >
+                Tüm İrsaliyeler ({waybills.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("dispatch")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  activeTab === "dispatch"
+                    ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60"
+                    : "text-purple-900/70 hover:text-purple-950"
+                }`}
+              >
+                Sevk İrsaliyeleri (Giden)
+              </button>
+              <button
+                onClick={() => setActiveTab("receipt")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  activeTab === "receipt"
+                    ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60"
+                    : "text-purple-900/70 hover:text-purple-950"
+                }`}
+              >
+                Alış İrsaliyeleri (Gelen)
+              </button>
+            </>
+          ) : (
             <button
-              onClick={() => setActiveTab("all")}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "all"
-                  ? "bg-white text-blue-700 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-slate-900"
+              onClick={() => setActiveTab(forcedType)}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activeTab === forcedType
+                  ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60"
+                  : "text-purple-900/70 hover:text-purple-950"
               }`}
             >
-              Tüm İrsaliyeler ({waybills.length})
+              Tümü ({waybills.filter((w) => w.type === forcedType).length})
             </button>
-            <button
-              onClick={() => setActiveTab("dispatch")}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "dispatch"
-                  ? "bg-blue-600 text-white shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Sevk İrsaliyeleri (Giden) ({waybills.filter((w) => w.type === "dispatch").length})
-            </button>
-            <button
-              onClick={() => setActiveTab("receipt")}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "receipt"
-                  ? "bg-indigo-600 text-white shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Alış İrsaliyeleri (Gelen) ({waybills.filter((w) => w.type === "receipt").length})
-            </button>
+          )}
+        </div>
+
+        {/* Search, Status & Export */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          <div className="relative w-full md:w-64">
+            <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="İrsaliye No, Cari, Plaka..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
+            />
           </div>
 
-          {/* Search & Status Filter */}
-          <div className="flex items-center gap-3">
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-blue-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="İrsaliye No, Cari, Plaka, Sürücü..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-50 text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              />
-            </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-white text-slate-700 text-xs rounded-xl px-3 py-2 border border-purple-200/60 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
+          >
+            <option value="all">Tüm Durumlar</option>
+            <option value="pending">Hazırlanıyor</option>
+            <option value="shipped">Sevk Edildi</option>
+            <option value="delivered">Teslim Edildi</option>
+            <option value="invoiced">Faturalandırıldı</option>
+            <option value="cancelled">İptal Edilenler</option>
+          </select>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-slate-50 text-slate-700 text-xs rounded-xl px-3 py-2 border border-slate-200 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            >
-              <option value="all">Tüm Durumlar</option>
-              <option value="pending">Hazırlanıyor</option>
-              <option value="shipped">Sevk Edildi</option>
-              <option value="delivered">Teslim Edildi</option>
-              <option value="invoiced">Faturalandırıldı</option>
-              <option value="cancelled">İptal Edilenler</option>
-            </select>
-          </div>
+          <ExportButtons getExportData={getWaybillsExportData} size="sm" />
         </div>
       </div>
 
       {/* Waybills Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-3 shadow-2xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
             <thead>
-              <tr className="bg-slate-50/80 text-slate-500 text-[11px] uppercase tracking-wider font-semibold border-b border-slate-200">
-                <th className="py-3.5 px-4">İrsaliye No / Tarih</th>
-                <th className="py-3.5 px-4">İrsaliye Tipi</th>
-                <th className="py-3.5 px-4">Cari Firma / VKN</th>
-                <th className="py-3.5 px-4">Plaka & Sürücü / Depo</th>
-                <th className="py-3.5 px-4 text-center">Kalem</th>
-                <th className="py-3.5 px-4 text-right">Genel Toplam</th>
-                <th className="py-3.5 px-4">Durum</th>
-                <th className="py-3.5 px-4 text-right">İşlemler</th>
+              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
+                <th className="pb-2 px-4">İrsaliye No / Tarih</th>
+                <th className="pb-2 px-4">İrsaliye Tipi</th>
+                <th className="pb-2 px-4">Cari Firma / VKN</th>
+                <th className="pb-2 px-4">Plaka & Sürücü / Depo</th>
+                <th className="pb-2 px-4 text-center">Kalem</th>
+                <th className="pb-2 px-4 text-right">Genel Toplam</th>
+                <th className="pb-2 px-4">Durum</th>
+                <th className="pb-2 px-4 text-center">İşlemler</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+            <tbody>
               {filteredWaybills.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    <Truck className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-                    <p className="font-semibold">Kriterlere uygun irsaliye kaydı bulunamadı.</p>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Yeni bir sevk veya alış irsaliyesi oluşturmak için yukarıdaki butonları kullanabilirsiniz.
-                    </p>
+                  <td colSpan={8} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                    Kriterlere uygun irsaliye kaydı bulunamadı.
                   </td>
                 </tr>
               ) : (
                 filteredWaybills.map((waybill) => (
-                  <tr key={waybill.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-slate-900">{waybill.waybillNumber}</div>
-                      <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                        <Calendar className="w-3 h-3 text-slate-400" />
+                  <tr
+                    key={waybill.id}
+                    className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                  >
+                    <td className="py-3.5 px-4 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <div className="font-extrabold text-slate-900 group-hover:text-purple-950 font-mono text-sm transition-colors">
+                        {waybill.waybillNumber}
+                      </div>
+                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60 flex items-center gap-1 mt-0.5">
+                        <Calendar className="w-3 h-3 text-purple-400" />
                         <span>{waybill.waybillDate}</span>
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4">
+                    <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                       {waybill.type === "dispatch" ? (
-                        <span className="bg-blue-100 text-blue-800 border border-blue-200/80 px-2.5 py-1 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
-                          <ArrowUpRight className="w-3 h-3 text-blue-600" /> Sevk İrsaliyesi
+                        <span className="bg-blue-50 text-blue-700 border border-blue-200 group-hover:border-blue-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase inline-flex items-center gap-1">
+                          <ArrowUpRight className="w-3 h-3" /> Sevk İrsaliyesi
                         </span>
                       ) : (
-                        <span className="bg-indigo-100 text-indigo-800 border border-indigo-200/80 px-2.5 py-1 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
-                          <ArrowDownLeft className="w-3 h-3 text-indigo-600" /> Alış İrsaliyesi
+                        <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 group-hover:border-indigo-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase inline-flex items-center gap-1">
+                          <ArrowDownLeft className="w-3 h-3" /> Alış İrsaliyesi
                         </span>
                       )}
                     </td>
 
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-slate-900">{waybill.contactName}</div>
+                    <td className="py-3.5 px-4 font-extrabold text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      {waybill.contactName}
                       {waybill.taxNumber && (
-                        <div className="text-[11px] text-slate-400">VKN/TCKN: {waybill.taxNumber}</div>
+                        <div className="text-[10px] font-normal text-slate-400 group-hover:text-purple-700/60">
+                          VKN: {waybill.taxNumber}
+                        </div>
                       )}
                     </td>
 
-                    <td className="py-3.5 px-4">
-                      <div className="text-slate-800 font-bold flex items-center gap-1">
-                        <Truck className="w-3 h-3 text-slate-400" />
+                    <td className="py-3.5 px-4 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <div className="text-slate-800 font-bold flex items-center gap-1 group-hover:text-purple-950">
+                        <Truck className="w-3.5 h-3.5 text-purple-500" />
                         <span>{waybill.vehiclePlate || "Plakasız"}</span>
                       </div>
-                      <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                        <User className="w-3 h-3 text-slate-400" />
+                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60 flex items-center gap-1 mt-0.5">
+                        <User className="w-3 h-3" />
                         <span>{waybill.driverName || "Sürücü Belirtilmedi"}</span>
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                    <td className="py-3.5 px-4 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <span className="bg-purple-50 border border-purple-200 text-purple-900 px-2 py-0.5 rounded text-[10px] font-bold">
                         {waybill.items.length} Kalem
                       </span>
                     </td>
 
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="font-bold text-slate-900 text-sm">
+                    <td className="py-3.5 px-4 text-right border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <div className="font-extrabold text-slate-900 group-hover:text-purple-950 font-mono text-sm">
                         ₺{waybill.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">
                         KDV: ₺{waybill.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4">{getStatusBadge(waybill.status)}</td>
+                    <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      {getStatusBadge(waybill.status)}
+                    </td>
 
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* View Waybill Detail & Document */}
+                    <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {/* İncele Button */}
                         <button
                           onClick={() => setSelectedWaybillForView(waybill)}
-                          className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
-                          title="İrsaliye Belgesi & Yazdır"
+                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="İrsaliye Detayını İncele"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>İncele</span>
                         </button>
 
-                        {/* Convert to Invoice */}
-                        {waybill.status !== "invoiced" && waybill.status !== "cancelled" && (
+                        {/* Yazdır Button */}
+                        <button
+                          onClick={() => {
+                            setSelectedWaybillForView(waybill);
+                            setTimeout(() => window.print(), 100);
+                          }}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="İrsaliye Belgesini Yazdır"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Yazdır</span>
+                        </button>
+
+                        {/* Convert to Invoice - Sadece Giden Sevk İrsaliyesi İçin */}
+                        {waybill.type === "dispatch" && waybill.status !== "invoiced" && waybill.status !== "cancelled" && (
                           <button
                             onClick={() => setConvertConfirmWaybill(waybill)}
-                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                            className="bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                             title="İrsaliyeyi Faturalandır"
                           >
                             <FileText className="w-3.5 h-3.5" />
@@ -667,10 +859,10 @@ export const Waybills: React.FC<WaybillsProps> = ({
                               onDeleteWaybill(waybill.id);
                             }
                           }}
-                          className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer"
                           title="İrsaliyeyi Sil"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
@@ -1053,7 +1245,9 @@ export const Waybills: React.FC<WaybillsProps> = ({
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">{selectedWaybillForView.waybillNumber}</h2>
-                  <p className="text-xs text-slate-500 font-medium">Resmi Sevk İrsaliyesi Belge Önizlemesi</p>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {selectedWaybillForView.type === "receipt" ? "Resmi Alış İrsaliyesi Belge Detayı" : "Resmi Sevk İrsaliyesi Belge Detayı"}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

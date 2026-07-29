@@ -168,7 +168,6 @@ export default function App() {
       totalVat: waybill.totalVat,
       grandTotal: waybill.grandTotal,
       currency: waybill.currency || "₺",
-      paymentStatus: "unpaid",
       paidAmount: 0,
       remainingAmount: waybill.grandTotal,
       status: "sent",
@@ -215,8 +214,6 @@ export default function App() {
         contacts: updatedContacts,
       };
     });
-
-    setCurrentTab("invoices");
   };
 
   // Handlers for Orders
@@ -272,8 +269,9 @@ export default function App() {
       totalVat: order.totalVat,
       grandTotal: order.grandTotal,
       currency: order.currency || "₺",
-      paymentStatus: "unpaid",
+      paidAmount: 0,
       remainingAmount: order.grandTotal,
+      status: "sent",
       notes: `Sipariş No: ${order.orderNumber} faturaya dönüştürüldü. ${order.notes || ""}`,
       createdAt: new Date().toISOString().split("T")[0],
     };
@@ -503,6 +501,98 @@ export default function App() {
 
     handleAddTransaction(newTx);
   };
+
+  const handleCollectAllInvoices = (targetAccountId?: string) => {
+    setData((prev) => {
+      const defaultAcc = prev.accounts.find((a) => a.id === targetAccountId) || prev.accounts[0];
+      const accountId = defaultAcc?.id || "acc_1";
+      const accountName = defaultAcc?.name || "Merkez TL Kasası";
+
+      const newTransactions: Transaction[] = [];
+      let updatedAccounts = [...prev.accounts];
+      let updatedContacts = [...prev.contacts];
+
+      const nowStr = new Date().toISOString().split("T")[0];
+      let collectCount = 0;
+
+      const updatedInvoices = prev.invoices.map((inv) => {
+        if (inv.status !== "cancelled" && inv.remainingAmount > 0) {
+          collectCount++;
+          const remainingToPay = inv.remainingAmount;
+          const isSales = inv.type === "sales";
+
+          const tx: Transaction = {
+            id: `tx_all_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            date: nowStr,
+            type: isSales ? "collection" : "payment",
+            amount: remainingToPay,
+            currency: inv.currency || "TRY",
+            accountId,
+            accountName,
+            contactId: inv.contactId,
+            contactName: inv.contactName,
+            invoiceId: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            category: isSales ? "Fatura Tahsilatı" : "Fatura Ödemesi",
+            description: `${inv.invoiceNumber} nolu fatura ${isSales ? "toplu tahsilatı" : "toplu ödemesi"}`,
+          };
+          newTransactions.push(tx);
+
+          // Update Account Balance
+          updatedAccounts = updatedAccounts.map((a) => {
+            if (a.id === accountId) {
+              const delta = isSales ? remainingToPay : -remainingToPay;
+              return { ...a, balance: a.balance + delta };
+            }
+            return a;
+          });
+
+          // Update Contact Balance
+          if (inv.contactId) {
+            updatedContacts = updatedContacts.map((c) => {
+              if (c.id === inv.contactId) {
+                const delta = isSales ? -remainingToPay : remainingToPay;
+                const newBal = c.balance + delta;
+                return {
+                  ...c,
+                  balance: newBal,
+                  balanceType:
+                    newBal > 0 ? ("receivable" as const) : newBal < 0 ? ("payable" as const) : ("balanced" as const),
+                };
+              }
+              return c;
+            });
+          }
+
+          return {
+            ...inv,
+            paidAmount: inv.grandTotal,
+            remainingAmount: 0,
+            status: "paid" as const,
+          };
+        }
+        return inv;
+      });
+
+      if (collectCount === 0) return prev;
+
+      return {
+        ...prev,
+        invoices: updatedInvoices,
+        transactions: [...newTransactions, ...prev.transactions],
+        accounts: updatedAccounts,
+        contacts: updatedContacts,
+      };
+    });
+  };
+
+  // Auto collect all invoices on mount if any are uncollected
+  useEffect(() => {
+    const uncollectedCount = data.invoices.filter((i) => i.status !== "cancelled" && i.remainingAmount > 0).length;
+    if (uncollectedCount > 0) {
+      handleCollectAllInvoices();
+    }
+  }, []);
 
   const handleTransferBetweenAccounts = (
     fromId: string,
@@ -738,8 +828,59 @@ export default function App() {
         q.id === quote.id ? { ...q, status: "converted" as const } : q
       ),
     }));
+  };
 
-    setCurrentTab("invoices");
+  const handleConvertQuoteToOrder = (quote: Quote) => {
+    const prefix = "SIP2026";
+    const nextSeq = String((data.orders || []).length + 1).padStart(6, "0");
+    const contact = data.contacts.find((c) => c.id === quote.contactId);
+
+    const newOrder: Order = {
+      id: "ord_" + Date.now(),
+      orderNumber: `${prefix}${nextSeq}`,
+      type: "sales",
+      contactId: quote.contactId,
+      contactName: quote.contactName,
+      contactPhone: contact?.phone,
+      contactEmail: contact?.email,
+      taxNumber: contact?.taxNumber,
+      orderDate: new Date().toISOString().split("T")[0],
+      deliveryDate: quote.validUntil || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      items: quote.items.map((item) => {
+        const prod = data.products.find((p) => p.id === item.productId);
+        return {
+          id: item.id || "item_" + Math.random().toString(36).substring(2, 9),
+          productId: item.productId,
+          productCode: prod?.code,
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          vatRate: item.vatRate,
+          discountRate: 0,
+          totalWithoutVat: item.totalWithoutVat,
+          vatAmount: item.vatAmount,
+          totalWithVat: item.totalWithVat,
+        };
+      }),
+      subtotal: quote.items.reduce((s, i) => s + i.totalWithoutVat, 0),
+      totalVat: quote.items.reduce((s, i) => s + i.vatAmount, 0),
+      grandTotal: quote.grandTotal,
+      currency: quote.currency || "TRY",
+      status: "approved",
+      notes: `Proforma (Belge No: ${quote.quoteNumber}) siparişe dönüştürüldü. ${quote.notes || ""}`,
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+
+    handleAddOrder(newOrder);
+
+    // Update quote status to converted
+    setData((prev) => ({
+      ...prev,
+      quotes: prev.quotes.map((q) =>
+        q.id === quote.id ? { ...q, status: "converted" as const } : q
+      ),
+    }));
   };
 
   const handleDeleteQuote = (id: string) => {
@@ -889,15 +1030,25 @@ export default function App() {
       case "contacts":
         return "Cari Hesaplar";
       case "invoices":
-        return "Faturalar";
+        return "E-Belgeler";
       case "invoices_sales":
         return "Gelir Faturası";
       case "invoices_purchase":
         return "Gider Faturası";
       case "quotes":
-        return "Teklifler & Proforma";
+        return "Proforma Faturalar";
+      case "quotes_and_slips":
+        return "Gelir & Gider Fişleri";
+      case "orders":
+        return "Siparişler & Sipariş Oluştur";
+      case "orders_module":
+        return "Sipariş & Proforma";
       case "waybills":
         return "İrsaliye Yönetimi & İrsaliye Oluştur";
+      case "waybills_dispatch":
+        return "Giden İrsaliyeler (Sevk İrsaliyeleri)";
+      case "waybills_receipt":
+        return "Gelen İrsaliyeler (Alış İrsaliyeleri)";
       case "accounts":
         return "Finans Yönetimi";
       case "transactions":
@@ -1020,7 +1171,9 @@ export default function App() {
               onUpdateInvoice={() => {}}
               onDeleteInvoice={handleDeleteInvoice}
               onAddTransactionFromInvoice={handleAddTransactionFromInvoice}
+              onCollectAllInvoices={handleCollectAllInvoices}
               initialContactIdForNewInvoice={initialContactIdForInvoice}
+              onSelectTab={setCurrentTab}
             />
           )}
 
@@ -1033,6 +1186,7 @@ export default function App() {
               globalSearchTerm={searchTerm}
               onAddQuote={handleAddQuote}
               onConvertQuoteToInvoice={handleConvertQuoteToInvoice}
+              onConvertQuoteToOrder={handleConvertQuoteToOrder}
               onDeleteQuote={handleDeleteQuote}
             />
           )}
@@ -1070,6 +1224,7 @@ export default function App() {
               transactions={data.transactions}
               accounts={data.accounts}
               contacts={data.contacts}
+              products={data.products || []}
               globalSearchTerm={searchTerm}
               forcedType={
                 currentTab === "income_slips"
@@ -1111,7 +1266,7 @@ export default function App() {
             />
           )}
 
-          {currentTab === "waybills" && (
+          {(currentTab === "waybills" || currentTab === "waybills_dispatch" || currentTab === "waybills_receipt") && (
             <Waybills
               waybills={data.waybills || []}
               contacts={data.contacts}
@@ -1119,6 +1274,13 @@ export default function App() {
               warehouses={data.warehouses || []}
               companySettings={data.settings}
               globalSearchTerm={searchTerm}
+              forcedType={
+                currentTab === "waybills_dispatch"
+                  ? "dispatch"
+                  : currentTab === "waybills_receipt"
+                  ? "receipt"
+                  : undefined
+              }
               onAddWaybill={handleAddWaybill}
               onUpdateWaybill={handleUpdateWaybill}
               onConvertWaybillToInvoice={handleConvertWaybillToInvoice}

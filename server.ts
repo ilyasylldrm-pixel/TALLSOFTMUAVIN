@@ -1,12 +1,13 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
-dotenv.config({ path: path.join(__dirname, "..", ".env") });
+dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -67,7 +68,7 @@ Schema:
     }
 
     const response = await aiClient.models.generateContent({
-      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: [
         {
           text: `Kullanıcı İletisi / Komutu: ${prompt}\n\nMevcut Muhasebe Özet Verileri:\n${JSON.stringify(
@@ -92,21 +93,20 @@ Schema:
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = __dirname;
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  app.listen(PORT, () => {
+  app.listen(PORT, "0.0.0.0", () => {
     console.log(`Muavin Muhasebe sunucusu çalışıyor: http://0.0.0.0:${PORT}`);
   });
 }
