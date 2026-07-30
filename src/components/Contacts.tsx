@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Contact, ContactType, LedgerEntry, Invoice, Transaction, Account, Cheque, PromissoryNote, CompanySettings } from "../types";
+import { Contact, ContactType, LedgerEntry, Invoice, Transaction, Account, Cheque, PromissoryNote, CompanySettings, getContactAccountCode } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency } from "../utils/exportUtils";
 import * as XLSX from "xlsx";
@@ -473,15 +473,21 @@ export const Contacts: React.FC<ContactsProps> = ({
     e.preventDefault();
     if (!formData.name.trim()) return;
 
+    const prefix = formData.contactType === "vendor" ? "320" : "120";
+    const taxNum = formData.taxNumber && formData.taxNumber.trim() ? formData.taxNumber.trim() : "0000000000";
+    const accountCode = `${prefix}.${taxNum}`;
+
     if (editingContact) {
       onUpdateContact({
         ...editingContact,
         ...formData,
+        accountCode,
       });
     } else {
       const newContact: Contact = {
         id: "c_" + Date.now(),
         ...formData,
+        accountCode,
         balance: 0,
         balanceType: "balanced",
         createdAt: new Date().toISOString().split("T")[0],
@@ -494,9 +500,11 @@ export const Contacts: React.FC<ContactsProps> = ({
   // Filter Contacts
   const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
   const filteredContacts = contacts.filter((c) => {
+    const accountCodeStr = getContactAccountCode(c).toLowerCase();
     const matchesSearch =
       !activeSearchQuery ||
       c.name.toLowerCase().includes(activeSearchQuery) ||
+      accountCodeStr.includes(activeSearchQuery) ||
       (c.taxNumber && c.taxNumber.toLowerCase().includes(activeSearchQuery)) ||
       (c.companyTitle && c.companyTitle.toLowerCase().includes(activeSearchQuery)) ||
       (c.phone && c.phone.toLowerCase().includes(activeSearchQuery)) ||
@@ -653,6 +661,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   const getContactsExportData = (): ExportData => {
     const headers = [
+      "Cari Hesap No",
       "Cari Adı / Unvanı",
       "Firma Unvanı",
       "Cari Tipi",
@@ -668,14 +677,15 @@ export const Contacts: React.FC<ContactsProps> = ({
     const rows = filteredContacts.map((c) => {
       const typeLabel =
         c.contactType === "customer"
-          ? "Müşteri"
+          ? "Müşteri (120)"
           : c.contactType === "vendor"
-          ? "Tedarikçi"
-          : "Hem Müşteri Hem Tedarikçi";
+          ? "Tedarikçi (320)"
+          : "Hem Müşteri Hem Tedarikçi (120)";
       const balanceStatus =
         c.balance > 0 ? "Alacaklıyız (Borçlu Cari)" : c.balance < 0 ? "Borçluyuz (Alacaklı Cari)" : "Sıfır Bakiye";
 
       return [
+        getContactAccountCode(c),
         c.name,
         c.companyTitle || "-",
         typeLabel,
@@ -715,6 +725,7 @@ export const Contacts: React.FC<ContactsProps> = ({
       ["Rapor Tarihi:", new Date().toLocaleDateString("tr-TR")],
       [],
       ["CARİ HESAP BİLGİLERİ"],
+      ["Cari Hesap No:", getContactAccountCode(contact)],
       ["Cari Adı / Unvanı:", contact.name || "-"],
       ["Firma Unvanı:", contact.companyTitle || "-"],
       ["VKN / TCKN:", contact.taxNumber || "-"],
@@ -902,6 +913,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
         <div class="info-grid">
           <div>
+            <strong>HESAP NO:</strong> <span style="font-family:monospace; font-weight:bold; color:#581c87;">${getContactAccountCode(contact)}</span><br>
             <strong>CARİ UNVANI:</strong> ${contact.name}<br>
             <span style="color:#64748b;">${contact.companyTitle || ""}</span><br>
             <strong>VKN/TCKN:</strong> ${contact.taxNumber || "-"} (${contact.taxOffice || "-"})
@@ -1079,6 +1091,7 @@ export const Contacts: React.FC<ContactsProps> = ({
           <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
             <thead>
               <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
+                <th className="pb-2 px-4">Cari Hesap No</th>
                 <th className="pb-2 px-4">Cari Unvan / Şirket</th>
                 <th className="pb-2 px-4">Tip</th>
                 <th className="pb-2 px-4">Vergi Dairesi & No</th>
@@ -1090,7 +1103,7 @@ export const Contacts: React.FC<ContactsProps> = ({
             <tbody>
               {filteredContacts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                  <td colSpan={7} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
                     Kriterlere uygun cari hesap bulunamadı.
                   </td>
                 </tr>
@@ -1105,6 +1118,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                       className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
                     >
                       <td className="py-3.5 px-4 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                        <span className="font-mono text-xs font-bold px-2 py-1 rounded-md bg-purple-100/80 text-purple-950 border border-purple-300/60 shadow-2xs inline-block">
+                          {getContactAccountCode(c)}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                         <div className="font-extrabold text-slate-900 group-hover:text-purple-950 text-sm transition-colors">
                           {c.name}
                         </div>
@@ -1290,9 +1309,9 @@ export const Contacts: React.FC<ContactsProps> = ({
                         }
                         className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                       >
-                        <option value="customer">Müşteri (Satış Yapılan)</option>
-                        <option value="vendor">Tedarikçi (Alış Yapılan)</option>
-                        <option value="both">Müşteri & Tedarikçi (Hem Satış hem Alış)</option>
+                        <option value="customer">Müşteri (120 Alıcılar)</option>
+                        <option value="vendor">Tedarikçi (320 Satıcılar)</option>
+                        <option value="both">Müşteri & Tedarikçi (120 / 320)</option>
                       </select>
                     </div>
 
@@ -1308,6 +1327,21 @@ export const Contacts: React.FC<ContactsProps> = ({
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                       />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Cari Hesap Kodu (Otomatik 120 / 320 Formatı)
+                    </label>
+                    <div className="w-full bg-purple-50/80 border border-purple-200 rounded-xl p-2 text-xs font-mono font-bold text-purple-950 flex items-center justify-between">
+                      <span>
+                        {formData.contactType === "vendor" ? "320." : "120."}
+                        {formData.taxNumber && formData.taxNumber.trim() ? formData.taxNumber.trim() : "0000000000"}
+                      </span>
+                      <span className="text-[10px] text-purple-700 font-sans font-normal">
+                        {formData.contactType === "vendor" ? "320 Satıcılar Hesabı" : "120 Alıcılar Hesabı"}
+                      </span>
                     </div>
                   </div>
 
@@ -1510,8 +1544,13 @@ export const Contacts: React.FC<ContactsProps> = ({
                 <h3 className="text-xl font-black text-slate-900 mt-1">
                   {selectedLedgerContact.name}
                 </h3>
-                <p className="text-xs text-slate-500">
-                  {selectedLedgerContact.companyTitle} | VKN: {selectedLedgerContact.taxNumber || "-"} ({selectedLedgerContact.taxOffice || "-"})
+                <p className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-950 border border-purple-300 shadow-2xs">
+                    Hesap No: {getContactAccountCode(selectedLedgerContact)}
+                  </span>
+                  <span>
+                    {selectedLedgerContact.companyTitle} | VKN: {selectedLedgerContact.taxNumber || "-"} ({selectedLedgerContact.taxOffice || "-"})
+                  </span>
                 </p>
               </div>
 

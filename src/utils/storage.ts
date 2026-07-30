@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction } from "../types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, getContactAccountCode } from "../types";
 import {
   initialCompanySettings,
   initialContacts,
@@ -52,9 +52,16 @@ export function getStoredData() {
 
   const storedInvoices = get<Invoice[]>(STORAGE_KEYS.INVOICES, initialInvoices);
   const storedProducts = get<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
+  const storedCheques = get<Cheque[]>(STORAGE_KEYS.CHEQUES, initialCheques);
+  const storedNotes = get<PromissoryNote[]>(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes);
 
-  // If local storage contains old dataset (< 170 invoices or < 700 products), reset to new full monthly integrated data
-  if (storedInvoices.length < 170 || storedProducts.length < 700) {
+  // If local storage contains old dataset (< 2100 invoices, < 1200 products, < 200 cheques, or < 250 notes), reset to new dataset
+  if (
+    storedInvoices.length < 2100 ||
+    storedProducts.length < 1200 ||
+    storedCheques.length < 200 ||
+    storedNotes.length < 250
+  ) {
     resetToDemoData();
     return {
       settings: initialCompanySettings,
@@ -77,9 +84,15 @@ export function getStoredData() {
     };
   }
 
+  const loadedContacts = get<Contact[]>(STORAGE_KEYS.CONTACTS, initialContacts);
+  const normalizedContacts = loadedContacts.map((c) => ({
+    ...c,
+    accountCode: getContactAccountCode(c),
+  }));
+
   return {
     settings: get<CompanySettings>(STORAGE_KEYS.SETTINGS, initialCompanySettings),
-    contacts: get<Contact[]>(STORAGE_KEYS.CONTACTS, initialContacts),
+    contacts: normalizedContacts,
     accounts: get<Account[]>(STORAGE_KEYS.ACCOUNTS, initialAccounts),
     invoices: storedInvoices,
     transactions: get<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions),
@@ -102,25 +115,33 @@ export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any) {
   try {
     localStorage.setItem(STORAGE_KEYS[key], JSON.stringify(data));
   } catch (e) {
-    console.error(`Error saving ${key} to storage`, e);
+    console.warn(`Storage quota exceeded or error saving ${key} to localStorage:`, e);
   }
 }
 
 export function resetToDemoData() {
-  localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(initialCompanySettings));
-  localStorage.setItem(STORAGE_KEYS.CONTACTS, JSON.stringify(initialContacts));
-  localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(initialAccounts));
-  localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(initialInvoices));
-  localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(initialTransactions));
-  localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(initialProducts));
-  localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(initialQuotes));
-  localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(initialOrders));
-  localStorage.setItem(STORAGE_KEYS.WAYBILLS, JSON.stringify(initialWaybills));
-  localStorage.setItem(STORAGE_KEYS.CHEQUES, JSON.stringify(initialCheques));
-  localStorage.setItem(STORAGE_KEYS.PROMISSORY_NOTES, JSON.stringify(initialPromissoryNotes));
-  localStorage.setItem(STORAGE_KEYS.BRANCHES, JSON.stringify(initialBranches));
-  localStorage.setItem(STORAGE_KEYS.WAREHOUSES, JSON.stringify(initialWarehouses));
-  localStorage.setItem(STORAGE_KEYS.LEGAL_DEDUCTIONS, JSON.stringify(initialLegalDeductions));
+  const safeSet = (key: string, val: any) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(val));
+    } catch (e) {
+      console.warn(`Storage quota exceeded or error setting ${key}:`, e);
+    }
+  };
+
+  safeSet(STORAGE_KEYS.SETTINGS, initialCompanySettings);
+  safeSet(STORAGE_KEYS.CONTACTS, initialContacts);
+  safeSet(STORAGE_KEYS.ACCOUNTS, initialAccounts);
+  safeSet(STORAGE_KEYS.INVOICES, initialInvoices);
+  safeSet(STORAGE_KEYS.TRANSACTIONS, initialTransactions);
+  safeSet(STORAGE_KEYS.PRODUCTS, initialProducts);
+  safeSet(STORAGE_KEYS.QUOTES, initialQuotes);
+  safeSet(STORAGE_KEYS.ORDERS, initialOrders);
+  safeSet(STORAGE_KEYS.WAYBILLS, initialWaybills);
+  safeSet(STORAGE_KEYS.CHEQUES, initialCheques);
+  safeSet(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes);
+  safeSet(STORAGE_KEYS.BRANCHES, initialBranches);
+  safeSet(STORAGE_KEYS.WAREHOUSES, initialWarehouses);
+  safeSet(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions);
 }
 
 
@@ -133,15 +154,15 @@ export function importBackupJSON(jsonString: string): boolean {
   try {
     const parsed = JSON.parse(jsonString);
     if (parsed.contacts && parsed.invoices) {
-      if (parsed.settings) localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(parsed.settings));
-      if (parsed.contacts) localStorage.setItem(STORAGE_KEYS.CONTACTS, JSON.stringify(parsed.contacts));
-      if (parsed.accounts) localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(parsed.accounts));
-      if (parsed.invoices) localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(parsed.invoices));
-      if (parsed.transactions) localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(parsed.transactions));
-      if (parsed.products) localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(parsed.products));
-      if (parsed.quotes) localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(parsed.quotes));
-      if (parsed.branches) localStorage.setItem(STORAGE_KEYS.BRANCHES, JSON.stringify(parsed.branches));
-      if (parsed.warehouses) localStorage.setItem(STORAGE_KEYS.WAREHOUSES, JSON.stringify(parsed.warehouses));
+      if (parsed.settings) saveStoredData("SETTINGS", parsed.settings);
+      if (parsed.contacts) saveStoredData("CONTACTS", parsed.contacts);
+      if (parsed.accounts) saveStoredData("ACCOUNTS", parsed.accounts);
+      if (parsed.invoices) saveStoredData("INVOICES", parsed.invoices);
+      if (parsed.transactions) saveStoredData("TRANSACTIONS", parsed.transactions);
+      if (parsed.products) saveStoredData("PRODUCTS", parsed.products);
+      if (parsed.quotes) saveStoredData("QUOTES", parsed.quotes);
+      if (parsed.branches) saveStoredData("BRANCHES", parsed.branches);
+      if (parsed.warehouses) saveStoredData("WAREHOUSES", parsed.warehouses);
       return true;
     }
   } catch (e) {

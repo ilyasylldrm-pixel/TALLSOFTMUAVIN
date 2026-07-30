@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Transaction, Account, Contact, TransactionType, Product, InvoiceItem } from "../types";
+import { Transaction, Account, Contact, TransactionType, Product, InvoiceItem, getContactAccountCode } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency } from "../utils/exportUtils";
 import {
@@ -613,7 +613,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     <option value="">-- Cari Seçilmedi --</option>
                     {contacts.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name}
+                        [{getContactAccountCode(c)}] {c.name}
                       </option>
                     ))}
                   </select>

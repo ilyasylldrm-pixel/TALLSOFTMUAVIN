@@ -8,6 +8,7 @@ import {
   Product,
   Account,
   CompanySettings,
+  getContactAccountCode,
 } from "../types";
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { ExportButtons } from "./ExportButtons";
@@ -807,7 +808,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     >
                       {contacts.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name} {c.taxNumber ? `(VKN: ${c.taxNumber})` : ""}
+                          [{getContactAccountCode(c)}] {c.name} {c.taxNumber ? `(VKN: ${c.taxNumber})` : ""}
                         </option>
                       ))}
                     </select>

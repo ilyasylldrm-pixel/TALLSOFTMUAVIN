@@ -2,6 +2,7 @@ export type ContactType = "customer" | "vendor" | "both";
 
 export interface Contact {
   id: string;
+  accountCode?: string; // Cari Hesap Kodu (Alıcılar: 120.VKN, Satıcılar: 320.VKN)
   name: string; // Şahıs veya Şirket Ünvanı
   companyTitle?: string;
   contactType: ContactType;
@@ -18,6 +19,15 @@ export interface Contact {
   balanceType: "receivable" | "payable" | "balanced";
   notes?: string;
   createdAt: string;
+}
+
+export function getContactAccountCode(contact: Partial<Contact>): string {
+  if (contact.accountCode && contact.accountCode.trim()) {
+    return contact.accountCode.trim();
+  }
+  const prefix = contact.contactType === "vendor" ? "320" : "120";
+  const taxNum = contact.taxNumber && contact.taxNumber.trim() ? contact.taxNumber.trim() : "0000000000";
+  return `${prefix}.${taxNum}`;
 }
 
 export interface InvoiceItem {
