@@ -207,25 +207,93 @@ export async function exportToPDF({
       },
     });
 
-    const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("l", "mm", "a4");
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
     const margin = 8;
     const imgWidth = pdfWidth - margin * 2;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const pageUsableHeightMm = pdfHeight - margin * 2;
 
-    let heightLeft = imgHeight;
-    let position = margin;
+    const pxPerMm = canvas.width / imgWidth;
+    const targetPagePx = pageUsableHeightMm * pxPerMm;
 
-    pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
-    heightLeft -= pdfHeight - margin * 2;
+    const containerRect = container.getBoundingClientRect();
+    const scaleY = canvas.height / (containerRect.height || 1);
 
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight + margin;
-      pdf.addPage();
-      pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
+    const rawElements = Array.from(
+      container.querySelectorAll("tr, div")
+    ) as HTMLElement[];
+
+    const breakElements = rawElements.filter(
+      (el) => el.tagName === "TR" || !el.querySelector("table, tr")
+    );
+
+    const breakPoints = breakElements
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return {
+          top: Math.round((r.top - containerRect.top) * scaleY),
+          bottom: Math.round((r.bottom - containerRect.top) * scaleY),
+        };
+      })
+      .filter((bp) => bp.bottom > bp.top);
+
+    let yStart = 0;
+    let pageIndex = 0;
+
+    while (yStart < canvas.height - 5) {
+      let yNextCut = yStart + targetPagePx;
+
+      if (yNextCut < canvas.height) {
+        const straddlingElements = breakPoints.filter(
+          (bp) => bp.top > yStart + 10 && bp.top < yNextCut && bp.bottom > yNextCut
+        );
+
+        if (straddlingElements.length > 0) {
+          const minTop = Math.min(...straddlingElements.map((e) => e.top));
+          if (minTop > yStart + 20) {
+            yNextCut = minTop;
+          }
+        }
+      } else {
+        yNextCut = canvas.height;
+      }
+
+      const chunkHeight = yNextCut - yStart;
+      if (chunkHeight <= 0) break;
+
+      const subCanvas = document.createElement("canvas");
+      subCanvas.width = canvas.width;
+      subCanvas.height = chunkHeight;
+
+      const ctx = subCanvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, subCanvas.width, subCanvas.height);
+        ctx.drawImage(
+          canvas,
+          0,
+          yStart,
+          canvas.width,
+          chunkHeight,
+          0,
+          0,
+          canvas.width,
+          chunkHeight
+        );
+      }
+
+      const subImgData = subCanvas.toDataURL("image/png");
+      const subImgHeightMm = (chunkHeight * imgWidth) / canvas.width;
+
+      if (pageIndex > 0) {
+        pdf.addPage();
+      }
+
+      pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
+
+      yStart = yNextCut;
+      pageIndex++;
     }
 
     const cleanFilename = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;

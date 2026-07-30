@@ -618,7 +618,7 @@ export const Products: React.FC<ProductsProps> = ({
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Header (Lila Bal Peteği & Geometrik Desen) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div
@@ -909,8 +909,8 @@ export const Products: React.FC<ProductsProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+        <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[800px]">
             <thead>
               <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                 <th className="pb-2 px-3">Stok Kodu & Barkod</th>
@@ -1443,8 +1443,8 @@ export const Products: React.FC<ProductsProps> = ({
             </div>
 
             {/* Table of Movements */}
-            <div className="overflow-x-auto rounded-xl border border-slate-200 max-h-72">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto custom-scrollbar w-full rounded-xl border border-slate-200 max-h-72">
+              <table className="w-full text-left text-xs min-w-[750px]">
                 <thead className="bg-slate-100 text-slate-700 font-extrabold sticky top-0 z-10 border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-3">Tarih</th>

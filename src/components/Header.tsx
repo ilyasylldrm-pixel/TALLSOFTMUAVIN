@@ -8,6 +8,7 @@ import {
   UserPlus,
   LogOut,
   X,
+  Menu,
 } from "lucide-react";
 import { Account } from "../types";
 import { UserProfile } from "./AuthModal";
@@ -24,6 +25,7 @@ interface HeaderProps {
   currentUser: UserProfile | null;
   onOpenAuthModal: (mode: "login" | "register") => void;
   onLogout: () => void;
+  onToggleMobileMenu?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,13 +40,14 @@ export const Header: React.FC<HeaderProps> = ({
   currentUser,
   onOpenAuthModal,
   onLogout,
+  onToggleMobileMenu,
 }) => {
   const totalTlBalance = accounts
     .filter((a) => a.currency === "TRY")
     .reduce((sum, a) => sum + a.balance, 0);
 
   return (
-    <header className="relative overflow-hidden bg-gradient-to-r from-purple-50/90 via-white/95 to-fuchsia-50/80 backdrop-blur-md border-b border-purple-200/70 px-6 py-3.5 sticky top-0 z-30 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <header className="relative overflow-hidden bg-gradient-to-r from-purple-50/90 via-white/95 to-fuchsia-50/80 backdrop-blur-md border-b border-purple-200/70 px-4 sm:px-6 py-3 sticky top-0 z-30 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
       {/* Lila Bal Peteği Desen Kaplaması */}
       <div
         className="absolute inset-0 pointer-events-none opacity-20 mix-blend-multiply"
@@ -54,16 +57,28 @@ export const Header: React.FC<HeaderProps> = ({
         }}
       />
 
-      {/* Title & Subtitle */}
-      <div className="relative z-10">
-        <h2 className="text-xl font-extrabold text-slate-950 tracking-tight">
-          {title}
-        </h2>
-        {subtitle && (
-          <p className="text-xs font-semibold text-purple-900/80 mt-0.5">
-            {subtitle}
-          </p>
+      {/* Title & Mobile Hamburger Button */}
+      <div className="relative z-10 flex items-center gap-3">
+        {onToggleMobileMenu && (
+          <button
+            type="button"
+            onClick={onToggleMobileMenu}
+            className="md:hidden p-2 rounded-xl bg-white/90 hover:bg-white text-purple-900 border border-purple-300 shadow-2xs cursor-pointer transition-all active:scale-95"
+            title="Ana Menüyü Aç / Kapat"
+          >
+            <Menu className="w-5 h-5 text-purple-800" />
+          </button>
         )}
+        <div>
+          <h2 className="text-lg sm:text-xl font-extrabold text-slate-950 tracking-tight">
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="text-[11px] sm:text-xs font-semibold text-purple-900/80 mt-0.5 hidden sm:block">
+              {subtitle}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Global Search & Action Bar */}

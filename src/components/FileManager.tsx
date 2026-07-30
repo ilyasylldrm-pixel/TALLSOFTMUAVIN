@@ -184,7 +184,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
       
       {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen - Cari Hesaplar Tasarımı) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">

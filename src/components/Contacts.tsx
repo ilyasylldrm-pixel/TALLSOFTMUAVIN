@@ -35,6 +35,10 @@ import {
   Receipt,
   CheckCheck,
   Calendar,
+  MessageCircle,
+  Send,
+  Share2,
+  Copy,
 } from "lucide-react";
 import {
   ALL_81_PROVINCES,
@@ -91,6 +95,14 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   // Selected contact for Ledger / Muavin statement modal
   const [selectedLedgerContact, setSelectedLedgerContact] = useState<Contact | null>(null);
+
+  // Share Modal State (WhatsApp / Email)
+  const [shareType, setShareType] = useState<"whatsapp" | "email" | null>(null);
+  const [sharePhone, setSharePhone] = useState<string>("");
+  const [shareEmail, setShareEmail] = useState<string>("");
+  const [shareSubject, setShareSubject] = useState<string>("");
+  const [shareMessage, setShareMessage] = useState<string>("");
+  const [isCopied, setIsCopied] = useState<boolean>(false);
 
   // Action Modal State (Tahsilat Yap / Ödeme Yap)
   const [actionModalType, setActionModalType] = useState<"collection" | "payment" | null>(null);
@@ -657,6 +669,150 @@ export const Contacts: React.FC<ContactsProps> = ({
     });
   };
 
+  const handleOpenShareModal = (type: "whatsapp" | "email") => {
+    if (!selectedLedgerContact) return;
+
+    setShareType(type);
+    setIsCopied(false);
+    setSharePhone(selectedLedgerContact.phone || "");
+    setShareEmail(selectedLedgerContact.email || "");
+
+    const compName = companySettings?.companyName || "Firma";
+    const contactCode = getContactAccountCode(selectedLedgerContact);
+    const dateStr = new Date().toLocaleDateString("tr-TR");
+
+    const absBal = Math.abs(selectedLedgerContact.balance).toLocaleString("tr-TR", { minimumFractionDigits: 2 });
+    const balanceText = selectedLedgerContact.balance > 0 
+      ? `₺${absBal} (Müşteri Borçlu / Alacağımız Var)` 
+      : selectedLedgerContact.balance < 0 
+      ? `₺${absBal} (Firma Alacaklı / Borcumuz Var)` 
+      : "₺0.00 (Hesap Kapalı / Bakiye Yok)";
+
+    const entries = getLedgerEntries(selectedLedgerContact.id);
+    const totalDebit = entries.reduce((s, e) => s + e.debit, 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 });
+    const totalCredit = entries.reduce((s, e) => s + e.credit, 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 });
+
+    const subjectText = `Cari Hesap Ekstresi - ${compName} (${selectedLedgerContact.name})`;
+    setShareSubject(subjectText);
+
+    // Build recent ledger transactions summary
+    const recentEntries = entries.slice(-5);
+    let movementSummary = "";
+    if (recentEntries.length > 0) {
+      movementSummary = "\n\n📌 Son İşlem Hareketleri:\n" + recentEntries.map(e => 
+        `• ${e.date} | ${e.documentType} (${e.documentNo}) -> Borç: ₺${e.debit.toLocaleString("tr-TR")} | Alacak: ₺${e.credit.toLocaleString("tr-TR")}`
+      ).join("\n");
+    }
+
+    const safeName = (selectedLedgerContact.name || "Cari").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ]/g, "_");
+    const pdfFileName = `Cari_Ekstre_${safeName}.pdf`;
+
+    const msg = `Sayın ${selectedLedgerContact.name},
+
+${compName} nezdindeki Cari Hesap Ekstreniz resmi PDF formatında hazırlanmıştır (${dateStr}).
+
+📄 Resmi Belge: ${pdfFileName}
+• Cari Hesap Kodu: ${contactCode}
+• Toplam Borç Tutarı: ₺${totalDebit}
+• Toplam Alacak Tutarı: ₺${totalCredit}
+• Net Bakiye Durumu: ${balanceText}${movementSummary}
+
+Resmi cari hesap ekstreniz ve işlem detaylarınız ekteki PDF dosyasındadır (${pdfFileName}). Detaylar ve hesap mutabakatı için lütfen ekteki PDF belgesini inceleyiniz.
+
+Saygılarımızla,
+${compName}
+${companySettings?.phone ? `Tel: ${companySettings.phone}` : ""}`;
+
+    setShareMessage(msg);
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!sharePhone.trim()) {
+      alert("Lütfen geçerli bir telefon numarası girin.");
+      return;
+    }
+
+    if (!selectedLedgerContact) return;
+
+    // 1. Generate the PDF Ekstre file
+    const pdfResult = await generateLedgerPDF(selectedLedgerContact);
+
+    let clean = sharePhone.replace(/\D/g, "");
+    if (clean.startsWith("0")) {
+      clean = "90" + clean.slice(1);
+    } else if (clean.length === 10) {
+      clean = "90" + clean;
+    }
+
+    // 2. Try native Web Share API with PDF File attached (for mobile/supported browsers)
+    if (pdfResult && typeof navigator !== "undefined" && navigator.canShare) {
+      try {
+        const pdfFile = new File([pdfResult.blob], pdfResult.fileName, { type: "application/pdf" });
+        if (navigator.canShare({ files: [pdfFile] })) {
+          await navigator.share({
+            files: [pdfFile],
+            title: shareSubject,
+            text: shareMessage,
+          });
+          return;
+        }
+      } catch (err) {
+        console.log("Web Share iptal edildi veya desteklenmiyor, varsayılan akışa geçiliyor.", err);
+      }
+    }
+
+    // 3. Fallback: Automatically save/download PDF file locally & open WhatsApp URL scheme with text
+    if (pdfResult) {
+      pdfResult.pdf.save(pdfResult.fileName);
+    }
+
+    const url = `https://api.whatsapp.com/send?phone=${clean}&text=${encodeURIComponent(shareMessage)}`;
+    window.open(url, "_blank");
+  };
+
+  const handleSendEmail = async () => {
+    if (!shareEmail.trim()) {
+      alert("Lütfen geçerli bir e-posta adresi girin.");
+      return;
+    }
+
+    if (!selectedLedgerContact) return;
+
+    // 1. Generate the PDF Ekstre file
+    const pdfResult = await generateLedgerPDF(selectedLedgerContact);
+
+    // 2. Try native Web Share API with PDF File attached
+    if (pdfResult && typeof navigator !== "undefined" && navigator.canShare) {
+      try {
+        const pdfFile = new File([pdfResult.blob], pdfResult.fileName, { type: "application/pdf" });
+        if (navigator.canShare({ files: [pdfFile] })) {
+          await navigator.share({
+            files: [pdfFile],
+            title: shareSubject,
+            text: shareMessage,
+          });
+          return;
+        }
+      } catch (err) {
+        console.log("Web Share iptal edildi, mailto bağlantısına geçiliyor.", err);
+      }
+    }
+
+    // 3. Fallback: Download PDF file & trigger mailto
+    if (pdfResult) {
+      pdfResult.pdf.save(pdfResult.fileName);
+    }
+
+    const mailtoUrl = `mailto:${encodeURIComponent(shareEmail)}?subject=${encodeURIComponent(shareSubject)}&body=${encodeURIComponent(shareMessage)}`;
+    window.open(mailtoUrl, "_blank");
+  };
+
+  const handleCopyMessage = () => {
+    navigator.clipboard.writeText(shareMessage);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 3000);
+  };
+
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const getContactsExportData = (): ExportData => {
@@ -788,10 +944,12 @@ export const Contacts: React.FC<ContactsProps> = ({
     XLSX.writeFile(workbook, `Cari_Ekstre_${safeName}.xlsx`);
   };
 
-  // PDF Export Module
-  const exportLedgerPDF = async (contact: Contact) => {
+  // PDF Helper Function (returns PDF document, Blob, and filename)
+  const generateLedgerPDF = async (
+    contact: Contact
+  ): Promise<{ pdf: jsPDF; blob: Blob; fileName: string } | null> => {
     const element = document.getElementById("printable-ledger");
-    if (!element) return;
+    if (!element) return null;
 
     try {
       setIsGeneratingPDF(true);
@@ -811,33 +969,117 @@ export const Contacts: React.FC<ContactsProps> = ({
         },
       });
 
-      const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("l", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pdfWidth - 20; // 10mm margins
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const margin = 10;
+      const imgWidth = pdfWidth - margin * 2;
+      const pageUsableHeightMm = pdfHeight - margin * 2;
 
-      let heightLeft = imgHeight;
-      let position = 10;
+      const pxPerMm = canvas.width / imgWidth;
+      const targetPagePx = pageUsableHeightMm * pxPerMm;
 
-      pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight - 20;
+      const containerRect = element.getBoundingClientRect();
+      const scaleY = canvas.height / (containerRect.height || 1);
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight + 10;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
-        heightLeft -= pdfHeight;
+      // Collect elements that should not be split horizontally across pages (table rows and top-level cards/divs)
+      const rawElements = Array.from(
+        element.querySelectorAll("tr, #printable-ledger > div")
+      ) as HTMLElement[];
+
+      const breakElements = rawElements.filter(
+        (el) => el.tagName === "TR" || !el.querySelector("table, tr")
+      );
+
+      const breakPoints = breakElements
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            top: Math.round((r.top - containerRect.top) * scaleY),
+            bottom: Math.round((r.bottom - containerRect.top) * scaleY),
+          };
+        })
+        .filter((bp) => bp.bottom > bp.top);
+
+      let yStart = 0;
+      let pageIndex = 0;
+
+      while (yStart < canvas.height - 5) {
+        let yNextCut = yStart + targetPagePx;
+
+        if (yNextCut < canvas.height) {
+          // Find any element that starts on this page after yStart, starts before yNextCut, and ends after yNextCut
+          const straddlingElements = breakPoints.filter(
+            (bp) => bp.top > yStart + 10 && bp.top < yNextCut && bp.bottom > yNextCut
+          );
+
+          if (straddlingElements.length > 0) {
+            // Cut right above the earliest straddling element so it moves intact to the next page
+            const minTop = Math.min(...straddlingElements.map((e) => e.top));
+            if (minTop > yStart + 20) {
+              yNextCut = minTop;
+            }
+          }
+        } else {
+          yNextCut = canvas.height;
+        }
+
+        const chunkHeight = yNextCut - yStart;
+        if (chunkHeight <= 0) break;
+
+        const subCanvas = document.createElement("canvas");
+        subCanvas.width = canvas.width;
+        subCanvas.height = chunkHeight;
+
+        const ctx = subCanvas.getContext("2d");
+        if (ctx) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, subCanvas.width, subCanvas.height);
+          ctx.drawImage(
+            canvas,
+            0,
+            yStart,
+            canvas.width,
+            chunkHeight,
+            0,
+            0,
+            canvas.width,
+            chunkHeight
+          );
+        }
+
+        const subImgData = subCanvas.toDataURL("image/png");
+        const subImgHeightMm = (chunkHeight * imgWidth) / canvas.width;
+
+        if (pageIndex > 0) {
+          pdf.addPage();
+        }
+
+        pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
+
+        yStart = yNextCut;
+        pageIndex++;
       }
 
       const safeName = (contact.name || "Cari").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ]/g, "_");
-      pdf.save(`Cari_Ekstre_${safeName}.pdf`);
+      const fileName = `Cari_Ekstre_${safeName}.pdf`;
+      const blob = pdf.output("blob");
+
+      return { pdf, blob, fileName };
     } catch (err) {
-      console.error("PDF indirilemedi:", err);
+      console.error("PDF oluşturulamadı:", err);
       alert("PDF oluşturulurken bir hata oluştu. Lütfen tekrar deneyiniz.");
+      return null;
     } finally {
       setIsGeneratingPDF(false);
+    }
+  };
+
+  // PDF Export Module
+  const exportLedgerPDF = async (contact: Contact) => {
+    const pdfData = await generateLedgerPDF(contact);
+    if (pdfData) {
+      pdfData.pdf.save(pdfData.fileName);
     }
   };
 
@@ -864,7 +1106,7 @@ export const Contacts: React.FC<ContactsProps> = ({
       : entries
           .map(
             (e) => `
-        <tr style="border-bottom: 1px solid #e2e8f0;">
+        <tr style="border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; break-inside: avoid;">
           <td style="padding: 8px 10px; font-size: 11px;">${e.date}</td>
           <td style="padding: 8px 10px; font-size: 11px; font-weight: bold;">${e.documentType}</td>
           <td style="padding: 8px 10px; font-size: 11px; font-family: monospace;">${e.documentNo}</td>
@@ -885,16 +1127,19 @@ export const Contacts: React.FC<ContactsProps> = ({
         <title>Cari Ekstre - ${contact.name}</title>
         <style>
           body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #0f172a; margin: 0; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 20px; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 20px; page-break-inside: avoid; break-inside: avoid; }
           .company-name { font-size: 18px; font-weight: bold; text-transform: uppercase; color: #0f172a; }
           .title { font-size: 20px; font-weight: 900; text-align: right; color: #1e293b; }
-          .info-grid { display: flex; justify-content: space-between; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; font-size: 12px; }
+          .info-grid { display: flex; justify-content: space-between; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; font-size: 12px; page-break-inside: avoid; break-inside: avoid; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th { background: #f1f5f9; text-align: left; padding: 10px; font-size: 11px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; color: #475569; }
-          .summary { display: flex; justify-content: flex-end; gap: 20px; margin-top: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid #e2e8f0; }
+          tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+          thead { display: table-header-group; }
+          .summary { display: flex; justify-content: flex-end; gap: 20px; margin-top: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid #e2e8f0; page-break-inside: avoid; break-inside: avoid; }
           @page { size: landscape; margin: 10mm; }
           @media print {
             body { padding: 0; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
           }
         </style>
       </head>
@@ -968,7 +1213,7 @@ export const Contacts: React.FC<ContactsProps> = ({
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
@@ -1024,9 +1269,9 @@ export const Contacts: React.FC<ContactsProps> = ({
       </div>
 
       {/* Filter Tabs & Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
         {/* Filter Buttons */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs">
+        <div className="flex items-center gap-1.5 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs overflow-x-auto custom-scrollbar w-full lg:w-auto shrink-0 whitespace-nowrap">
           <button
             onClick={() => setFilterType("all")}
             className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
@@ -1070,8 +1315,8 @@ export const Contacts: React.FC<ContactsProps> = ({
         </div>
 
         {/* Search & Export */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          <div className="relative w-full md:w-64">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+          <div className="relative w-full sm:w-64">
             <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -1086,18 +1331,18 @@ export const Contacts: React.FC<ContactsProps> = ({
       </div>
 
       {/* Contacts List Table */}
-      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-3 shadow-2xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-1.5 sm:p-3 shadow-2xs overflow-hidden">
+        <div className="overflow-x-auto custom-scrollbar w-full">
+          <table className="w-full text-left text-xs border-separate border-spacing-y-2">
             <thead>
-              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                <th className="pb-2 px-4">Cari Hesap No</th>
-                <th className="pb-2 px-4">Cari Unvan / Şirket</th>
-                <th className="pb-2 px-4">Tip</th>
-                <th className="pb-2 px-4">Vergi Dairesi & No</th>
-                <th className="pb-2 px-4">İletişim</th>
-                <th className="pb-2 px-4 text-right">Güncel Bakiye</th>
-                <th className="pb-2 px-4 text-center">İşlemler</th>
+              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[10px] sm:text-[11px]">
+                <th className="pb-2 px-2 sm:px-3 hidden sm:table-cell">Cari Hesap No</th>
+                <th className="pb-2 px-2 sm:px-3">Cari Unvan / Şirket</th>
+                <th className="pb-2 px-2 sm:px-3 hidden md:table-cell">Tip</th>
+                <th className="pb-2 px-2 sm:px-3 hidden lg:table-cell">Vergi Dairesi & No</th>
+                <th className="pb-2 px-2 sm:px-3 hidden xl:table-cell">İletişim</th>
+                <th className="pb-2 px-2 sm:px-3 text-right">Güncel Bakiye</th>
+                <th className="pb-2 px-2 sm:px-3 text-center">İşlemler</th>
               </tr>
             </thead>
             <tbody>
@@ -1117,27 +1362,44 @@ export const Contacts: React.FC<ContactsProps> = ({
                       key={c.id}
                       className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
                     >
-                      <td className="py-3.5 px-4 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all hidden sm:table-cell">
                         <span className="font-mono text-xs font-bold px-2 py-1 rounded-md bg-purple-100/80 text-purple-950 border border-purple-300/60 shadow-2xs inline-block">
                           {getContactAccountCode(c)}
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="font-extrabold text-slate-900 group-hover:text-purple-950 text-sm transition-colors">
+                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-l-xl sm:rounded-l-none border-y border-l sm:border-l-0 border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                        <div className="font-extrabold text-slate-900 group-hover:text-purple-950 text-xs sm:text-sm transition-colors">
                           {c.name}
                         </div>
                         {c.companyTitle && c.companyTitle !== c.name && (
-                          <div className="text-[11px] text-slate-500 group-hover:text-purple-800/80 truncate max-w-xs transition-colors">
+                          <div className="text-[10px] sm:text-[11px] text-slate-500 group-hover:text-purple-800/80 truncate max-w-[140px] sm:max-w-xs transition-colors">
                             {c.companyTitle}
                           </div>
                         )}
-                        <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60 transition-colors">
-                          {c.city || "Şehir Belirtilmemiş"}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-slate-400 group-hover:text-purple-700/60 transition-colors">
+                            {c.city || "Şehir Belirtilmemiş"}
+                          </span>
+                          <span
+                            className={`md:hidden px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                              c.contactType === "customer"
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : c.contactType === "vendor"
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "bg-purple-50 text-purple-700 border border-purple-200"
+                            }`}
+                          >
+                            {c.contactType === "customer"
+                              ? "Müşteri"
+                              : c.contactType === "vendor"
+                              ? "Tedarikçi"
+                              : "Müşteri & Tedarikçi"}
+                          </span>
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all hidden md:table-cell">
                         <span
                           className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${
                             c.contactType === "customer"
@@ -1155,37 +1417,37 @@ export const Contacts: React.FC<ContactsProps> = ({
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-slate-700 font-medium border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 text-slate-700 font-medium border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all hidden lg:table-cell">
                         {c.taxNumber ? (
                           <div>
-                            <div>VKN: {c.taxNumber}</div>
+                            <div className="text-[11px]">VKN: {c.taxNumber}</div>
                             <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">
                               V.D: {c.taxOffice || "-"}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic">Belirtilmemiş</span>
+                          <span className="text-slate-400 italic text-[11px]">Belirtilmemiş</span>
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all hidden xl:table-cell">
                         {c.phone && (
                           <div className="flex items-center gap-1 text-[11px]">
-                            <Phone className="w-3 h-3 text-slate-400 group-hover:text-purple-500" />
+                            <Phone className="w-3 h-3 text-slate-400 group-hover:text-purple-500 shrink-0" />
                             <span>{c.phone}</span>
                           </div>
                         )}
                         {c.email && (
                           <div className="flex items-center gap-1 text-[11px] text-slate-500 group-hover:text-purple-800/80">
-                            <Mail className="w-3 h-3 text-slate-400 group-hover:text-purple-500" />
-                            <span className="truncate max-w-[140px]">{c.email}</span>
+                            <Mail className="w-3 h-3 text-slate-400 group-hover:text-purple-500 shrink-0" />
+                            <span className="truncate max-w-[120px]">{c.email}</span>
                           </div>
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 text-right whitespace-nowrap border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                         <div
-                          className={`font-black text-sm ${
+                          className={`font-black text-xs sm:text-sm ${
                             isReceivable
                               ? "text-emerald-600"
                               : isPayable
@@ -1195,7 +1457,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         >
                           ₺{Math.abs(c.balance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </div>
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 group-hover:text-purple-700/70">
+                        <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-slate-400 group-hover:text-purple-700/70 block">
                           {isReceivable
                             ? "Alacaklıyız"
                             : isPayable
@@ -1204,47 +1466,46 @@ export const Contacts: React.FC<ContactsProps> = ({
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                        <div className="flex items-center justify-center gap-1 sm:gap-1.5">
                           {/* Tahsilat Yap Button */}
                           <button
                             onClick={() => handleOpenActionModal(c, "collection")}
                             title="Müşteriden / Cariden Tahsilat Al"
-                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
                           >
-                            <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Tahsilat</span>
+                            <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="hidden sm:inline">Tahsilat</span>
                           </button>
 
                           {/* Ödeme Yap Button */}
                           <button
                             onClick={() => handleOpenActionModal(c, "payment")}
                             title="Cariye Ödeme Yap"
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
                           >
-                            <ArrowUpRight className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Ödeme</span>
+                            <ArrowUpRight className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span className="hidden sm:inline">Ödeme</span>
                           </button>
 
                           {/* Ledger / Muavin Button */}
                           <button
                             onClick={() => setSelectedLedgerContact(c)}
                             title="Cari Ekstre / Muavin Dökümü"
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                           >
-                            <FileSpreadsheet className="w-3.5 h-3.5" />
-                            <span>Ekstre</span>
+                            <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                            <span className="hidden xl:inline">Ekstre</span>
                           </button>
-
 
                           {/* Edit Button */}
                           <button
                             onClick={() => handleOpenAddModal(c)}
                             title="Kartı Düzenle"
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
-                            <span>Düzenle</span>
+                            <Edit2 className="w-3.5 h-3.5 shrink-0" />
+                            <span className="hidden xl:inline">Düzenle</span>
                           </button>
                         </div>
                       </td>
@@ -1264,19 +1525,19 @@ export const Contacts: React.FC<ContactsProps> = ({
         const taxOfficeOptions = getTaxOfficesForProvince(formData.city);
 
         return (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 my-8">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4">
+            <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto animate-fadeIn">
               {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between border-b border-slate-200 p-3.5 sm:p-5 shrink-0 bg-slate-50/60">
+                <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
                     <Building2 className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900">
+                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
                       {editingContact ? "Cari Kartı Düzenle" : "Yeni Cari Kart Oluştur"}
                     </h3>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[10px] sm:text-[11px] text-slate-500">
                       Resmi vergi dairesi ve il, ilçe, mahalle adres bilgileri ile cari kaydı
                     </p>
                   </div>
@@ -1289,234 +1550,237 @@ export const Contacts: React.FC<ContactsProps> = ({
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5 text-xs">
-                {/* SECTION 1: Cari Kimlik Bilgileri */}
-                <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 border-b border-slate-200/60 pb-2">
-                    <Users className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Cari Kimlik & Ticari Unvan</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Cari Tipi *
-                      </label>
-                      <select
-                        value={formData.contactType}
-                        onChange={(e) =>
-                          setFormData({ ...formData, contactType: e.target.value as ContactType })
-                        }
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                      >
-                        <option value="customer">Müşteri (120 Alıcılar)</option>
-                        <option value="vendor">Tedarikçi (320 Satıcılar)</option>
-                        <option value="both">Müşteri & Tedarikçi (120 / 320)</option>
-                      </select>
+              <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
+                <div className="p-3.5 sm:p-5 space-y-4 text-xs overflow-y-auto custom-scrollbar flex-1">
+                  {/* SECTION 1: Cari Kimlik Bilgileri */}
+                  <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 border-b border-slate-200/60 pb-2">
+                      <Users className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Cari Kimlik & Ticari Unvan</span>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Kısa Unvan / İsim *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="ör: TeknoSoft A.Ş."
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                      />
-                    </div>
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Cari Tipi *
+                        </label>
+                        <select
+                          value={formData.contactType}
+                          onChange={(e) =>
+                            setFormData({ ...formData, contactType: e.target.value as ContactType })
+                          }
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        >
+                          <option value="customer">Müşteri (120 Alıcılar)</option>
+                          <option value="vendor">Tedarikçi (320 Satıcılar)</option>
+                          <option value="both">Müşteri & Tedarikçi (120 / 320)</option>
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Cari Hesap Kodu (Otomatik 120 / 320 Formatı)
-                    </label>
-                    <div className="w-full bg-purple-50/80 border border-purple-200 rounded-xl p-2 text-xs font-mono font-bold text-purple-950 flex items-center justify-between">
-                      <span>
-                        {formData.contactType === "vendor" ? "320." : "120."}
-                        {formData.taxNumber && formData.taxNumber.trim() ? formData.taxNumber.trim() : "0000000000"}
-                      </span>
-                      <span className="text-[10px] text-purple-700 font-sans font-normal">
-                        {formData.contactType === "vendor" ? "320 Satıcılar Hesabı" : "120 Alıcılar Hesabı"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Resmi Ticari Şirket Unvanı
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="ör: TeknoSoft Yazılım ve Teknoloji A.Ş."
-                      value={formData.companyTitle}
-                      onChange={(e) => setFormData({ ...formData, companyTitle: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                {/* SECTION 2: Vergi Dairesi ve Numarası */}
-                <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                      <Building className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Vergi Dairesi & Numarası (Türkiye Listesi)</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsCustomTaxOffice(!isCustomTaxOffice)}
-                      className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
-                    >
-                      {isCustomTaxOffice ? "Listeden Seç" : "Manuel Gir"}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Vergi Dairesi {formData.city ? `(${formData.city})` : ""}
-                      </label>
-                      {isCustomTaxOffice ? (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Kısa Unvan / İsim *
+                        </label>
                         <input
                           type="text"
-                          placeholder="ör: Mecidiyeköy Vergi Dairesi"
-                          value={formData.taxOffice}
-                          onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
+                          required
+                          placeholder="ör: TeknoSoft A.Ş."
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                           className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                         />
-                      ) : (
-                        <select
-                          value={formData.taxOffice}
-                          onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
-                        >
-                          {taxOfficeOptions.map((vd) => (
-                            <option key={vd} value={vd}>
-                              {vd}
-                            </option>
-                          ))}
-                        </select>
-                      )}
+                      </div>
                     </div>
 
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700">
-                          VKN / TCKN No
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Cari Hesap Kodu (Otomatik 120 / 320 Formatı)
+                      </label>
+                      <div className="w-full bg-purple-50/80 border border-purple-200 rounded-xl p-2 text-xs font-mono font-bold text-purple-950 flex items-center justify-between">
+                        <span>
+                          {formData.contactType === "vendor" ? "320." : "120."}
+                          {formData.taxNumber && formData.taxNumber.trim() ? formData.taxNumber.trim() : "0000000000"}
+                        </span>
+                        <span className="text-[10px] text-purple-700 font-sans font-normal">
+                          {formData.contactType === "vendor" ? "320 Satıcılar Hesabı" : "120 Alıcılar Hesabı"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Resmi Ticari Şirket Unvanı
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="ör: TeknoSoft Yazılım ve Teknoloji A.Ş."
+                        value={formData.companyTitle}
+                        onChange={(e) => setFormData({ ...formData, companyTitle: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* SECTION 2: Vergi Dairesi ve Numarası */}
+                  <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                        <Building className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Vergi Dairesi & Numarası (Türkiye Listesi)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomTaxOffice(!isCustomTaxOffice)}
+                        className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                      >
+                        {isCustomTaxOffice ? "Listeden Seç" : "Manuel Gir"}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Vergi Dairesi {formData.city ? `(${formData.city})` : ""}
                         </label>
-                        {formData.taxNumber && (
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                              formData.taxNumber.length === 10 || formData.taxNumber.length === 11
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-amber-100 text-amber-700"
-                            }`}
+                        {isCustomTaxOffice ? (
+                          <input
+                            type="text"
+                            placeholder="ör: Mecidiyeköy Vergi Dairesi"
+                            value={formData.taxOffice}
+                            onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                          />
+                        ) : (
+                          <select
+                            value={formData.taxOffice}
+                            onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
                           >
-                            {formData.taxNumber.length === 10
-                              ? "VKN (10 hane)"
-                              : formData.taxNumber.length === 11
-                              ? "TCKN (11 hane)"
-                              : `${formData.taxNumber.length} Hane`}
-                          </span>
+                            {taxOfficeOptions.map((vd) => (
+                              <option key={vd} value={vd}>
+                                {vd}
+                              </option>
+                            ))}
+                          </select>
                         )}
                       </div>
-                      <input
-                        type="text"
-                        placeholder="10 (VKN) veya 11 (TCKN) haneli numara"
-                        value={formData.taxNumber}
-                        onChange={(e) => setFormData({ ...formData, taxNumber: e.target.value })}
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-semibold text-slate-700">
+                            VKN / TCKN No
+                          </label>
+                          {formData.taxNumber && (
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                formData.taxNumber.length === 10 || formData.taxNumber.length === 11
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {formData.taxNumber.length === 10
+                                ? "VKN (10 hane)"
+                                : formData.taxNumber.length === 11
+                                ? "TCKN (11 hane)"
+                                : `${formData.taxNumber.length} Hane`}
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="10 (VKN) veya 11 (TCKN) haneli numara"
+                          value={formData.taxNumber}
+                          onChange={(e) => setFormData({ ...formData, taxNumber: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 3: Adres Bilgileri */}
+                  <AddressSelector
+                    title="Cari Hesap Adres Bilgileri"
+                    address={{
+                      country: "Türkiye",
+                      city: formData.city || "İstanbul",
+                      district: formData.district || "Kadıköy",
+                      neighborhood: formData.neighborhood || "Caferağa",
+                      street: formData.street || "",
+                      buildingNo: formData.buildingNo || "",
+                      doorNo: "",
+                      postalCode: "",
+                      fullAddress: formData.address || "",
+                    }}
+                    onChange={(updatedDetails) => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        city: updatedDetails.city,
+                        district: updatedDetails.district,
+                        neighborhood: updatedDetails.neighborhood,
+                        street: updatedDetails.street,
+                        buildingNo: updatedDetails.buildingNo,
+                        address: updatedDetails.fullAddress || prev.address,
+                      }));
+                    }}
+                  />
+
+                  {/* SECTION 4: İletişim Bilgileri ve Notlar */}
+                  <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Telefon
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="+90 212 000 0000"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          E-posta
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="muhasebe@firma.com"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Özel Notlar
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Sözleşme şartları, özel iskonto oranı vb..."
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                         className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* SECTION 3: Adres Bilgileri */}
-                <AddressSelector
-                  title="Cari Hesap Adres Bilgileri"
-                  address={{
-                    country: "Türkiye",
-                    city: formData.city || "İstanbul",
-                    district: formData.district || "Kadıköy",
-                    neighborhood: formData.neighborhood || "Caferağa",
-                    street: formData.street || "",
-                    buildingNo: formData.buildingNo || "",
-                    doorNo: "",
-                    postalCode: "",
-                    fullAddress: formData.address || "",
-                  }}
-                  onChange={(updatedDetails) => {
-                    setFormData((prev) => ({
-                      ...prev,
-                      city: updatedDetails.city,
-                      district: updatedDetails.district,
-                      neighborhood: updatedDetails.neighborhood,
-                      street: updatedDetails.street,
-                      buildingNo: updatedDetails.buildingNo,
-                      address: updatedDetails.fullAddress || prev.address,
-                    }));
-                  }}
-                />
-
-                {/* SECTION 4: İletişim Bilgileri ve Notlar */}
-                <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Telefon
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="+90 212 000 0000"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        E-posta
-                      </label>
-                      <input
-                        type="email"
-                        placeholder="muhasebe@firma.com"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Özel Notlar
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Sözleşme şartları, özel iskonto oranı vb..."
-                      value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-200">
+                {/* Footer */}
+                <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors"
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200/80 cursor-pointer transition-colors"
                   >
                     İptal
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+                    className="px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
                   >
                     <Check className="w-4 h-4" />
                     <span>{editingContact ? "Güncelle" : "Cari Hesabı Kaydet"}</span>
@@ -1530,10 +1794,10 @@ export const Contacts: React.FC<ContactsProps> = ({
 
       {/* MODAL: Cari Muavin Defteri / Ekstre Dökümü */}
       {selectedLedgerContact && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
             {/* Header - Fixed on top */}
-            <div className="p-5 border-b border-slate-200 bg-white shrink-0 flex items-start justify-between z-20">
+            <div className="p-3 sm:p-5 border-b border-slate-200 bg-white shrink-0 flex flex-col sm:flex-row items-start justify-between gap-3 z-20">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-extrabold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded">
@@ -1541,7 +1805,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                   </span>
                   <span className="text-xs text-slate-500">Cari Hareket Raporu</span>
                 </div>
-                <h3 className="text-xl font-black text-slate-900 mt-1">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 mt-1">
                   {selectedLedgerContact.name}
                 </h3>
                 <p className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
@@ -1554,27 +1818,43 @@ export const Contacts: React.FC<ContactsProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => handleOpenShareModal("whatsapp")}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                  title="PDF Cari Ekstreyi WhatsApp İle Paylaş (Tel elle girilebilir)"
+                >
+                  <MessageCircle className="w-4 h-4 text-emerald-100 fill-emerald-100/20" />
+                  <span>WhatsApp</span>
+                </button>
+                <button
+                  onClick={() => handleOpenShareModal("email")}
+                  className="bg-blue-600 hover:bg-blue-700 text-white border border-blue-600 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                  title="PDF Cari Ekstreyi E-Posta İle Paylaş (Mail adresi elle girilebilir)"
+                >
+                  <Mail className="w-4 h-4 text-blue-100" />
+                  <span>Mail</span>
+                </button>
                 <button
                   onClick={() => exportLedgerExcel(selectedLedgerContact)}
-                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                   title="Türkçe Karakter Destekli Excel (.xlsx) İndir"
                 >
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  <span>Excel İndir (.xlsx)</span>
+                  <span>Excel</span>
                 </button>
                 <button
                   onClick={() => exportLedgerPDF(selectedLedgerContact)}
                   disabled={isGeneratingPDF}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                   title="PDF Belgesi Olarak İndir"
                 >
                   <FileText className="w-4 h-4 text-rose-600" />
-                  <span>{isGeneratingPDF ? "Hazırlanıyor..." : "PDF İndir"}</span>
+                  <span>{isGeneratingPDF ? "Hazırlanıyor..." : "PDF"}</span>
                 </button>
                 <button
                   onClick={() => handlePrintLedger(selectedLedgerContact)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                   title="Cari Ekstre Raporunu Yazdır"
                 >
                   <Printer className="w-4 h-4 text-slate-600" />
@@ -1582,7 +1862,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                 </button>
                 <button
                   onClick={() => setSelectedLedgerContact(null)}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer ml-1"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1590,11 +1870,11 @@ export const Contacts: React.FC<ContactsProps> = ({
             </div>
 
             {/* Scrollable Printable Content Area */}
-            <div className="p-5 overflow-y-auto space-y-5 flex-1">
-              <div id="printable-ledger" className="space-y-5 p-4 rounded-xl" style={{ backgroundColor: "#ffffff", color: "#0f172a" }}>
+            <div className="p-3 sm:p-5 overflow-y-auto space-y-5 flex-1">
+              <div id="printable-ledger" className="space-y-4 sm:space-y-5 p-3 sm:p-4 rounded-xl" style={{ backgroundColor: "#ffffff", color: "#0f172a" }}>
               {/* Company Info Header for PDF/Print/Screen */}
               <div className="border-b-2 pb-4 mb-4" style={{ borderColor: "#0f172a" }}>
-                <div className="flex justify-between items-start">
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
                   <div>
                     <h2 className="text-base font-black uppercase tracking-tight" style={{ color: "#0f172a" }}>
                       {companySettings?.companyName || "FİRMA ADI"}
@@ -1604,8 +1884,8 @@ export const Contacts: React.FC<ContactsProps> = ({
                       VKN/TCKN: {companySettings?.taxNumber || "-"} ({companySettings?.taxOffice || "-"}) | Tel: {companySettings?.phone || "-"}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <h1 className="text-lg font-black uppercase tracking-tight" style={{ color: "#0f172a" }}>
+                  <div className="text-left sm:text-right">
+                    <h1 className="text-base sm:text-lg font-black uppercase tracking-tight" style={{ color: "#0f172a" }}>
                       CARİ HESAP EKSTRESİ
                     </h1>
                     <p className="text-xs font-semibold" style={{ color: "#64748b" }}>Tarih: {new Date().toLocaleDateString("tr-TR")}</p>
@@ -1614,7 +1894,7 @@ export const Contacts: React.FC<ContactsProps> = ({
               </div>
 
               {/* Current Balance Summary Box */}
-              <div className="rounded-xl p-4 flex flex-wrap items-center justify-between gap-4" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
+              <div className="rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
               <div>
                 <span className="text-[10px] font-bold uppercase block" style={{ color: "#64748b" }}>
                   Cari Telefon / E-posta
@@ -1633,12 +1913,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                 </span>
               </div>
 
-              <div className="text-right">
+              <div className="sm:text-right">
                 <span className="text-[10px] font-bold uppercase block" style={{ color: "#64748b" }}>
                   Net Cari Bakiye
                 </span>
                 <span
-                  className="text-lg font-black"
+                  className="text-base sm:text-lg font-black"
                   style={{
                     color: selectedLedgerContact.balance > 0
                       ? "#059669"
@@ -1656,8 +1936,8 @@ export const Contacts: React.FC<ContactsProps> = ({
             </div>
 
             {/* Ledger Table */}
-            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #e2e8f0" }}>
-              <table className="w-full text-left text-xs" style={{ backgroundColor: "#ffffff" }}>
+            <div className="rounded-xl overflow-x-auto custom-scrollbar w-full" style={{ border: "1px solid #e2e8f0" }}>
+              <table className="w-full text-left text-xs min-w-[680px]" style={{ backgroundColor: "#ffffff" }}>
                 <thead>
                   <tr className="font-bold uppercase tracking-wider" style={{ backgroundColor: "#f1f5f9", borderBottom: "1px solid #cbd5e1", color: "#475569" }}>
                     <th className="py-2.5 px-3">Tarih</th>
@@ -1764,8 +2044,8 @@ export const Contacts: React.FC<ContactsProps> = ({
 
       {/* TAHSİLAT YAP / ÖDEME YAP MODAL */}
       {actionModalType && selectedActionContact && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 my-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 animate-fadeIn">
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-xl w-full p-3 sm:p-5 shadow-2xl space-y-3 sm:space-y-4 my-auto max-h-[92vh] overflow-y-auto custom-scrollbar">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2.5">
@@ -1783,12 +2063,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                   )}
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-slate-900">
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
                     {actionModalType === "collection"
                       ? "Müşteriden / Cariden Tahsilat Al"
                       : "Cariye Ödeme Yap"}
                   </h3>
-                  <p className="text-xs text-slate-500 font-medium">
+                  <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
                     {actionModalType === "collection"
                       ? "Gelir girişi ve alacak kapatma işlemi"
                       : "Gider çıkışı ve borç kapatma işlemi"}
@@ -1808,18 +2088,18 @@ export const Contacts: React.FC<ContactsProps> = ({
             </div>
 
             {/* Selected Contact Card Summary */}
-            <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex items-center justify-between">
+            <div className="bg-slate-50 border border-slate-200 p-2.5 sm:p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">İşlem Yapılan Cari</span>
-                <div className="text-sm font-extrabold text-slate-900">{selectedActionContact.name}</div>
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wide">İşlem Yapılan Cari</span>
+                <div className="text-xs sm:text-sm font-extrabold text-slate-900">{selectedActionContact.name}</div>
                 {selectedActionContact.companyTitle && (
-                  <div className="text-xs text-slate-500 font-medium">{selectedActionContact.companyTitle}</div>
+                  <div className="text-[11px] text-slate-500 font-medium">{selectedActionContact.companyTitle}</div>
                 )}
               </div>
-              <div className="text-right">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Güncel Bakiye</span>
+              <div className="sm:text-right">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wide">Güncel Bakiye</span>
                 <div
-                  className={`text-sm font-black ${
+                  className={`text-xs sm:text-sm font-black ${
                     selectedActionContact.balance > 0
                       ? "text-emerald-600"
                       : selectedActionContact.balance < 0
@@ -1839,13 +2119,13 @@ export const Contacts: React.FC<ContactsProps> = ({
               </div>
             </div>
 
-            <form onSubmit={handleSaveAction} className="space-y-4 text-xs">
-              {/* Finans Yönetimi Alt Modül Tab Seçimi (Kasa, Banka, Kredi Kartı, Çek, Senet) */}
+            <form onSubmit={handleSaveAction} className="space-y-3 sm:space-y-4 text-xs">
+              {/* Finans Yönetimi Alt Modül Tab Seçimi (Kasa, Banka, Kredi Kartı, Çek, Senet, Virman) */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1.5">
                   Finans Modülü / Ödeme Yöntemi Seçin *
                 </label>
-                <div className="grid grid-cols-5 gap-1.5 p-1.5 bg-slate-100 rounded-xl">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-slate-100 rounded-xl">
                   <button
                     type="button"
                     onClick={() => {
@@ -1853,7 +2133,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                       const acc = accounts.find((a) => a.type === "cash") || accounts[0];
                       if (acc) setPayAccountId(acc.id);
                     }}
-                    className={`py-2 px-1 rounded-lg font-bold text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    className={`py-1.5 sm:py-2 px-1 rounded-lg font-bold text-[10px] sm:text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       payMethod === "kasa"
                         ? "bg-emerald-600 text-white shadow-xs"
                         : "text-slate-600 hover:bg-slate-200"
@@ -1870,7 +2150,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                       const acc = accounts.find((a) => a.type === "bank") || accounts[0];
                       if (acc) setPayAccountId(acc.id);
                     }}
-                    className={`py-2 px-1 rounded-lg font-bold text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    className={`py-1.5 sm:py-2 px-1 rounded-lg font-bold text-[10px] sm:text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       payMethod === "banka"
                         ? "bg-blue-600 text-white shadow-xs"
                         : "text-slate-600 hover:bg-slate-200"
@@ -1887,7 +2167,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                       const acc = accounts.find((a) => a.type === "credit_card") || accounts[0];
                       if (acc) setPayAccountId(acc.id);
                     }}
-                    className={`py-2 px-1 rounded-lg font-bold text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    className={`py-1.5 sm:py-2 px-1 rounded-lg font-bold text-[10px] sm:text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       payMethod === "kredi_karti"
                         ? "bg-amber-600 text-white shadow-xs"
                         : "text-slate-600 hover:bg-slate-200"
@@ -1900,7 +2180,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                   <button
                     type="button"
                     onClick={() => setPayMethod("cek")}
-                    className={`py-2 px-1 rounded-lg font-bold text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    className={`py-1.5 sm:py-2 px-1 rounded-lg font-bold text-[10px] sm:text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       payMethod === "cek"
                         ? "bg-indigo-600 text-white shadow-xs"
                         : "text-slate-600 hover:bg-slate-200"
@@ -1913,7 +2193,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                   <button
                     type="button"
                     onClick={() => setPayMethod("senet")}
-                    className={`py-2 px-1 rounded-lg font-bold text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    className={`py-1.5 sm:py-2 px-1 rounded-lg font-bold text-[10px] sm:text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       payMethod === "senet"
                         ? "bg-purple-600 text-white shadow-xs"
                         : "text-slate-600 hover:bg-slate-200"
@@ -1930,14 +2210,14 @@ export const Contacts: React.FC<ContactsProps> = ({
                       const otherContact = contacts.find((c) => c.id !== selectedActionContact?.id);
                       if (otherContact) setVirmanTargetContactId(otherContact.id);
                     }}
-                    className={`py-2 px-1 rounded-lg font-bold text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    className={`py-1.5 sm:py-2 px-1 rounded-lg font-bold text-[10px] sm:text-[11px] flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       payMethod === "virman"
                         ? "bg-teal-600 text-white shadow-xs"
                         : "text-slate-600 hover:bg-slate-200"
                     }`}
                   >
                     <ArrowRightLeft className="w-4 h-4" />
-                    <span>Virman (Cari)</span>
+                    <span>Virman</span>
                   </button>
                 </div>
               </div>
@@ -1956,7 +2236,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                     <select
                       value={payAccountId}
                       onChange={(e) => setPayAccountId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 cursor-pointer text-xs"
                       required
                     >
                       {accounts
@@ -1991,7 +2271,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                       <select
                         value={payInstallmentCount}
                         onChange={(e) => setPayInstallmentCount(parseInt(e.target.value))}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 cursor-pointer text-xs"
                       >
                         <option value={1}>Tek Çekim (Taksitsiz)</option>
                         <option value={2}>2 Taksit</option>
@@ -2003,7 +2283,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">
                         {actionModalType === "collection" ? "Tahsil Edilen Tutar (₺) *" : "Ödenen Tutar (₺) *"}
@@ -2016,7 +2296,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={payAmount}
                         onChange={(e) => setPayAmount(e.target.value)}
                         placeholder="0.00"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-black text-base text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-mono font-black text-sm sm:text-base text-slate-900"
                       />
                     </div>
 
@@ -2027,12 +2307,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                         required
                         value={payDate}
                         onChange={(e) => setPayDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 text-xs"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Belge / Dekont / Slip No</label>
                       <input
@@ -2040,7 +2320,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={payDocNo}
                         onChange={(e) => setPayDocNo(e.target.value)}
                         placeholder="Örn: SLIP-1290"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-medium text-slate-900 text-xs"
                       />
                     </div>
 
@@ -2051,7 +2331,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={payDesc}
                         onChange={(e) => setPayDesc(e.target.value)}
                         placeholder="Örn: Fatura borcuna mahsuben"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-medium text-slate-900 text-xs"
                       />
                     </div>
                   </div>
@@ -2070,7 +2350,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Çek Tutarı (₺) *</label>
                       <input
@@ -2081,7 +2361,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={payAmount}
                         onChange={(e) => setPayAmount(e.target.value)}
                         placeholder="0.00"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-black text-base text-indigo-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-mono font-black text-sm sm:text-base text-indigo-900"
                       />
                     </div>
 
@@ -2093,12 +2373,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={docNumber}
                         onChange={(e) => setDocNumber(e.target.value)}
                         placeholder="Örn: ÇEK-901823"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-mono font-bold text-slate-900 text-xs"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Banka Adı *</label>
                       <input
@@ -2107,7 +2387,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={docBankName}
                         onChange={(e) => setDocBankName(e.target.value)}
                         placeholder="Örn: Garanti BBVA"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 text-xs"
                       />
                     </div>
 
@@ -2118,12 +2398,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                         required
                         value={docDebtorName}
                         onChange={(e) => setDocDebtorName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 text-xs"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Vade Tarihi *</label>
                       <input
@@ -2131,7 +2411,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         required
                         value={docDueDate}
                         onChange={(e) => setDocDueDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 text-xs"
                       />
                     </div>
 
@@ -2142,7 +2422,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         required
                         value={payDate}
                         onChange={(e) => setPayDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 text-xs"
                       />
                     </div>
                   </div>
@@ -2154,7 +2434,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                       value={payDesc}
                       onChange={(e) => setPayDesc(e.target.value)}
                       placeholder="Örn: 30 gün vadeli müşteri çeki"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium text-slate-900"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-medium text-slate-900 text-xs"
                     />
                   </div>
                 </div>
@@ -2172,7 +2452,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Senet Tutarı (₺) *</label>
                       <input
@@ -2183,7 +2463,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={payAmount}
                         onChange={(e) => setPayAmount(e.target.value)}
                         placeholder="0.00"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-black text-base text-purple-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-mono font-black text-sm sm:text-base text-purple-900"
                       />
                     </div>
 
@@ -2195,12 +2475,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={docNumber}
                         onChange={(e) => setDocNumber(e.target.value)}
                         placeholder="Örn: SNT-102938"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-mono font-bold text-slate-900 text-xs"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Borçlu Adı / Soyadı *</label>
                       <input
@@ -2208,7 +2488,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         required
                         value={docDebtorName}
                         onChange={(e) => setDocDebtorName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 text-xs"
                       />
                     </div>
 
@@ -2219,12 +2499,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                         required
                         value={docDueDate}
                         onChange={(e) => setDocDueDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 text-xs"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">İşlem Tarihi *</label>
                       <input
@@ -2232,7 +2512,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         required
                         value={payDate}
                         onChange={(e) => setPayDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 text-xs"
                       />
                     </div>
 
@@ -2243,7 +2523,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={payDesc}
                         onChange={(e) => setPayDesc(e.target.value)}
                         placeholder="Örn: Sözleşmeye istinaden alınan senet"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-medium text-slate-900 text-xs"
                       />
                     </div>
                   </div>
@@ -2253,7 +2533,7 @@ export const Contacts: React.FC<ContactsProps> = ({
               {/* Form Fields: CARİLER ARASI VİRMAN */}
               {payMethod === "virman" && (
                 <div className="space-y-3">
-                  <div className="p-3 bg-teal-50 border border-teal-200 text-teal-900 rounded-xl font-medium text-xs flex items-center gap-2">
+                  <div className="p-2.5 sm:p-3 bg-teal-50 border border-teal-200 text-teal-900 rounded-xl font-medium text-xs flex items-center gap-2">
                     <ArrowRightLeft className="w-5 h-5 text-teal-600 shrink-0" />
                     <div>
                       <strong>Cariler Arası Virman Fişi:</strong> Kasa veya banka hareketi olmadan, seçilen diğer cari hesap ile bu cari arasında borç/alacak virman aktarımı yapar.
@@ -2265,7 +2545,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                     <select
                       value={virmanTargetContactId}
                       onChange={(e) => setVirmanTargetContactId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer text-xs"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 cursor-pointer text-xs"
                       required
                     >
                       <option value="">-- Karşı Cari Seçin --</option>
@@ -2280,7 +2560,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Virman Tutarı (₺) *</label>
                       <input
@@ -2291,7 +2571,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={payAmount}
                         onChange={(e) => setPayAmount(e.target.value)}
                         placeholder="0.00"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-black text-base text-teal-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-mono font-black text-sm sm:text-base text-teal-900"
                       />
                     </div>
 
@@ -2302,12 +2582,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                         required
                         value={payDate}
                         onChange={(e) => setPayDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-bold text-slate-900 text-xs"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Virman Dekont / Fiş No</label>
                       <input
@@ -2315,7 +2595,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={payDocNo}
                         onChange={(e) => setPayDocNo(e.target.value)}
                         placeholder="Örn: VRM-2026-001"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-medium text-slate-900 text-xs"
                       />
                     </div>
 
@@ -2326,7 +2606,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         value={payDesc}
                         onChange={(e) => setPayDesc(e.target.value)}
                         placeholder="Örn: Cariler arası borç virman transferi"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium text-slate-900"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 sm:p-2.5 font-medium text-slate-900 text-xs"
                       />
                     </div>
                   </div>
@@ -2334,21 +2614,21 @@ export const Contacts: React.FC<ContactsProps> = ({
               )}
 
               {/* Action Buttons */}
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
+              <div className="pt-3 flex flex-col sm:flex-row justify-end gap-2 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => {
                     setActionModalType(null);
                     setSelectedActionContact(null);
                   }}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
+                  className="w-full sm:w-auto px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold text-xs"
                 >
                   İptal
                 </button>
                 <button
                   type="submit"
                   disabled={!payAmount || parseFloat(payAmount) <= 0}
-                  className={`px-5 py-2 font-bold text-white rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md ${
+                  className={`w-full sm:w-auto px-5 py-2 font-bold text-white text-xs rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md ${
                     actionModalType === "collection"
                       ? "bg-emerald-600 hover:bg-emerald-700"
                       : "bg-rose-600 hover:bg-rose-700"
@@ -2358,6 +2638,162 @@ export const Contacts: React.FC<ContactsProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: WhatsApp & E-Posta ile Ekstre Paylaş (Elle Telefon & Mail Girişi Destekli) */}
+      {shareType && selectedLedgerContact && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in duration-150">
+            {/* Modal Header */}
+            <div className={`p-4 border-b flex items-center justify-between text-white ${
+              shareType === "whatsapp" ? "bg-emerald-600 border-emerald-700" : "bg-blue-600 border-blue-700"
+            }`}>
+              <div className="flex items-center gap-2.5">
+                {shareType === "whatsapp" ? (
+                  <MessageCircle className="w-5 h-5 text-white" />
+                ) : (
+                  <Mail className="w-5 h-5 text-white" />
+                )}
+                <div>
+                  <h3 className="text-base font-extrabold leading-tight">
+                    {shareType === "whatsapp" ? "PDF WhatsApp ile Cari Ekstre Paylaş" : "PDF Mail ile Cari Ekstre Paylaş"}
+                  </h3>
+                  <p className="text-[11px] text-white/80">
+                    Cari: {selectedLedgerContact.name} ({getContactAccountCode(selectedLedgerContact)})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShareType(null)}
+                className="text-white/80 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              {/* PDF Format Notice */}
+              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-semibold flex items-center gap-2.5 shadow-xs">
+                <FileText className="w-5 h-5 text-amber-600 shrink-0" />
+                <div>
+                  <strong className="block text-amber-950 font-bold">📄 Yalnızca PDF Formatında Ekstre Paylaşımı</strong>
+                  <span>Gönder butonuna tıklandığında resmi <strong>Cari_Ekstre_*.pdf</strong> belgesi cihazınıza otomatik indirilecek ve WhatsApp/Mail paylaşımı başlatılacaktır.</span>
+                </div>
+              </div>
+
+              {shareType === "whatsapp" ? (
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Gönderilecek WhatsApp Telefon Numarası *</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={sharePhone}
+                    onChange={(e) => setSharePhone(e.target.value)}
+                    placeholder="Örn: 0532 123 45 67 veya 5321234567"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    💡 İsterseniz telefon numarasını elle değiştirebilir veya farklı bir WhatsApp numarası girebilirsiniz.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Gönderilecek E-Posta Adresi *</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={shareEmail}
+                      onChange={(e) => setShareEmail(e.target.value)}
+                      placeholder="Örn: muhasebe@sirket.com"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      💡 İsterseniz mail adresini elle değiştirebilir veya farklı bir alıcı adresi yazabilirsiniz.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                      E-Posta Konusu (Subject)
+                    </label>
+                    <input
+                      type="text"
+                      value={shareSubject}
+                      onChange={(e) => setShareSubject(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-extrabold text-slate-700">
+                    Ekstre Mesaj İçeriği (Gönderilmeden Önce Düzenlenebilir)
+                  </label>
+                  <button
+                    onClick={handleCopyMessage}
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{isCopied ? "Metin Kopyalandı!" : "Metni Kopyala"}</span>
+                  </button>
+                </div>
+                <textarea
+                  rows={9}
+                  value={shareMessage}
+                  onChange={(e) => setShareMessage(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white leading-relaxed resize-y"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3 flex-wrap">
+              <button
+                onClick={handleCopyMessage}
+                className="px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {isCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
+                <span>{isCopied ? "Kopyalandı!" : "Mesajı Kopyala"}</span>
+              </button>
+
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  onClick={() => setShareType(null)}
+                  className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                {shareType === "whatsapp" ? (
+                  <button
+                    onClick={handleSendWhatsApp}
+                    disabled={isGeneratingPDF}
+                    className="px-4.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>{isGeneratingPDF ? "PDF Hazırlanıyor..." : "PDF WhatsApp ile Gönder"}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSendEmail}
+                    disabled={isGeneratingPDF}
+                    className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>{isGeneratingPDF ? "PDF Hazırlanıyor..." : "PDF Mail ile Gönder"}</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -62,7 +62,7 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6">
       {/* Header Banner */}
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 rounded-2xl p-6 text-white shadow-md border border-slate-800">
         <div className="relative z-10 flex items-center justify-between gap-4">

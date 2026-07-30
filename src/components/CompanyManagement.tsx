@@ -318,7 +318,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   );
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
       {/* Header Banner */}
       <div className="relative overflow-hidden bg-white rounded-2xl p-6 text-slate-900 shadow-xs border border-slate-200">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">

@@ -731,7 +731,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* MODULE HEADER & TOP SUMMARY (Lila Bal Peteği & Geometrik Desen) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-6 border border-purple-200/60 shadow-2xs space-y-4">
         {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
@@ -1106,8 +1106,8 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-              <table className="w-full text-left text-xs border-separate border-spacing-y-2">
+            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+              <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[750px]">
                 <thead>
                   <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                     <th className="pb-2 px-3">Tarih</th>
@@ -1286,8 +1286,8 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-              <table className="w-full text-left text-xs border-separate border-spacing-y-2">
+            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+              <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[750px]">
                 <thead>
                   <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                     <th className="pb-2 px-3">Tarih</th>
@@ -1436,8 +1436,8 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-            <table className="w-full text-left text-xs border-separate border-spacing-y-2">
+          <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+            <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[800px]">
               <thead>
                 <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                   <th className="pb-2 px-3">Çek No & Tipi</th>
@@ -1623,8 +1623,8 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-            <table className="w-full text-left text-xs border-separate border-spacing-y-2">
+          <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+            <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[800px]">
               <thead>
                 <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                   <th className="pb-2 px-3">Senet No & Tipi</th>
@@ -1843,8 +1843,8 @@ export const Accounts: React.FC<AccountsProps> = ({
           <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
             <h3 className="text-sm font-extrabold text-slate-900">Virman Transfer Geçmişi</h3>
 
-            <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-              <table className="w-full text-left text-xs border-separate border-spacing-y-2">
+            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+              <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[700px]">
                 <thead>
                   <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                     <th className="pb-2 px-3">Tarih</th>

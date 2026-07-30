@@ -761,7 +761,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* HEADER BANNER */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs">
         {/* Lila Bal Peteği Desen Kaplaması */}
@@ -1056,8 +1056,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           </div>
 
           {/* Employees Table */}
-          <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-            <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+          <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+            <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[800px]">
               <thead>
                 <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                   <th className="pb-2 px-3">Çalışan Bilgisi</th>
@@ -1279,8 +1279,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-              <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
+              <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[900px]">
                 <thead>
                   <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                     <th className="pb-2 px-3">Personel</th>
@@ -1452,8 +1452,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </button>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-            <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+          <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
+            <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
               <thead>
                 <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                   <th className="pb-2 px-3">Çalışan</th>
@@ -1656,8 +1656,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           {/* INNER VIEW 1: AVANS & MASRAF TALEPLERİ */}
           {advanceInnerTab === "requests" && (
             <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
-              <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-                <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+              <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
+                <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
                   <thead>
                     <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                       <th className="pb-2 px-3">Çalışan</th>
@@ -1795,8 +1795,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   </div>
                 </div>
 
-                <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-                  <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+                <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
+                  <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[800px]">
                     <thead>
                       <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                         <th className="pb-2 px-3">Çalışan</th>

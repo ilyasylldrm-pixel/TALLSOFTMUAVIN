@@ -371,7 +371,7 @@ export const Orders: React.FC<OrdersProps> = ({
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen - Cari Hesaplar Stili) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
@@ -559,9 +559,9 @@ export const Orders: React.FC<OrdersProps> = ({
       </div>
 
       {/* Orders Table Container */}
-      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-3 shadow-2xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+        <div className="overflow-x-auto custom-scrollbar w-full">
+          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[800px]">
             <thead>
               <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                 <th className="pb-2 px-4">Sipariş No / Tarih</th>
@@ -843,8 +843,8 @@ export const Orders: React.FC<OrdersProps> = ({
                   </button>
                 </div>
 
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left border-collapse">
+                <div className="border border-slate-200 rounded-2xl overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left border-collapse min-w-[650px]">
                     <thead>
                       <tr className="bg-slate-100 text-slate-600 text-[11px] font-bold uppercase tracking-wider">
                         <th className="py-2.5 px-3">Ürün / Hizmet Seçimi</th>
@@ -1061,28 +1061,30 @@ export const Orders: React.FC<OrdersProps> = ({
               </div>
 
               {/* Items Table */}
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                    <th className="p-2">Açıklama / Ürün</th>
-                    <th className="p-2 text-center">Miktar</th>
-                    <th className="p-2 text-right">Birim Fiyat</th>
-                    <th className="p-2 text-right">KDV</th>
-                    <th className="p-2 text-right">Toplam</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {selectedOrderForView.items.map((item, i) => (
-                    <tr key={i}>
-                      <td className="p-2 font-medium text-slate-800">{item.description}</td>
-                      <td className="p-2 text-center font-bold">{item.quantity} {item.unit}</td>
-                      <td className="p-2 text-right">₺{(item.unitPrice || 0).toLocaleString("tr-TR")}</td>
-                      <td className="p-2 text-right">%{item.vatRate}</td>
-                      <td className="p-2 text-right font-bold">₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</td>
+              <div className="overflow-x-auto custom-scrollbar w-full rounded-xl border border-slate-200">
+                <table className="w-full text-left text-xs border-collapse min-w-[600px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                      <th className="p-2">Açıklama / Ürün</th>
+                      <th className="p-2 text-center">Miktar</th>
+                      <th className="p-2 text-right">Birim Fiyat</th>
+                      <th className="p-2 text-right">KDV</th>
+                      <th className="p-2 text-right">Toplam</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedOrderForView.items.map((item, i) => (
+                      <tr key={i}>
+                        <td className="p-2 font-medium text-slate-800">{item.description}</td>
+                        <td className="p-2 text-center font-bold">{item.quantity} {item.unit}</td>
+                        <td className="p-2 text-right">₺{(item.unitPrice || 0).toLocaleString("tr-TR")}</td>
+                        <td className="p-2 text-right">%{item.vatRate}</td>
+                        <td className="p-2 text-right font-bold">₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
               <div className="flex justify-between items-end border-t border-slate-200 pt-4">
                 <div className="text-xs text-slate-500 max-w-xs">

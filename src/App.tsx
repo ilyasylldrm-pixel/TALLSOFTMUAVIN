@@ -57,6 +57,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<NavItem>("dashboard");
   const [financeSubTab, setFinanceSubTab] = useState<FinanceSubModule>("kasa");
   const [searchTerm, setSearchTerm] = useState("");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Storage State
   const [data, setData] = useState(() => getStoredData());
@@ -1092,6 +1093,8 @@ export default function App() {
         settings={data.settings}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
         currentUser={currentUser}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
       {/* Main App Content Area */}
@@ -1108,6 +1111,7 @@ export default function App() {
           currentUser={currentUser}
           onOpenAuthModal={handleOpenAuthModal}
           onLogout={handleLogout}
+          onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
         />
 
         <main className="flex-1 pb-12 bg-slate-100">

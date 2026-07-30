@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   ShoppingCart,
   Truck,
+  X,
 } from "lucide-react";
 import { CompanySettings } from "../types";
 import { Logo } from "./Logo";
@@ -73,6 +74,8 @@ interface SidebarProps {
   settings: CompanySettings;
   onOpenQuickAdd: () => void;
   currentUser?: UserProfile | null;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -83,6 +86,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   settings,
   onOpenQuickAdd,
   currentUser,
+  isMobileOpen = false,
+  onCloseMobile,
 }) => {
   const [isOrdersExpanded, setIsOrdersExpanded] = useState(true);
   const [isFinanceExpanded, setIsFinanceExpanded] = useState(true);
@@ -146,22 +151,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "virman", label: "Hesaplar Arası Virman", icon: ArrowRightLeft },
   ];
 
-  return (
-    <aside className="w-64 bg-white text-slate-800 flex flex-col shrink-0 h-screen sticky top-0 border-r border-slate-200 shadow-sm z-20">
+  const handleSelectTabWithMobileClose = (tab: NavItem) => {
+    onSelectTab(tab);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
+
+  const renderNavContent = () => (
+    <>
       {/* Brand Header */}
-      <div className="p-4 border-b border-slate-200 flex flex-col justify-center">
-        <div className="flex items-center justify-between">
+      <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+        <div>
           <Logo size="md" />
+          <p className="text-xs text-slate-500 font-medium truncate mt-1">
+            {settings.companyName}
+          </p>
         </div>
-        <p className="text-xs text-slate-500 font-medium truncate mt-1">
-          {settings.companyName}
-        </p>
+        {onCloseMobile && (
+          <button
+            onClick={onCloseMobile}
+            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+            title="Kapat"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Quick Add Button */}
       <div className="p-4">
         <button
-          onClick={onOpenQuickAdd}
+          onClick={() => {
+            onOpenQuickAdd();
+            if (onCloseMobile) onCloseMobile();
+          }}
           className="w-full bg-[#8252F6] hover:bg-[#703EE5] active:scale-[0.98] text-white font-medium text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4 text-[#EF7D2C]" />
@@ -474,6 +498,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="text-emerald-600 font-medium">Bakiye Aktif</span>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-64 bg-white text-slate-800 flex-col shrink-0 h-screen sticky top-0 border-r border-slate-200 shadow-sm z-20">
+        {renderNavContent()}
+      </aside>
+
+      {/* Mobile Backdrop Overlay */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 md:hidden"
+          onClick={onCloseMobile}
+        />
+      )}
+
+      {/* Mobile Sidebar Slide-Over Drawer */}
+      <aside
+        className={`fixed inset-y-0 left-0 w-72 bg-white text-slate-800 flex flex-col z-50 shadow-2xl md:hidden transition-transform duration-300 ease-in-out ${
+          isMobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {renderNavContent()}
+      </aside>
+    </>
   );
 };

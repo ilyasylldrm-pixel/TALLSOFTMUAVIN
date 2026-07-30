@@ -170,8 +170,8 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           </div>
 
           {/* Invoice Items Table */}
-          <div className="border border-slate-300 rounded-xl overflow-hidden">
-            <table className="w-full text-left text-xs">
+          <div className="border border-slate-300 rounded-xl overflow-x-auto custom-scrollbar w-full">
+            <table className="w-full text-left text-xs min-w-[650px]">
               <thead>
                 <tr className="bg-slate-900 text-white font-bold uppercase text-[10px] tracking-wider">
                   <th className="py-2.5 px-3">Sıra</th>

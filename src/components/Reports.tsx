@@ -199,7 +199,7 @@ export const Reports: React.FC<ReportsProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto text-slate-900">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto text-slate-900">
       {/* Header Banner */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 rounded-3xl p-6 text-white shadow-lg border border-purple-800/40 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
         {/* Decorative Grid SVG */}
@@ -537,8 +537,8 @@ export const Reports: React.FC<ReportsProps> = ({
                   {isIndividual || isPartnership ? (
                     <div className="mt-4 space-y-3">
                       <h5 className="font-bold text-xs text-slate-800">2026 Gelir Vergisi Dilimlerine Göre Hesaplama Detayı (GVK M.103):</h5>
-                      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                        <table className="w-full text-xs text-left">
+                      <div className="overflow-x-auto custom-scrollbar w-full rounded-xl border border-slate-200 bg-white">
+                        <table className="w-full text-xs text-left min-w-[500px]">
                           <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px]">
                             <tr>
                               <th className="p-2.5">Gelir Dilimi</th>
@@ -741,8 +741,8 @@ export const Reports: React.FC<ReportsProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-              <table className="w-full text-left text-xs border-separate border-spacing-y-2">
+            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+              <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[750px]">
                 <thead>
                   <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                     <th className="pb-2 px-3">Tarih</th>

@@ -135,7 +135,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen - Cari Hesaplar Tasarımı) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
@@ -236,9 +236,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
       </div>
 
       {/* Users List Table */}
-      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-3 shadow-2xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+        <div className="overflow-x-auto custom-scrollbar w-full">
+          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
             <thead>
               <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                 <th className="pb-2 px-4">Kullanıcı / Ad Soyad</th>

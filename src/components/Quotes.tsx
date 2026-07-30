@@ -211,7 +211,7 @@ export const Quotes: React.FC<QuotesProps> = ({
   );
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Header (Lila Bal Peteği & Geometrik Desen) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
@@ -315,8 +315,8 @@ export const Quotes: React.FC<QuotesProps> = ({
           />
         </div>
 
-        <div className="overflow-x-auto rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5">
+        <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
             <thead>
               <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                 <th className="pb-2 px-4">Belge No</th>
@@ -502,8 +502,8 @@ export const Quotes: React.FC<QuotesProps> = ({
                   </button>
                 </div>
 
-                <div className="border border-purple-200/80 rounded-xl overflow-hidden shadow-2xs">
-                  <table className="w-full text-left text-xs">
+                <div className="border border-purple-200/80 rounded-xl overflow-x-auto custom-scrollbar w-full shadow-2xs">
+                  <table className="w-full text-left text-xs min-w-[650px]">
                     <thead>
                       <tr className="bg-purple-50/80 text-purple-950 font-extrabold uppercase text-[10px]">
                         <th className="py-2.5 px-3">Ürün / Hizmet (Stoktan Seç & Açıklama)</th>
@@ -799,8 +799,8 @@ export const Quotes: React.FC<QuotesProps> = ({
               </div>
 
               {/* Items Table */}
-              <div className="border border-purple-200/80 rounded-xl overflow-hidden">
-                <table className="w-full text-left text-xs">
+              <div className="border border-purple-200/80 rounded-xl overflow-x-auto custom-scrollbar w-full">
+                <table className="w-full text-left text-xs min-w-[650px]">
                   <thead>
                     <tr className="bg-purple-950 text-white font-extrabold uppercase text-[10px]">
                       <th className="py-2.5 px-3 w-10 text-center">#</th>
