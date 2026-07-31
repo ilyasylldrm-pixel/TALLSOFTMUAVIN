@@ -150,6 +150,8 @@ export const Header: React.FC<HeaderProps> = ({
                 <img
                   src={currentUser.selectedLogoUrl}
                   alt={currentUser.selectedLogoName}
+                  loading="lazy"
+                  decoding="async"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />

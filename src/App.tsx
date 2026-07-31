@@ -1,23 +1,25 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { Sidebar, NavItem } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Dashboard } from "./components/Dashboard";
-import { Contacts } from "./components/Contacts";
-import { Invoices } from "./components/Invoices";
-import { Quotes } from "./components/Quotes";
-import { Orders } from "./components/Orders";
-import { Waybills } from "./components/Waybills";
-import { Accounts } from "./components/Accounts";
-import { Transactions } from "./components/Transactions";
-import { Products } from "./components/Products";
-import { Reports } from "./components/Reports";
-import { AiAssistant } from "./components/AiAssistant";
-import { Settings } from "./components/Settings";
-import { CompanyManagement, CompanySubTab } from "./components/CompanyManagement";
-import { HRManagement } from "./components/HRManagement";
-import { FileManager } from "./components/FileManager";
-import { AdminDashboard } from "./components/AdminDashboard";
 import { AuthModal, UserProfile, BRAND_LOGOS } from "./components/AuthModal";
+
+// Lazy-loaded heavy tab modules for fast initial page load and automatic code splitting
+const Contacts = lazy(() => import("./components/Contacts").then((m) => ({ default: m.Contacts })));
+const Invoices = lazy(() => import("./components/Invoices").then((m) => ({ default: m.Invoices })));
+const Quotes = lazy(() => import("./components/Quotes").then((m) => ({ default: m.Quotes })));
+const Orders = lazy(() => import("./components/Orders").then((m) => ({ default: m.Orders })));
+const Waybills = lazy(() => import("./components/Waybills").then((m) => ({ default: m.Waybills })));
+const Accounts = lazy(() => import("./components/Accounts").then((m) => ({ default: m.Accounts })));
+const Transactions = lazy(() => import("./components/Transactions").then((m) => ({ default: m.Transactions })));
+const Products = lazy(() => import("./components/Products").then((m) => ({ default: m.Products })));
+const Reports = lazy(() => import("./components/Reports").then((m) => ({ default: m.Reports })));
+const AiAssistant = lazy(() => import("./components/AiAssistant").then((m) => ({ default: m.AiAssistant })));
+const Settings = lazy(() => import("./components/Settings").then((m) => ({ default: m.Settings })));
+const CompanyManagement = lazy(() => import("./components/CompanyManagement").then((m) => ({ default: m.CompanyManagement })));
+const HRManagement = lazy(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement })));
+const FileManager = lazy(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
+const AdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
 
 import {
   getStoredData,
@@ -52,6 +54,22 @@ import {
 import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X } from "lucide-react";
 
 import { FinanceSubModule } from "./components/Accounts";
+
+const TabLoadingSkeleton = () => (
+  <div className="p-6 max-w-7xl mx-auto space-y-6 animate-pulse">
+    <div className="flex items-center justify-between">
+      <div className="h-7 bg-slate-200 rounded-lg w-48"></div>
+      <div className="h-9 bg-slate-200 rounded-xl w-32"></div>
+    </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="h-24 bg-slate-200 rounded-2xl"></div>
+      <div className="h-24 bg-slate-200 rounded-2xl"></div>
+      <div className="h-24 bg-slate-200 rounded-2xl"></div>
+      <div className="h-24 bg-slate-200 rounded-2xl"></div>
+    </div>
+    <div className="h-80 bg-slate-200 rounded-2xl border border-slate-200"></div>
+  </div>
+);
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<NavItem>("dashboard");
@@ -1115,7 +1133,8 @@ export default function App() {
         />
 
         <main className="flex-1 pb-12 bg-slate-100">
-          {currentTab === "dashboard" && (
+          <Suspense fallback={<TabLoadingSkeleton />}>
+            {currentTab === "dashboard" && (
             <Dashboard
               contacts={data.contacts}
               invoices={data.invoices}
@@ -1378,6 +1397,7 @@ export default function App() {
               onResetDemoData={handleResetDemoData}
             />
           )}
+          </Suspense>
         </main>
       </div>
 
