@@ -85,23 +85,30 @@ export function getStoredData() {
   }
 
   const loadedContacts = get<Contact[]>(STORAGE_KEYS.CONTACTS, initialContacts);
-  const normalizedContacts = loadedContacts.map((c) => ({
-    ...c,
-    accountCode: getContactAccountCode(c),
-  }));
+  const loadedTransactions = get<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions);
+  const loadedCheques = get<Cheque[]>(STORAGE_KEYS.CHEQUES, initialCheques);
+  const loadedNotes = get<PromissoryNote[]>(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes);
+
+  const normalizedContacts = syncContactBalances(
+    loadedContacts,
+    storedInvoices,
+    loadedTransactions,
+    loadedCheques,
+    loadedNotes
+  );
 
   return {
     settings: get<CompanySettings>(STORAGE_KEYS.SETTINGS, initialCompanySettings),
     contacts: normalizedContacts,
     accounts: get<Account[]>(STORAGE_KEYS.ACCOUNTS, initialAccounts),
     invoices: storedInvoices,
-    transactions: get<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions),
+    transactions: loadedTransactions,
     products: get<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts),
     quotes: get<Quote[]>(STORAGE_KEYS.QUOTES, initialQuotes),
     orders: get<Order[]>(STORAGE_KEYS.ORDERS, initialOrders),
     waybills: get<Waybill[]>(STORAGE_KEYS.WAYBILLS, initialWaybills),
-    cheques: get<Cheque[]>(STORAGE_KEYS.CHEQUES, initialCheques),
-    promissoryNotes: get<PromissoryNote[]>(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes),
+    cheques: loadedCheques,
+    promissoryNotes: loadedNotes,
     branches: get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches),
     warehouses: get<Warehouse[]>(STORAGE_KEYS.WAREHOUSES, initialWarehouses),
     employees: get<Employee[]>(STORAGE_KEYS.EMPLOYEES, initialEmployees),
@@ -109,6 +116,70 @@ export function getStoredData() {
     advanceRequests: get<AdvanceRequest[]>(STORAGE_KEYS.ADVANCE_REQUESTS, initialAdvanceRequests),
     legalDeductions: get<LegalDeduction[]>(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions),
   };
+}
+
+export function syncContactBalances(
+  contacts: Contact[],
+  invoices: Invoice[],
+  transactions: Transaction[],
+  cheques?: Cheque[],
+  promissoryNotes?: PromissoryNote[]
+): Contact[] {
+  const contactBalanceMap: Record<string, number> = {};
+
+  invoices.forEach((inv) => {
+    if (!inv.contactId) return;
+    const current = contactBalanceMap[inv.contactId] || 0;
+    if (inv.type === "sales") {
+      contactBalanceMap[inv.contactId] = current + inv.grandTotal;
+    } else {
+      contactBalanceMap[inv.contactId] = current - inv.grandTotal;
+    }
+  });
+
+  transactions.forEach((tx) => {
+    if (!tx.contactId) return;
+    const current = contactBalanceMap[tx.contactId] || 0;
+    if (tx.type === "income" || tx.type === "collection") {
+      contactBalanceMap[tx.contactId] = current - tx.amount;
+    } else if (tx.type === "expense" || tx.type === "payment") {
+      contactBalanceMap[tx.contactId] = current + tx.amount;
+    }
+  });
+
+  if (cheques) {
+    cheques.forEach((chq) => {
+      if (!chq.contactId) return;
+      const current = contactBalanceMap[chq.contactId] || 0;
+      if (chq.type === "received") {
+        contactBalanceMap[chq.contactId] = current - chq.amount;
+      } else {
+        contactBalanceMap[chq.contactId] = current + chq.amount;
+      }
+    });
+  }
+
+  if (promissoryNotes) {
+    promissoryNotes.forEach((note) => {
+      if (!note.contactId) return;
+      const current = contactBalanceMap[note.contactId] || 0;
+      if (note.type === "received") {
+        contactBalanceMap[note.contactId] = current - note.amount;
+      } else {
+        contactBalanceMap[note.contactId] = current + note.amount;
+      }
+    });
+  }
+
+  return contacts.map((c) => {
+    const calcBal = contactBalanceMap[c.id] ?? c.balance ?? 0;
+    return {
+      ...c,
+      accountCode: getContactAccountCode(c),
+      balance: calcBal,
+      balanceType: calcBal > 0 ? ("receivable" as const) : calcBal < 0 ? ("payable" as const) : ("balanced" as const),
+    };
+  });
 }
 
 export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any) {

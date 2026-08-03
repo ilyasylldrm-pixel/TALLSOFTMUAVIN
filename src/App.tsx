@@ -690,10 +690,46 @@ export default function App() {
   };
 
   const handleUpdateChequeStatus = (id: string, status: ChequeStatus) => {
-    setData((prev) => ({
-      ...prev,
-      cheques: (prev.cheques || []).map((c) => (c.id === id ? { ...c, status } : c)),
-    }));
+    setData((prev) => {
+      const cheque = (prev.cheques || []).find((c) => c.id === id);
+      const updatedCheques = (prev.cheques || []).map((c) => (c.id === id ? { ...c, status } : c));
+
+      let updatedAccounts = prev.accounts;
+      let updatedTransactions = prev.transactions;
+
+      if (cheque && (status === "collected" || status === "paid")) {
+        const defaultAcc = prev.accounts[0];
+        if (defaultAcc) {
+          const isIncome = cheque.type === "received";
+          const newTx: Transaction = {
+            id: "tx_chq_" + Date.now(),
+            date: new Date().toISOString().split("T")[0],
+            type: isIncome ? "collection" : "payment",
+            amount: cheque.amount,
+            currency: cheque.currency || "TRY",
+            accountId: defaultAcc.id,
+            accountName: defaultAcc.name,
+            contactId: cheque.contactId,
+            contactName: cheque.contactName,
+            category: isIncome ? "Çek Tahsilatı" : "Çek Ödemesi",
+            description: `${cheque.bankName || "Banka"} (${cheque.chequeNumber || "Çek"}) ${isIncome ? "Çek Tahsilatı" : "Çek Ödemesi"}`,
+          };
+          updatedAccounts = prev.accounts.map((acc) =>
+            acc.id === defaultAcc.id
+              ? { ...acc, balance: isIncome ? acc.balance + cheque.amount : acc.balance - cheque.amount }
+              : acc
+          );
+          updatedTransactions = [newTx, ...prev.transactions];
+        }
+      }
+
+      return {
+        ...prev,
+        cheques: updatedCheques,
+        accounts: updatedAccounts,
+        transactions: updatedTransactions,
+      };
+    });
   };
 
   const handleEndorseCheque = (
@@ -751,10 +787,46 @@ export default function App() {
   };
 
   const handleUpdateNoteStatus = (id: string, status: PromissoryNoteStatus) => {
-    setData((prev) => ({
-      ...prev,
-      promissoryNotes: (prev.promissoryNotes || []).map((n) => (n.id === id ? { ...n, status } : n)),
-    }));
+    setData((prev) => {
+      const note = (prev.promissoryNotes || []).find((n) => n.id === id);
+      const updatedNotes = (prev.promissoryNotes || []).map((n) => (n.id === id ? { ...n, status } : n));
+
+      let updatedAccounts = prev.accounts;
+      let updatedTransactions = prev.transactions;
+
+      if (note && (status === "collected" || status === "paid")) {
+        const defaultAcc = prev.accounts[0];
+        if (defaultAcc) {
+          const isIncome = note.type === "received";
+          const newTx: Transaction = {
+            id: "tx_note_" + Date.now(),
+            date: new Date().toISOString().split("T")[0],
+            type: isIncome ? "collection" : "payment",
+            amount: note.amount,
+            currency: note.currency || "TRY",
+            accountId: defaultAcc.id,
+            accountName: defaultAcc.name,
+            contactId: note.contactId,
+            contactName: note.contactName,
+            category: isIncome ? "Senet Tahsilatı" : "Senet Ödemesi",
+            description: `Senet No: ${note.noteNumber || "Senet"} ${isIncome ? "Senet Tahsilatı" : "Senet Ödemesi"}`,
+          };
+          updatedAccounts = prev.accounts.map((acc) =>
+            acc.id === defaultAcc.id
+              ? { ...acc, balance: isIncome ? acc.balance + note.amount : acc.balance - note.amount }
+              : acc
+          );
+          updatedTransactions = [newTx, ...prev.transactions];
+        }
+      }
+
+      return {
+        ...prev,
+        promissoryNotes: updatedNotes,
+        accounts: updatedAccounts,
+        transactions: updatedTransactions,
+      };
+    });
   };
 
   const handleEndorsePromissoryNote = (
@@ -1001,14 +1073,44 @@ export default function App() {
 
   const handleUpdateAdvanceStatus = (id: string, status: "paid" | "approved" | "rejected") => {
     setData((p) => {
-      const next = {
+      const targetReq = (p.advanceRequests || []).find((r) => r.id === id);
+      const updatedAdvanceRequests = (p.advanceRequests || []).map((r) =>
+        r.id === id ? { ...r, status } : r
+      );
+      saveStoredData("ADVANCE_REQUESTS", updatedAdvanceRequests);
+
+      let updatedAccounts = p.accounts;
+      let updatedTransactions = p.transactions;
+
+      if (status === "paid" && targetReq && targetReq.status !== "paid") {
+        const defaultAcc = p.accounts[0];
+        if (defaultAcc) {
+          const emp = (p.employees || []).find((e) => e.id === targetReq.employeeId);
+          const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Personel";
+          const newTx: Transaction = {
+            id: "tx_adv_" + Date.now(),
+            date: new Date().toISOString().split("T")[0],
+            type: "expense",
+            amount: targetReq.amount,
+            currency: "TRY",
+            accountId: defaultAcc.id,
+            accountName: defaultAcc.name,
+            category: "Personel / Avans",
+            description: `Personel Avans Ödemesi: ${empName} (${targetReq.reason || "Avans Ödemesi"})`,
+          };
+          updatedAccounts = p.accounts.map((acc) =>
+            acc.id === defaultAcc.id ? { ...acc, balance: acc.balance - targetReq.amount } : acc
+          );
+          updatedTransactions = [newTx, ...p.transactions];
+        }
+      }
+
+      return {
         ...p,
-        advanceRequests: (p.advanceRequests || []).map((r) =>
-          r.id === id ? { ...r, status } : r
-        ),
+        advanceRequests: updatedAdvanceRequests,
+        accounts: updatedAccounts,
+        transactions: updatedTransactions,
       };
-      saveStoredData("ADVANCE_REQUESTS", next.advanceRequests);
-      return next;
     });
   };
 
@@ -1347,6 +1449,13 @@ export default function App() {
               invoices={data.invoices}
               transactions={data.transactions}
               companySettings={data.settings}
+              products={data.products}
+              quotes={data.quotes}
+              orders={data.orders}
+              waybills={data.waybills}
+              cheques={data.cheques}
+              promissoryNotes={data.promissoryNotes}
+              employees={data.employees}
             />
           )}
 
@@ -1356,6 +1465,13 @@ export default function App() {
               invoices={data.invoices}
               accounts={data.accounts}
               transactions={data.transactions}
+              products={data.products}
+              quotes={data.quotes}
+              orders={data.orders}
+              waybills={data.waybills}
+              cheques={data.cheques}
+              promissoryNotes={data.promissoryNotes}
+              employees={data.employees}
               onAddInvoice={handleAddInvoice}
               onAddTransaction={handleAddTransaction}
             />

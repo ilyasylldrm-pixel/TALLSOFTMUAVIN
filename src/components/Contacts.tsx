@@ -35,7 +35,6 @@ import {
   Receipt,
   CheckCheck,
   Calendar,
-  MessageCircle,
   Send,
   Share2,
   Copy,
@@ -96,13 +95,11 @@ export const Contacts: React.FC<ContactsProps> = ({
   // Selected contact for Ledger / Muavin statement modal
   const [selectedLedgerContact, setSelectedLedgerContact] = useState<Contact | null>(null);
 
-  // Share Modal State (WhatsApp / Email)
-  const [shareType, setShareType] = useState<"whatsapp" | "email" | null>(null);
+  // Share Modal State (Email)
+  const [shareType, setShareType] = useState<"email" | null>(null);
   const [sharePhone, setSharePhone] = useState<string>("");
   const [shareEmail, setShareEmail] = useState<string>("");
   const [shareSubject, setShareSubject] = useState<string>("");
-  const [shareMessage, setShareMessage] = useState<string>("");
-  const [isCopied, setIsCopied] = useState<boolean>(false);
 
   // Action Modal State (Tahsilat Yap / Ödeme Yap)
   const [actionModalType, setActionModalType] = useState<"collection" | "payment" | null>(null);
@@ -669,148 +666,60 @@ export const Contacts: React.FC<ContactsProps> = ({
     });
   };
 
-  const handleOpenShareModal = (type: "whatsapp" | "email") => {
+  const handleOpenShareModal = (type: "email") => {
     if (!selectedLedgerContact) return;
 
     setShareType(type);
-    setIsCopied(false);
     setSharePhone(selectedLedgerContact.phone || "");
     setShareEmail(selectedLedgerContact.email || "");
 
     const compName = companySettings?.companyName || "Firma";
-    const contactCode = getContactAccountCode(selectedLedgerContact);
-    const dateStr = new Date().toLocaleDateString("tr-TR");
-
-    const absBal = Math.abs(selectedLedgerContact.balance).toLocaleString("tr-TR", { minimumFractionDigits: 2 });
-    const balanceText = selectedLedgerContact.balance > 0 
-      ? `₺${absBal} (Müşteri Borçlu / Alacağımız Var)` 
-      : selectedLedgerContact.balance < 0 
-      ? `₺${absBal} (Firma Alacaklı / Borcumuz Var)` 
-      : "₺0.00 (Hesap Kapalı / Bakiye Yok)";
-
-    const entries = getLedgerEntries(selectedLedgerContact.id);
-    const totalDebit = entries.reduce((s, e) => s + e.debit, 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 });
-    const totalCredit = entries.reduce((s, e) => s + e.credit, 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 });
-
     const subjectText = `Cari Hesap Ekstresi - ${compName} (${selectedLedgerContact.name})`;
     setShareSubject(subjectText);
-
-    // Build recent ledger transactions summary
-    const recentEntries = entries.slice(-5);
-    let movementSummary = "";
-    if (recentEntries.length > 0) {
-      movementSummary = "\n\n📌 Son İşlem Hareketleri:\n" + recentEntries.map(e => 
-        `• ${e.date} | ${e.documentType} (${e.documentNo}) -> Borç: ₺${e.debit.toLocaleString("tr-TR")} | Alacak: ₺${e.credit.toLocaleString("tr-TR")}`
-      ).join("\n");
-    }
-
-    const safeName = (selectedLedgerContact.name || "Cari").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ]/g, "_");
-    const pdfFileName = `Cari_Ekstre_${safeName}.pdf`;
-
-    const msg = `Sayın ${selectedLedgerContact.name},
-
-${compName} nezdindeki Cari Hesap Ekstreniz resmi PDF formatında hazırlanmıştır (${dateStr}).
-
-📄 Resmi Belge: ${pdfFileName}
-• Cari Hesap Kodu: ${contactCode}
-• Toplam Borç Tutarı: ₺${totalDebit}
-• Toplam Alacak Tutarı: ₺${totalCredit}
-• Net Bakiye Durumu: ${balanceText}${movementSummary}
-
-Resmi cari hesap ekstreniz ve işlem detaylarınız ekteki PDF dosyasındadır (${pdfFileName}). Detaylar ve hesap mutabakatı için lütfen ekteki PDF belgesini inceleyiniz.
-
-Saygılarımızla,
-${compName}
-${companySettings?.phone ? `Tel: ${companySettings.phone}` : ""}`;
-
-    setShareMessage(msg);
-  };
-
-  const handleSendWhatsApp = async () => {
-    if (!sharePhone.trim()) {
-      alert("Lütfen geçerli bir telefon numarası girin.");
-      return;
-    }
-
-    if (!selectedLedgerContact) return;
-
-    // 1. Generate the PDF Ekstre file
-    const pdfResult = await generateLedgerPDF(selectedLedgerContact);
-
-    let clean = sharePhone.replace(/\D/g, "");
-    if (clean.startsWith("0")) {
-      clean = "90" + clean.slice(1);
-    } else if (clean.length === 10) {
-      clean = "90" + clean;
-    }
-
-    // 2. Try native Web Share API with PDF File attached (for mobile/supported browsers)
-    if (pdfResult && typeof navigator !== "undefined" && navigator.canShare) {
-      try {
-        const pdfFile = new File([pdfResult.blob], pdfResult.fileName, { type: "application/pdf" });
-        if (navigator.canShare({ files: [pdfFile] })) {
-          await navigator.share({
-            files: [pdfFile],
-            title: shareSubject,
-            text: shareMessage,
-          });
-          return;
-        }
-      } catch (err) {
-        console.log("Web Share iptal edildi veya desteklenmiyor, varsayılan akışa geçiliyor.", err);
-      }
-    }
-
-    // 3. Fallback: Automatically save/download PDF file locally & open WhatsApp URL scheme with text
-    if (pdfResult) {
-      pdfResult.pdf.save(pdfResult.fileName);
-    }
-
-    const url = `https://api.whatsapp.com/send?phone=${clean}&text=${encodeURIComponent(shareMessage)}`;
-    window.open(url, "_blank");
   };
 
   const handleSendEmail = async () => {
-    if (!shareEmail.trim()) {
+    if (!shareEmail.trim() || !shareEmail.includes("@")) {
       alert("Lütfen geçerli bir e-posta adresi girin.");
       return;
     }
 
     if (!selectedLedgerContact) return;
 
-    // 1. Generate the PDF Ekstre file
-    const pdfResult = await generateLedgerPDF(selectedLedgerContact);
+    try {
+      // 1. Generate the PDF Ekstre file
+      const pdfResult = await generateLedgerPDF(selectedLedgerContact);
 
-    // 2. Try native Web Share API with PDF File attached
-    if (pdfResult && typeof navigator !== "undefined" && navigator.canShare) {
-      try {
-        const pdfFile = new File([pdfResult.blob], pdfResult.fileName, { type: "application/pdf" });
-        if (navigator.canShare({ files: [pdfFile] })) {
-          await navigator.share({
-            files: [pdfFile],
-            title: shareSubject,
-            text: shareMessage,
-          });
-          return;
-        }
-      } catch (err) {
-        console.log("Web Share iptal edildi, mailto bağlantısına geçiliyor.", err);
+      if (!pdfResult) {
+        alert("PDF ekstre oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.");
+        return;
       }
-    }
 
-    // 3. Fallback: Download PDF file & trigger mailto
-    if (pdfResult) {
+      // 2. Try native Web Share API with PDF File attached
+      if (typeof navigator !== "undefined" && navigator.canShare) {
+        try {
+          const pdfFile = new File([pdfResult.blob], pdfResult.fileName, { type: "application/pdf" });
+          if (navigator.canShare({ files: [pdfFile] })) {
+            await navigator.share({
+              files: [pdfFile],
+              title: shareSubject,
+            });
+            return;
+          }
+        } catch (err) {
+          console.log("Web Share pas geçildi, mailto bağlantısına geçiliyor.", err);
+        }
+      }
+
+      // 3. Fallback: Download PDF file & trigger mailto
       pdfResult.pdf.save(pdfResult.fileName);
+
+      const mailtoUrl = `mailto:${encodeURIComponent(shareEmail)}?subject=${encodeURIComponent(shareSubject)}`;
+      window.location.href = mailtoUrl;
+    } catch (err) {
+      console.error("E-Posta paylaşım hatası:", err);
+      alert("E-posta paylaşımı sırasında bir hata oluştu.");
     }
-
-    const mailtoUrl = `mailto:${encodeURIComponent(shareEmail)}?subject=${encodeURIComponent(shareSubject)}&body=${encodeURIComponent(shareMessage)}`;
-    window.open(mailtoUrl, "_blank");
-  };
-
-  const handleCopyMessage = () => {
-    navigator.clipboard.writeText(shareMessage);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 3000);
   };
 
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -1820,14 +1729,6 @@ ${companySettings?.phone ? `Tel: ${companySettings.phone}` : ""}`;
 
               <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
                 <button
-                  onClick={() => handleOpenShareModal("whatsapp")}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
-                  title="PDF Cari Ekstreyi WhatsApp İle Paylaş (Tel elle girilebilir)"
-                >
-                  <MessageCircle className="w-4 h-4 text-emerald-100 fill-emerald-100/20" />
-                  <span>WhatsApp</span>
-                </button>
-                <button
                   onClick={() => handleOpenShareModal("email")}
                   className="bg-blue-600 hover:bg-blue-700 text-white border border-blue-600 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
                   title="PDF Cari Ekstreyi E-Posta İle Paylaş (Mail adresi elle girilebilir)"
@@ -1917,21 +1818,27 @@ ${companySettings?.phone ? `Tel: ${companySettings.phone}` : ""}`;
                 <span className="text-[10px] font-bold uppercase block" style={{ color: "#64748b" }}>
                   Net Cari Bakiye
                 </span>
-                <span
-                  className="text-base sm:text-lg font-black"
-                  style={{
-                    color: selectedLedgerContact.balance > 0
-                      ? "#059669"
-                      : selectedLedgerContact.balance < 0
-                      ? "#dc2626"
-                      : "#64748b"
-                  }}
-                >
-                  ₺{Math.abs(selectedLedgerContact.balance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}{" "}
-                  <span className="text-xs font-normal" style={{ color: "#64748b" }}>
-                    ({selectedLedgerContact.balance > 0 ? "Alacaklıyız" : selectedLedgerContact.balance < 0 ? "Borçluyuz" : "Sıfır"})
-                  </span>
-                </span>
+                {(() => {
+                  const entries = getLedgerEntries(selectedLedgerContact.id);
+                  const netBal = entries.length > 0 ? entries[entries.length - 1].runningBalance : selectedLedgerContact.balance;
+                  return (
+                    <span
+                      className="text-base sm:text-lg font-black"
+                      style={{
+                        color: netBal > 0
+                          ? "#059669"
+                          : netBal < 0
+                          ? "#dc2626"
+                          : "#64748b"
+                      }}
+                    >
+                      ₺{Math.abs(netBal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}{" "}
+                      <span className="text-xs font-normal" style={{ color: "#64748b" }}>
+                        ({netBal > 0 ? "Alacaklıyız" : netBal < 0 ? "Borçluyuz" : "Sıfır"})
+                      </span>
+                    </span>
+                  );
+                })()}
               </div>
             </div>
 
@@ -2642,23 +2549,17 @@ ${companySettings?.phone ? `Tel: ${companySettings.phone}` : ""}`;
         </div>
       )}
 
-      {/* MODAL: WhatsApp & E-Posta ile Ekstre Paylaş (Elle Telefon & Mail Girişi Destekli) */}
+      {/* MODAL: E-Posta ile Ekstre Paylaş */}
       {shareType && selectedLedgerContact && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in duration-150">
             {/* Modal Header */}
-            <div className={`p-4 border-b flex items-center justify-between text-white ${
-              shareType === "whatsapp" ? "bg-emerald-600 border-emerald-700" : "bg-blue-600 border-blue-700"
-            }`}>
+            <div className="p-4 border-b flex items-center justify-between text-white bg-blue-600 border-blue-700">
               <div className="flex items-center gap-2.5">
-                {shareType === "whatsapp" ? (
-                  <MessageCircle className="w-5 h-5 text-white" />
-                ) : (
-                  <Mail className="w-5 h-5 text-white" />
-                )}
+                <Mail className="w-5 h-5 text-white" />
                 <div>
                   <h3 className="text-base font-extrabold leading-tight">
-                    {shareType === "whatsapp" ? "PDF WhatsApp ile Cari Ekstre Paylaş" : "PDF Mail ile Cari Ekstre Paylaş"}
+                    PDF Mail ile Cari Ekstre Paylaş
                   </h3>
                   <p className="text-[11px] text-white/80">
                     Cari: {selectedLedgerContact.name} ({getContactAccountCode(selectedLedgerContact)})
@@ -2679,120 +2580,57 @@ ${companySettings?.phone ? `Tel: ${companySettings.phone}` : ""}`;
               <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-semibold flex items-center gap-2.5 shadow-xs">
                 <FileText className="w-5 h-5 text-amber-600 shrink-0" />
                 <div>
-                  <strong className="block text-amber-950 font-bold">📄 Yalnızca PDF Formatında Ekstre Paylaşımı</strong>
-                  <span>Gönder butonuna tıklandığında resmi <strong>Cari_Ekstre_*.pdf</strong> belgesi cihazınıza otomatik indirilecek ve WhatsApp/Mail paylaşımı başlatılacaktır.</span>
+                  <strong className="block text-amber-950 font-bold">📄 Doğrudan PDF Ekstre Paylaşımı</strong>
+                  <span>Gönder butonuna tıklandığında yalnızca resmi <strong>Cari_Ekstre_*.pdf</strong> belgesi paylaşılır.</span>
                 </div>
               </div>
 
-              {shareType === "whatsapp" ? (
-                <div>
-                  <label className="block text-xs font-extrabold text-slate-700 mb-1 flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Gönderilecek WhatsApp Telefon Numarası *</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={sharePhone}
-                    onChange={(e) => setSharePhone(e.target.value)}
-                    placeholder="Örn: 0532 123 45 67 veya 5321234567"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    💡 İsterseniz telefon numarasını elle değiştirebilir veya farklı bir WhatsApp numarası girebilirsiniz.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-xs font-extrabold text-slate-700 mb-1 flex items-center gap-1.5">
-                      <Mail className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Gönderilecek E-Posta Adresi *</span>
-                    </label>
-                    <input
-                      type="email"
-                      value={shareEmail}
-                      onChange={(e) => setShareEmail(e.target.value)}
-                      placeholder="Örn: muhasebe@sirket.com"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-                    />
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      💡 İsterseniz mail adresini elle değiştirebilir veya farklı bir alıcı adresi yazabilirsiniz.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-extrabold text-slate-700 mb-1">
-                      E-Posta Konusu (Subject)
-                    </label>
-                    <input
-                      type="text"
-                      value={shareSubject}
-                      onChange={(e) => setShareSubject(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-                    />
-                  </div>
-                </>
-              )}
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 mb-1 flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Gönderilecek E-Posta Adresi *</span>
+                </label>
+                <input
+                  type="email"
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  placeholder="Örn: muhasebe@sirket.com"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  💡 İsterseniz mail adresini elle değiştirebilir veya farklı bir alıcı adresi yazabilirsiniz.
+                </p>
+              </div>
 
               <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-extrabold text-slate-700">
-                    Ekstre Mesaj İçeriği (Gönderilmeden Önce Düzenlenebilir)
-                  </label>
-                  <button
-                    onClick={handleCopyMessage}
-                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
-                  >
-                    {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{isCopied ? "Metin Kopyalandı!" : "Metni Kopyala"}</span>
-                  </button>
-                </div>
-                <textarea
-                  rows={9}
-                  value={shareMessage}
-                  onChange={(e) => setShareMessage(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white leading-relaxed resize-y"
+                <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                  E-Posta Konusu (Subject)
+                </label>
+                <input
+                  type="text"
+                  value={shareSubject}
+                  onChange={(e) => setShareSubject(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 />
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3 flex-wrap">
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
               <button
-                onClick={handleCopyMessage}
-                className="px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                onClick={() => setShareType(null)}
+                className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
-                {isCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
-                <span>{isCopied ? "Kopyalandı!" : "Mesajı Kopyala"}</span>
+                Vazgeç
               </button>
-
-              <div className="flex items-center gap-2 ml-auto">
-                <button
-                  onClick={() => setShareType(null)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                >
-                  Vazgeç
-                </button>
-                {shareType === "whatsapp" ? (
-                  <button
-                    onClick={handleSendWhatsApp}
-                    disabled={isGeneratingPDF}
-                    className="px-4.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>{isGeneratingPDF ? "PDF Hazırlanıyor..." : "PDF WhatsApp ile Gönder"}</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSendEmail}
-                    disabled={isGeneratingPDF}
-                    className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>{isGeneratingPDF ? "PDF Hazırlanıyor..." : "PDF Mail ile Gönder"}</span>
-                  </button>
-                )}
-              </div>
+              <button
+                onClick={handleSendEmail}
+                disabled={isGeneratingPDF}
+                className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send className="w-4 h-4" />
+                <span>{isGeneratingPDF ? "PDF Hazırlanıyor..." : "PDF Mail ile Gönder"}</span>
+              </button>
             </div>
           </div>
         </div>

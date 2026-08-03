@@ -7,6 +7,13 @@ interface AiAssistantProps {
   invoices: Invoice[];
   accounts: Account[];
   transactions: Transaction[];
+  products?: any[];
+  quotes?: any[];
+  orders?: any[];
+  waybills?: any[];
+  cheques?: any[];
+  promissoryNotes?: any[];
+  employees?: any[];
   onAddInvoice: (inv: Invoice) => void;
   onAddTransaction: (tx: Transaction) => void;
 }

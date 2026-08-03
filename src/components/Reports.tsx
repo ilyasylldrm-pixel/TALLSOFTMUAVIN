@@ -35,6 +35,13 @@ interface ReportsProps {
   invoices: Invoice[];
   transactions: Transaction[];
   companySettings: CompanySettings;
+  products?: any[];
+  quotes?: any[];
+  orders?: any[];
+  waybills?: any[];
+  cheques?: any[];
+  promissoryNotes?: any[];
+  employees?: any[];
 }
 
 // 2026 Gelir Vergisi Tarifesi (GVK M.103) - Progressive Tax Bracket Calculation

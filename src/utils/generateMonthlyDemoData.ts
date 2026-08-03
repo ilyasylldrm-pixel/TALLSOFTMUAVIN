@@ -606,8 +606,60 @@ export function generateMonthlyIntegratedData() {
   const allCheques = [...cheques, ...new200Cheques];
   const allNotes = [...promissoryNotes, ...new250Notes];
 
+  // Recalculate and sync all contact balances with generated transactions
+  const contactBalanceMap: Record<string, number> = {};
+
+  allInvoices.forEach((inv) => {
+    if (!inv.contactId) return;
+    const current = contactBalanceMap[inv.contactId] || 0;
+    if (inv.type === "sales") {
+      contactBalanceMap[inv.contactId] = current + inv.grandTotal;
+    } else {
+      contactBalanceMap[inv.contactId] = current - inv.grandTotal;
+    }
+  });
+
+  allTransactions.forEach((tx) => {
+    if (!tx.contactId) return;
+    const current = contactBalanceMap[tx.contactId] || 0;
+    if (tx.type === "income" || tx.type === "collection") {
+      contactBalanceMap[tx.contactId] = current - tx.amount;
+    } else if (tx.type === "expense" || tx.type === "payment") {
+      contactBalanceMap[tx.contactId] = current + tx.amount;
+    }
+  });
+
+  allCheques.forEach((chq) => {
+    if (!chq.contactId) return;
+    const current = contactBalanceMap[chq.contactId] || 0;
+    if (chq.type === "received") {
+      contactBalanceMap[chq.contactId] = current - chq.amount;
+    } else {
+      contactBalanceMap[chq.contactId] = current + chq.amount;
+    }
+  });
+
+  allNotes.forEach((note) => {
+    if (!note.contactId) return;
+    const current = contactBalanceMap[note.contactId] || 0;
+    if (note.type === "received") {
+      contactBalanceMap[note.contactId] = current - note.amount;
+    } else {
+      contactBalanceMap[note.contactId] = current + note.amount;
+    }
+  });
+
+  const syncedContacts = combinedContacts.map((c) => {
+    const calcBal = contactBalanceMap[c.id] ?? 0;
+    return {
+      ...c,
+      balance: calcBal,
+      balanceType: calcBal > 0 ? ("receivable" as const) : calcBal < 0 ? ("payable" as const) : ("balanced" as const),
+    };
+  });
+
   return {
-    contacts: combinedContacts, // 1,400 UNIQUE CONTACTS
+    contacts: syncedContacts, // 1,400 UNIQUE CONTACTS WITH SYNCED BALANCES
     products: combinedProducts, // 1,300 UNIQUE STOCK ITEMS
     accounts: demoAccounts,
     invoices: allInvoices, // 2,300 INVOICES (300 monthly + 1,000 purchase + 1,000 sales)
