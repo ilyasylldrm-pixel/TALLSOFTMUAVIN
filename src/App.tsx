@@ -128,10 +128,13 @@ export default function App() {
     saveStoredData("QUOTES", data.quotes);
     if (data.orders) saveStoredData("ORDERS", data.orders);
     if (data.waybills) saveStoredData("WAYBILLS", data.waybills);
-    saveStoredData("CHEQUES", data.cheques);
-    saveStoredData("PROMISSORY_NOTES", data.promissoryNotes);
-    saveStoredData("BRANCHES", data.branches);
-    saveStoredData("WAREHOUSES", data.warehouses);
+    if (data.cheques) saveStoredData("CHEQUES", data.cheques);
+    if (data.promissoryNotes) saveStoredData("PROMISSORY_NOTES", data.promissoryNotes);
+    if (data.branches) saveStoredData("BRANCHES", data.branches);
+    if (data.warehouses) saveStoredData("WAREHOUSES", data.warehouses);
+    if (data.employees) saveStoredData("EMPLOYEES", data.employees);
+    if (data.leaveRequests) saveStoredData("LEAVE_REQUESTS", data.leaveRequests);
+    if (data.advanceRequests) saveStoredData("ADVANCE_REQUESTS", data.advanceRequests);
     if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions);
   }, [data]);
 
@@ -1252,6 +1255,7 @@ export default function App() {
 
           {currentTab === "contacts" && (
             <Contacts
+              currentUser={currentUser}
               contacts={data.contacts}
               invoices={data.invoices}
               transactions={data.transactions}

@@ -54,47 +54,15 @@ export function getStoredData() {
   const storedProducts = get<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
   const storedCheques = get<Cheque[]>(STORAGE_KEYS.CHEQUES, initialCheques);
   const storedNotes = get<PromissoryNote[]>(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes);
-
-  // If local storage contains old dataset (< 2100 invoices, < 1200 products, < 200 cheques, or < 250 notes), reset to new dataset
-  if (
-    storedInvoices.length < 2100 ||
-    storedProducts.length < 1200 ||
-    storedCheques.length < 200 ||
-    storedNotes.length < 250
-  ) {
-    resetToDemoData();
-    return {
-      settings: initialCompanySettings,
-      contacts: initialContacts,
-      accounts: initialAccounts,
-      invoices: initialInvoices,
-      transactions: initialTransactions,
-      products: initialProducts,
-      quotes: initialQuotes,
-      orders: initialOrders,
-      waybills: initialWaybills,
-      cheques: initialCheques,
-      promissoryNotes: initialPromissoryNotes,
-      branches: initialBranches,
-      warehouses: initialWarehouses,
-      employees: initialEmployees,
-      leaveRequests: initialLeaveRequests,
-      advanceRequests: initialAdvanceRequests,
-      legalDeductions: initialLegalDeductions,
-    };
-  }
-
   const loadedContacts = get<Contact[]>(STORAGE_KEYS.CONTACTS, initialContacts);
   const loadedTransactions = get<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions);
-  const loadedCheques = get<Cheque[]>(STORAGE_KEYS.CHEQUES, initialCheques);
-  const loadedNotes = get<PromissoryNote[]>(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes);
 
   const normalizedContacts = syncContactBalances(
     loadedContacts,
     storedInvoices,
     loadedTransactions,
-    loadedCheques,
-    loadedNotes
+    storedCheques,
+    storedNotes
   );
 
   return {
@@ -103,12 +71,12 @@ export function getStoredData() {
     accounts: get<Account[]>(STORAGE_KEYS.ACCOUNTS, initialAccounts),
     invoices: storedInvoices,
     transactions: loadedTransactions,
-    products: get<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts),
+    products: storedProducts,
     quotes: get<Quote[]>(STORAGE_KEYS.QUOTES, initialQuotes),
     orders: get<Order[]>(STORAGE_KEYS.ORDERS, initialOrders),
     waybills: get<Waybill[]>(STORAGE_KEYS.WAYBILLS, initialWaybills),
-    cheques: loadedCheques,
-    promissoryNotes: loadedNotes,
+    cheques: storedCheques,
+    promissoryNotes: storedNotes,
     branches: get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches),
     warehouses: get<Warehouse[]>(STORAGE_KEYS.WAREHOUSES, initialWarehouses),
     employees: get<Employee[]>(STORAGE_KEYS.EMPLOYEES, initialEmployees),
@@ -212,6 +180,9 @@ export function resetToDemoData() {
   safeSet(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes);
   safeSet(STORAGE_KEYS.BRANCHES, initialBranches);
   safeSet(STORAGE_KEYS.WAREHOUSES, initialWarehouses);
+  safeSet(STORAGE_KEYS.EMPLOYEES, initialEmployees);
+  safeSet(STORAGE_KEYS.LEAVE_REQUESTS, initialLeaveRequests);
+  safeSet(STORAGE_KEYS.ADVANCE_REQUESTS, initialAdvanceRequests);
   safeSet(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions);
 }
 
@@ -232,8 +203,16 @@ export function importBackupJSON(jsonString: string): boolean {
       if (parsed.transactions) saveStoredData("TRANSACTIONS", parsed.transactions);
       if (parsed.products) saveStoredData("PRODUCTS", parsed.products);
       if (parsed.quotes) saveStoredData("QUOTES", parsed.quotes);
+      if (parsed.orders) saveStoredData("ORDERS", parsed.orders);
+      if (parsed.waybills) saveStoredData("WAYBILLS", parsed.waybills);
+      if (parsed.cheques) saveStoredData("CHEQUES", parsed.cheques);
+      if (parsed.promissoryNotes) saveStoredData("PROMISSORY_NOTES", parsed.promissoryNotes);
       if (parsed.branches) saveStoredData("BRANCHES", parsed.branches);
       if (parsed.warehouses) saveStoredData("WAREHOUSES", parsed.warehouses);
+      if (parsed.employees) saveStoredData("EMPLOYEES", parsed.employees);
+      if (parsed.leaveRequests) saveStoredData("LEAVE_REQUESTS", parsed.leaveRequests);
+      if (parsed.advanceRequests) saveStoredData("ADVANCE_REQUESTS", parsed.advanceRequests);
+      if (parsed.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", parsed.legalDeductions);
       return true;
     }
   } catch (e) {

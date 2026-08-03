@@ -38,6 +38,12 @@ import {
   Send,
   Share2,
   Copy,
+  MessageSquare,
+  Smartphone,
+  Laptop,
+  Globe,
+  UploadCloud,
+  RefreshCw,
 } from "lucide-react";
 import {
   ALL_81_PROVINCES,
@@ -47,8 +53,10 @@ import {
   getTaxOfficesForProvince,
 } from "../data/locationAndTaxData";
 import { AddressSelector } from "./AddressSelector";
+import { saveUserFile, uploadFileToStorage, deleteUserFile, UserProfileData } from "../lib/firebase";
 
 interface ContactsProps {
+  currentUser?: UserProfileData | null;
   contacts: Contact[];
   invoices: Invoice[];
   transactions: Transaction[];
@@ -69,6 +77,7 @@ interface ContactsProps {
 }
 
 export const Contacts: React.FC<ContactsProps> = ({
+  currentUser,
   contacts,
   invoices,
   transactions,
@@ -95,8 +104,10 @@ export const Contacts: React.FC<ContactsProps> = ({
   // Selected contact for Ledger / Muavin statement modal
   const [selectedLedgerContact, setSelectedLedgerContact] = useState<Contact | null>(null);
 
-  // Share Modal State (Email)
-  const [shareType, setShareType] = useState<"email" | null>(null);
+  // Share Modal State (WhatsApp & Email)
+  const [shareType, setShareType] = useState<"whatsapp" | "email" | null>(null);
+  const [whatsappMode, setWhatsappMode] = useState<"auto" | "app" | "web">("auto");
+  const [cloudStatusText, setCloudStatusText] = useState<string>("");
   const [sharePhone, setSharePhone] = useState<string>("");
   const [shareEmail, setShareEmail] = useState<string>("");
   const [shareSubject, setShareSubject] = useState<string>("");
@@ -666,7 +677,7 @@ export const Contacts: React.FC<ContactsProps> = ({
     });
   };
 
-  const handleOpenShareModal = (type: "email") => {
+  const handleOpenShareModal = (type: "whatsapp" | "email") => {
     if (!selectedLedgerContact) return;
 
     setShareType(type);
@@ -676,6 +687,112 @@ export const Contacts: React.FC<ContactsProps> = ({
     const compName = companySettings?.companyName || "Firma";
     const subjectText = `Cari Hesap Ekstresi - ${compName} (${selectedLedgerContact.name})`;
     setShareSubject(subjectText);
+    setCloudStatusText("");
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!sharePhone.trim()) {
+      alert("Lütfen WhatsApp paylaşımı için geçerli bir telefon numarası girin.");
+      return;
+    }
+
+    if (!selectedLedgerContact) return;
+
+    // Standardize phone number (digits only)
+    let cleanPhone = sharePhone.replace(/[^0-9]/g, "");
+    if (cleanPhone.startsWith("0")) {
+      cleanPhone = "90" + cleanPhone.substring(1);
+    } else if (cleanPhone.length === 10 && (cleanPhone.startsWith("5") || cleanPhone.startsWith("8"))) {
+      cleanPhone = "90" + cleanPhone;
+    }
+
+    try {
+      setIsGeneratingPDF(true);
+      setCloudStatusText("1/3: PDF Cari Ekstre belgesi hazırlanıyor...");
+
+      // 1. Generate the PDF Ekstre file
+      const pdfResult = await generateLedgerPDF(selectedLedgerContact);
+
+      if (!pdfResult) {
+        alert("PDF ekstre oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.");
+        setIsGeneratingPDF(false);
+        setCloudStatusText("");
+        return;
+      }
+
+      setCloudStatusText("2/3: Belge Bulut Depo Modülüne yükleniyor...");
+
+      // Convert Blob to File object
+      const pdfFile = new File([pdfResult.blob], pdfResult.fileName, {
+        type: "application/pdf",
+      });
+
+      const userId = currentUser?.userId || "demo_user";
+      let uploadedFileId: string | null = null;
+      let storagePath: string | null = null;
+
+      try {
+        const uploadRes = await uploadFileToStorage(userId, pdfFile);
+        storagePath = uploadRes.storagePath;
+        uploadedFileId = await saveUserFile({
+          userId,
+          fileName: pdfResult.fileName,
+          fileSize: pdfFile.size,
+          fileType: "application/pdf",
+          uploadDate: new Date().toISOString(),
+          category: "Cari Ekstre",
+          description: `WhatsApp Paylaşımı: ${selectedLedgerContact.name} - ${pdfResult.fileName}`,
+          fileUrl: uploadRes.fileUrl,
+          storagePath: uploadRes.storagePath,
+        });
+      } catch (err) {
+        console.warn("Bulut depoya yükleme yapılırken hata veya çevrimdışı mod:", err);
+      }
+
+      setCloudStatusText("3/3: WhatsApp başlatılıyor & Bulut depodan geçici dosya temizleniyor...");
+
+      // Format message text for WhatsApp
+      const compName = companySettings?.companyName || "Firma";
+      const contactName = selectedLedgerContact.name;
+      const accountCode = getContactAccountCode(selectedLedgerContact);
+      const balanceVal = selectedLedgerContact.balance;
+      const balanceStr = formatCurrency(Math.abs(balanceVal), companySettings?.currency || "TRY");
+      const balanceStatusStr =
+        balanceVal > 0 ? "Alacaklıyız (Borçlu Cari)" : balanceVal < 0 ? "Borçluyuz (Alacaklı Cari)" : "Sıfır Bakiye";
+
+      const messageText = `Sayın ${contactName} (${accountCode}),\n\n${compName} firmamıza ait Cari Hesap Ekstre belgeniz tanzim edilmiştir.\n\n📊 Güncel Bakiye: ${balanceStr} (${balanceStatusStr})\n📄 Belge Adı: ${pdfResult.fileName}\n\nİyi çalışmalar dileriz.`;
+
+      // Determine WhatsApp URL format based on selected mode
+      let waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
+      if (whatsappMode === "app") {
+        waUrl = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(messageText)}`;
+      } else if (whatsappMode === "web") {
+        waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(messageText)}`;
+      }
+
+      // Open WhatsApp in new tab or app protocol
+      window.open(waUrl, "_blank");
+
+      // 4. Immediately delete temporary file from Cloud File Storage as requested
+      if (uploadedFileId) {
+        try {
+          await deleteUserFile(uploadedFileId, storagePath || undefined);
+        } catch (cleanErr) {
+          console.warn("Bulut depo temizleme uyarısı:", cleanErr);
+        }
+      }
+
+      setTimeout(() => {
+        setIsGeneratingPDF(false);
+        setCloudStatusText("");
+        setShareType(null);
+      }, 500);
+    } catch (err) {
+      console.error("WhatsApp paylaşım hatası:", err);
+      alert("WhatsApp ile paylaşım sırasında bir hata oluştu.");
+      setIsGeneratingPDF(false);
+      setCloudStatusText("");
+    }
   };
 
   const handleSendEmail = async () => {
@@ -1729,6 +1846,14 @@ export const Contacts: React.FC<ContactsProps> = ({
 
               <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
                 <button
+                  onClick={() => handleOpenShareModal("whatsapp")}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                  title="Cari Ekstreyi Bulut Depoya Yükle ve WhatsApp İle Paylaş"
+                >
+                  <MessageSquare className="w-4 h-4 text-emerald-100" />
+                  <span>WhatsApp</span>
+                </button>
+                <button
                   onClick={() => handleOpenShareModal("email")}
                   className="bg-blue-600 hover:bg-blue-700 text-white border border-blue-600 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
                   title="PDF Cari Ekstreyi E-Posta İle Paylaş (Mail adresi elle girilebilir)"
@@ -2549,17 +2674,23 @@ export const Contacts: React.FC<ContactsProps> = ({
         </div>
       )}
 
-      {/* MODAL: E-Posta ile Ekstre Paylaş */}
+      {/* MODAL: WhatsApp & E-Posta ile Ekstre Paylaş */}
       {shareType && selectedLedgerContact && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in duration-150">
             {/* Modal Header */}
-            <div className="p-4 border-b flex items-center justify-between text-white bg-blue-600 border-blue-700">
+            <div className={`p-4 border-b flex items-center justify-between text-white ${
+              shareType === "whatsapp" ? "bg-emerald-600 border-emerald-700" : "bg-blue-600 border-blue-700"
+            }`}>
               <div className="flex items-center gap-2.5">
-                <Mail className="w-5 h-5 text-white" />
+                {shareType === "whatsapp" ? (
+                  <MessageSquare className="w-5 h-5 text-white" />
+                ) : (
+                  <Mail className="w-5 h-5 text-white" />
+                )}
                 <div>
                   <h3 className="text-base font-extrabold leading-tight">
-                    PDF Mail ile Cari Ekstre Paylaş
+                    {shareType === "whatsapp" ? "WhatsApp ile Cari Ekstre Paylaş" : "PDF Mail ile Cari Ekstre Paylaş"}
                   </h3>
                   <p className="text-[11px] text-white/80">
                     Cari: {selectedLedgerContact.name} ({getContactAccountCode(selectedLedgerContact)})
@@ -2567,7 +2698,10 @@ export const Contacts: React.FC<ContactsProps> = ({
                 </div>
               </div>
               <button
-                onClick={() => setShareType(null)}
+                onClick={() => {
+                  setShareType(null);
+                  setCloudStatusText("");
+                }}
                 className="text-white/80 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -2576,61 +2710,169 @@ export const Contacts: React.FC<ContactsProps> = ({
 
             {/* Modal Body */}
             <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-              {/* PDF Format Notice */}
-              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-semibold flex items-center gap-2.5 shadow-xs">
-                <FileText className="w-5 h-5 text-amber-600 shrink-0" />
-                <div>
-                  <strong className="block text-amber-950 font-bold">📄 Doğrudan PDF Ekstre Paylaşımı</strong>
-                  <span>Gönder butonuna tıklandığında yalnızca resmi <strong>Cari_Ekstre_*.pdf</strong> belgesi paylaşılır.</span>
-                </div>
-              </div>
+              {shareType === "whatsapp" ? (
+                <>
+                  {/* Cloud Storage Notice */}
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-950 rounded-xl text-xs font-semibold flex items-start gap-2.5 shadow-xs">
+                    <UploadCloud className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block text-emerald-950 font-bold mb-0.5">☁️ Bulut Depo & WhatsApp Otomatik Temizleme</strong>
+                      <p className="text-[11px] text-emerald-800 leading-relaxed">
+                        Ekstre belgesi önce <strong>Bulut Depo Modülüne</strong> yüklenecek, ardından yazılan numara için WhatsApp uygulaması başlatılacak ve belge bulut depodan otomatik olarak silinecektir.
+                      </p>
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-xs font-extrabold text-slate-700 mb-1 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Gönderilecek E-Posta Adresi *</span>
-                </label>
-                <input
-                  type="email"
-                  value={shareEmail}
-                  onChange={(e) => setShareEmail(e.target.value)}
-                  placeholder="Örn: muhasebe@sirket.com"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  💡 İsterseniz mail adresini elle değiştirebilir veya farklı bir alıcı adresi yazabilirsiniz.
-                </p>
-              </div>
+                  {/* Mode selector */}
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                      <Laptop className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>WhatsApp Açma Yöntemi (PC & Mobil)</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWhatsappMode("auto")}
+                        className={`p-2.5 rounded-xl border text-left flex flex-col items-center text-center gap-1 transition-all cursor-pointer ${
+                          whatsappMode === "auto"
+                            ? "border-emerald-600 bg-emerald-50 text-emerald-950 font-extrabold shadow-xs ring-2 ring-emerald-500/20"
+                            : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 font-medium"
+                        }`}
+                      >
+                        <Smartphone className={`w-4 h-4 ${whatsappMode === "auto" ? "text-emerald-700" : "text-slate-500"}`} />
+                        <span className="text-xs">wa.me (Otomatik)</span>
+                        <span className="text-[9px] opacity-75">Mobil / Genel</span>
+                      </button>
 
-              <div>
-                <label className="block text-xs font-extrabold text-slate-700 mb-1">
-                  E-Posta Konusu (Subject)
-                </label>
-                <input
-                  type="text"
-                  value={shareSubject}
-                  onChange={(e) => setShareSubject(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-                />
-              </div>
+                      <button
+                        type="button"
+                        onClick={() => setWhatsappMode("app")}
+                        className={`p-2.5 rounded-xl border text-left flex flex-col items-center text-center gap-1 transition-all cursor-pointer ${
+                          whatsappMode === "app"
+                            ? "border-emerald-600 bg-emerald-50 text-emerald-950 font-extrabold shadow-xs ring-2 ring-emerald-500/20"
+                            : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 font-medium"
+                        }`}
+                      >
+                        <Laptop className={`w-4 h-4 ${whatsappMode === "app" ? "text-emerald-700" : "text-slate-500"}`} />
+                        <span className="text-xs">Masaüstü App</span>
+                        <span className="text-[9px] opacity-75">PC WhatsApp Uygulaması</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setWhatsappMode("web")}
+                        className={`p-2.5 rounded-xl border text-left flex flex-col items-center text-center gap-1 transition-all cursor-pointer ${
+                          whatsappMode === "web"
+                            ? "border-emerald-600 bg-emerald-50 text-emerald-950 font-extrabold shadow-xs ring-2 ring-emerald-500/20"
+                            : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 font-medium"
+                        }`}
+                      >
+                        <Globe className={`w-4 h-4 ${whatsappMode === "web" ? "text-emerald-700" : "text-slate-500"}`} />
+                        <span className="text-xs">WhatsApp Web</span>
+                        <span className="text-[9px] opacity-75">Tarayıcıda Aç</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Phone input */}
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Gönderilecek WhatsApp Telefon Numarası *</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={sharePhone}
+                      onChange={(e) => setSharePhone(e.target.value)}
+                      placeholder="Örn: 0532 123 45 67 veya 5321234567"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      💡 İsterseniz telefon numarasını elle değiştirebilir veya farklı bir alıcı WhatsApp numarası girebilirsiniz.
+                    </p>
+                  </div>
+
+                  {/* Cloud Progress indicator */}
+                  {cloudStatusText && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl text-xs font-bold flex items-center gap-2 animate-pulse">
+                      <RefreshCw className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
+                      <span>{cloudStatusText}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* PDF Format Notice */}
+                  <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-semibold flex items-center gap-2.5 shadow-xs">
+                    <FileText className="w-5 h-5 text-amber-600 shrink-0" />
+                    <div>
+                      <strong className="block text-amber-950 font-bold">📄 Doğrudan PDF Ekstre Paylaşımı</strong>
+                      <span>Gönder butonuna tıklandığında yalnızca resmi <strong>Cari_Ekstre_*.pdf</strong> belgesi paylaşılır.</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Gönderilecek E-Posta Adresi *</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={shareEmail}
+                      onChange={(e) => setShareEmail(e.target.value)}
+                      placeholder="Örn: muhasebe@sirket.com"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      💡 İsterseniz mail adresini elle değiştirebilir veya farklı bir alıcı adresi yazabilirsiniz.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                      E-Posta Konusu (Subject)
+                    </label>
+                    <input
+                      type="text"
+                      value={shareSubject}
+                      onChange={(e) => setShareSubject(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
               <button
-                onClick={() => setShareType(null)}
+                onClick={() => {
+                  setShareType(null);
+                  setCloudStatusText("");
+                }}
                 className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 Vazgeç
               </button>
-              <button
-                onClick={handleSendEmail}
-                disabled={isGeneratingPDF}
-                className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send className="w-4 h-4" />
-                <span>{isGeneratingPDF ? "PDF Hazırlanıyor..." : "PDF Mail ile Gönder"}</span>
-              </button>
+              {shareType === "whatsapp" ? (
+                <button
+                  onClick={handleSendWhatsApp}
+                  disabled={isGeneratingPDF}
+                  className="px-4.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>{isGeneratingPDF ? "İşleniyor..." : "Bulut Depoya Yükle & WhatsApp Aç"}</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleSendEmail}
+                  disabled={isGeneratingPDF}
+                  className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>{isGeneratingPDF ? "PDF Hazırlanıyor..." : "PDF Mail ile Gönder"}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
