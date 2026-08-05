@@ -12,7 +12,7 @@ import {
 } from "../types";
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { NavItem } from "./Sidebar";
 import {
   FileText,
@@ -678,8 +678,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-medium text-slate-800 group-hover:text-slate-900">{inv.issueDate}</div>
-                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">Vade: {inv.dueDate}</div>
+                      <div className="font-medium text-slate-800 group-hover:text-slate-900">{formatDate(inv.issueDate)}</div>
+                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">Vade: {formatDate(inv.dueDate)}</div>
                     </td>
 
                     <td className="py-3.5 px-4 text-right font-medium text-slate-700 group-hover:text-slate-900 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">

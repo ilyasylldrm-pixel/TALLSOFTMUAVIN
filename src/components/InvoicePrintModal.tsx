@@ -1,7 +1,7 @@
 import React from "react";
 import { Invoice, CompanySettings, Contact } from "../types";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
-import { getCurrencySymbol } from "../utils/exportUtils";
+import { getCurrencySymbol, formatDate } from "../utils/exportUtils";
 import { Printer, Download, X, QrCode, Building2, CheckCircle2, Users, Package, ExternalLink } from "lucide-react";
 import { Logo } from "./Logo";
 import { NavItem } from "./Sidebar";
@@ -95,7 +95,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                 ETTN: 8a491029-3810-4b10-8201-948123019283
               </div>
               <div className="text-xs text-slate-600">
-                <strong>Fatura Tarihi:</strong> {invoice.issueDate}
+                <strong>Fatura Tarihi:</strong> {formatDate(invoice.issueDate)}
               </div>
               <div className="text-xs text-slate-600">
                 <strong>Düzenleme Zamanı:</strong> 14:30:00

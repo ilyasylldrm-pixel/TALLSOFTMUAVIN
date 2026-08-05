@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Order, OrderItem, OrderType, OrderStatus, Contact, Product, Warehouse, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import {
   ShoppingCart,
   Plus,
@@ -597,7 +597,7 @@ export const Orders: React.FC<OrdersProps> = ({
                       </div>
                       <div className="text-[11px] text-slate-500 group-hover:text-purple-800/80 flex items-center gap-1 mt-0.5">
                         <Calendar className="w-3 h-3 text-purple-400" />
-                        <span>{order.orderDate}</span>
+                        <span>{formatDate(order.orderDate)}</span>
                       </div>
                     </td>
 
@@ -625,7 +625,7 @@ export const Orders: React.FC<OrdersProps> = ({
                     </td>
 
                     <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="text-slate-800 font-semibold">{order.deliveryDate || "-"}</div>
+                      <div className="text-slate-800 font-semibold">{formatDate(order.deliveryDate)}</div>
                       <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60 flex items-center gap-1 mt-0.5">
                         <WarehouseIcon className="w-3 h-3 text-purple-400" />
                         <span>{order.warehouseName || "Genel Depo"}</span>
@@ -1044,8 +1044,8 @@ export const Orders: React.FC<OrdersProps> = ({
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-extrabold text-purple-700">{selectedOrderForView.orderNumber}</div>
-                  <div className="text-xs text-slate-500">Tarih: {selectedOrderForView.orderDate}</div>
-                  <div className="text-xs text-slate-500">Termin: {selectedOrderForView.deliveryDate || "-"}</div>
+                  <div className="text-xs text-slate-500">Tarih: {formatDate(selectedOrderForView.orderDate)}</div>
+                  <div className="text-xs text-slate-500">Termin: {formatDate(selectedOrderForView.deliveryDate)}</div>
                 </div>
               </div>
 

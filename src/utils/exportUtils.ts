@@ -42,6 +42,125 @@ export function formatCurrency(amount: number | null | undefined, currency?: str
 }
 
 /**
+ * Helper to replace oklch(...) color functions in CSS string with fallback hex color to prevent html2canvas errors
+ */
+export function replaceOklchInString(cssText: string, fallbackColor: string = "#4f46e5"): string {
+  if (!cssText || !cssText.includes("oklch")) return cssText;
+
+  let result = "";
+  let i = 0;
+  while (i < cssText.length) {
+    const oklchIndex = cssText.indexOf("oklch(", i);
+    if (oklchIndex === -1) {
+      result += cssText.slice(i);
+      break;
+    }
+
+    result += cssText.slice(i, oklchIndex);
+    let depth = 1;
+    let j = oklchIndex + 6;
+    while (j < cssText.length && depth > 0) {
+      if (cssText[j] === "(") depth++;
+      else if (cssText[j] === ")") depth--;
+      j++;
+    }
+
+    result += fallbackColor;
+    i = j;
+  }
+  return result;
+}
+
+/**
+ * Sanitizes all <style> elements and inline styles in cloned DOM document for html2canvas
+ */
+export function sanitizeOklchForHtml2Canvas(clonedDoc: Document): void {
+  try {
+    const styleTags = clonedDoc.querySelectorAll("style");
+    styleTags.forEach((styleEl) => {
+      if (styleEl.textContent && styleEl.textContent.includes("oklch")) {
+        styleEl.textContent = replaceOklchInString(styleEl.textContent, "#6366f1");
+      }
+    });
+
+    const elementsWithStyle = clonedDoc.querySelectorAll("[style]");
+    elementsWithStyle.forEach((el) => {
+      const styleAttr = el.getAttribute("style");
+      if (styleAttr && styleAttr.includes("oklch")) {
+        el.setAttribute("style", replaceOklchInString(styleAttr, "#6366f1"));
+      }
+    });
+
+    try {
+      const styleSheets = Array.from(clonedDoc.styleSheets);
+      styleSheets.forEach((sheet) => {
+        try {
+          const rules = Array.from(sheet.cssRules || []);
+          rules.forEach((rule, idx) => {
+            if (rule.cssText && rule.cssText.includes("oklch")) {
+              const sanitizedRule = replaceOklchInString(rule.cssText, "#6366f1");
+              try {
+                sheet.deleteRule(idx);
+                sheet.insertRule(sanitizedRule, idx);
+              } catch {
+                // Ignore rule insertion error
+              }
+            }
+          });
+        } catch {
+          // Ignore cross-origin stylesheet error
+        }
+      });
+    } catch {
+      // Ignore stylesheet iteration error
+    }
+  } catch (err) {
+    console.warn("oklch sanitization warning:", err);
+  }
+}
+
+/**
+ * Formats any date input (YYYY-MM-DD, ISO string, Date object) to DD.MM.YYYY format
+ */
+export function formatDate(dateInput?: string | Date | null): string {
+  if (!dateInput) return "-";
+  
+  if (typeof dateInput === "string") {
+    const trimmed = dateInput.trim();
+    if (!trimmed) return "-";
+    // If it's already in DD.MM.YYYY format
+    if (/^\d{2}\.\d{2}\.\d{4}/.test(trimmed)) {
+      return trimmed;
+    }
+    // Handle YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch;
+      return `${d}.${m}.${y}`;
+    }
+    
+    // Fallback to standard Date parsing
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      const day = String(parsed.getDate()).padStart(2, "0");
+      const month = String(parsed.getMonth() + 1).padStart(2, "0");
+      const year = parsed.getFullYear();
+      return `${day}.${month}.${year}`;
+    }
+    return trimmed;
+  }
+
+  if (dateInput instanceof Date && !isNaN(dateInput.getTime())) {
+    const day = String(dateInput.getDate()).padStart(2, "0");
+    const month = String(dateInput.getMonth() + 1).padStart(2, "0");
+    const year = dateInput.getFullYear();
+    return `${day}.${month}.${year}`;
+  }
+
+  return "-";
+}
+
+/**
  * Excel (.xlsx) Export with Turkish character and auto column width support
  */
 export function exportToExcel({
@@ -198,12 +317,7 @@ export async function exportToPDF({
       logging: false,
       backgroundColor: "#ffffff",
       onclone: (clonedDoc) => {
-        const styleTags = clonedDoc.getElementsByTagName("style");
-        for (let i = 0; i < styleTags.length; i++) {
-          if (styleTags[i].innerHTML.includes("oklch")) {
-            styleTags[i].innerHTML = styleTags[i].innerHTML.replace(/oklch\([^)]+\)/g, "#ffffff");
-          }
-        }
+        sanitizeOklchForHtml2Canvas(clonedDoc);
       },
     });
 

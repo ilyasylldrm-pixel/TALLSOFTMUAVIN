@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Quote, QuoteStatus, Contact, Product, Invoice, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import {
   FileSpreadsheet,
   Plus,
@@ -354,9 +354,9 @@ export const Quotes: React.FC<QuotesProps> = ({
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div>{q.issueDate}</div>
+                      <div>{formatDate(q.issueDate)}</div>
                       <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">
-                        Geçerlilik: {q.validUntil}
+                        Geçerlilik: {formatDate(q.validUntil)}
                       </div>
                     </td>
 
@@ -756,8 +756,8 @@ export const Quotes: React.FC<QuotesProps> = ({
                   </div>
                   <div className="text-xs text-slate-600 font-mono space-y-1">
                     <div><span className="font-bold text-slate-800">Belge No:</span> {printingQuote.quoteNumber}</div>
-                    <div><span className="font-bold text-slate-800">Tarih:</span> {printingQuote.issueDate}</div>
-                    <div><span className="font-bold text-slate-800">Son Geçerlilik:</span> {printingQuote.validUntil}</div>
+                    <div><span className="font-bold text-slate-800">Tarih:</span> {formatDate(printingQuote.issueDate)}</div>
+                    <div><span className="font-bold text-slate-800">Son Geçerlilik:</span> {formatDate(printingQuote.validUntil)}</div>
                   </div>
                 </div>
               </div>

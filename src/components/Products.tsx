@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Product, Invoice, Contact, Warehouse } from "../types";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import {
   Package,
   Plus,
@@ -1461,7 +1461,7 @@ export const Products: React.FC<ProductsProps> = ({
                     const isPurchase = m.type === "purchase";
                     return (
                       <tr key={m.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-2.5 px-3 font-mono font-medium text-slate-600">{m.issueDate}</td>
+                        <td className="py-2.5 px-3 font-mono font-medium text-slate-600">{formatDate(m.issueDate)}</td>
                         <td className="py-2.5 px-3">
                           <span
                             className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded text-[10px] ${

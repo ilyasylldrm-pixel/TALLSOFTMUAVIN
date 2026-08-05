@@ -378,6 +378,42 @@ export default function App() {
     }));
   };
 
+  // Handlers for Accounts & Finance Entities
+  const handleUpdateAccount = (account: Account) => {
+    setData((prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((a) => (a.id === account.id ? account : a)),
+    }));
+  };
+
+  const handleDeleteAccount = (id: string) => {
+    setData((prev) => ({
+      ...prev,
+      accounts: prev.accounts.filter((a) => a.id !== id),
+    }));
+  };
+
+  const handleUpdateTransaction = (tx: Transaction) => {
+    setData((prev) => ({
+      ...prev,
+      transactions: prev.transactions.map((t) => (t.id === tx.id ? tx : t)),
+    }));
+  };
+
+  const handleUpdateCheque = (cheque: Cheque) => {
+    setData((prev) => ({
+      ...prev,
+      cheques: (prev.cheques || []).map((c) => (c.id === cheque.id ? cheque : c)),
+    }));
+  };
+
+  const handleUpdatePromissoryNote = (note: PromissoryNote) => {
+    setData((prev) => ({
+      ...prev,
+      promissoryNotes: (prev.promissoryNotes || []).map((n) => (n.id === note.id ? note : n)),
+    }));
+  };
+
   // Handlers
   const handleAddContact = (contact: Contact) => {
     setData((prev) => ({
@@ -1333,13 +1369,19 @@ export default function App() {
               onAddAccount={(acc) =>
                 setData((p) => ({ ...p, accounts: [...p.accounts, acc] }))
               }
+              onUpdateAccount={handleUpdateAccount}
+              onDeleteAccount={handleDeleteAccount}
               onTransferBetweenAccounts={handleTransferBetweenAccounts}
               onAddTransaction={handleAddTransaction}
+              onUpdateTransaction={handleUpdateTransaction}
+              onDeleteTransaction={handleDeleteTransaction}
               onAddCheque={handleAddCheque}
+              onUpdateCheque={handleUpdateCheque}
               onUpdateChequeStatus={handleUpdateChequeStatus}
               onDeleteCheque={handleDeleteCheque}
               onEndorseCheque={handleEndorseCheque}
               onAddPromissoryNote={handleAddPromissoryNote}
+              onUpdatePromissoryNote={handleUpdatePromissoryNote}
               onUpdateNoteStatus={handleUpdateNoteStatus}
               onEndorsePromissoryNote={handleEndorsePromissoryNote}
               onDeletePromissoryNote={handleDeletePromissoryNote}
@@ -1363,6 +1405,7 @@ export default function App() {
                   : undefined
               }
               onAddTransaction={handleAddTransaction}
+              onUpdateTransaction={handleUpdateTransaction}
               onDeleteTransaction={handleDeleteTransaction}
             />
           )}

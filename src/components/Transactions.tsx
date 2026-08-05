@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Transaction, Account, Contact, TransactionType, Product, InvoiceItem, getContactAccountCode } from "../types";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import {
   Receipt,
   Plus,
@@ -492,7 +492,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                           {tx.documentNo || (isIncome ? "GLR-FİŞ" : "GDR-FİŞ")}
                         </div>
                         <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">
-                          {tx.date}
+                          {formatDate(tx.date)}
                         </div>
                       </td>
 
@@ -929,7 +929,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
               <div>
                 <span className="text-slate-400 block text-[10px] font-bold">İşlem Tarihi</span>
-                <span className="font-semibold text-slate-800">{viewingTx.date}</span>
+                <span className="font-semibold text-slate-800">{formatDate(viewingTx.date)}</span>
               </div>
               <div>
                 <span className="text-slate-400 block text-[10px] font-bold">Kategori</span>

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ExportButtons } from "./ExportButtons";
 import { ExchangeRatesWidget } from "./ExchangeRatesWidget";
-import { formatCurrency } from "../utils/exportUtils";
+import { formatCurrency, formatDate } from "../utils/exportUtils";
 import {
   Contact,
   Invoice,
@@ -800,7 +800,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         <div className="flex items-center gap-2">
                           <Calendar className={`w-3.5 h-3.5 shrink-0 ${isOverdue ? "text-amber-600" : "text-slate-400"}`} />
                           <div>
-                            <span className="font-bold text-slate-900 block">{inv.dueDate}</span>
+                            <span className="font-bold text-slate-900 block">{formatDate(inv.dueDate)}</span>
                             <span
                               className={`text-[10px] font-extrabold ${
                                 isOverdue
@@ -945,7 +945,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
                   >
                     <td className="py-3 px-3 text-slate-500 group-hover:text-purple-900 font-medium whitespace-nowrap rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      {tx.date}
+                      {formatDate(tx.date)}
                     </td>
                     <td className="py-3 px-3 font-semibold text-slate-800 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                       {tx.description}

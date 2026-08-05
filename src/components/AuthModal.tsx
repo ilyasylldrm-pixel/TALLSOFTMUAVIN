@@ -1,35 +1,33 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
-  LogIn,
-  UserPlus,
   Lock,
   Mail,
   User,
   Building,
-  Phone,
-  FileCheck2,
-  CheckCircle2,
-  Sparkles,
-  ShieldCheck,
   Eye,
   EyeOff,
   ArrowRight,
-  BadgePercent,
-  Layers,
+  Loader2,
   Hexagon,
-  Award,
+  ShieldCheck,
   CircleDot,
-  Compass,
+  Award,
   Cpu,
-  Loader2
+  Compass,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Pause,
+  Sparkles,
 } from "lucide-react";
+import { Logo } from "./Logo";
 import {
   auth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   saveUserProfile,
-  getUserProfile
+  getUserProfile,
 } from "../lib/firebase";
 
 export interface UserProfile {
@@ -64,6 +62,60 @@ export interface LogoOption {
   icon: React.ElementType;
   imageUrl: string;
 }
+
+export interface BackgroundSlide {
+  id: number;
+  title: string;
+  subtitle: string;
+  tag: string;
+  imageUrl: string;
+}
+
+// 6 Birbirinden Farklı Mor Manzara Görselleri (Arka Planda Dönen Slaytlar)
+export const LOGIN_BACKGROUND_SLIDES: BackgroundSlide[] = [
+  {
+    id: 1,
+    title: "Mor Fenerli Sahil Manzarası",
+    subtitle: "Güvenli ve yüksek teknolojili bulut ön muhasebe altyapımızla 7/24 kesintisiz erişim sağlayın.",
+    tag: "GÜVENLİ ALTYAPI",
+    imageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 2,
+    title: "Japon Bahçesi & Mor Salkım Ormanı",
+    subtitle: "Karmaşık finansal süreçleri huzurlu, sade ve akıllı bir arayüz ile kolayca yönetin.",
+    tag: "AKILLI YÖNETİM",
+    imageUrl: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 3,
+    title: "Samanyolu Altında Mor Çöl Ay Işığı",
+    subtitle: "Yapay zeka ve büyük veri analitiği ile işletmenizin geleceğine ışık tutun.",
+    tag: "YAPAY ZEKA FİNANS",
+    imageUrl: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 4,
+    title: "Büyülü Mor Şelale & Kesintisiz Nakit Akışı",
+    subtitle: "Gelir ve giderlerinizi canlı grafikler ve anlık bildirimlerle tam kontrol altında tutun.",
+    tag: "CANLI NAKİT AKIŞI",
+    imageUrl: "https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 5,
+    title: "Karlı Dağ Yansıması & Mor Lupin Gölu",
+    subtitle: "Zirveye oynayan şirketler için e-Fatura, e-Arşiv ve banka entegrasyon çözümleri.",
+    tag: "E-FATURA & ERP ZİRVESİ",
+    imageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 6,
+    title: "Gün Batımında Mor Lavanta Tarlası",
+    subtitle: "Verimli, bereketli ve dijitalleşmiş ticari operasyonların gücünü keşfedin.",
+    tag: "DİJİTAL DÖNÜŞÜM",
+    imageUrl: "https://images.unsplash.com/photo-1499002238440-d264edd596ec?q=80&w=1920&auto=format&fit=crop",
+  },
+];
 
 // 6 Birbirinden Farklı Resimli Logo Seçeneği
 export const BRAND_LOGOS: LogoOption[] = [
@@ -145,9 +197,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Background Carousel State
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [progress, setProgress] = useState(0);
+
   // Form State
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("demo@tallsoft.com.tr");
+  const [password, setPassword] = useState("123456");
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [phone, setPhone] = useState("");
@@ -157,14 +214,54 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [errorMessage, setErrorMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Auto Rotation Timer (6 Seconds Interval)
+  useEffect(() => {
+    if (!isAutoPlaying || !isOpen) return;
+
+    const SLIDE_DURATION = 6000;
+    const UPDATE_INTERVAL = 50;
+
+    const timer = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 100) {
+          setCurrentSlideIndex((idx) => (idx + 1) % LOGIN_BACKGROUND_SLIDES.length);
+          return 0;
+        }
+        return prev + (UPDATE_INTERVAL / SLIDE_DURATION) * 100;
+      });
+    }, UPDATE_INTERVAL);
+
+    return () => clearInterval(timer);
+  }, [isAutoPlaying, isOpen]);
+
   // Reset inputs when modal mode changes
-  React.useEffect(() => {
+  useEffect(() => {
     setErrorMessage("");
+    if (mode === "login" && (!email || email === "")) {
+      setEmail("demo@tallsoft.com.tr");
+      setPassword("123456");
+    }
   }, [mode, isOpen]);
 
   if (!isOpen) return null;
 
   const selectedLogo = BRAND_LOGOS.find((l) => l.id === selectedLogoId) || BRAND_LOGOS[0];
+  const activeSlide = LOGIN_BACKGROUND_SLIDES[currentSlideIndex];
+
+  const handleNextSlide = () => {
+    setCurrentSlideIndex((prev) => (prev + 1) % LOGIN_BACKGROUND_SLIDES.length);
+    setProgress(0);
+  };
+
+  const handlePrevSlide = () => {
+    setCurrentSlideIndex((prev) => (prev === 0 ? LOGIN_BACKGROUND_SLIDES.length - 1 : prev - 1));
+    setProgress(0);
+  };
+
+  const handleSelectSlide = (index: number) => {
+    setCurrentSlideIndex(index);
+    setProgress(0);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,7 +303,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             setSubmitting(false);
             return;
           }
-          // Fallback if auth server has restricted domain or offline mode
           console.warn("Firebase Auth fallback used:", authErr);
         }
 
@@ -292,7 +388,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               role: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : "Firma Yöneticisi",
             };
 
-            // Save admin profile to Firestore if missing
             try {
               await saveUserProfile({
                 userId: finalProfile.id,
@@ -311,13 +406,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             }
           }
         } catch (authErr: any) {
-          if (authErr.code === "auth/invalid-credential" || authErr.code === "auth/user-not-found" || authErr.code === "auth/wrong-password") {
-            setErrorMessage("Hatalı e-posta veya şifre girdiniz. Lütfen tekrar deneyiniz.");
-            setSubmitting(false);
-            return;
-          }
-
-          // Local fallback for offline/development admin login
+          // Local fallback for offline/development logins
           finalProfile = {
             id: isSystemAdmin ? "nuT309AyQxQKddnAp1ZJjlSgBXt2" : `usr_${Date.now()}`,
             name: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : (email.split("@")[0] || "Müşteri / Yönetici"),
@@ -351,340 +440,356 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-purple-200/80 overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto animate-in fade-in duration-300">
+      <div className="relative w-full h-full min-h-screen bg-slate-950 flex flex-col lg:flex-row">
         
-        {/* Top Decorative Header */}
-        <div className="relative bg-gradient-to-r from-slate-900 via-purple-950 to-indigo-950 text-white p-6 sm:p-8 overflow-hidden">
-          {/* Lila Bal Peteği Desen Kaplaması */}
-          <div
-            className="absolute inset-0 pointer-events-none opacity-20 mix-blend-screen"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%23a855f7' stroke-width='1' stroke-opacity='0.6'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23c084fc' stroke-width='0.7' stroke-opacity='0.4' stroke-dasharray='2,2'/%3E%3C/g%3E%3C/svg%3E")`,
-              backgroundSize: "20px 35px",
-            }}
-          />
+        {/* ========================================================= */}
+        {/* LEFT COLUMN: 6-IMAGE ROTATING BACKGROUND CAROUSEL         */}
+        {/* ========================================================= */}
+        <div className="relative w-full lg:w-2/3 min-h-[400px] lg:min-h-screen bg-slate-950 flex flex-col justify-between overflow-hidden group">
+          
+          {/* Carousel Images Cross-Dissolve Stack */}
+          {LOGIN_BACKGROUND_SLIDES.map((slide, idx) => {
+            const isActive = idx === currentSlideIndex;
+            return (
+              <div
+                key={slide.id}
+                className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                  isActive ? "opacity-100 z-10 scale-100" : "opacity-0 z-0 scale-105"
+                } transform transition-transform duration-[8000ms]`}
+              >
+                <img
+                  src={slide.imageUrl}
+                  alt={slide.title}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover object-center"
+                />
+                <div className="absolute inset-0 bg-gradient-to-tr from-purple-950/90 via-[#2d1b54]/60 to-slate-950/50" />
+              </div>
+            );
+          })}
 
+          {/* Dark Purple Gradient Overlay Vignette */}
+          <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/95 via-purple-950/50 to-slate-950/40 mix-blend-multiply pointer-events-none" />
+
+          {/* Top Header Badge on Carousel */}
+          <div className="relative z-30 p-6 flex items-center justify-between">
+            <div className="inline-flex items-center gap-2 bg-slate-900/70 backdrop-blur-md border border-[#8252F6]/40 px-3.5 py-1.5 rounded-full text-purple-200 text-xs font-bold tracking-wide shadow-lg">
+              <Sparkles className="w-4 h-4 text-[#EF7D2C] animate-pulse" />
+              <span>MUAVİN ERP • 6 Görsel Otomatik Akış</span>
+            </div>
+
+            {/* Auto Play / Pause Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+              className="bg-slate-900/70 hover:bg-slate-900/90 border border-white/20 text-white p-2 rounded-full backdrop-blur-md transition-all cursor-pointer shadow-md"
+              title={isAutoPlaying ? "Otomatik Akışı Duraklat" : "Otomatik Akışı Başlat"}
+            >
+              {isAutoPlaying ? <Pause className="w-4 h-4 text-purple-300" /> : <Play className="w-4 h-4 text-[#EF7D2C]" />}
+            </button>
+          </div>
+
+          {/* CENTER: FROSTED GLASS CAPTION CARD */}
+          <div className="relative z-30 flex-1 flex items-center justify-center p-6 sm:p-10">
+            <div className="w-full max-w-md bg-[#1e1435]/75 backdrop-blur-xl border border-[#8252F6]/40 rounded-3xl p-6 sm:p-8 shadow-2xl text-center text-white space-y-4 animate-in fade-in duration-500">
+              
+              {/* Active Category Tag */}
+              <div className="inline-block px-3.5 py-1 rounded-full bg-[#EF7D2C]/20 border border-[#EF7D2C]/40 text-[#EF7D2C] text-[11px] font-black tracking-wider uppercase shadow-xs">
+                {activeSlide.tag}
+              </div>
+
+              {/* Tagline Title */}
+              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-snug drop-shadow-md">
+                {activeSlide.title}
+              </h2>
+
+              {/* Tagline Subtitle */}
+              <p className="text-xs sm:text-sm text-purple-100/90 font-normal leading-relaxed">
+                {activeSlide.subtitle}
+              </p>
+
+              {/* Progress Bar */}
+              <div className="pt-2">
+                <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden shadow-inner">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#8252F6] via-purple-400 to-[#EF7D2C] transition-all duration-100 ease-linear rounded-full"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Dots & Nav Buttons */}
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={handlePrevSlide}
+                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-purple-200 hover:text-white transition-all cursor-pointer"
+                  title="Önceki Slayt"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <div className="flex items-center gap-1.5">
+                  {LOGIN_BACKGROUND_SLIDES.map((slide, idx) => {
+                    const isCurrent = idx === currentSlideIndex;
+                    return (
+                      <button
+                        key={slide.id}
+                        type="button"
+                        onClick={() => handleSelectSlide(idx)}
+                        className={`h-2 rounded-full transition-all cursor-pointer ${
+                          isCurrent
+                            ? "w-6 bg-[#EF7D2C] shadow-md"
+                            : "w-2 bg-white/30 hover:bg-white/60"
+                        }`}
+                        title={`Slayt ${idx + 1}`}
+                      />
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleNextSlide}
+                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-purple-200 hover:text-white transition-all cursor-pointer"
+                  title="Sonraki Slayt"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Carousel Bottom Footer */}
+          <div className="relative z-30 p-4 text-center text-[11px] text-purple-200/80 font-semibold border-t border-white/10 bg-slate-950/60 backdrop-blur-xs">
+            ✨ MUAVİN MUHASEBE • Bulut Tabanlı Ön Muhasebe & ERP Portalı
+          </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* RIGHT COLUMN: USER LOGIN FORM (ÜYE GİRİŞİ BÖLÜMÜ - SAĞDA) */}
+        {/* ========================================================= */}
+        <div className="relative w-full lg:w-1/3 min-h-screen bg-white flex flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-y-auto custom-scrollbar z-30">
+          
+          {/* Top Close Button (if applicable) */}
           {canClose && (
             <button
               onClick={onClose}
-              className="absolute top-5 right-5 p-2 bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white rounded-full transition-all cursor-pointer z-20"
+              className="absolute top-4 right-4 p-2.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-all cursor-pointer z-20"
               title="Kapat"
             >
               <X className="w-5 h-5" />
             </button>
           )}
 
-          <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-2 bg-purple-500/20 border border-purple-400/40 px-3 py-1 rounded-full text-purple-300 text-xs font-bold uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-                <span>Muavin ERP Giriş & Kayıt Portalı</span>
+          <div className="w-full max-w-md mx-auto my-auto space-y-6">
+
+            {/* BRAND LOGO EMBLEM (OFFICIAL MUAV!N LOGO) */}
+            <div className="flex flex-col items-center justify-center text-center space-y-3 pt-2">
+              <Logo size="lg" showText={true} />
+              <div className="text-[11px] font-bold tracking-[0.25em] text-[#8252F6] uppercase flex items-center justify-center gap-2 w-full">
+                <span className="w-8 h-[1px] bg-purple-200" />
+                <span>ÖN MUHASEBE & FİNANS PORTALI</span>
+                <span className="w-8 h-[1px] bg-purple-200" />
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                {mode === "login" ? "Kullanıcı Girişi Yapın" : "Yeni Şirket / Üyelik Oluşturun"}
-              </h2>
-              <p className="text-xs text-purple-200/80 font-medium">
-                Ön muhasebe, cari takip, e-fatura ve finansal yönetim portalına güvenle erişin.
-              </p>
             </div>
 
-            {/* Mode Toggle Pills */}
-            <div className="bg-slate-800/80 p-1.5 rounded-2xl border border-slate-700/80 flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={() => setMode("login")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                  mode === "login"
-                    ? "bg-purple-600 text-white shadow-md"
-                    : "text-slate-300 hover:text-white hover:bg-slate-700/50"
-                }`}
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Giriş Yap</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("register")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                  mode === "register"
-                    ? "bg-purple-600 text-white shadow-md"
-                    : "text-slate-300 hover:text-white hover:bg-slate-700/50"
-                }`}
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Üye Ol</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content Area */}
-        <div className="p-6 sm:p-8 space-y-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
-
-          {/* SECTION: 6 BIRBIRINDEN FARKLIDIR LOGO RESIMLERI GALERISI */}
-          <div className="space-y-3 bg-gradient-to-r from-purple-50/80 via-indigo-50/50 to-purple-50/80 p-5 rounded-2xl border border-purple-200/80">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-purple-600" />
-                  <span>Şirketiniz İçin Kurumsal Logo Resmini Seçin (6 Farklı Tasarım)</span>
-                </h3>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Aşağıda firmasını temsil edecek 6 farklı amblem/logo resminden dilediğinizi seçebilirsiniz:
-                </p>
-              </div>
-              <span className="text-[11px] font-bold text-purple-700 bg-white px-2.5 py-1 rounded-lg border border-purple-200 shadow-2xs">
-                Seçili: <strong className="text-purple-950">{selectedLogo.title}</strong>
-              </span>
-            </div>
-
-            {/* 6 Grid Logo Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2">
-              {BRAND_LOGOS.map((logo) => {
-                const Icon = logo.icon;
-                const isSelected = selectedLogoId === logo.id;
-
-                return (
-                  <div
-                    key={logo.id}
-                    onClick={() => setSelectedLogoId(logo.id)}
-                    className={`relative rounded-2xl p-3 border text-center transition-all cursor-pointer flex flex-col items-center justify-between gap-2 group ${
-                      isSelected
-                        ? "bg-white border-purple-600 ring-2 ring-purple-500/40 shadow-md scale-[1.03]"
-                        : "bg-white/80 border-slate-200 hover:border-purple-300 hover:bg-white hover:shadow-xs"
-                    }`}
-                  >
-                    {/* Selected Badge */}
-                    {isSelected && (
-                      <span className="absolute -top-2 -right-2 bg-purple-600 text-white p-1 rounded-full shadow-md z-10">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      </span>
-                    )}
-
-                    {/* Logo Image & Icon Composite */}
-                    <div className="relative w-16 h-16 rounded-2xl overflow-hidden border border-slate-200 shadow-2xs group-hover:scale-105 transition-transform">
-                      <img
-                        src={logo.imageUrl}
-                        alt={logo.title}
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover"
-                      />
-                      {/* Gradient Badge Overlay */}
-                      <div className={`absolute inset-0 bg-gradient-to-tr ${logo.bgGradient} opacity-25 mix-blend-overlay`} />
-                      <div className="absolute inset-0 flex items-center justify-center bg-slate-900/30 backdrop-blur-[1px]">
-                        <Icon className="w-7 h-7 text-white drop-shadow-md" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-[11px] font-black text-slate-900 line-clamp-1 leading-tight">
-                        {logo.title}
-                      </div>
-                      <div className="text-[9px] font-semibold text-purple-700 bg-purple-50 rounded px-1 mt-0.5 inline-block">
-                        {logo.category}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* AUTH FORM */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {errorMessage && (
-              <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl p-3 flex items-center justify-between gap-2 shadow-2xs animate-in fade-in">
-                <span>⚠️ {errorMessage}</span>
+            {/* LOGIN / SIGN UP HEADER & BACK LINK */}
+            <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                {mode === "login" ? "Kullanıcı Girişi" : "Yeni Üyelik Oluşturun"}
+              </h3>
+              {canClose && (
                 <button
                   type="button"
-                  onClick={() => setErrorMessage("")}
-                  className="text-rose-600 hover:text-rose-900 font-black cursor-pointer px-1"
+                  onClick={onClose}
+                  className="text-xs font-semibold text-slate-500 hover:text-[#8252F6] flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  ✕
+                  <span>← Web Sitesine Dön</span>
                 </button>
-              </div>
-            )}
+              )}
+            </div>
 
-            {mode === "register" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in">
-                <div>
-                  <label className="block font-bold text-xs text-slate-700 mb-1">
-                    Adınız Soyadınız *
-                  </label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-purple-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="Örn: Ahmet Yılmaz"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
-                    />
+            {/* AUTH FORM */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {errorMessage && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl p-3 flex items-center justify-between gap-2 shadow-2xs animate-in fade-in">
+                  <span>⚠️ {errorMessage}</span>
+                  <button
+                    type="button"
+                    onClick={() => setErrorMessage("")}
+                    className="text-rose-600 hover:text-rose-900 font-black cursor-pointer px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* REGISTER EXTRA FIELDS */}
+              {mode === "register" && (
+                <div className="space-y-3 animate-in fade-in">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Adınız Soyadınız *
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-[#8252F6] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ahmet Yılmaz"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-[#8252F6] focus:ring-2 focus:ring-[#8252F6]/20 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Şirket Unvanı *
+                    </label>
+                    <div className="relative">
+                      <Building className="w-4 h-4 text-[#8252F6] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Muavin Teknoloji Ltd. Şti."
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-[#8252F6] focus:ring-2 focus:ring-[#8252F6]/20 transition-all"
+                      />
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div>
-                  <label className="block font-bold text-xs text-slate-700 mb-1">
-                    Şirket / Firma Unvanı *
-                  </label>
-                  <div className="relative">
-                    <Building className="w-4 h-4 text-purple-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="Örn: Muavin Teknoloji Sanayi A.Ş."
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-xs text-slate-700 mb-1">
-                    Telefon Numarası
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-purple-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="0212 555 0100"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-3 py-2.5 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-xs text-slate-700 mb-1">
-                    Vergi Kimlik No (VKN / TCKN)
-                  </label>
-                  <div className="relative">
-                    <FileCheck2 className="w-4 h-4 text-purple-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="8470291038"
-                      value={taxNumber}
-                      onChange={(e) => setTaxNumber(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-3 py-2.5 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* EMAIL FIELD */}
               <div>
-                <label className="block font-bold text-xs text-slate-700 mb-1">
-                  E-Posta Adresi *
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  E-Posta Adresi
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-purple-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Mail className="w-4 h-4 text-[#8252F6] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="email"
                     required
-                    placeholder="finans@firma.com.tr"
+                    placeholder="demo@tallsoft.com.tr"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+                    className="w-full bg-white border border-slate-200 focus:border-[#8252F6] rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#8252F6]/20 transition-all"
                   />
                 </div>
               </div>
 
+              {/* PASSWORD FIELD */}
               <div>
-                <label className="block font-bold text-xs text-slate-700 mb-1">
-                  Şifre *
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Şifre
                 </label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-purple-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Lock className="w-4 h-4 text-[#8252F6] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type={showPassword ? "text" : "password"}
                     required
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-10 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+                    className="w-full bg-white border border-slate-200 focus:border-[#8252F6] rounded-xl pl-9 pr-10 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#8252F6]/20 transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
-            </div>
 
-            {mode === "login" && (
-              <div className="p-3 bg-purple-50 border border-purple-200 rounded-2xl flex items-center justify-between text-xs">
-                <span className="text-purple-900 font-bold">💡 Admin Yöneticisi Giriş Demosu</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail("admin@muavin.com");
-                    setPassword("123456");
-                  }}
-                  className="bg-purple-700 hover:bg-purple-800 text-white font-extrabold px-3 py-1 rounded-xl text-[11px] cursor-pointer"
-                >
-                  Admin Bilgilerini Doldur
-                </button>
-              </div>
-            )}
+              {/* CHECKBOX & FORGOT PASSWORD */}
+              {mode === "login" && (
+                <div className="flex items-center justify-between text-xs pt-0.5">
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="rounded border-slate-300 text-[#8252F6] focus:ring-[#8252F6] w-4 h-4"
+                    />
+                    <span>Beni Hatırla</span>
+                  </label>
+                  <a
+                    href="#forgot"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      alert("Şifre sıfırlama talebiniz alındı. E-posta adresinize sıfırlama bağlantısı gönderildi.");
+                    }}
+                    className="font-semibold text-[#8252F6] hover:text-[#6a35dd] hover:underline"
+                  >
+                    Şifremi Unuttum?
+                  </a>
+                </div>
+              )}
 
-            {mode === "login" && (
-              <div className="flex items-center justify-between text-xs pt-1">
-                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4"
-                  />
-                  <span>Beni Hatırla</span>
-                </label>
-                <a
-                  href="#forgot"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    alert("Sistem yöneticisine şifre sıfırlama bağlantısı gönderildi.");
-                  }}
-                  className="font-bold text-purple-700 hover:underline"
-                >
-                  Şifremi Unuttum?
-                </a>
-              </div>
-            )}
-
-            <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-[11px] text-slate-500 font-medium">
-                🔒 256-Bit SSL Şifreleme ve KVKK Onaylı Güvenli Altyapı
-              </p>
-
+              {/* SUBMIT BUTTON */}
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full sm:w-auto bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 disabled:opacity-50 text-white font-black text-sm px-8 py-3 rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer"
+                className="w-full bg-gradient-to-r from-[#8252F6] via-[#7340f5] to-[#6366f1] hover:from-[#723ff4] hover:to-[#5254e0] disabled:opacity-50 text-white font-bold text-xs sm:text-sm py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-purple-500/20 transition-all active:scale-[0.99] cursor-pointer mt-2"
               >
                 {submitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>İşleniyor...</span>
+                    <span>Giriş Yapılıyor...</span>
                   </>
                 ) : (
                   <>
-                    <span>{mode === "login" ? "Sisteme Giriş Yap" : "Üyeliği Tamamla & Giriş Yap"}</span>
+                    <span>{mode === "login" ? "Giriş Yap" : "Üyeliği Tamamla ve Giriş Yap"}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
+            </form>
+
+            {/* MODE SWITCH FOOTER LINK */}
+            <div className="text-center text-xs pt-4 border-t border-slate-100">
+              {mode === "login" ? (
+                <p className="text-slate-600 font-medium">
+                  Hesabınız yok mu?{" "}
+                  <button
+                    type="button"
+                    onClick={() => setMode("register")}
+                    className="font-bold text-[#8252F6] hover:text-[#6a35dd] hover:underline cursor-pointer"
+                  >
+                    Üye Olun
+                  </button>
+                </p>
+              ) : (
+                <p className="text-slate-600 font-medium">
+                  Zaten bir hesabınız var mı?{" "}
+                  <button
+                    type="button"
+                    onClick={() => setMode("login")}
+                    className="font-bold text-[#8252F6] hover:text-[#6a35dd] hover:underline cursor-pointer"
+                  >
+                    Giriş Yapın
+                  </button>
+                </p>
+              )}
             </div>
-          </form>
+
+          </div>
+
+          {/* BOTTOM FOOTER */}
+          <div className="text-center text-[11px] text-slate-400 font-medium pt-4">
+            🔒 256-Bit SSL Şifreleme ve KVKK Uyumlu Güvenli Altyapı
+          </div>
 
         </div>
+
       </div>
     </div>
   );

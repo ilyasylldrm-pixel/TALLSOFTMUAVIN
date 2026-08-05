@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import {
   Users,
   UserPlus,
@@ -1125,7 +1125,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       </div>
                     </td>
                     <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all text-slate-600 text-xs font-semibold">
-                      {new Date(emp.startDate).toLocaleDateString("tr-TR")}
+                      {formatDate(emp.startDate)}
                     </td>
                     <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                       <div className="font-bold text-slate-900">
@@ -1497,7 +1497,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       )}
                     </td>
                     <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all text-xs font-semibold text-slate-700">
-                      {req.startDate} — {req.endDate}
+                      {formatDate(req.startDate)} — {formatDate(req.endDate)}
                     </td>
                     <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all font-bold text-slate-800">
                       {req.daysCount} Gün
@@ -3179,7 +3179,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <span className="text-slate-500 block text-[11px]">İşe Giriş Tarihi</span>
-                <span className="text-slate-900 font-bold">{selectedEmployeeForDetail.startDate}</span>
+                <span className="text-slate-900 font-bold">{formatDate(selectedEmployeeForDetail.startDate)}</span>
               </div>
 
               <div className="bg-indigo-50/70 p-3 rounded-xl border border-indigo-200/80">

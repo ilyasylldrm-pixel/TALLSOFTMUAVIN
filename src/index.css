@@ -81,7 +81,10 @@ body {
     display: none !important;
   }
 
-  #printable-ledger {
+  #printable-ledger,
+  #printable-receipt,
+  #printable-quote,
+  #printable-order {
     visibility: visible !important;
     position: static !important;
     width: 100% !important;
