@@ -126,7 +126,13 @@ export const Reports: React.FC<ReportsProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc"); // Default chronological
   const [expandedMonth, setExpandedMonth] = useState<number | null>(null);
-  const [selectedMonthFilter, setSelectedMonthFilter] = useState<number | "all">("all");
+
+  // Active Period Filter State: Quarter (0..3), Month (0..11), or All
+  const [selectedPeriod, setSelectedPeriod] = useState<
+    | { type: "quarter"; index: number }
+    | { type: "month"; index: number }
+    | { type: "all" }
+  >({ type: "quarter", index: 0 });
 
   // Additional Corporate Tax Parameters (KVK M.32 Adjustments)
   const [kkegAmount, setKkegAmount] = useState<number>(0); // Kanunen kabul edilmeyen giderler (+)
@@ -138,23 +144,29 @@ export const Reports: React.FC<ReportsProps> = ({
   const handleApplyPreset = (preset: "all" | "q1" | "q2" | "q3" | "q4" | "this_month" | "this_year") => {
     const yr = selectedYear;
     if (preset === "all" || preset === "this_year") {
+      setSelectedPeriod({ type: "all" });
       setStartDate(`${yr}-01-01`);
       setEndDate(`${yr}-12-31`);
     } else if (preset === "this_month") {
-      const now = new Date();
-      const m = String(now.getMonth() + 1).padStart(2, "0");
-      setStartDate(`${yr}-${m}-01`);
-      setEndDate(`${yr}-${m}-31`);
+      const currentM = new Date().getMonth();
+      setSelectedPeriod({ type: "month", index: currentM });
+      const mStr = String(currentM + 1).padStart(2, "0");
+      setStartDate(`${yr}-${mStr}-01`);
+      setEndDate(`${yr}-${mStr}-31`);
     } else if (preset === "q1") {
+      setSelectedPeriod({ type: "quarter", index: 0 });
       setStartDate(`${yr}-01-01`);
       setEndDate(`${yr}-03-31`);
     } else if (preset === "q2") {
+      setSelectedPeriod({ type: "quarter", index: 1 });
       setStartDate(`${yr}-04-01`);
       setEndDate(`${yr}-06-30`);
     } else if (preset === "q3") {
+      setSelectedPeriod({ type: "quarter", index: 2 });
       setStartDate(`${yr}-07-01`);
       setEndDate(`${yr}-09-30`);
     } else if (preset === "q4") {
+      setSelectedPeriod({ type: "quarter", index: 3 });
       setStartDate(`${yr}-10-01`);
       setEndDate(`${yr}-12-31`);
     }
@@ -508,7 +520,7 @@ export const Reports: React.FC<ReportsProps> = ({
 
   // Render Date Filter Bar (Matching Finance Management layout)
   const renderDateFilterBar = (title: string) => (
-    <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+    <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="p-2 rounded-xl bg-purple-50 text-purple-700 font-bold">
@@ -516,7 +528,7 @@ export const Reports: React.FC<ReportsProps> = ({
           </span>
           <div>
             <h3 className="text-sm font-extrabold text-slate-900">{title}</h3>
-            <p className="text-[11px] text-slate-500 font-medium">Tarih aralığı ve sıralama seçenekleri</p>
+            <p className="text-[11px] text-slate-500 font-medium">Çeyrek ve ay bazında tarih filtresi ve sıralama</p>
           </div>
         </div>
 
@@ -536,34 +548,54 @@ export const Reports: React.FC<ReportsProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs font-semibold">
         {/* Preset Buttons */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] text-slate-400 font-bold mr-1">Dönem:</span>
+          <span className="text-[11px] text-slate-400 font-bold mr-1">Hızlı Çeyrek / Dönem:</span>
           <button
             onClick={() => handleApplyPreset("this_year")}
-            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700 transition-colors cursor-pointer text-[11px]"
+            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+              selectedPeriod.type === "all"
+                ? "bg-purple-900 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+            }`}
           >
             Tüm Yıl ({selectedYear})
           </button>
           <button
             onClick={() => handleApplyPreset("q1")}
-            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700 transition-colors cursor-pointer text-[11px]"
+            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+              selectedPeriod.type === "quarter" && selectedPeriod.index === 0
+                ? "bg-purple-900 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+            }`}
           >
             1. Çeyrek
           </button>
           <button
             onClick={() => handleApplyPreset("q2")}
-            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700 transition-colors cursor-pointer text-[11px]"
+            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+              selectedPeriod.type === "quarter" && selectedPeriod.index === 1
+                ? "bg-purple-900 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+            }`}
           >
             2. Çeyrek
           </button>
           <button
             onClick={() => handleApplyPreset("q3")}
-            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700 transition-colors cursor-pointer text-[11px]"
+            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+              selectedPeriod.type === "quarter" && selectedPeriod.index === 2
+                ? "bg-purple-900 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+            }`}
           >
             3. Çeyrek
           </button>
           <button
             onClick={() => handleApplyPreset("q4")}
-            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700 transition-colors cursor-pointer text-[11px]"
+            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+              selectedPeriod.type === "quarter" && selectedPeriod.index === 3
+                ? "bg-purple-900 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+            }`}
           >
             4. Çeyrek
           </button>
@@ -826,76 +858,211 @@ export const Reports: React.FC<ReportsProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: AYLIK VERGİ VE ALIM-SATIM DETAY RAPORU */}
+      {/* TAB 1: DÖNEMSEL VERGİ VE ALIM-SATIM DETAY RAPORU */}
       {/* ========================================================================= */}
       {activeTab === "monthly" && (
         <div className="space-y-4 animate-fadeIn">
           {renderDateFilterBar("Dönemsel Vergi ve Ay Analiz Filtresi")}
 
-          {/* MONTH SELECTOR PILLS BAR */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-bold text-slate-800">
-              <span className="flex items-center gap-1.5 text-purple-950 font-black">
-                <Calendar className="w-4 h-4 text-purple-700" />
-                Ay Seçimi (Seçilen Aya Ait Detaylar ve Vergiler):
-              </span>
-              <span className="text-[11px] font-mono text-slate-500 font-normal">
-                Dönem: {selectedYear} Mali Yılı
-              </span>
+          {/* PERIOD & MONTH SELECTOR PILLS BAR */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+            {/* 1. ÇEYREK SEÇİMİ (4 DÖNEM GEÇİCİ VERGİ) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
+                <span className="flex items-center gap-1.5 text-purple-950 font-black">
+                  <Percent className="w-4 h-4 text-purple-700" />
+                  Dönemsel Çeyrek Seçimi (4 Dönem Geçici Vergi & Mali Yıl):
+                </span>
+                <span className="text-[11px] font-mono text-purple-900 bg-purple-50 px-2.5 py-0.5 rounded-md border border-purple-200 font-bold">
+                  {selectedYear} Mali Yılı
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                {[
+                  { label: "1. Çeyrek (Oca - Mar)", key: "q1", qIdx: 0, sub: "1. Geçici Vergi Dönemi" },
+                  { label: "2. Çeyrek (Nis - Haz)", key: "q2", qIdx: 1, sub: "2. Geçici Vergi Dönemi" },
+                  { label: "3. Çeyrek (Tem - Eyl)", key: "q3", qIdx: 2, sub: "3. Geçici Vergi Dönemi" },
+                  { label: "4. Çeyrek (Ek - Ara)", key: "q4", qIdx: 3, sub: "4. Geçici Vergi Dönemi" },
+                  { label: `Tüm Yıl (${selectedYear})`, key: "all", qIdx: -1, sub: "Yıllık Beyanname Dökümü" },
+                ].map((item) => {
+                  const isSelected = item.qIdx === -1
+                    ? selectedPeriod.type === "all"
+                    : selectedPeriod.type === "quarter" && selectedPeriod.index === item.qIdx;
+
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => {
+                        if (item.qIdx === -1) {
+                          handleApplyPreset("all");
+                        } else {
+                          handleApplyPreset(item.key as any);
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between border ${
+                        isSelected
+                          ? "bg-purple-900 text-white border-purple-900 shadow-sm ring-2 ring-purple-500/40"
+                          : "bg-purple-50/60 hover:bg-purple-100 text-purple-950 border-purple-200/80"
+                      }`}
+                    >
+                      <span className="text-xs font-black truncate">{item.label}</span>
+                      <span className={`text-[10px] mt-0.5 font-medium truncate ${isSelected ? "text-purple-200" : "text-purple-700/80"}`}>
+                        {item.sub}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              {MONTH_NAMES.map((mName, mIdx) => {
-                const mData = monthlyTaxDetails[mIdx];
-                const totalActivity = mData.invoiceCount + mData.txCount;
-                const activeMonthIdx = selectedMonthFilter === "all" ? (new Date().getFullYear() === selectedYear ? new Date().getMonth() : 0) : selectedMonthFilter;
-                const isSelected = activeMonthIdx === mIdx;
+            {/* 2. AYLIK DETAY SEÇİMİ (12 AY) */}
+            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                <span className="flex items-center gap-1.5 text-slate-800 font-bold">
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  Tekil Ay Seçimi (Aylık Break-down):
+                </span>
+              </div>
 
-                return (
-                  <button
-                    key={mIdx}
-                    onClick={() => {
-                      setSelectedMonthFilter(mIdx);
-                      setExpandedMonth(mIdx);
-                    }}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      isSelected
-                        ? "bg-purple-900 text-white shadow-xs font-black ring-2 ring-purple-500/50"
-                        : totalActivity > 0
-                        ? "bg-purple-50/90 text-purple-950 hover:bg-purple-100 border border-purple-200"
-                        : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60"
-                    }`}
-                  >
-                    <span>{mName}</span>
-                    {totalActivity > 0 && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-extrabold ${
-                          isSelected ? "bg-purple-950 text-purple-200" : "bg-purple-200/90 text-purple-950"
-                        }`}
-                      >
-                        {totalActivity}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {MONTH_NAMES.map((mName, mIdx) => {
+                  const mData = monthlyTaxDetails[mIdx];
+                  const totalActivity = mData.invoiceCount + mData.txCount;
+                  const isSelected = selectedPeriod.type === "month" && selectedPeriod.index === mIdx;
+
+                  return (
+                    <button
+                      key={mIdx}
+                      onClick={() => {
+                        setSelectedPeriod({ type: "month", index: mIdx });
+                        const mStr = String(mIdx + 1).padStart(2, "0");
+                        setStartDate(`${selectedYear}-${mStr}-01`);
+                        setEndDate(`${selectedYear}-${mStr}-31`);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isSelected
+                          ? "bg-purple-900 text-white shadow-xs font-black ring-2 ring-purple-500/50"
+                          : totalActivity > 0
+                          ? "bg-slate-100 text-slate-800 hover:bg-purple-100 hover:text-purple-900 border border-slate-200"
+                          : "bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200/60"
+                      }`}
+                    >
+                      <span>{mName}</span>
+                      {totalActivity > 0 && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-extrabold ${
+                            isSelected ? "bg-purple-950 text-purple-200" : "bg-purple-200 text-purple-950"
+                          }`}
+                        >
+                          {totalActivity}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* SELECTED MONTH DETAILS & TAXES SECTION */}
+          {/* DYNAMIC PERIOD DETAILS & STATUTORY TAXES */}
           {(() => {
-            const activeMonthIdx = selectedMonthFilter === "all" ? (new Date().getFullYear() === selectedYear ? new Date().getMonth() : 0) : selectedMonthFilter;
-            const m = monthlyTaxDetails[activeMonthIdx];
-            const salesInvoices = m.monthInvoices.filter((i) => i.type === "sales");
-            const purchaseInvoices = m.monthInvoices.filter((i) => i.type === "purchase");
+            let periodTitle = "";
+            let periodBadge = "";
+            let periodMonths: number[] = [];
 
-            // Calculated Geçici / Kurumlar tax share for this month
-            const estimatedTaxRate = isCorporate ? 0.25 : 0.15;
-            const estimatedMonthlyTax = Math.max(0, Math.round(m.netProfit * estimatedTaxRate));
+            if (selectedPeriod.type === "quarter") {
+              const qIdx = selectedPeriod.index;
+              periodMonths = [qIdx * 3, qIdx * 3 + 1, qIdx * 3 + 2];
+              periodTitle = `${qIdx + 1}. Çeyrek (${MONTH_NAMES[qIdx * 3]} - ${MONTH_NAMES[qIdx * 3 + 2]} ${selectedYear}) Beyanname, Vergi ve Alım-Satım Analizi`;
+              periodBadge = `${qIdx + 1}. Geçici Vergi Dönemi | Son Ödeme: ${
+                qIdx === 0 ? "17 Mayıs" : qIdx === 1 ? "17 Ağustos" : qIdx === 2 ? "17 Kasım" : "17 Şubat"
+              }`;
+            } else if (selectedPeriod.type === "month") {
+              const mIdx = selectedPeriod.index;
+              periodMonths = [mIdx];
+              periodTitle = `${MONTH_NAMES[mIdx]} ${selectedYear} Ayı Beyanname, Vergi ve Alım-Satım Analizi`;
+              periodBadge = `${MONTH_NAMES[mIdx]} Ayı Detayı`;
+            } else {
+              periodMonths = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+              periodTitle = `${selectedYear} Mali Yılı Tüm Dönemler Vergi ve Alım-Satım Analizi`;
+              periodBadge = `2026 Yıllık Rapor`;
+            }
+
+            const targetMonthlyDetails = periodMonths.map((mIdx) => monthlyTaxDetails[mIdx]);
+
+            const periodIncome = targetMonthlyDetails.reduce((sum, m) => sum + m.totalIncome, 0);
+            const periodExpense = targetMonthlyDetails.reduce((sum, m) => sum + m.totalExpense, 0);
+            const periodNetProfit = periodIncome - periodExpense;
+
+            const periodSalesVat = targetMonthlyDetails.reduce((sum, m) => sum + m.salesVat, 0);
+            const periodPurchaseVat = targetMonthlyDetails.reduce((sum, m) => sum + m.purchaseVat, 0);
+            const periodPayableVat = targetMonthlyDetails.reduce((sum, m) => sum + m.payableVat, 0);
+            const periodNetVat = periodSalesVat - periodPurchaseVat;
+            const periodDeferredVat = isExemptOrg ? 0 : periodNetVat < 0 ? Math.abs(periodNetVat) : 0;
+            const periodKdvDamga = targetMonthlyDetails.reduce((sum, m) => sum + m.kdvDamga, 0);
+
+            const periodRentAmount = targetMonthlyDetails.reduce((sum, m) => sum + m.rentAmount, 0);
+            const periodRentWithholding = targetMonthlyDetails.reduce((sum, m) => sum + m.rentWithholding, 0);
+            const periodPayrollIncomeTax = targetMonthlyDetails.reduce((sum, m) => sum + m.payrollIncomeTax, 0);
+            const periodPayrollStampTax = targetMonthlyDetails.reduce((sum, m) => sum + m.payrollStampTax, 0);
+            const periodTotalWithholding = targetMonthlyDetails.reduce((sum, m) => sum + m.totalWithholding, 0);
+            const periodMuhtasarDamga = targetMonthlyDetails.reduce((sum, m) => sum + m.muhtasarDamga, 0);
+            const periodPayrollSgkShare = targetMonthlyDetails.reduce((sum, m) => sum + m.payrollSgkShare, 0);
+
+            // Calculate Provisional / Corporate Tax for the selected period
+            let provisionalTaxTitle = isCorporate ? "Geçici Kurumlar Vergisi (%25)" : "Geçici Gelir Vergisi";
+            let provisionalTaxBase = 0;
+            let provisionalTaxPayable = 0;
+            let provisionalTaxDescription = "";
+
+            if (selectedPeriod.type === "quarter") {
+              const qIdx = selectedPeriod.index;
+              const qData = quarterDetails[qIdx];
+              provisionalTaxBase = qData.qProfit;
+              provisionalTaxPayable = qData.qPayableTax;
+              provisionalTaxDescription = `${qIdx + 1}. Çeyrek net karı (₺${qData.qProfit.toLocaleString("tr-TR")}) ve kumulatif matrah (₺${qData.cumulativeProfit.toLocaleString("tr-TR")}) üzerinden hesaplanan ödenecek geçici vergi.`;
+            } else if (selectedPeriod.type === "month") {
+              const mIdx = selectedPeriod.index;
+              provisionalTaxBase = Math.max(0, periodNetProfit);
+              const estimatedTaxRate = isCorporate ? 0.25 : 0.15;
+              provisionalTaxPayable = Math.max(0, Math.round(provisionalTaxBase * estimatedTaxRate));
+              provisionalTaxDescription = `${MONTH_NAMES[mIdx]} ayının net matrahı üzerinden hesaplanan tahmini vergi payı.`;
+            } else {
+              provisionalTaxBase = Math.max(0, totalYearNetProfit);
+              provisionalTaxPayable = totalYearCalculatedTax;
+              provisionalTaxDescription = `Tüm yıl net matrahı üzerinden hesaplanan yıllık toplam vergi.`;
+            }
+
+            // Filter invoices for selected period
+            const periodInvoices = invoices.filter((inv) => {
+              const d = new Date(inv.issueDate);
+              const monthMatch = periodMonths.includes(d.getMonth()) && (d.getFullYear() === selectedYear || !inv.issueDate);
+              if (!monthMatch) return false;
+
+              if (startDate && inv.issueDate < startDate) return false;
+              if (endDate && inv.issueDate > endDate) return false;
+
+              if (searchTerm) {
+                const s = searchTerm.toLowerCase();
+                const matchContact = (inv.contactName || "").toLowerCase().includes(s);
+                const matchDoc = (inv.invoiceNumber || "").toLowerCase().includes(s);
+                const matchNotes = (inv.notes || "").toLowerCase().includes(s);
+                if (!matchContact && !matchDoc && !matchNotes) return false;
+              }
+              return true;
+            }).sort((a, b) => {
+              const timeA = new Date(a.issueDate).getTime();
+              const timeB = new Date(b.issueDate).getTime();
+              return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
+            });
+
+            const periodSalesInvoices = periodInvoices.filter((i) => i.type === "sales");
+            const periodPurchaseInvoices = periodInvoices.filter((i) => i.type === "purchase");
 
             return (
               <div className="space-y-5 animate-fadeIn">
-                {/* Header for Selected Month */}
+                {/* Header for Selected Period */}
                 <div className="bg-gradient-to-br from-purple-900 via-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/10">
@@ -907,40 +1074,40 @@ export const Reports: React.FC<ReportsProps> = ({
                           {activeTaxpayerType}
                         </span>
                         <span className="text-xs font-mono text-purple-300">
-                          {m.monthName} {selectedYear}
+                          {periodBadge}
                         </span>
                       </div>
                       <h3 className="text-lg font-black mt-0.5">
-                        {m.monthName} Ayı Beyanname, Vergi ve Alım-Satım Analizi
+                        {periodTitle}
                       </h3>
                     </div>
                   </div>
 
                   <ExportButtons
                     getExportData={() => ({
-                      filename: `Muavin_${m.monthName}_Ayı_Vergi_Raporu_${selectedYear}`,
-                      title: `${m.monthName.toUpperCase()} AYI VERGİ VE ALIM-SATIM DETAY RAPORU (${activeTaxpayerType})`,
-                      subtitle: `Dönem: ${m.monthName} ${selectedYear} | Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
+                      filename: `Muavin_Dönemsel_Vergi_Raporu_${selectedYear}`,
+                      title: `${periodTitle.toUpperCase()} (${activeTaxpayerType})`,
+                      subtitle: `Dönem: ${periodBadge} | Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
                       headers: [
                         "Tür / İşlem", "Matrah / Tutar", "KDV / Vergi", "Net Yük / Toplam"
                       ],
                       rows: [
-                        ["Faturalı Satışlar", formatCurrency(m.totalIncome, "TRY"), formatCurrency(m.salesVat, "TRY"), formatCurrency(m.totalIncome, "TRY")],
-                        ["Faturalı Alışlar", formatCurrency(m.totalExpense, "TRY"), formatCurrency(m.purchaseVat, "TRY"), formatCurrency(m.totalExpense, "TRY")],
-                        ["Faturalı Net Matrah", formatCurrency(m.netProfit, "TRY"), "-", formatCurrency(m.netProfit, "TRY")],
-                        ["Ödenecek / Devreden KDV", "-", formatCurrency(m.salesVat - m.purchaseVat, "TRY"), formatCurrency(m.payableVat, "TRY")],
-                        ["Muhtasar Stopaj", formatCurrency(m.rentAmount, "TRY"), formatCurrency(m.totalWithholding, "TRY"), formatCurrency(m.totalWithholding, "TRY")],
-                        ["SGK Primi Yükü", "-", "-", formatCurrency(m.payrollSgkShare, "TRY")],
-                        [`Tahmini ${isCorporate ? "Kurumlar" : "Geçici"} Vergisi`, formatCurrency(m.netProfit, "TRY"), `%${estimatedTaxRate * 100}`, formatCurrency(estimatedMonthlyTax, "TRY")],
+                        ["Faturalı Satışlar", formatCurrency(periodIncome, "TRY"), formatCurrency(periodSalesVat, "TRY"), formatCurrency(periodIncome, "TRY")],
+                        ["Faturalı Alışlar", formatCurrency(periodExpense, "TRY"), formatCurrency(periodPurchaseVat, "TRY"), formatCurrency(periodExpense, "TRY")],
+                        ["Faturalı Net Matrah", formatCurrency(periodNetProfit, "TRY"), "-", formatCurrency(periodNetProfit, "TRY")],
+                        ["Ödenecek / Devreden KDV", "-", formatCurrency(periodSalesVat - periodPurchaseVat, "TRY"), formatCurrency(periodPayableVat, "TRY")],
+                        ["Muhtasar Stopaj", formatCurrency(periodRentAmount, "TRY"), formatCurrency(periodTotalWithholding, "TRY"), formatCurrency(periodTotalWithholding, "TRY")],
+                        ["SGK Primi Yükü", "-", "-", formatCurrency(periodPayrollSgkShare, "TRY")],
+                        [provisionalTaxTitle, formatCurrency(provisionalTaxBase, "TRY"), "-", formatCurrency(provisionalTaxPayable, "TRY")],
                       ],
                     })}
                     size="sm"
                   />
                 </div>
 
-                {/* TAX & STATUTORY OBLIGATIONS CARDS (4 Main Categories: Geçici/Kurumlar, Stopaj, SGK, KDV) */}
+                {/* STATUTORY OBLIGATIONS CARDS (4 Main Categories: Geçici/Kurumlar, Stopaj, SGK, KDV) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* 1. Geçici / Kurumlar Vergisi */}
+                  {/* 1. Geçici / Kurumlar Vergisi Card */}
                   <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                       <div className="flex items-center gap-2">
@@ -948,32 +1115,32 @@ export const Reports: React.FC<ReportsProps> = ({
                           <Building2 className="w-4 h-4" />
                         </div>
                         <h4 className="font-extrabold text-xs text-slate-900">
-                          {isCorporate ? "Kurumlar Vergisi" : "Geçici Gelir Vergisi"}
+                          {provisionalTaxTitle}
                         </h4>
                       </div>
                       <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-900 border border-purple-100">
-                        %{estimatedTaxRate * 100}
+                        {isCorporate ? "%25" : "GVK Tariff"}
                       </span>
                     </div>
 
                     <div className="space-y-1.5 text-xs font-medium text-slate-600">
                       <div className="flex justify-between">
-                        <span>Aylık Net Matrah:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{m.netProfit.toLocaleString("tr-TR")}</span>
+                        <span>Dönem Net Matrahı:</span>
+                        <span className="font-mono font-bold text-slate-900">₺{provisionalTaxBase.toLocaleString("tr-TR")}</span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-slate-100 text-purple-950 font-bold">
-                        <span>Aya İsabet Eden Vergi:</span>
+                        <span>Ödenecek Geçici Vergi:</span>
                         <span className="font-mono text-sm text-purple-900 font-extrabold">
-                          ₺{estimatedMonthlyTax.toLocaleString("tr-TR")}
+                          ₺{provisionalTaxPayable.toLocaleString("tr-TR")}
                         </span>
                       </div>
                     </div>
-                    <div className="text-[10px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                      Faturalı satışlar ({m.salesTotal.toLocaleString("tr-TR")} TL) eksi alışlar ({m.purchaseTotal.toLocaleString("tr-TR")} TL) üzerinden hesaplanmıştır.
+                    <div className="text-[10px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 leading-relaxed">
+                      {provisionalTaxDescription}
                     </div>
                   </div>
 
-                  {/* 2. Muhtasar Stopaj Vergisi */}
+                  {/* 2. Muhtasar Stopaj Vergisi Card */}
                   <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                       <div className="flex items-center gap-2">
@@ -990,26 +1157,26 @@ export const Reports: React.FC<ReportsProps> = ({
                     <div className="space-y-1.5 text-xs font-medium text-slate-600">
                       <div className="flex justify-between">
                         <span>Kira Stopajı (%20):</span>
-                        <span className="font-mono font-bold text-slate-900">₺{m.rentWithholding.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{periodRentWithholding.toLocaleString("tr-TR")}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Personel GV Stopajı:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{m.payrollIncomeTax.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{periodPayrollIncomeTax.toLocaleString("tr-TR")}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Beyanname Damga Vergisi:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{m.muhtasarDamga.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{periodMuhtasarDamga.toLocaleString("tr-TR")}</span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-indigo-950">
                         <span>Toplam Stopaj Yükü:</span>
                         <span className="font-mono text-sm text-indigo-900 font-extrabold">
-                          ₺{(m.totalWithholding + m.muhtasarDamga).toLocaleString("tr-TR")}
+                          ₺{(periodTotalWithholding + periodMuhtasarDamga).toLocaleString("tr-TR")}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* 3. SGK Sigorta Primi */}
+                  {/* 3. SGK Sigorta Primi Card */}
                   <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                       <div className="flex items-center gap-2">
@@ -1027,25 +1194,25 @@ export const Reports: React.FC<ReportsProps> = ({
                       <div className="flex justify-between">
                         <span>İşçi SGK Hissesi (%15):</span>
                         <span className="font-mono font-bold text-slate-900">
-                          ₺{employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.15), 0).toLocaleString("tr-TR")}
+                          ₺{(periodMonths.length * employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.15), 0)).toLocaleString("tr-TR")}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>İşveren SGK Hissesi (%20.5):</span>
                         <span className="font-mono font-bold text-slate-900">
-                          ₺{employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.205), 0).toLocaleString("tr-TR")}
+                          ₺{(periodMonths.length * employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.205), 0)).toLocaleString("tr-TR")}
                         </span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-emerald-950">
                         <span>Toplam SGK Yükü:</span>
                         <span className="font-mono text-sm text-emerald-700 font-extrabold">
-                          ₺{m.payrollSgkShare.toLocaleString("tr-TR")}
+                          ₺{periodPayrollSgkShare.toLocaleString("tr-TR")}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* 4. Katma Değer Vergisi (KDV) */}
+                  {/* 4. Katma Değer Vergisi (KDV) Card */}
                   <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                       <div className="flex items-center gap-2">
@@ -1062,27 +1229,27 @@ export const Reports: React.FC<ReportsProps> = ({
                     <div className="space-y-1.5 text-xs font-medium text-slate-600">
                       <div className="flex justify-between">
                         <span>Hesaplanan (Satış) KDV:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{m.salesVat.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{periodSalesVat.toLocaleString("tr-TR")}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>İndirilecek (Alış) KDV:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{m.purchaseVat.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{periodPurchaseVat.toLocaleString("tr-TR")}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>KDV Damga Vergisi:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{m.kdvDamga.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{periodKdvDamga.toLocaleString("tr-TR")}</span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-amber-950">
-                        <span>{m.deferredVat > 0 ? "Devreden KDV:" : "Ödenecek KDV:"}</span>
-                        <span className={`font-mono text-sm font-extrabold ${m.deferredVat > 0 ? "text-blue-700" : "text-amber-950"}`}>
-                          ₺{(m.deferredVat > 0 ? m.deferredVat : m.payableVat).toLocaleString("tr-TR")}
+                        <span>{periodDeferredVat > 0 ? "Devreden KDV:" : "Ödenecek KDV:"}</span>
+                        <span className={`font-mono text-sm font-extrabold ${periodDeferredVat > 0 ? "text-blue-700" : "text-amber-950"}`}>
+                          ₺{(periodDeferredVat > 0 ? periodDeferredVat : periodPayableVat).toLocaleString("tr-TR")}
                         </span>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* DETAILED INVOICE BREAKDOWN (ALIM & SATIŞ DETAYLARI) */}
+                {/* DETAILED INVOICE BREAKDOWN (ALIM & SATIŞ DETAYLARI) FOR SELECTED PERIOD */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                   {/* Faturalı Satışlar Tablosu */}
                   <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
@@ -1092,18 +1259,18 @@ export const Reports: React.FC<ReportsProps> = ({
                           <ArrowUpRight className="w-4 h-4" />
                         </div>
                         <div>
-                          <h4 className="font-extrabold text-sm text-slate-900">Faturalı Satışlar ({salesInvoices.length})</h4>
-                          <p className="text-[11px] text-slate-500 font-medium">Seçilen ayda kesilen tüm satış faturaları</p>
+                          <h4 className="font-extrabold text-sm text-slate-900">Faturalı Satışlar ({periodSalesInvoices.length})</h4>
+                          <p className="text-[11px] text-slate-500 font-medium">Seçilen dönemde kesilen tüm satış faturaları</p>
                         </div>
                       </div>
                       <span className="font-mono font-black text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
-                        Toplam: ₺{m.totalIncome.toLocaleString("tr-TR")}
+                        Toplam: ₺{periodIncome.toLocaleString("tr-TR")}
                       </span>
                     </div>
 
-                    {salesInvoices.length === 0 ? (
+                    {periodSalesInvoices.length === 0 ? (
                       <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs italic">
-                        {m.monthName} ayına ait kesilmiş satış faturası bulunmamaktadır.
+                        Seçilen döneme ait kesilmiş satış faturası bulunmamaktadır.
                       </div>
                     ) : (
                       <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200">
@@ -1119,7 +1286,7 @@ export const Reports: React.FC<ReportsProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                            {salesInvoices.map((inv) => (
+                            {periodSalesInvoices.map((inv) => (
                               <tr key={inv.id} className="hover:bg-emerald-50/40 transition-colors">
                                 <td className="p-2.5 font-mono text-slate-700">{formatDate(inv.issueDate)}</td>
                                 <td className="p-2.5 font-mono font-bold text-slate-900">{inv.invoiceNumber}</td>
@@ -1143,18 +1310,18 @@ export const Reports: React.FC<ReportsProps> = ({
                           <ArrowDownLeft className="w-4 h-4" />
                         </div>
                         <div>
-                          <h4 className="font-extrabold text-sm text-slate-900">Faturalı Alışlar ({purchaseInvoices.length})</h4>
-                          <p className="text-[11px] text-slate-500 font-medium">Seçilen ayda alınan tüm alış faturaları ve gider belgeleri</p>
+                          <h4 className="font-extrabold text-sm text-slate-900">Faturalı Alışlar ({periodPurchaseInvoices.length})</h4>
+                          <p className="text-[11px] text-slate-500 font-medium">Seçilen dönemde alınan tüm alış faturaları ve gider belgeleri</p>
                         </div>
                       </div>
                       <span className="font-mono font-black text-xs text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-xl">
-                        Toplam: ₺{m.totalExpense.toLocaleString("tr-TR")}
+                        Toplam: ₺{periodExpense.toLocaleString("tr-TR")}
                       </span>
                     </div>
 
-                    {purchaseInvoices.length === 0 ? (
+                    {periodPurchaseInvoices.length === 0 ? (
                       <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs italic">
-                        {m.monthName} ayına ait alış faturası bulunmamaktadır.
+                        Seçilen döneme ait alış faturası bulunmamaktadır.
                       </div>
                     ) : (
                       <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200">
@@ -1170,7 +1337,7 @@ export const Reports: React.FC<ReportsProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                            {purchaseInvoices.map((inv) => (
+                            {periodPurchaseInvoices.map((inv) => (
                               <tr key={inv.id} className="hover:bg-rose-50/40 transition-colors">
                                 <td className="p-2.5 font-mono text-slate-700">{formatDate(inv.issueDate)}</td>
                                 <td className="p-2.5 font-mono font-bold text-slate-900">{inv.invoiceNumber}</td>
