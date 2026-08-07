@@ -45,6 +45,7 @@ export const Quotes: React.FC<QuotesProps> = ({
   onDeleteQuote,
 }) => {
   const [search, setSearch] = useState("");
+  const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [printingQuote, setPrintingQuote] = useState<Quote | null>(null);
   const [formType, setFormType] = useState<"proforma" | "quote">("proforma");
@@ -210,6 +211,8 @@ export const Quotes: React.FC<QuotesProps> = ({
       (q.notes && q.notes.toLowerCase().includes(activeSearchQuery))
   );
 
+  const displayedQuotes = filteredQuotes.slice(0, displayLimit);
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Header (Lila Bal Peteği & Geometrik Desen) */}
@@ -335,7 +338,7 @@ export const Quotes: React.FC<QuotesProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredQuotes.map((q) => (
+                displayedQuotes.map((q) => (
                   <tr
                     key={q.id}
                     className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
@@ -423,6 +426,17 @@ export const Quotes: React.FC<QuotesProps> = ({
             </tbody>
           </table>
         </div>
+
+        {filteredQuotes.length > displayLimit && (
+          <div className="text-center mt-4">
+            <button
+              onClick={() => setDisplayLimit((prev) => prev + 100)}
+              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+            >
+              Daha Fazla Göster ({displayLimit} / {filteredQuotes.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MODAL: Create New Quote / Proforma Invoice */}

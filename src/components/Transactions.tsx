@@ -94,6 +94,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
 }) => {
   const [filterType, setFilterType] = useState<string>(forcedType || "all");
   const [search, setSearch] = useState<string>("");
+  const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
 
@@ -302,6 +303,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
     return true;
   });
 
+  const displayedTxs = filteredTxs.slice(0, displayLimit);
+
   const getTransactionsExportData = (): ExportData => {
     const headers = [
       "Tarih",
@@ -480,7 +483,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredTxs.map((tx) => {
+                displayedTxs.map((tx) => {
                   const isIncome = tx.type === "income" || tx.type === "collection";
                   return (
                     <tr
@@ -554,6 +557,17 @@ export const Transactions: React.FC<TransactionsProps> = ({
             </tbody>
           </table>
         </div>
+
+        {filteredTxs.length > displayLimit && (
+          <div className="text-center mt-4">
+            <button
+              onClick={() => setDisplayLimit((prev) => prev + 100)}
+              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+            >
+              Daha Fazla Göster ({displayLimit} / {filteredTxs.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MODAL: Create New Invoice-style Slip */}

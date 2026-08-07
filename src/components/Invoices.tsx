@@ -88,6 +88,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [collectAllAccountId, setCollectAllAccountId] = useState<string>(accounts[0]?.id || "");
 
   // Payment Form State
+  const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [selectedAccountId, setSelectedAccountId] = useState<string>(
     accounts[0]?.id || ""
   );
@@ -358,6 +359,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return true;
   });
 
+  const displayedInvoices = filteredInvoices.slice(0, displayLimit);
+
   const { subtotal, totalVat, grandTotal } = calculateTotals();
 
   const getInvoicesExportData = (): ExportData => {
@@ -606,7 +609,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredInvoices.map((inv) => (
+                displayedInvoices.map((inv) => (
                   <tr
                     key={inv.id}
                     className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
@@ -761,6 +764,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
             </tbody>
           </table>
         </div>
+
+        {filteredInvoices.length > displayLimit && (
+          <div className="text-center mt-4">
+            <button
+              onClick={() => setDisplayLimit((prev) => prev + 100)}
+              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+            >
+              Daha Fazla Göster ({displayLimit} / {filteredInvoices.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MODAL: Create New Invoice */}

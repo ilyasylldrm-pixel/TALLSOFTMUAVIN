@@ -68,6 +68,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
     }
   }, [forcedType]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedWaybillForView, setSelectedWaybillForView] = useState<Waybill | null>(null);
   const [convertConfirmWaybill, setConvertConfirmWaybill] = useState<Waybill | null>(null);
@@ -329,6 +330,8 @@ export const Waybills: React.FC<WaybillsProps> = ({
 
     return true;
   });
+
+  const displayedWaybills = filteredWaybills.slice(0, displayLimit);
 
   // Analytics Metrics
   const totalWaybillsCount = waybills.length;
@@ -749,7 +752,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredWaybills.map((waybill) => (
+                displayedWaybills.map((waybill) => (
                   <tr
                     key={waybill.id}
                     className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
@@ -872,6 +875,17 @@ export const Waybills: React.FC<WaybillsProps> = ({
             </tbody>
           </table>
         </div>
+
+        {filteredWaybills.length > displayLimit && (
+          <div className="text-center mt-4">
+            <button
+              onClick={() => setDisplayLimit((prev) => prev + 100)}
+              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+            >
+              Daha Fazla Göster ({displayLimit} / {filteredWaybills.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* NEW WAYBILL MODAL */}

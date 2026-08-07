@@ -244,6 +244,13 @@ export const Accounts: React.FC<AccountsProps> = ({
   const [internalSubModule, setInternalSubModule] = useState<FinanceSubModule>("kasa");
   const activeSubModule = activeFinanceSubTab || internalSubModule;
 
+  // Display limit states for Finance Sub-Modules
+  const [kasaDisplayLimit, setKasaDisplayLimit] = useState<number>(100);
+  const [bankDisplayLimit, setBankDisplayLimit] = useState<number>(100);
+  const [chequeDisplayLimit, setChequeDisplayLimit] = useState<number>(100);
+  const [noteDisplayLimit, setNoteDisplayLimit] = useState<number>(100);
+  const [virmanDisplayLimit, setVirmanDisplayLimit] = useState<number>(100);
+
   const setActiveSubModule = (tab: FinanceSubModule) => {
     setInternalSubModule(tab);
     if (onSelectFinanceSubTab) {
@@ -1018,6 +1025,12 @@ export const Accounts: React.FC<AccountsProps> = ({
     return true;
   });
 
+  const displayedKasaTransactions = kasaTransactions.slice(0, kasaDisplayLimit);
+  const displayedBankTransactions = bankTransactions.slice(0, bankDisplayLimit);
+  const displayedCheques = filteredCheques.slice(0, chequeDisplayLimit);
+  const displayedNotes = filteredNotes.slice(0, noteDisplayLimit);
+  const displayedVirmanTransactions = virmanTransactions.slice(0, virmanDisplayLimit);
+
   const renderDateFilterBar = (subModuleName: string) => {
     const isFiltered = Boolean(startDate || endDate);
     return (
@@ -1607,7 +1620,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    kasaTransactions.map((tx) => {
+                    displayedKasaTransactions.map((tx) => {
                       const isIncome = tx.type === "income" || tx.type === "collection";
                       return (
                         <tr
@@ -1683,6 +1696,17 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {kasaTransactions.length > kasaDisplayLimit && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={() => setKasaDisplayLimit((prev) => prev + 100)}
+                  className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+                >
+                  Daha Fazla Göster ({kasaDisplayLimit} / {kasaTransactions.length})
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1842,7 +1866,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    bankTransactions.map((tx) => {
+                    displayedBankTransactions.map((tx) => {
                       const isIncome = tx.type === "income" || tx.type === "collection";
                       return (
                         <tr
@@ -1918,6 +1942,17 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {bankTransactions.length > bankDisplayLimit && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={() => setBankDisplayLimit((prev) => prev + 100)}
+                  className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+                >
+                  Daha Fazla Göster ({bankDisplayLimit} / {bankTransactions.length})
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2026,7 +2061,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredCheques.map((c) => (
+                  displayedCheques.map((c) => (
                     <tr
                       key={c.id}
                       className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
@@ -2126,6 +2161,17 @@ export const Accounts: React.FC<AccountsProps> = ({
           </tbody>
             </table>
           </div>
+
+          {filteredCheques.length > chequeDisplayLimit && (
+            <div className="text-center mt-4">
+              <button
+                onClick={() => setChequeDisplayLimit((prev) => prev + 100)}
+                className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+              >
+                Daha Fazla Göster ({chequeDisplayLimit} / {filteredCheques.length})
+              </button>
+            </div>
+          )}
         </div>
         </div>
       )}
@@ -2234,7 +2280,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredNotes.map((n) => (
+                  displayedNotes.map((n) => (
                     <tr
                       key={n.id}
                       className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
@@ -2331,6 +2377,17 @@ export const Accounts: React.FC<AccountsProps> = ({
           </tbody>
             </table>
           </div>
+
+          {filteredNotes.length > noteDisplayLimit && (
+            <div className="text-center mt-4">
+              <button
+                onClick={() => setNoteDisplayLimit((prev) => prev + 100)}
+                className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+              >
+                Daha Fazla Göster ({noteDisplayLimit} / {filteredNotes.length})
+              </button>
+            </div>
+          )}
         </div>
         </div>
       )}
@@ -2477,7 +2534,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    virmanTransactions.map((tx) => (
+                    displayedVirmanTransactions.map((tx) => (
                       <tr
                         key={tx.id}
                         className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
@@ -2539,6 +2596,17 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {virmanTransactions.length > virmanDisplayLimit && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={() => setVirmanDisplayLimit((prev) => prev + 100)}
+                  className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+                >
+                  Daha Fazla Göster ({virmanDisplayLimit} / {virmanTransactions.length})
+                </button>
+              </div>
+            )}
           </div>
         </div>
         </div>

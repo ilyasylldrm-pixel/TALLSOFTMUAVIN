@@ -98,7 +98,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 }) => {
   const [filterType, setFilterType] = useState<string>("all");
   const [search, setSearch] = useState<string>("");
-  const [visibleCount, setVisibleCount] = useState(100); // PERF: baslangicta ilk 100 satir
+  const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
@@ -518,11 +518,11 @@ export const Contacts: React.FC<ContactsProps> = ({
     setIsModalOpen(false);
   };
 
-  // Filter Contacts.
-  // PERF: useDeferredValue arama girisini render'dan ayirir (yazarken takilmaz),
-  // useMemo filtreyi sadece ilgili girdiler degisince yeniden hesaplar.
-  const deferredQuery = useDeferredValue(globalSearchTerm || search);
-  const activeSearchQuery = deferredQuery.toLowerCase().trim();
+  // Filter Contacts
+  const deferredSearch = useDeferredValue(search);
+  const deferredGlobalSearch = useDeferredValue(globalSearchTerm);
+  const activeSearchQuery = (deferredGlobalSearch || deferredSearch).toLowerCase().trim();
+
   const filteredContacts = useMemo(() => {
     return contacts.filter((c) => {
       const accountCodeStr = getContactAccountCode(c).toLowerCase();
@@ -546,10 +546,7 @@ export const Contacts: React.FC<ContactsProps> = ({
     });
   }, [contacts, activeSearchQuery, filterType]);
 
-  // PERF: arama/filtre degisince listeyi bastan goster (ilk 100)
-  useEffect(() => {
-    setVisibleCount(100);
-  }, [activeSearchQuery, filterType]);
+  const displayedContacts = filteredContacts.slice(0, displayLimit);
 
   // Calculate Ledger / Muavin Entries for a selected contact
   const getLedgerEntries = (contactId: string): LedgerEntry[] => {
@@ -1384,7 +1381,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredContacts.slice(0, visibleCount).map((c) => {
+                displayedContacts.map((c) => {
                   const isReceivable = c.balance > 0;
                   const isPayable = c.balance < 0;
 
@@ -1548,14 +1545,13 @@ export const Contacts: React.FC<ContactsProps> = ({
           </table>
         </div>
 
-        {/* PERF: Kalan satirlari istege bagli goster (uzun listede DOM'u sinirlar) */}
-        {filteredContacts.length > visibleCount && (
-          <div className="flex justify-center pt-3">
+        {filteredContacts.length > displayLimit && (
+          <div className="text-center mt-4">
             <button
-              onClick={() => setVisibleCount((c) => c + 100)}
-              className="px-4 py-2 rounded-xl bg-purple-50 text-purple-900 font-bold text-xs border border-purple-200 hover:bg-purple-100 transition-colors"
+              onClick={() => setDisplayLimit((prev) => prev + 100)}
+              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
             >
-              Daha fazla göster ({filteredContacts.length - visibleCount} cari daha)
+              Daha Fazla Göster ({displayLimit} / {filteredContacts.length})
             </button>
           </div>
         )}

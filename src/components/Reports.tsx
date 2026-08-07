@@ -19,7 +19,6 @@ import {
   CheckCircle2,
   Info,
   Calculator,
-  Briefcase,
   ShieldCheck,
   Scale,
   ChevronDown,
@@ -104,6 +103,14 @@ const MONTH_NAMES = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
   "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
 ];
+
+const formatTL = (val: number | null | undefined): string => {
+  if (val === null || val === undefined || isNaN(Number(val))) return "0,00";
+  return Number(val).toLocaleString("tr-TR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
 export const Reports: React.FC<ReportsProps> = ({
   contacts,
@@ -726,37 +733,27 @@ export const Reports: React.FC<ReportsProps> = ({
                 <option value={2025}>2025 Mali Yılı</option>
               </select>
             </div>
-          </div>
-        </div>
 
-        {/* 5 SUMMARY STAT CARDS (Matching Finance Management Card Design) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-5 relative z-10">
-          {/* Card 1: Mükellef Rejimi */}
-          <div className="bg-white/90 border border-purple-200/80 rounded-2xl p-4 text-left shadow-2xs backdrop-blur-md hover:border-purple-300 transition-all">
-            <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-purple-950 tracking-wider">
-              <span>Mükellef Rejimi</span>
-              <Briefcase className="w-4 h-4 text-purple-700" />
-            </div>
-            <div className="mt-2 text-base font-black text-purple-950 truncate">
-              {activeTaxpayerType}
-            </div>
-            <p className="text-[10px] font-semibold text-purple-900/80 mt-1 truncate">
+            <p className="text-[10px] text-purple-950/80 font-semibold truncate pt-1 border-t border-purple-200/60">
               {taxFormulaDescription}
             </p>
           </div>
+        </div>
 
-          {/* Card 2: Ödenecek KDV */}
+        {/* 4 SUMMARY STAT CARDS (Matching Finance Management Card Design) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-5 relative z-10">
+          {/* Card 1: Ödenecek KDV */}
           <div className="bg-white/90 border border-amber-200/80 rounded-2xl p-4 text-left shadow-2xs backdrop-blur-md hover:border-amber-300 transition-all">
             <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-amber-950 tracking-wider">
               <span>Yıllık Ödenecek KDV</span>
               <Receipt className="w-4 h-4 text-amber-700" />
             </div>
             <div className="mt-2 text-lg font-black text-amber-950 font-mono">
-              {isExemptOrg ? "₺0,00" : `₺${annualPayableVat.toLocaleString("tr-TR")}`}
+              {isExemptOrg ? "₺0,00" : `₺${formatTL(annualPayableVat)}`}
             </div>
             <p className="text-[10px] font-semibold text-amber-900/80 mt-1 flex justify-between">
-              <span>Satış: ₺{annualSalesVat.toLocaleString("tr-TR")}</span>
-              <span>Alış: ₺{annualPurchaseVat.toLocaleString("tr-TR")}</span>
+              <span>Satış: ₺{formatTL(annualSalesVat)}</span>
+              <span>Alış: ₺{formatTL(annualPurchaseVat)}</span>
             </p>
           </div>
 
@@ -767,7 +764,7 @@ export const Reports: React.FC<ReportsProps> = ({
               <FileCheck className="w-4 h-4 text-indigo-700" />
             </div>
             <div className="mt-2 text-lg font-black text-indigo-950 font-mono">
-              ₺{annualWithholding.toLocaleString("tr-TR")}
+              ₺{formatTL(annualWithholding)}
             </div>
             <p className="text-[10px] font-semibold text-indigo-900/80 mt-1">
               GV + SGK + Kira Stopaj Toplamı
@@ -781,11 +778,11 @@ export const Reports: React.FC<ReportsProps> = ({
               <TrendingUp className="w-4 h-4 text-emerald-700" />
             </div>
             <div className="mt-2 text-lg font-black text-emerald-950 font-mono">
-              ₺{totalYearCalculatedTax.toLocaleString("tr-TR")}
+              ₺{formatTL(totalYearCalculatedTax)}
             </div>
             <p className="text-[10px] font-semibold text-emerald-900/80 mt-1 truncate">
               {isCorporate || isCoop
-                ? `Matrah: ₺${corporateTaxableBase.toLocaleString("tr-TR")}`
+                ? `Matrah: ₺${formatTL(corporateTaxableBase)}`
                 : "Artan Oranlı Tarife (GVK M.103)"}
             </p>
           </div>
@@ -797,7 +794,7 @@ export const Reports: React.FC<ReportsProps> = ({
               <Calculator className="w-4 h-4 text-blue-700" />
             </div>
             <div className="mt-2 text-lg font-black text-blue-950 font-mono">
-              ₺{(annualMonthlyTaxLoad + totalYearCalculatedTax + totalGeçiciDamga + YILLIK_DAMGA_VERGISI).toLocaleString("tr-TR")}
+              ₺{formatTL(annualMonthlyTaxLoad + totalYearCalculatedTax + totalGeçiciDamga + YILLIK_DAMGA_VERGISI)}
             </div>
             <p className="text-[10px] font-semibold text-blue-900/80 mt-1">
               Tüm Yasal Vergiler + Damga
@@ -1021,7 +1018,7 @@ export const Reports: React.FC<ReportsProps> = ({
               const qData = quarterDetails[qIdx];
               provisionalTaxBase = qData.qProfit;
               provisionalTaxPayable = qData.qPayableTax;
-              provisionalTaxDescription = `${qIdx + 1}. Çeyrek net karı (₺${qData.qProfit.toLocaleString("tr-TR")}) ve kumulatif matrah (₺${qData.cumulativeProfit.toLocaleString("tr-TR")}) üzerinden hesaplanan ödenecek geçici vergi.`;
+              provisionalTaxDescription = `${qIdx + 1}. Çeyrek net karı (₺${formatTL(qData.qProfit)}) ve kumulatif matrah (₺${formatTL(qData.cumulativeProfit)}) üzerinden hesaplanan ödenecek geçici vergi.`;
             } else if (selectedPeriod.type === "month") {
               const mIdx = selectedPeriod.index;
               provisionalTaxBase = Math.max(0, periodNetProfit);
@@ -1126,12 +1123,12 @@ export const Reports: React.FC<ReportsProps> = ({
                     <div className="space-y-1.5 text-xs font-medium text-slate-600">
                       <div className="flex justify-between">
                         <span>Dönem Net Matrahı:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{provisionalTaxBase.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{formatTL(provisionalTaxBase)}</span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-slate-100 text-purple-950 font-bold">
                         <span>Ödenecek Geçici Vergi:</span>
                         <span className="font-mono text-sm text-purple-900 font-extrabold">
-                          ₺{provisionalTaxPayable.toLocaleString("tr-TR")}
+                          ₺{formatTL(provisionalTaxPayable)}
                         </span>
                       </div>
                     </div>
@@ -1157,20 +1154,20 @@ export const Reports: React.FC<ReportsProps> = ({
                     <div className="space-y-1.5 text-xs font-medium text-slate-600">
                       <div className="flex justify-between">
                         <span>Kira Stopajı (%20):</span>
-                        <span className="font-mono font-bold text-slate-900">₺{periodRentWithholding.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{formatTL(periodRentWithholding)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Personel GV Stopajı:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{periodPayrollIncomeTax.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{formatTL(periodPayrollIncomeTax)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Beyanname Damga Vergisi:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{periodMuhtasarDamga.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{formatTL(periodMuhtasarDamga)}</span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-indigo-950">
                         <span>Toplam Stopaj Yükü:</span>
                         <span className="font-mono text-sm text-indigo-900 font-extrabold">
-                          ₺{(periodTotalWithholding + periodMuhtasarDamga).toLocaleString("tr-TR")}
+                          ₺{formatTL(periodTotalWithholding + periodMuhtasarDamga)}
                         </span>
                       </div>
                     </div>
@@ -1194,19 +1191,19 @@ export const Reports: React.FC<ReportsProps> = ({
                       <div className="flex justify-between">
                         <span>İşçi SGK Hissesi (%15):</span>
                         <span className="font-mono font-bold text-slate-900">
-                          ₺{(periodMonths.length * employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.15), 0)).toLocaleString("tr-TR")}
+                          ₺{formatTL(periodMonths.length * employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.15), 0))}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>İşveren SGK Hissesi (%20.5):</span>
                         <span className="font-mono font-bold text-slate-900">
-                          ₺{(periodMonths.length * employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.205), 0)).toLocaleString("tr-TR")}
+                          ₺{formatTL(periodMonths.length * employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.205), 0))}
                         </span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-emerald-950">
                         <span>Toplam SGK Yükü:</span>
                         <span className="font-mono text-sm text-emerald-700 font-extrabold">
-                          ₺{periodPayrollSgkShare.toLocaleString("tr-TR")}
+                          ₺{formatTL(periodPayrollSgkShare)}
                         </span>
                       </div>
                     </div>
@@ -1229,20 +1226,20 @@ export const Reports: React.FC<ReportsProps> = ({
                     <div className="space-y-1.5 text-xs font-medium text-slate-600">
                       <div className="flex justify-between">
                         <span>Hesaplanan (Satış) KDV:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{periodSalesVat.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{formatTL(periodSalesVat)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>İndirilecek (Alış) KDV:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{periodPurchaseVat.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{formatTL(periodPurchaseVat)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>KDV Damga Vergisi:</span>
-                        <span className="font-mono font-bold text-slate-900">₺{periodKdvDamga.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono font-bold text-slate-900">₺{formatTL(periodKdvDamga)}</span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-amber-950">
                         <span>{periodDeferredVat > 0 ? "Devreden KDV:" : "Ödenecek KDV:"}</span>
                         <span className={`font-mono text-sm font-extrabold ${periodDeferredVat > 0 ? "text-blue-700" : "text-amber-950"}`}>
-                          ₺{(periodDeferredVat > 0 ? periodDeferredVat : periodPayableVat).toLocaleString("tr-TR")}
+                          ₺{formatTL(periodDeferredVat > 0 ? periodDeferredVat : periodPayableVat)}
                         </span>
                       </div>
                     </div>
@@ -1264,7 +1261,7 @@ export const Reports: React.FC<ReportsProps> = ({
                         </div>
                       </div>
                       <span className="font-mono font-black text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
-                        Toplam: ₺{periodIncome.toLocaleString("tr-TR")}
+                        Toplam: ₺{formatTL(periodIncome)}
                       </span>
                     </div>
 
@@ -1291,9 +1288,9 @@ export const Reports: React.FC<ReportsProps> = ({
                                 <td className="p-2.5 font-mono text-slate-700">{formatDate(inv.issueDate)}</td>
                                 <td className="p-2.5 font-mono font-bold text-slate-900">{inv.invoiceNumber}</td>
                                 <td className="p-2.5 font-semibold text-slate-800 truncate max-w-[150px]">{inv.contactName}</td>
-                                <td className="p-2.5 text-right font-mono text-slate-700">₺{(inv.subtotal || 0).toLocaleString("tr-TR")}</td>
-                                <td className="p-2.5 text-right font-mono text-emerald-700 font-semibold">₺{(inv.totalVat || 0).toLocaleString("tr-TR")}</td>
-                                <td className="p-2.5 text-right font-mono font-bold text-emerald-800">₺{(inv.grandTotal || 0).toLocaleString("tr-TR")}</td>
+                                <td className="p-2.5 text-right font-mono text-slate-700">₺{formatTL(inv.subtotal || 0)}</td>
+                                <td className="p-2.5 text-right font-mono text-emerald-700 font-semibold">₺{formatTL(inv.totalVat || 0)}</td>
+                                <td className="p-2.5 text-right font-mono font-bold text-emerald-800">₺{formatTL(inv.grandTotal || 0)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1315,7 +1312,7 @@ export const Reports: React.FC<ReportsProps> = ({
                         </div>
                       </div>
                       <span className="font-mono font-black text-xs text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-xl">
-                        Toplam: ₺{periodExpense.toLocaleString("tr-TR")}
+                        Toplam: ₺{formatTL(periodExpense)}
                       </span>
                     </div>
 
@@ -1342,9 +1339,9 @@ export const Reports: React.FC<ReportsProps> = ({
                                 <td className="p-2.5 font-mono text-slate-700">{formatDate(inv.issueDate)}</td>
                                 <td className="p-2.5 font-mono font-bold text-slate-900">{inv.invoiceNumber}</td>
                                 <td className="p-2.5 font-semibold text-slate-800 truncate max-w-[150px]">{inv.contactName}</td>
-                                <td className="p-2.5 text-right font-mono text-slate-700">₺{(inv.subtotal || 0).toLocaleString("tr-TR")}</td>
-                                <td className="p-2.5 text-right font-mono text-indigo-700 font-semibold">₺{(inv.totalVat || 0).toLocaleString("tr-TR")}</td>
-                                <td className="p-2.5 text-right font-mono font-bold text-rose-800">₺{(inv.grandTotal || 0).toLocaleString("tr-TR")}</td>
+                                <td className="p-2.5 text-right font-mono text-slate-700">₺{formatTL(inv.subtotal || 0)}</td>
+                                <td className="p-2.5 text-right font-mono text-indigo-700 font-semibold">₺{formatTL(inv.totalVat || 0)}</td>
+                                <td className="p-2.5 text-right font-mono font-bold text-rose-800">₺{formatTL(inv.grandTotal || 0)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1407,15 +1404,15 @@ export const Reports: React.FC<ReportsProps> = ({
                     <div className="space-y-1.5 text-xs text-slate-300 font-medium">
                       <div className="flex justify-between">
                         <span>Dönemsel Gelir:</span>
-                        <span className="font-mono text-emerald-400">₺{q.qIncome.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono text-emerald-400">₺{formatTL(q.qIncome)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Dönemsel Gider:</span>
-                        <span className="font-mono text-rose-300">₺{q.qExpense.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono text-rose-300">₺{formatTL(q.qExpense)}</span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-slate-800 font-bold text-white">
                         <span>Kümülatif Matrah:</span>
-                        <span className="font-mono">₺{q.cumulativeProfit.toLocaleString("tr-TR")}</span>
+                        <span className="font-mono">₺{formatTL(q.cumulativeProfit)}</span>
                       </div>
                     </div>
                   </div>
@@ -1423,11 +1420,11 @@ export const Reports: React.FC<ReportsProps> = ({
                   <div className="pt-2 border-t border-slate-800 space-y-1">
                     <div className="text-[11px] text-slate-400">Hesaplanan Geçici Vergi:</div>
                     <div className="text-xl font-black text-emerald-400 font-mono">
-                      ₺{q.qPayableTax.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      ₺{formatTL(q.qPayableTax)}
                     </div>
                     <div className="text-[10px] text-slate-400 flex justify-between">
                       <span>Beyanname Damgası:</span>
-                      <span className="font-mono text-slate-300">₺{q.damgaVergisi.toLocaleString("tr-TR")}</span>
+                      <span className="font-mono text-slate-300">₺{formatTL(q.damgaVergisi)}</span>
                     </div>
                   </div>
                 </div>
@@ -1449,21 +1446,21 @@ export const Reports: React.FC<ReportsProps> = ({
                     <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
                       <span className="text-slate-500 font-semibold block">Yıllık Toplam Matrah:</span>
                       <span className="text-lg font-black text-slate-900 font-mono">
-                        ₺{totalYearNetProfit.toLocaleString("tr-TR")}
+                        ₺{formatTL(totalYearNetProfit)}
                       </span>
                     </div>
 
                     <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
                       <span className="text-slate-500 font-semibold block">Ödenen Geçici Vergiler:</span>
                       <span className="text-lg font-black text-indigo-700 font-mono">
-                        ₺{totalGeçiciVergiPayable.toLocaleString("tr-TR")}
+                        ₺{formatTL(totalGeçiciVergiPayable)}
                       </span>
                     </div>
 
                     <div className="bg-purple-900 text-white p-3 rounded-xl space-y-1 shadow-xs">
                       <span className="text-purple-200 font-semibold block">Net Ödenecek Yıllık Vergi:</span>
                       <span className="text-xl font-black text-emerald-300 font-mono">
-                        ₺{finalPayableAnnualTax.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        ₺{formatTL(finalPayableAnnualTax)}
                       </span>
                     </div>
                   </div>
@@ -1580,31 +1577,31 @@ export const Reports: React.FC<ReportsProps> = ({
                             <tr className="hover:bg-slate-50">
                               <td className="p-2 text-center font-bold text-slate-500">1</td>
                               <td className="p-2 font-sans font-semibold text-slate-900">Ticari Bilanço Net Karı (Gelir - Gider)</td>
-                              <td className="p-2 text-right font-bold text-slate-900">₺{totalYearNetProfit.toLocaleString("tr-TR")}</td>
+                              <td className="p-2 text-right font-bold text-slate-900">₺{formatTL(totalYearNetProfit)}</td>
                               <td className="p-2 font-sans text-[11px] text-slate-500">690 Dönem Net Karı Hesabı</td>
                             </tr>
                             <tr className="hover:bg-purple-50/30">
                               <td className="p-2 text-center font-bold text-purple-700">2</td>
                               <td className="p-2 font-sans font-semibold text-purple-950">(+) Kanunen Kabul Edilmeyen Giderler (KKEG)</td>
-                              <td className="p-2 text-right font-bold text-purple-900">+₺{(kkegAmount || 0).toLocaleString("tr-TR")}</td>
+                              <td className="p-2 text-right font-bold text-purple-900">+₺{formatTL(kkegAmount || 0)}</td>
                               <td className="p-2 font-sans text-[11px] text-slate-500">KVK M.11 Matraha İlave</td>
                             </tr>
                             <tr className="hover:bg-emerald-50/30">
                               <td className="p-2 text-center font-bold text-emerald-700">3</td>
                               <td className="p-2 font-sans font-semibold text-emerald-950">(-) İndirim ve İstisnalar Toplamı</td>
-                              <td className="p-2 text-right font-bold text-emerald-700">-₺{(exemptionsAmount || 0).toLocaleString("tr-TR")}</td>
+                              <td className="p-2 text-right font-bold text-emerald-700">-₺{formatTL(exemptionsAmount || 0)}</td>
                               <td className="p-2 font-sans text-[11px] text-slate-500">KVK M.5 / M.10 İndirimler</td>
                             </tr>
                             <tr className="hover:bg-indigo-50/30">
                               <td className="p-2 text-center font-bold text-indigo-700">4</td>
                               <td className="p-2 font-sans font-semibold text-indigo-950">(-) Geçmiş Yıl Mali Zararları Mahsubu</td>
-                              <td className="p-2 text-right font-bold text-indigo-700">-₺{(priorLossesAmount || 0).toLocaleString("tr-TR")}</td>
+                              <td className="p-2 text-right font-bold text-indigo-700">-₺{formatTL(priorLossesAmount || 0)}</td>
                               <td className="p-2 font-sans text-[11px] text-slate-500">KVK M.9 (Son 5 Yıl)</td>
                             </tr>
                             <tr className="bg-purple-100/70 font-bold border-y-2 border-purple-300">
                               <td className="p-2.5 text-center text-purple-950 font-black">5</td>
                               <td className="p-2.5 font-sans font-black text-purple-950 text-xs sm:text-sm">KURUMLAR VERGİSİ MATRAHI (Mali Kar)</td>
-                              <td className="p-2.5 text-right font-black text-purple-950 text-sm sm:text-base">₺{corporateTaxableBase.toLocaleString("tr-TR")}</td>
+                              <td className="p-2.5 text-right font-black text-purple-950 text-sm sm:text-base">₺{formatTL(corporateTaxableBase)}</td>
                               <td className="p-2.5 font-sans text-xs text-purple-900 font-extrabold">Vergilendirilecek Net Matrah</td>
                             </tr>
                             <tr className="hover:bg-slate-50">
@@ -1616,19 +1613,19 @@ export const Reports: React.FC<ReportsProps> = ({
                             <tr className="bg-purple-50 font-bold">
                               <td className="p-2.5 text-center text-purple-950">7</td>
                               <td className="p-2.5 font-sans font-extrabold text-purple-950">HESAPLANAN KURUMLAR VERGİSİ (Matrah × %25)</td>
-                              <td className="p-2.5 text-right font-black text-purple-950 text-sm">₺{calculatedCorporateTax.toLocaleString("tr-TR")}</td>
+                              <td className="p-2.5 text-right font-black text-purple-950 text-sm">₺{formatTL(calculatedCorporateTax)}</td>
                               <td className="p-2.5 font-sans text-[11px] text-purple-800 font-bold">Yıllık Brüt Vergi Yükü</td>
                             </tr>
                             <tr className="hover:bg-slate-50">
                               <td className="p-2 text-center font-bold text-slate-500">8</td>
                               <td className="p-2 font-sans font-semibold text-slate-900">(-) Ödenen Geçici Vergiler Toplamı (1-4. Dönem)</td>
-                              <td className="p-2 text-right font-bold text-indigo-700">-₺{totalGeçiciVergiPayable.toLocaleString("tr-TR")}</td>
+                              <td className="p-2 text-right font-bold text-indigo-700">-₺{formatTL(totalGeçiciVergiPayable)}</td>
                               <td className="p-2 font-sans text-[11px] text-slate-500">GVK M.120 / KVK M.32 Geçici Vergi</td>
                             </tr>
                             <tr className="hover:bg-slate-50">
                               <td className="p-2 text-center font-bold text-slate-500">9</td>
                               <td className="p-2 font-sans font-semibold text-slate-900">(-) Kesinti Yoluyla Ödenen Vergiler (Stopaj)</td>
-                              <td className="p-2 text-right font-bold text-amber-700">-₺{(prepaidWithholdingAmount || 0).toLocaleString("tr-TR")}</td>
+                              <td className="p-2 text-right font-bold text-amber-700">-₺{formatTL(prepaidWithholdingAmount || 0)}</td>
                               <td className="p-2 font-sans text-[11px] text-slate-500">GVK M.94 / KVK M.15 Stopaj</td>
                             </tr>
                             <tr className={`font-black text-sm border-t-2 ${netPayableCorporateTax > 0 ? "bg-purple-900 text-white" : "bg-emerald-800 text-white"}`}>
@@ -1637,7 +1634,7 @@ export const Reports: React.FC<ReportsProps> = ({
                                 {netPayableCorporateTax > 0 ? "ÖDENECEK KURUMLAR VERGİSİ" : "İADE ALINACAK KURUMLAR VERGİSİ"}
                               </td>
                               <td className="p-3 text-right font-mono text-base text-emerald-300">
-                                ₺{(netPayableCorporateTax > 0 ? netPayableCorporateTax : corporateRefundTax).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                ₺{formatTL(netPayableCorporateTax > 0 ? netPayableCorporateTax : corporateRefundTax)}
                               </td>
                               <td className="p-3 font-sans text-xs text-purple-200 font-semibold">
                                 {netPayableCorporateTax > 0 ? "Son Beyan: 30 Nisan 2027" : "İade / Mahsup Talebi"}
@@ -1661,15 +1658,15 @@ export const Reports: React.FC<ReportsProps> = ({
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1 font-mono">
                           <div className="bg-slate-800/80 p-2.5 rounded-lg">
                             <span className="text-slate-400 text-[10px] block font-sans">Net Dağıtılabilir Kar:</span>
-                            <span className="font-bold text-white">₺{Math.max(0, totalYearNetProfit - calculatedCorporateTax).toLocaleString("tr-TR")}</span>
+                            <span className="font-bold text-white">₺{formatTL(Math.max(0, totalYearNetProfit - calculatedCorporateTax))}</span>
                           </div>
                           <div className="bg-slate-800/80 p-2.5 rounded-lg">
                             <span className="text-slate-400 text-[10px] block font-sans">Ortaklara Dağıtılırsa Stopaj (%10):</span>
-                            <span className="font-bold text-amber-400">₺{Math.round(Math.max(0, totalYearNetProfit - calculatedCorporateTax) * 0.10).toLocaleString("tr-TR")}</span>
+                            <span className="font-bold text-amber-400">₺{formatTL(Math.round(Math.max(0, totalYearNetProfit - calculatedCorporateTax) * 0.10))}</span>
                           </div>
                           <div className="bg-slate-800/80 p-2.5 rounded-lg">
                             <span className="text-slate-400 text-[10px] block font-sans">Ortakların Ele Geçen Net Kar:</span>
-                            <span className="font-bold text-emerald-400">₺{Math.round(Math.max(0, totalYearNetProfit - calculatedCorporateTax) * 0.90).toLocaleString("tr-TR")}</span>
+                            <span className="font-bold text-emerald-400">₺{formatTL(Math.round(Math.max(0, totalYearNetProfit - calculatedCorporateTax) * 0.90))}</span>
                           </div>
                         </div>
                       </div>
@@ -1696,9 +1693,9 @@ export const Reports: React.FC<ReportsProps> = ({
                             {calculateIndividualIncomeTax(totalYearNetProfit).bracketBreakdown.map((item, idx) => (
                               <tr key={idx} className="hover:bg-slate-50">
                                 <td className="p-2 font-sans font-semibold text-slate-800">{item.bracket}</td>
-                                <td className="p-2 text-right text-slate-900">₺{item.taxableAmount.toLocaleString("tr-TR")}</td>
+                                <td className="p-2 text-right text-slate-900">₺{formatTL(item.taxableAmount)}</td>
                                 <td className="p-2 text-right text-purple-700 font-bold">%{item.rate}</td>
-                                <td className="p-2 text-right text-emerald-700 font-bold">₺{item.taxAmount.toLocaleString("tr-TR")}</td>
+                                <td className="p-2 text-right text-emerald-700 font-bold">₺{formatTL(item.taxAmount)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1855,7 +1852,7 @@ export const Reports: React.FC<ReportsProps> = ({
                           {item.credit > 0 ? `₺${item.credit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "-"}
                         </td>
                         <td className="p-3 text-right font-mono text-indigo-700 font-semibold">
-                          {item.vatAmount > 0 ? `₺${item.vatAmount.toLocaleString("tr-TR")}` : "-"}
+                          {item.vatAmount > 0 ? `₺${formatTL(item.vatAmount)}` : "-"}
                         </td>
                         <td className="p-3 text-right font-mono font-black text-slate-900">
                           ₺{item.runningBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}

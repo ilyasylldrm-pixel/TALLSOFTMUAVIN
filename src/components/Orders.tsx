@@ -58,6 +58,7 @@ export const Orders: React.FC<OrdersProps> = ({
   const [activeTab, setActiveTab] = useState<"all" | "sales" | "purchase">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedOrderForView, setSelectedOrderForView] = useState<Order | null>(null);
   const [convertConfirmOrder, setConvertConfirmOrder] = useState<Order | null>(null);
@@ -299,6 +300,8 @@ export const Orders: React.FC<OrdersProps> = ({
 
     return true;
   });
+
+  const displayedOrders = filteredOrders.slice(0, displayLimit);
 
   // Analytics Metrics
   const totalOrdersCount = orders.length;
@@ -586,7 +589,7 @@ export const Orders: React.FC<OrdersProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order) => (
+                displayedOrders.map((order) => (
                   <tr
                     key={order.id}
                     className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
@@ -694,6 +697,17 @@ export const Orders: React.FC<OrdersProps> = ({
             </tbody>
           </table>
         </div>
+
+        {filteredOrders.length > displayLimit && (
+          <div className="text-center mt-4">
+            <button
+              onClick={() => setDisplayLimit((prev) => prev + 100)}
+              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+            >
+              Daha Fazla Göster ({displayLimit} / {filteredOrders.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* NEW ORDER MODAL */}

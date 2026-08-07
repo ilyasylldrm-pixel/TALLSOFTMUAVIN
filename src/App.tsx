@@ -117,10 +117,7 @@ export default function App() {
     setAuthModalOpen(true);
   };
 
-  // Sync state changes with localStorage.
-  // PERF: Her koleksiyon icin AYRI efekt — sadece degisen slice diske yazilir.
-  // (Onceki tek efekt her data degisiminde 17 koleksiyonu birden JSON.stringify
-  //  edip yaziyordu; bu, cari/stok gibi buyuk listelerde main thread'i kilitliyordu.)
+  // Sync state changes with localStorage per slice
   useEffect(() => { saveStoredData("SETTINGS", data.settings); }, [data.settings]);
   useEffect(() => { saveStoredData("CONTACTS", data.contacts); }, [data.contacts]);
   useEffect(() => { saveStoredData("ACCOUNTS", data.accounts); }, [data.accounts]);

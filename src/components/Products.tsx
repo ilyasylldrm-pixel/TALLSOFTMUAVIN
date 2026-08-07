@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useDeferredValue } from "react";
+import React, { useState, useMemo, useDeferredValue } from "react";
 import { Product, Invoice, Contact, Warehouse } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
@@ -263,9 +263,18 @@ export const Products: React.FC<ProductsProps> = ({
 
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("all");
   const [search, setSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(100); // PERF: baslangicta ilk 100 satir
+  const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Precompute analytics map for all products once
+  const analyticsMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getProductAnalytics>>();
+    products.forEach((p) => {
+      map.set(p.id, getProductAnalytics(p, invoices));
+    });
+    return map;
+  }, [products, invoices]);
 
   // Selected product for Ekstre Modal
   const [selectedEkstreProduct, setSelectedEkstreProduct] = useState<Product | null>(null);
@@ -464,11 +473,11 @@ export const Products: React.FC<ProductsProps> = ({
     setIsModalOpen(false);
   };
 
-  // Filter products by search and selected warehouse.
-  // PERF: useDeferredValue arama girisini render'dan ayirir (yazarken takilmaz),
-  // useMemo ise filtreyi sadece ilgili girdiler degisince yeniden hesaplar.
-  const deferredSearch = useDeferredValue(globalSearchTerm || search);
-  const activeSearchQuery = deferredSearch.toLowerCase().trim();
+  // Filter products by search and selected warehouse
+  const deferredSearch = useDeferredValue(search);
+  const deferredGlobalSearch = useDeferredValue(globalSearchTerm);
+  const activeSearchQuery = (deferredGlobalSearch || deferredSearch).toLowerCase().trim();
+
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       const matchesSearch =
@@ -488,19 +497,7 @@ export const Products: React.FC<ProductsProps> = ({
     });
   }, [products, activeSearchQuery, selectedWarehouseId, activeWarehouses]);
 
-  // PERF: Onceki kod her urun satirinda getProductAnalytics(p, invoices) cagiriyordu
-  // (= her render'da O(urun x fatura)). Simdi tum urunlerin analitigini TEK seferde,
-  // sadece products/invoices degisince hesaplayip Map'te tutuyoruz.
-  const analyticsByProduct = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof getProductAnalytics>>();
-    products.forEach((p) => map.set(p.id, getProductAnalytics(p, invoices)));
-    return map;
-  }, [products, invoices]);
-
-  // PERF: arama/filtre degisince listeyi bastan goster (ilk 100)
-  useEffect(() => {
-    setVisibleCount(100);
-  }, [activeSearchQuery, selectedWarehouseId]);
+  const displayedProducts = filteredProducts.slice(0, displayLimit);
 
   const getStockTypeBadgeClass = (st?: string) => {
     switch (st) {
@@ -543,10 +540,9 @@ export const Products: React.FC<ProductsProps> = ({
   const totalConsolidatedValue = products.reduce((acc, p) => acc + (p.stockQuantity || 0) * (p.buyPrice || 0), 0);
 
   // Analytics for selected Ekstre Product
-  const ekstreAnalytics = useMemo(
-    () => (selectedEkstreProduct ? getProductAnalytics(selectedEkstreProduct, invoices) : null),
-    [selectedEkstreProduct, invoices]
-  );
+  const ekstreAnalytics = selectedEkstreProduct
+    ? getProductAnalytics(selectedEkstreProduct, invoices)
+    : null;
 
   const filteredEkstreMovements = ekstreAnalytics
     ? ekstreAnalytics.movements.filter((m) => {
@@ -947,10 +943,10 @@ export const Products: React.FC<ProductsProps> = ({
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.slice(0, visibleCount).map((p) => {
+              {displayedProducts.map((p) => {
                 const stockInWh = getProductStockInWarehouse(p, selectedWarehouseId, activeWarehouses);
                 const isCritical = p.minStockAlert && stockInWh <= p.minStockAlert;
-                const analytics = analyticsByProduct.get(p.id) ?? getProductAnalytics(p, invoices);
+                const analytics = analyticsMap.get(p.id) || getProductAnalytics(p, invoices);
 
                 return (
                   <tr
@@ -1124,14 +1120,13 @@ export const Products: React.FC<ProductsProps> = ({
           </table>
         </div>
 
-        {/* PERF: Kalan satirlari istege bagli goster (uzun listede DOM'u sinirlar) */}
-        {filteredProducts.length > visibleCount && (
-          <div className="flex justify-center pt-3">
+        {filteredProducts.length > displayLimit && (
+          <div className="text-center mt-4">
             <button
-              onClick={() => setVisibleCount((c) => c + 100)}
-              className="px-4 py-2 rounded-xl bg-purple-50 text-purple-900 font-bold text-xs border border-purple-200 hover:bg-purple-100 transition-colors"
+              onClick={() => setDisplayLimit((prev) => prev + 100)}
+              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
             >
-              Daha fazla göster ({filteredProducts.length - visibleCount} ürün daha)
+              Daha Fazla Göster ({displayLimit} / {filteredProducts.length})
             </button>
           </div>
         )}
