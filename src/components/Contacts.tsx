@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useDeferredValue } from "react";
 import { Contact, ContactType, LedgerEntry, Invoice, Transaction, Account, Cheque, PromissoryNote, CompanySettings, getContactAccountCode } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas } from "../utils/exportUtils";
@@ -98,6 +98,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 }) => {
   const [filterType, setFilterType] = useState<string>("all");
   const [search, setSearch] = useState<string>("");
+  const [visibleCount, setVisibleCount] = useState(100); // PERF: baslangicta ilk 100 satir
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
@@ -517,28 +518,38 @@ export const Contacts: React.FC<ContactsProps> = ({
     setIsModalOpen(false);
   };
 
-  // Filter Contacts
-  const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
-  const filteredContacts = contacts.filter((c) => {
-    const accountCodeStr = getContactAccountCode(c).toLowerCase();
-    const matchesSearch =
-      !activeSearchQuery ||
-      c.name.toLowerCase().includes(activeSearchQuery) ||
-      accountCodeStr.includes(activeSearchQuery) ||
-      (c.taxNumber && c.taxNumber.toLowerCase().includes(activeSearchQuery)) ||
-      (c.companyTitle && c.companyTitle.toLowerCase().includes(activeSearchQuery)) ||
-      (c.phone && c.phone.toLowerCase().includes(activeSearchQuery)) ||
-      (c.email && c.email.toLowerCase().includes(activeSearchQuery));
+  // Filter Contacts.
+  // PERF: useDeferredValue arama girisini render'dan ayirir (yazarken takilmaz),
+  // useMemo filtreyi sadece ilgili girdiler degisince yeniden hesaplar.
+  const deferredQuery = useDeferredValue(globalSearchTerm || search);
+  const activeSearchQuery = deferredQuery.toLowerCase().trim();
+  const filteredContacts = useMemo(() => {
+    return contacts.filter((c) => {
+      const accountCodeStr = getContactAccountCode(c).toLowerCase();
+      const matchesSearch =
+        !activeSearchQuery ||
+        c.name.toLowerCase().includes(activeSearchQuery) ||
+        accountCodeStr.includes(activeSearchQuery) ||
+        (c.taxNumber && c.taxNumber.toLowerCase().includes(activeSearchQuery)) ||
+        (c.companyTitle && c.companyTitle.toLowerCase().includes(activeSearchQuery)) ||
+        (c.phone && c.phone.toLowerCase().includes(activeSearchQuery)) ||
+        (c.email && c.email.toLowerCase().includes(activeSearchQuery));
 
-    if (!matchesSearch) return false;
+      if (!matchesSearch) return false;
 
-    if (filterType === "customers") return c.contactType === "customer" || c.contactType === "both";
-    if (filterType === "vendors") return c.contactType === "vendor" || c.contactType === "both";
-    if (filterType === "receivables") return c.balance > 0;
-    if (filterType === "payables") return c.balance < 0;
+      if (filterType === "customers") return c.contactType === "customer" || c.contactType === "both";
+      if (filterType === "vendors") return c.contactType === "vendor" || c.contactType === "both";
+      if (filterType === "receivables") return c.balance > 0;
+      if (filterType === "payables") return c.balance < 0;
 
-    return true;
-  });
+      return true;
+    });
+  }, [contacts, activeSearchQuery, filterType]);
+
+  // PERF: arama/filtre degisince listeyi bastan goster (ilk 100)
+  useEffect(() => {
+    setVisibleCount(100);
+  }, [activeSearchQuery, filterType]);
 
   // Calculate Ledger / Muavin Entries for a selected contact
   const getLedgerEntries = (contactId: string): LedgerEntry[] => {
@@ -1373,7 +1384,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredContacts.map((c) => {
+                filteredContacts.slice(0, visibleCount).map((c) => {
                   const isReceivable = c.balance > 0;
                   const isPayable = c.balance < 0;
 
@@ -1536,6 +1547,18 @@ export const Contacts: React.FC<ContactsProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* PERF: Kalan satirlari istege bagli goster (uzun listede DOM'u sinirlar) */}
+        {filteredContacts.length > visibleCount && (
+          <div className="flex justify-center pt-3">
+            <button
+              onClick={() => setVisibleCount((c) => c + 100)}
+              className="px-4 py-2 rounded-xl bg-purple-50 text-purple-900 font-bold text-xs border border-purple-200 hover:bg-purple-100 transition-colors"
+            >
+              Daha fazla göster ({filteredContacts.length - visibleCount} cari daha)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MODAL: Add / Edit Contact */}

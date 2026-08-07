@@ -117,26 +117,27 @@ export default function App() {
     setAuthModalOpen(true);
   };
 
-  // Sync state changes with localStorage
-  useEffect(() => {
-    saveStoredData("SETTINGS", data.settings);
-    saveStoredData("CONTACTS", data.contacts);
-    saveStoredData("ACCOUNTS", data.accounts);
-    saveStoredData("INVOICES", data.invoices);
-    saveStoredData("TRANSACTIONS", data.transactions);
-    saveStoredData("PRODUCTS", data.products);
-    saveStoredData("QUOTES", data.quotes);
-    if (data.orders) saveStoredData("ORDERS", data.orders);
-    if (data.waybills) saveStoredData("WAYBILLS", data.waybills);
-    if (data.cheques) saveStoredData("CHEQUES", data.cheques);
-    if (data.promissoryNotes) saveStoredData("PROMISSORY_NOTES", data.promissoryNotes);
-    if (data.branches) saveStoredData("BRANCHES", data.branches);
-    if (data.warehouses) saveStoredData("WAREHOUSES", data.warehouses);
-    if (data.employees) saveStoredData("EMPLOYEES", data.employees);
-    if (data.leaveRequests) saveStoredData("LEAVE_REQUESTS", data.leaveRequests);
-    if (data.advanceRequests) saveStoredData("ADVANCE_REQUESTS", data.advanceRequests);
-    if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions);
-  }, [data]);
+  // Sync state changes with localStorage.
+  // PERF: Her koleksiyon icin AYRI efekt — sadece degisen slice diske yazilir.
+  // (Onceki tek efekt her data degisiminde 17 koleksiyonu birden JSON.stringify
+  //  edip yaziyordu; bu, cari/stok gibi buyuk listelerde main thread'i kilitliyordu.)
+  useEffect(() => { saveStoredData("SETTINGS", data.settings); }, [data.settings]);
+  useEffect(() => { saveStoredData("CONTACTS", data.contacts); }, [data.contacts]);
+  useEffect(() => { saveStoredData("ACCOUNTS", data.accounts); }, [data.accounts]);
+  useEffect(() => { saveStoredData("INVOICES", data.invoices); }, [data.invoices]);
+  useEffect(() => { saveStoredData("TRANSACTIONS", data.transactions); }, [data.transactions]);
+  useEffect(() => { saveStoredData("PRODUCTS", data.products); }, [data.products]);
+  useEffect(() => { saveStoredData("QUOTES", data.quotes); }, [data.quotes]);
+  useEffect(() => { if (data.orders) saveStoredData("ORDERS", data.orders); }, [data.orders]);
+  useEffect(() => { if (data.waybills) saveStoredData("WAYBILLS", data.waybills); }, [data.waybills]);
+  useEffect(() => { if (data.cheques) saveStoredData("CHEQUES", data.cheques); }, [data.cheques]);
+  useEffect(() => { if (data.promissoryNotes) saveStoredData("PROMISSORY_NOTES", data.promissoryNotes); }, [data.promissoryNotes]);
+  useEffect(() => { if (data.branches) saveStoredData("BRANCHES", data.branches); }, [data.branches]);
+  useEffect(() => { if (data.warehouses) saveStoredData("WAREHOUSES", data.warehouses); }, [data.warehouses]);
+  useEffect(() => { if (data.employees) saveStoredData("EMPLOYEES", data.employees); }, [data.employees]);
+  useEffect(() => { if (data.leaveRequests) saveStoredData("LEAVE_REQUESTS", data.leaveRequests); }, [data.leaveRequests]);
+  useEffect(() => { if (data.advanceRequests) saveStoredData("ADVANCE_REQUESTS", data.advanceRequests); }, [data.advanceRequests]);
+  useEffect(() => { if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions); }, [data.legalDeductions]);
 
   // Handlers for Waybills (İrsaliyeler)
   const handleAddWaybill = (newWaybill: Waybill) => {
