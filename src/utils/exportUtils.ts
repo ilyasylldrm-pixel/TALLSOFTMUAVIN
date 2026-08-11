@@ -42,33 +42,42 @@ export function formatCurrency(amount: number | null | undefined, currency?: str
 }
 
 /**
- * Helper to replace oklch(...) color functions in CSS string with fallback hex color to prevent html2canvas errors
+ * Helper to replace oklch(...), oklab(...), and color-mix(...) color functions in CSS string with fallback hex color to prevent html2canvas errors
  */
 export function replaceOklchInString(cssText: string, fallbackColor: string = "#4f46e5"): string {
-  if (!cssText || !cssText.includes("oklch")) return cssText;
+  if (!cssText) return cssText;
 
-  let result = "";
-  let i = 0;
-  while (i < cssText.length) {
-    const oklchIndex = cssText.indexOf("oklch(", i);
-    if (oklchIndex === -1) {
-      result += cssText.slice(i);
-      break;
+  let text = cssText;
+  const colorFuncs = ["oklch(", "oklab(", "color-mix("];
+
+  for (const funcName of colorFuncs) {
+    if (!text.includes(funcName)) continue;
+
+    let result = "";
+    let i = 0;
+    while (i < text.length) {
+      const funcIndex = text.indexOf(funcName, i);
+      if (funcIndex === -1) {
+        result += text.slice(i);
+        break;
+      }
+
+      result += text.slice(i, funcIndex);
+      let depth = 1;
+      let j = funcIndex + funcName.length;
+      while (j < text.length && depth > 0) {
+        if (text[j] === "(") depth++;
+        else if (text[j] === ")") depth--;
+        j++;
+      }
+
+      result += fallbackColor;
+      i = j;
     }
-
-    result += cssText.slice(i, oklchIndex);
-    let depth = 1;
-    let j = oklchIndex + 6;
-    while (j < cssText.length && depth > 0) {
-      if (cssText[j] === "(") depth++;
-      else if (cssText[j] === ")") depth--;
-      j++;
-    }
-
-    result += fallbackColor;
-    i = j;
+    text = result;
   }
-  return result;
+
+  return text;
 }
 
 /**
@@ -76,9 +85,12 @@ export function replaceOklchInString(cssText: string, fallbackColor: string = "#
  */
 export function sanitizeOklchForHtml2Canvas(clonedDoc: Document): void {
   try {
+    const hasUnsupportedColor = (str: string) =>
+      str.includes("oklch") || str.includes("oklab") || str.includes("color-mix");
+
     const styleTags = clonedDoc.querySelectorAll("style");
     styleTags.forEach((styleEl) => {
-      if (styleEl.textContent && styleEl.textContent.includes("oklch")) {
+      if (styleEl.textContent && hasUnsupportedColor(styleEl.textContent)) {
         styleEl.textContent = replaceOklchInString(styleEl.textContent, "#6366f1");
       }
     });
@@ -86,7 +98,7 @@ export function sanitizeOklchForHtml2Canvas(clonedDoc: Document): void {
     const elementsWithStyle = clonedDoc.querySelectorAll("[style]");
     elementsWithStyle.forEach((el) => {
       const styleAttr = el.getAttribute("style");
-      if (styleAttr && styleAttr.includes("oklch")) {
+      if (styleAttr && hasUnsupportedColor(styleAttr)) {
         el.setAttribute("style", replaceOklchInString(styleAttr, "#6366f1"));
       }
     });
@@ -97,7 +109,7 @@ export function sanitizeOklchForHtml2Canvas(clonedDoc: Document): void {
         try {
           const rules = Array.from(sheet.cssRules || []);
           rules.forEach((rule, idx) => {
-            if (rule.cssText && rule.cssText.includes("oklch")) {
+            if (rule.cssText && hasUnsupportedColor(rule.cssText)) {
               const sanitizedRule = replaceOklchInString(rule.cssText, "#6366f1");
               try {
                 sheet.deleteRule(idx);
@@ -115,7 +127,7 @@ export function sanitizeOklchForHtml2Canvas(clonedDoc: Document): void {
       // Ignore stylesheet iteration error
     }
   } catch (err) {
-    console.warn("oklch sanitization warning:", err);
+    console.warn("oklch/oklab sanitization warning:", err);
   }
 }
 
@@ -421,3 +433,58 @@ export async function exportToPDF({
     }
   }
 }
+
+/**
+ * Direct DOM element to PDF exporter (Portrait A4 format for Invoices/Documents)
+ */
+export async function exportElementToPDF(elementId: string, filename: string = "belge.pdf"): Promise<void> {
+  const element = document.getElementById(elementId);
+  if (!element) {
+    console.warn(`exportElementToPDF: Element #${elementId} bulunamadı.`);
+    return;
+  }
+
+  try {
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: "#ffffff",
+      onclone: (clonedDoc) => {
+        sanitizeOklchForHtml2Canvas(clonedDoc);
+      },
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+
+    const imgWidth = pdfWidth - 10; // 5mm margins
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    if (imgHeight <= pdfHeight - 10) {
+      pdf.addImage(imgData, "PNG", 5, 5, imgWidth, imgHeight);
+    } else {
+      let heightLeft = imgHeight;
+      let position = 5;
+
+      pdf.addImage(imgData, "PNG", 5, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 5, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+    }
+
+    const cleanFilename = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
+    pdf.save(cleanFilename);
+  } catch (err) {
+    console.error("DOM PDF Export hatası:", err);
+    alert("PDF indirilirken bir hata oluştu. Lütfen tekrar deneyin.");
+  }
+}
+

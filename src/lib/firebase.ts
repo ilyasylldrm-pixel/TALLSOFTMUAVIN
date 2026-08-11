@@ -63,6 +63,7 @@ export interface UserFileMetadata {
   fileUrl?: string; // Firebase Storage Download URL
   storagePath?: string; // Firebase Storage path
   fileData?: string; // Fallback Base64 data for previewing/downloading
+  expiresAt?: number; // Expiration timestamp in ms (for temporary WhatsApp shares)
 }
 
 export interface UserProfileData {
@@ -145,20 +146,32 @@ export async function uploadFileToStorage(
   userId: string,
   file: File
 ): Promise<{ fileUrl: string; storagePath: string }> {
+  if (file.size > 8 * 1024 * 1024) {
+    throw new Error("Dosya boyutu çok büyük (Maksimum 8 MB yükleyebilirsiniz).");
+  }
+
   const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
   const storagePath = `user_files/${userId}/${Date.now()}_${sanitizedFileName}`;
   const storageRef = ref(storage, storagePath);
 
-  await uploadBytes(storageRef, file, {
-    contentType: file.type || "application/octet-stream",
-    customMetadata: {
-      uploadedBy: userId,
-      originalName: file.name
-    }
-  });
+  try {
+    await uploadBytes(storageRef, file, {
+      contentType: file.type || "application/octet-stream",
+      customMetadata: {
+        uploadedBy: userId,
+        originalName: file.name
+      }
+    });
 
-  const fileUrl = await getDownloadURL(storageRef);
-  return { fileUrl, storagePath };
+    const fileUrl = await getDownloadURL(storageRef);
+    return { fileUrl, storagePath };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    if (errorMsg.includes("payload") || errorMsg.includes("exceeds") || errorMsg.includes("11534336")) {
+      throw new Error("Yükleme sınır uyarısı: Dosya boyutu sunucu yükleme limitini (10 MB) aşıyor.");
+    }
+    throw err;
+  }
 }
 
 export async function deleteFileFromStorage(storagePath: string): Promise<void> {
@@ -172,6 +185,9 @@ export async function deleteFileFromStorage(storagePath: string): Promise<void> 
 
 // 3. User File & Metadata Operations (Strictly scoped by userId)
 export async function saveUserFile(file: Omit<UserFileMetadata, "id">): Promise<string> {
+  if (file.fileData && file.fileData.length > 900000) {
+    throw new Error("Veritabanı uyarısı: Dosya boyutu veritabanı doküman limitini (1 MB) aşıyor.");
+  }
   const filesCol = collection(db, "user_files");
   const docRef = await addDoc(filesCol, {
     ...file,
@@ -187,12 +203,23 @@ export async function getUserFiles(userId: string): Promise<UserFileMetadata[]> 
     const snapshot = await getDocs(q);
     
     const files: UserFileMetadata[] = [];
-    snapshot.forEach((docSnap) => {
+    const now = Date.now();
+
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data() as Omit<UserFileMetadata, "id">;
+      // If file has expired, purge it in background
+      if (data.expiresAt && data.expiresAt <= now) {
+        deleteUserFile(docSnap.id, data.storagePath).catch((err) =>
+          console.warn("Expired file cleanup error:", err)
+        );
+        continue;
+      }
+
       files.push({
         id: docSnap.id,
-        ...(docSnap.data() as Omit<UserFileMetadata, "id">)
+        ...data
       });
-    });
+    }
     
     // Sort client-side by upload date
     return files.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());

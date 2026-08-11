@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, getContactAccountCode } from "../types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, getContactAccountCode } from "../types";
 import {
   initialCompanySettings,
   initialContacts,
@@ -17,6 +17,7 @@ import {
   initialLeaveRequests,
   initialAdvanceRequests,
   initialLegalDeductions,
+  initialCostProjects,
 } from "../mockData";
 
 const STORAGE_KEYS = {
@@ -37,6 +38,7 @@ const STORAGE_KEYS = {
   LEAVE_REQUESTS: "muavin_leave_requests",
   ADVANCE_REQUESTS: "muavin_advance_requests",
   LEGAL_DEDUCTIONS: "muavin_legal_deductions",
+  COST_PROJECTS: "muavin_cost_projects",
 };
 
 export function getStoredData() {
@@ -83,6 +85,7 @@ export function getStoredData() {
     leaveRequests: get<LeaveRequest[]>(STORAGE_KEYS.LEAVE_REQUESTS, initialLeaveRequests),
     advanceRequests: get<AdvanceRequest[]>(STORAGE_KEYS.ADVANCE_REQUESTS, initialAdvanceRequests),
     legalDeductions: get<LegalDeduction[]>(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions),
+    costProjects: get<CostProject[]>(STORAGE_KEYS.COST_PROJECTS, initialCostProjects),
   };
 }
 
@@ -184,6 +187,7 @@ export function resetToDemoData() {
   safeSet(STORAGE_KEYS.LEAVE_REQUESTS, initialLeaveRequests);
   safeSet(STORAGE_KEYS.ADVANCE_REQUESTS, initialAdvanceRequests);
   safeSet(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions);
+  safeSet(STORAGE_KEYS.COST_PROJECTS, initialCostProjects);
 }
 
 
@@ -213,6 +217,7 @@ export function importBackupJSON(jsonString: string): boolean {
       if (parsed.leaveRequests) saveStoredData("LEAVE_REQUESTS", parsed.leaveRequests);
       if (parsed.advanceRequests) saveStoredData("ADVANCE_REQUESTS", parsed.advanceRequests);
       if (parsed.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", parsed.legalDeductions);
+      if (parsed.costProjects) saveStoredData("COST_PROJECTS", parsed.costProjects);
       return true;
     }
   } catch (e) {

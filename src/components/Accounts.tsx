@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { ExportButtons } from "./ExportButtons";
+import { BankStatementImportModal } from "./BankStatementImportModal";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas } from "../utils/exportUtils";
 import {
   Account,
@@ -47,6 +48,8 @@ import {
   ExternalLink,
   Eye,
   Cloud,
+  FileSpreadsheet,
+  Upload,
 } from "lucide-react";
 
 export type FinanceSubModule = "kasa" | "banka" | "cek" | "senet" | "virman";
@@ -264,6 +267,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   const [isChequeModalOpen, setIsChequeModalOpen] = useState(false);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [isAddTxModalOpen, setIsAddTxModalOpen] = useState(false);
+  const [isBankStatementModalOpen, setIsBankStatementModalOpen] = useState(false);
 
   // Edit States for Finance Sub-Modules
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -936,39 +940,43 @@ export const Accounts: React.FC<AccountsProps> = ({
   // Filtered lists with Date Range & Search filtering
   const activeSearchQuery = (globalSearchTerm || searchQuery).toLowerCase().trim();
 
-  const kasaTransactions = transactions.filter((t) => {
-    const acc = accounts.find((a) => a.id === t.accountId);
-    if (acc?.type !== "cash") return false;
-    if (selectedCashAccountId && t.accountId !== selectedCashAccountId) return false;
-    if (startDate && t.date < startDate) return false;
-    if (endDate && t.date > endDate) return false;
-    if (activeSearchQuery) {
-      const match =
-        t.description.toLowerCase().includes(activeSearchQuery) ||
-        (t.contactName && t.contactName.toLowerCase().includes(activeSearchQuery)) ||
-        (t.documentNo && t.documentNo.toLowerCase().includes(activeSearchQuery)) ||
-        t.category.toLowerCase().includes(activeSearchQuery);
-      if (!match) return false;
-    }
-    return true;
-  });
+  const kasaTransactions = transactions
+    .filter((t) => {
+      const acc = accounts.find((a) => a.id === t.accountId);
+      if (acc?.type !== "cash") return false;
+      if (selectedCashAccountId && t.accountId !== selectedCashAccountId) return false;
+      if (startDate && t.date < startDate) return false;
+      if (endDate && t.date > endDate) return false;
+      if (activeSearchQuery) {
+        const match =
+          t.description.toLowerCase().includes(activeSearchQuery) ||
+          (t.contactName && t.contactName.toLowerCase().includes(activeSearchQuery)) ||
+          (t.documentNo && t.documentNo.toLowerCase().includes(activeSearchQuery)) ||
+          t.category.toLowerCase().includes(activeSearchQuery);
+        if (!match) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  const bankTransactions = transactions.filter((t) => {
-    const acc = accounts.find((a) => a.id === t.accountId);
-    if (acc?.type !== "bank" && acc?.type !== "credit_card") return false;
-    if (selectedBankAccountId && t.accountId !== selectedBankAccountId) return false;
-    if (startDate && t.date < startDate) return false;
-    if (endDate && t.date > endDate) return false;
-    if (activeSearchQuery) {
-      const match =
-        t.description.toLowerCase().includes(activeSearchQuery) ||
-        (t.contactName && t.contactName.toLowerCase().includes(activeSearchQuery)) ||
-        (t.documentNo && t.documentNo.toLowerCase().includes(activeSearchQuery)) ||
-        t.category.toLowerCase().includes(activeSearchQuery);
-      if (!match) return false;
-    }
-    return true;
-  });
+  const bankTransactions = transactions
+    .filter((t) => {
+      const acc = accounts.find((a) => a.id === t.accountId);
+      if (acc?.type !== "bank" && acc?.type !== "credit_card") return false;
+      if (selectedBankAccountId && t.accountId !== selectedBankAccountId) return false;
+      if (startDate && t.date < startDate) return false;
+      if (endDate && t.date > endDate) return false;
+      if (activeSearchQuery) {
+        const match =
+          t.description.toLowerCase().includes(activeSearchQuery) ||
+          (t.contactName && t.contactName.toLowerCase().includes(activeSearchQuery)) ||
+          (t.documentNo && t.documentNo.toLowerCase().includes(activeSearchQuery)) ||
+          t.category.toLowerCase().includes(activeSearchQuery);
+        if (!match) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const filteredCheques = cheques.filter((c) => {
     const matchesType = chequeFilterType === "all" || c.type === chequeFilterType;
@@ -1012,18 +1020,20 @@ export const Accounts: React.FC<AccountsProps> = ({
     return matchesType && matchesQuery && matchesDate;
   });
 
-  const virmanTransactions = transactions.filter((t) => {
-    const isVirman =
-      t.category === "Virman / Transfer" ||
-      t.category === "Virman" ||
-      t.category === "Transfer" ||
-      t.description.toLowerCase().includes("virman") ||
-      t.description.toLowerCase().includes("transfer");
-    if (!isVirman) return false;
-    if (startDate && t.date < startDate) return false;
-    if (endDate && t.date > endDate) return false;
-    return true;
-  });
+  const virmanTransactions = transactions
+    .filter((t) => {
+      const isVirman =
+        t.category === "Virman / Transfer" ||
+        t.category === "Virman" ||
+        t.category === "Transfer" ||
+        t.description.toLowerCase().includes("virman") ||
+        t.description.toLowerCase().includes("transfer");
+      if (!isVirman) return false;
+      if (startDate && t.date < startDate) return false;
+      if (endDate && t.date > endDate) return false;
+      return true;
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const displayedKasaTransactions = kasaTransactions.slice(0, kasaDisplayLimit);
   const displayedBankTransactions = bankTransactions.slice(0, bankDisplayLimit);
@@ -1292,6 +1302,16 @@ export const Accounts: React.FC<AccountsProps> = ({
               </button>
             )}
 
+            {activeSubModule === "banka" && (
+              <button
+                onClick={() => setIsBankStatementModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-blue-100" />
+                <span>Banka Ekstresi Yükle</span>
+              </button>
+            )}
+
             {(activeSubModule === "kasa" || activeSubModule === "banka") && (
               <button
                 onClick={() => {
@@ -1510,10 +1530,11 @@ export const Accounts: React.FC<AccountsProps> = ({
                           <button
                             type="button"
                             onClick={() => handleShowAccountReceipt(acc)}
-                            className="p-1.5 rounded-lg bg-amber-200/70 hover:bg-amber-300 text-amber-950 transition-colors cursor-pointer"
+                            className="px-2 py-1 rounded-lg bg-amber-200/80 hover:bg-amber-300 text-amber-950 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                             title="Dekont / Ekstre Göster (Yazdır / PDF)"
                           >
-                            <FileText className="w-3.5 h-3.5 text-amber-900" />
+                            <FileText className="w-3.5 h-3.5 text-amber-900 shrink-0" />
+                            <span>Ekstre</span>
                           </button>
                           <button
                             type="button"
@@ -1521,10 +1542,11 @@ export const Accounts: React.FC<AccountsProps> = ({
                               setEditingAccount(acc);
                               setIsEditAccountModalOpen(true);
                             }}
-                            className="p-1.5 rounded-lg bg-amber-200/70 hover:bg-amber-300 text-amber-950 transition-colors cursor-pointer"
+                            className="px-2 py-1 rounded-lg bg-amber-200/80 hover:bg-amber-300 text-amber-950 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                             title="Hesabı Düzenle"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <Pencil className="w-3.5 h-3.5 text-amber-900 shrink-0" />
+                            <span>Düzenle</span>
                           </button>
                         </div>
                       </div>
@@ -1657,14 +1679,15 @@ export const Accounts: React.FC<AccountsProps> = ({
                             {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                            <div className="flex items-center justify-center gap-1">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                               <button
                                 type="button"
                                 onClick={() => handleShowTransactionReceipt(tx)}
-                                className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                                 title="Dekont Göster (Yazdır / PDF)"
                               >
-                                <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                <span>Dekont</span>
                               </button>
                               <button
                                 type="button"
@@ -1672,19 +1695,21 @@ export const Accounts: React.FC<AccountsProps> = ({
                                   setEditingTransaction(tx);
                                   setIsEditTxModalOpen(true);
                                 }}
-                                className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                                className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                                 title="İşlemi Düzenle"
                               >
-                                <Pencil className="w-3.5 h-3.5" />
+                                <Pencil className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                                <span>Düzenle</span>
                               </button>
                               {onDeleteTransaction && (
                                 <button
                                   type="button"
                                   onClick={() => onDeleteTransaction(tx.id)}
-                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                                   title="Sil"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                  <span>Sil</span>
                                 </button>
                               )}
                             </div>
@@ -1750,10 +1775,11 @@ export const Accounts: React.FC<AccountsProps> = ({
                           <button
                             type="button"
                             onClick={() => handleShowAccountReceipt(acc)}
-                            className="p-1.5 rounded-lg bg-blue-200/70 hover:bg-blue-300 text-blue-950 transition-colors cursor-pointer"
+                            className="px-2 py-1 rounded-lg bg-blue-200/80 hover:bg-blue-300 text-blue-950 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                             title="Dekont / Ekstre Göster (Yazdır / PDF)"
                           >
-                            <FileText className="w-3.5 h-3.5 text-blue-900" />
+                            <FileText className="w-3.5 h-3.5 text-blue-900 shrink-0" />
+                            <span>Ekstre</span>
                           </button>
                           <button
                             type="button"
@@ -1761,10 +1787,11 @@ export const Accounts: React.FC<AccountsProps> = ({
                               setEditingAccount(acc);
                               setIsEditAccountModalOpen(true);
                             }}
-                            className="p-1.5 rounded-lg bg-blue-200/70 hover:bg-blue-300 text-blue-950 transition-colors cursor-pointer"
+                            className="px-2 py-1 rounded-lg bg-blue-200/80 hover:bg-blue-300 text-blue-950 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                             title="Hesabı Düzenle"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <Pencil className="w-3.5 h-3.5 text-blue-900 shrink-0" />
+                            <span>Düzenle</span>
                           </button>
                         </div>
                       </div>
@@ -1817,6 +1844,16 @@ export const Accounts: React.FC<AccountsProps> = ({
                     Tüm Bankaları Göster
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setIsBankStatementModalOpen(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="CSV veya Excel banka ekstresini yükleyip cari eşleştirin"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
+                  <span>Banka Ekstresi Yükle</span>
+                </button>
+
                 <button
                   onClick={() => handleOpenAddTxModal("banka")}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -1903,14 +1940,15 @@ export const Accounts: React.FC<AccountsProps> = ({
                             {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                            <div className="flex items-center justify-center gap-1">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                               <button
                                 type="button"
                                 onClick={() => handleShowTransactionReceipt(tx)}
-                                className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                                 title="Dekont Göster (Yazdır / PDF)"
                               >
-                                <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                <span>Dekont</span>
                               </button>
                               <button
                                 type="button"
@@ -1918,19 +1956,21 @@ export const Accounts: React.FC<AccountsProps> = ({
                                   setEditingTransaction(tx);
                                   setIsEditTxModalOpen(true);
                                 }}
-                                className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                                className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                                 title="İşlemi Düzenle"
                               >
-                                <Pencil className="w-3.5 h-3.5" />
+                                <Pencil className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                                <span>Düzenle</span>
                               </button>
                               {onDeleteTransaction && (
                                 <button
                                   type="button"
                                   onClick={() => onDeleteTransaction(tx.id)}
-                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                                   title="Sil"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                  <span>Sil</span>
                                 </button>
                               )}
                             </div>
@@ -2094,66 +2134,71 @@ export const Accounts: React.FC<AccountsProps> = ({
                         {getChequeStatusBadge(c.status, c.endorsedToContactName)}
                       </td>
                       <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleShowChequeReceipt(c)}
-                          className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
-                          title="Dekont / Çek Bordrosu Göster (Yazdır / PDF)"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingCheque(c);
-                            setIsEditChequeModalOpen(true);
-                          }}
-                          className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
-                          title="Çeki Düzenle"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-
-                        {c.status === "portfolio" && (
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                           <button
                             type="button"
-                            onClick={() => handleOpenEndorseModal("cheque", c.id)}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold px-1.5 py-0.5 rounded cursor-pointer transition-colors shadow-2xs"
-                            title="Bu çeki başka bir cariye ciro et"
+                            onClick={() => handleShowChequeReceipt(c)}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Dekont / Çek Bordrosu Göster (Yazdır / PDF)"
                           >
-                            Ciro Et
+                            <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span>Bordro</span>
                           </button>
-                        )}
-                        <select
-                          value={c.status}
-                          onChange={(e) => {
-                            const val = e.target.value as ChequeStatus;
-                            if (val === "endorsed") {
-                              handleOpenEndorseModal("cheque", c.id);
-                            } else if (onUpdateChequeStatus) {
-                              onUpdateChequeStatus(c.id, val);
-                            }
-                          }}
-                          className="text-[10px] bg-slate-100 font-bold text-slate-800 rounded border border-slate-200 px-1 py-0.5 cursor-pointer"
-                        >
-                          <option value="portfolio">Portföyde</option>
-                          <option value="collected">Tahsil Edildi</option>
-                          <option value="endorsed">Ciro Edildi</option>
-                          <option value="paid">Ödendi</option>
-                          <option value="bounced">Karşılıksız</option>
-                        </select>
-                        {onDeleteCheque && (
                           <button
-                            onClick={() => onDeleteCheque(c.id)}
-                            className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
-                            title="Sil"
+                            type="button"
+                            onClick={() => {
+                              setEditingCheque(c);
+                              setIsEditChequeModalOpen(true);
+                            }}
+                            className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Çeki Düzenle"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Pencil className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                            <span>Düzenle</span>
                           </button>
-                        )}
-                      </div>
-                    </td>
+
+                          {c.status === "portfolio" && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEndorseModal("cheque", c.id)}
+                              className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Bu çeki başka bir cariye ciro et"
+                            >
+                              <ArrowRightLeft className="w-3.5 h-3.5 text-blue-700 shrink-0" />
+                              <span>Ciro Et</span>
+                            </button>
+                          )}
+                          <select
+                            value={c.status}
+                            onChange={(e) => {
+                              const val = e.target.value as ChequeStatus;
+                              if (val === "endorsed") {
+                                handleOpenEndorseModal("cheque", c.id);
+                              } else if (onUpdateChequeStatus) {
+                                onUpdateChequeStatus(c.id, val);
+                              }
+                            }}
+                            className="text-xs bg-slate-100 font-bold text-slate-800 rounded-lg border border-slate-200 px-2 py-1.5 cursor-pointer shadow-2xs shrink-0"
+                          >
+                            <option value="portfolio">Portföyde</option>
+                            <option value="collected">Tahsil Edildi</option>
+                            <option value="endorsed">Ciro Edildi</option>
+                            <option value="paid">Ödendi</option>
+                            <option value="bounced">Karşılıksız</option>
+                          </select>
+                          {onDeleteCheque && (
+                            <button
+                              type="button"
+                              onClick={() => onDeleteCheque(c.id)}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                              <span>Sil</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
                   </tr>
                 )
               )
@@ -2310,66 +2355,71 @@ export const Accounts: React.FC<AccountsProps> = ({
                         {getNoteStatusBadge(n.status, n.endorsedToContactName)}
                       </td>
                       <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleShowNoteReceipt(n)}
-                          className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
-                          title="Dekont / Senet Bordrosu Göster (Yazdır / PDF)"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingNote(n);
-                            setIsEditNoteModalOpen(true);
-                          }}
-                          className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
-                          title="Seneti Düzenle"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-
-                        {n.status === "portfolio" && (
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                           <button
                             type="button"
-                            onClick={() => handleOpenEndorseModal("note", n.id)}
-                            className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-extrabold px-1.5 py-0.5 rounded cursor-pointer transition-colors shadow-2xs"
-                            title="Bu seneti başka bir cariye ciro et"
+                            onClick={() => handleShowNoteReceipt(n)}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Dekont / Senet Bordrosu Göster (Yazdır / PDF)"
                           >
-                            Ciro Et
+                            <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span>Bordro</span>
                           </button>
-                        )}
-                        <select
-                          value={n.status}
-                          onChange={(e) => {
-                            const val = e.target.value as PromissoryNoteStatus;
-                            if (val === "endorsed") {
-                              handleOpenEndorseModal("note", n.id);
-                            } else if (onUpdateNoteStatus) {
-                              onUpdateNoteStatus(n.id, val);
-                            }
-                          }}
-                          className="text-[10px] bg-slate-100 font-bold text-slate-800 rounded border border-slate-200 px-1 py-0.5 cursor-pointer"
-                        >
-                          <option value="portfolio">Portföyde</option>
-                          <option value="collected">Tahsil Edildi</option>
-                          <option value="endorsed">Ciro Edildi</option>
-                          <option value="paid">Ödendi</option>
-                          <option value="protested">Protestolu</option>
-                        </select>
-                        {onDeletePromissoryNote && (
                           <button
-                            onClick={() => onDeletePromissoryNote(n.id)}
-                            className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
-                            title="Sil"
+                            type="button"
+                            onClick={() => {
+                              setEditingNote(n);
+                              setIsEditNoteModalOpen(true);
+                            }}
+                            className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Seneti Düzenle"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Pencil className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                            <span>Düzenle</span>
                           </button>
-                        )}
-                      </div>
-                    </td>
+
+                          {n.status === "portfolio" && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEndorseModal("note", n.id)}
+                              className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Bu seneti başka bir cariye ciro et"
+                            >
+                              <ArrowRightLeft className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                              <span>Ciro Et</span>
+                            </button>
+                          )}
+                          <select
+                            value={n.status}
+                            onChange={(e) => {
+                              const val = e.target.value as PromissoryNoteStatus;
+                              if (val === "endorsed") {
+                                handleOpenEndorseModal("note", n.id);
+                              } else if (onUpdateNoteStatus) {
+                                onUpdateNoteStatus(n.id, val);
+                              }
+                            }}
+                            className="text-xs bg-slate-100 font-bold text-slate-800 rounded-lg border border-slate-200 px-2 py-1.5 cursor-pointer shadow-2xs shrink-0"
+                          >
+                            <option value="portfolio">Portföyde</option>
+                            <option value="collected">Tahsil Edildi</option>
+                            <option value="endorsed">Ciro Edildi</option>
+                            <option value="paid">Ödendi</option>
+                            <option value="protested">Protestolu</option>
+                          </select>
+                          {onDeletePromissoryNote && (
+                            <button
+                              type="button"
+                              onClick={() => onDeletePromissoryNote(n.id)}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                              <span>Sil</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
                   </tr>
                 )
               )
@@ -2557,14 +2607,15 @@ export const Accounts: React.FC<AccountsProps> = ({
                           {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                             <button
                               type="button"
                               onClick={() => handleShowVirmanReceipt(tx)}
-                              className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                               title="Virman Dekontu Göster (Yazdır / PDF)"
                             >
-                              <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                              <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              <span>Dekont</span>
                             </button>
                             <button
                               type="button"
@@ -2572,20 +2623,22 @@ export const Accounts: React.FC<AccountsProps> = ({
                                 setEditingTransaction(tx);
                                 setIsEditTxModalOpen(true);
                               }}
-                              className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                              className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                               title="Virman İletisini Düzenle"
                             >
-                              <Pencil className="w-3.5 h-3.5" />
+                              <Pencil className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                              <span>Düzenle</span>
                             </button>
 
                             {onDeleteTransaction && (
                               <button
                                 type="button"
                                 onClick={() => onDeleteTransaction(tx.id)}
-                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                                 title="Sil"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                <span>Sil</span>
                               </button>
                             )}
                           </div>
@@ -4270,6 +4323,17 @@ export const Accounts: React.FC<AccountsProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL: BANK STATEMENT IMPORT */}
+      <BankStatementImportModal
+        isOpen={isBankStatementModalOpen}
+        onClose={() => setIsBankStatementModalOpen(false)}
+        accounts={accounts}
+        contacts={contacts}
+        transactions={transactions}
+        selectedBankAccountId={selectedBankAccountId}
+        onAddTransaction={onAddTransaction}
+      />
 
     </div>
   );

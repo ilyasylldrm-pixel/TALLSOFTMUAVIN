@@ -32,6 +32,46 @@ import {
   User,
 } from "lucide-react";
 
+const TURKISH_MONTHS = [
+  { id: 1, name: "Ocak" },
+  { id: 2, name: "Şubat" },
+  { id: 3, name: "Mart" },
+  { id: 4, name: "Nisan" },
+  { id: 5, name: "Mayıs" },
+  { id: 6, name: "Haziran" },
+  { id: 7, name: "Temmuz" },
+  { id: 8, name: "Ağustos" },
+  { id: 9, name: "Eylül" },
+  { id: 10, name: "Ekim" },
+  { id: 11, name: "Kasım" },
+  { id: 12, name: "Aralık" },
+];
+
+const getDateYearAndMonth = (dateStr?: string) => {
+  if (!dateStr) return { year: null, month: null };
+  if (dateStr.includes("-")) {
+    const parts = dateStr.split("-");
+    if (parts.length >= 2) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  if (dateStr.includes(".")) {
+    const parts = dateStr.split(".");
+    if (parts.length >= 3) {
+      const y = parseInt(parts[2], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  }
+  return { year: null, month: null };
+};
+
 interface WaybillsProps {
   waybills: Waybill[];
   contacts: Contact[];
@@ -61,6 +101,8 @@ export const Waybills: React.FC<WaybillsProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<"all" | "dispatch" | "receipt">(forcedType || "all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
 
   React.useEffect(() => {
     if (forcedType) {
@@ -306,9 +348,31 @@ export const Waybills: React.FC<WaybillsProps> = ({
     setIsModalOpen(false);
   };
 
+  // Years memo
+  const availableYears = React.useMemo(() => {
+    const yearsSet = new Set<number>();
+    yearsSet.add(new Date().getFullYear());
+    waybills.forEach((w) => {
+      const { year } = getDateYearAndMonth(w.waybillDate || w.createdAt);
+      if (year) yearsSet.add(year);
+    });
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [waybills]);
+
   // Filtering
   const activeSearchQuery = (globalSearchTerm || searchTerm).toLowerCase().trim();
   const filteredWaybills = waybills.filter((w) => {
+    // Year & Month Filter
+    const { year: wayYear, month: wayMonth } = getDateYearAndMonth(w.waybillDate || w.createdAt);
+
+    if (selectedYear !== "all" && wayYear !== parseInt(selectedYear, 10)) {
+      return false;
+    }
+
+    if (selectedMonth !== "all" && wayMonth !== parseInt(selectedMonth, 10)) {
+      return false;
+    }
+
     // Type Filter
     if (activeTab === "dispatch" && w.type !== "dispatch") return false;
     if (activeTab === "receipt" && w.type !== "receipt") return false;
@@ -698,8 +762,54 @@ export const Waybills: React.FC<WaybillsProps> = ({
           )}
         </div>
 
-        {/* Search, Status & Export */}
+        {/* Search, Year/Month, Status & Export */}
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          {/* Yıl Filtresi */}
+          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <span className="text-slate-400 font-bold">Yıl:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+            >
+              <option value="all">Tüm Yıllar</option>
+              {availableYears.map((y) => (
+                <option key={y} value={y.toString()}>{y}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Ay Filtresi */}
+          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+            <Filter className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <span className="text-slate-400 font-bold">Ay:</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+            >
+              <option value="all">Tüm Aylar</option>
+              {TURKISH_MONTHS.map((m) => (
+                <option key={m.id} value={m.id.toString()}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {(selectedYear !== "all" || selectedMonth !== "all") && (
+            <button
+              onClick={() => {
+                setSelectedYear("all");
+                setSelectedMonth("all");
+              }}
+              className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              title="Yıl ve Ay filtresini temizle"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Temizle</span>
+            </button>
+          )}
+
           <div className="relative w-full md:w-64">
             <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input

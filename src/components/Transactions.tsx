@@ -313,31 +313,74 @@ export const Transactions: React.FC<TransactionsProps> = ({
       "Kategori / Tür",
       "Hesap (Kasa / Banka)",
       "İlişkili Cari Hesap",
-      "Açıklama",
-      "Tutar",
+      "Stok / Kalem Adı",
+      "Miktar",
+      "Birim",
+      "Birim Fiyat",
+      "KDV (%)",
+      "Kalem Tutarı",
+      "Fiş Genel Toplamı",
       "Para Birimi",
+      "Açıklama",
     ];
-    const rows = filteredTxs.map((t) => [
-      t.date,
-      t.type === "income" ? "Gelir Fişi" : t.type === "expense" ? "Gider Fişi" : "Finans / Dekont Hareketi",
-      t.documentNo || "-",
-      t.category || "-",
-      t.accountName || "-",
-      t.contactName || "-",
-      t.description || "-",
-      formatCurrency(t.amount || 0, t.currency || "TRY"),
-      t.currency || "TRY",
-    ]);
+
+    const rows: (string | number | boolean | null | undefined)[][] = [];
+
+    filteredTxs.forEach((t) => {
+      const typeLabel =
+        t.type === "income" ? "Gelir Fişi" : t.type === "expense" ? "Gider Fişi" : "Finans / Dekont Hareketi";
+      const txCurrency = t.currency || "TRY";
+
+      if ((t as any).items && (t as any).items.length > 0) {
+        (t as any).items.forEach((item: any) => {
+          rows.push([
+            t.date,
+            typeLabel,
+            t.documentNo || "-",
+            t.category || "-",
+            t.accountName || "-",
+            t.contactName || "-",
+            item.description || "Belirtilmedi",
+            item.quantity ?? 1,
+            item.unit || "Adet",
+            formatCurrency(item.unitPrice || 0, txCurrency),
+            `%${item.vatRate ?? 0}`,
+            formatCurrency(item.totalWithVat ?? item.totalWithoutVat ?? 0, txCurrency),
+            formatCurrency(t.amount || 0, txCurrency),
+            txCurrency,
+            t.description || "-",
+          ]);
+        });
+      } else {
+        rows.push([
+          t.date,
+          typeLabel,
+          t.documentNo || "-",
+          t.category || "-",
+          t.accountName || "-",
+          t.contactName || "-",
+          t.description || "Genel Fiş Kalemi",
+          1,
+          "Adet",
+          formatCurrency(t.amount || 0, txCurrency),
+          "%0",
+          formatCurrency(t.amount || 0, txCurrency),
+          formatCurrency(t.amount || 0, txCurrency),
+          txCurrency,
+          t.description || "-",
+        ]);
+      }
+    });
 
     return {
-      filename: `Finans_Hareketleri_${new Date().toISOString().split("T")[0]}`,
+      filename: `Finans_Detayli_Stok_Hareketleri_${new Date().toISOString().split("T")[0]}`,
       title:
         forcedType === "income"
-          ? "GELİR FİŞLERİ HAREKET LİSTESİ"
+          ? "GELİR FİŞLERİ VE KALEM HAREKET LİSTESİ"
           : forcedType === "expense"
-          ? "GİDER FİŞLERİ HAREKET LİSTESİ"
-          : "KASA & BANKA FİNANS HAREKETLERİ",
-      subtitle: `Toplam ${filteredTxs.length} Adet Hareket Kaydı`,
+          ? "GİDER FİŞLERİ VE KALEM HAREKET LİSTESİ"
+          : "KASA & BANKA FİNANS VE KALEM HAREKETLERİ",
+      subtitle: `Toplam ${filteredTxs.length} Adet Hareket (${rows.length} Satır Kalem Kaydı)`,
       headers,
       rows,
     };
@@ -544,9 +587,10 @@ export const Transactions: React.FC<TransactionsProps> = ({
                           <button
                             onClick={() => onDeleteTransaction(tx.id)}
                             title="Fişi Sil"
-                            className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer"
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span>Sil</span>
                           </button>
                         </div>
                       </td>

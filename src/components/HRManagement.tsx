@@ -43,7 +43,7 @@ import {
   Store,
   Warehouse as WarehouseIcon,
 } from "lucide-react";
-import { Employee, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction, CompanySettings, Branch, Warehouse } from "../types";
+import { Employee, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction, CompanySettings, Branch, Warehouse, CostProject } from "../types";
 import { sgkOccupations } from "../data/sgkOccupations";
 import { sgkTerminationReasons } from "../data/sgkTerminationReasons";
 
@@ -55,6 +55,7 @@ interface HRManagementProps {
   companySettings: CompanySettings;
   branches?: Branch[];
   warehouses?: Warehouse[];
+  costProjects?: CostProject[];
   onAddEmployee: (emp: Employee) => void;
   onUpdateEmployee: (emp: Employee) => void;
   onDeleteEmployee: (id: string) => void;
@@ -75,6 +76,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   companySettings,
   branches = [],
   warehouses = [],
+  costProjects = [],
   onAddEmployee,
   onUpdateEmployee,
   onDeleteEmployee,
@@ -466,6 +468,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       branchName: newEmpForm.branchName || undefined,
       warehouseId: newEmpForm.warehouseId || undefined,
       warehouseName: newEmpForm.warehouseName || undefined,
+      projectId: newEmpForm.projectId || undefined,
+      projectName: newEmpForm.projectName || undefined,
     };
 
     onAddEmployee(created);
@@ -2291,6 +2295,29 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                     {warehouses.map((w) => (
                       <option key={w.id} value={w.id}>
                         {w.name} ({w.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-purple-900 mb-1">Görev Yaptığı Proje (Maliyet Ataması)</label>
+                  <select
+                    value={newEmpForm.projectId || ""}
+                    onChange={(e) => {
+                      const selectedPrj = costProjects.find((p) => p.id === e.target.value);
+                      setNewEmpForm({
+                        ...newEmpForm,
+                        projectId: e.target.value,
+                        projectName: selectedPrj ? selectedPrj.name : "",
+                      });
+                    }}
+                    className="w-full bg-purple-50/50 border border-purple-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900 cursor-pointer focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">-- Proje Seçiniz (Yok / Genel Merkez) --</option>
+                    {costProjects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} - {p.name}
                       </option>
                     ))}
                   </select>

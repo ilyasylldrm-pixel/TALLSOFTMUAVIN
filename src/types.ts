@@ -47,6 +47,8 @@ export interface InvoiceItem {
 export type InvoiceType = "sales" | "purchase"; // Satış Faturası / Alış Faturası
 export type InvoiceStatus = "draft" | "sent" | "paid" | "partial" | "overdue" | "cancelled";
 
+export type EDocumentType = "e_fatura" | "e_arsiv" | "paper";
+
 export interface Invoice {
   id: string;
   invoiceNumber: string; // ör: GIB20260000001
@@ -68,6 +70,8 @@ export interface Invoice {
   notes?: string;
   terms?: string;
   createdAt: string;
+  eDocumentType?: EDocumentType;
+  eDocumentEttn?: string;
 }
 
 export type ChequeType = "received" | "issued"; // received = Müşteri Çeki, issued = Borç / Firma Çeki
@@ -398,6 +402,8 @@ export interface Employee {
   branchName?: string; // Bağlı Olduğu Şube Adı
   warehouseId?: string; // Görev Yaptığı Depo ID
   warehouseName?: string; // Görev Yaptığı Depo Adı
+  projectId?: string; // Görev Yaptığı Proje ID
+  projectName?: string; // Görev Yaptığı Proje Adı
 }
 
 export interface PayrollRecord {
@@ -528,6 +534,44 @@ export interface Waybill {
   notes?: string;
   invoicedInvoiceId?: string;
   invoicedInvoiceNumber?: string;
+  createdAt: string;
+}
+
+export type CostProjectStatus = "planning" | "active" | "completed" | "paused" | "cancelled";
+
+export type ProjectCostType = "material" | "labor" | "subcontractor" | "overhead" | "other";
+
+export interface ProjectCostItem {
+  id: string;
+  type: ProjectCostType; // Malzeme, İşçilik, Taşeron, Genel Gider, Diğer
+  description: string;
+  quantity: number;
+  unit: string;
+  unitCost: number;
+  totalCost: number;
+  date?: string;
+  productId?: string;
+  sourceType?: "manual" | "invoice" | "expense" | "hr";
+  sourceId?: string;
+  employeeId?: string;
+  employeeName?: string;
+  notes?: string;
+}
+
+export interface CostProject {
+  id: string;
+  code: string; // ör: PRJ-2026-001
+  name: string; // Proje Adı
+  category?: string; // İnşaat / Taahhüt, Yazılım / Ar-Ge, Üretim, Danışmanlık, Servis vb.
+  contactId?: string;
+  contactName?: string; // Müşteri / Cari Adı
+  startDate: string;
+  endDate?: string;
+  budget: number; // Hedef Bütçe (₺)
+  contractPrice?: number; // Sözleşme Bedeli / Hedef Ciro (₺)
+  status: CostProjectStatus;
+  description?: string;
+  costItems: ProjectCostItem[];
   createdAt: string;
 }
 

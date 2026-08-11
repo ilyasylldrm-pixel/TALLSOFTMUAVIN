@@ -77,13 +77,25 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      if (file.size > 8 * 1024 * 1024) {
+        alert("Seçilen dosya çok büyük! Lütfen 8 MB'tan küçük bir dosya yükleyin.");
+        e.target.value = "";
+        setSelectedFile(null);
+        return;
+      }
+      setSelectedFile(file);
     }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) return;
+
+    if (selectedFile.size > 8 * 1024 * 1024) {
+      alert("Seçilen dosya çok büyük! Lütfen 8 MB'tan küçük bir dosya seçin.");
+      return;
+    }
 
     setUploading(true);
 
@@ -98,8 +110,13 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
         fileUrl = uploadResult.fileUrl;
         storagePath = uploadResult.storagePath;
       } catch (storageErr) {
-        console.warn("Firebase Storage upload failed or not enabled yet, falling back to Base64:", storageErr);
-        // Fallback to Base64 DataURL if storage is restricted or failing
+        console.warn("Firebase Storage upload failed or not enabled yet, checking fallback:", storageErr);
+
+        if (selectedFile.size > 700 * 1024) {
+          throw new Error("Bulut depolama alanı aktif değilken veritabanına 700 KB'tan büyük dosya doğrudan kaydedilemez. Lütfen dosya boyutunu küçültün.");
+        }
+
+        // Fallback to Base64 DataURL if storage is restricted or failing (only for small files < 700KB)
         base64Data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
@@ -132,9 +149,15 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
       setFiles((prev) => [newFileEntry, ...prev]);
       setSelectedFile(null);
       setDescription("");
-    } catch (err) {
+      alert("✅ Dosya başarıyla yüklendi!");
+    } catch (err: unknown) {
       console.error("Dosya yükleme hatası:", err);
-      alert("Dosya yüklenirken bir hata oluştu.");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("payload") || msg.includes("exceeds") || msg.includes("11534336")) {
+        alert("❌ Dosya Yükleme Hatası: Seçilen dosya boyutu sunucu yükleme sınırını (10 MB) aşıyor. Lütfen daha küçük bir dosya seçin.");
+      } else {
+        alert("❌ Dosya yüklenirken bir hata oluştu:\n" + msg);
+      }
     } finally {
       setUploading(false);
     }

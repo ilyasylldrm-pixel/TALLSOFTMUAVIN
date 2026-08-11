@@ -11,6 +11,7 @@ import {
   getContactAccountCode,
 } from "../types";
 import { InvoicePrintModal } from "./InvoicePrintModal";
+import { InvoicePreviewModal } from "./InvoicePreviewModal";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { NavItem } from "./Sidebar";
@@ -36,7 +37,50 @@ import {
   AlertCircle,
   Building2,
   MapPin,
+  Eye,
+  Calendar,
+  Filter,
 } from "lucide-react";
+
+const TURKISH_MONTHS = [
+  { id: 1, name: "Ocak" },
+  { id: 2, name: "Şubat" },
+  { id: 3, name: "Mart" },
+  { id: 4, name: "Nisan" },
+  { id: 5, name: "Mayıs" },
+  { id: 6, name: "Haziran" },
+  { id: 7, name: "Temmuz" },
+  { id: 8, name: "Ağustos" },
+  { id: 9, name: "Eylül" },
+  { id: 10, name: "Ekim" },
+  { id: 11, name: "Kasım" },
+  { id: 12, name: "Aralık" },
+];
+
+const getDateYearAndMonth = (dateStr?: string) => {
+  if (!dateStr) return { year: null, month: null };
+  if (dateStr.includes("-")) {
+    const parts = dateStr.split("-");
+    if (parts.length >= 2) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  if (dateStr.includes(".")) {
+    const parts = dateStr.split(".");
+    if (parts.length >= 3) {
+      const y = parseInt(parts[2], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  }
+  return { year: null, month: null };
+};
 
 interface InvoicesProps {
   invoices: Invoice[];
@@ -77,12 +121,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
 }) => {
   const [filterType, setFilterType] = useState<string>(forcedType || "all");
   const [search, setSearch] = useState<string>("");
+  const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(
     !!initialContactIdForNewInvoice
   );
   const [printingInvoice, setPrintingInvoice] = useState<Invoice | null>(null);
+  const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState<boolean>(false);
   const [paymentModalInvoice, setPaymentModalInvoice] = useState<Invoice | null>(null);
   const [isCollectAllModalOpen, setIsCollectAllModalOpen] = useState<boolean>(false);
   const [collectAllAccountId, setCollectAllAccountId] = useState<string>(accounts[0]?.id || "");
@@ -238,6 +285,40 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return { subtotal, totalVat, grandTotal, computedItems };
   };
 
+  const getDraftInvoice = (): Partial<Invoice> => {
+    const contact = contacts.find((c) => c.id === contactId);
+    const { subtotal, totalVat, grandTotal, computedItems } = calculateTotals();
+    const prefix = invType === "sales" ? "MUV2026" : "ALS2026";
+    const nextSeq = String(invoices.length + 1).padStart(7, "0");
+
+    let finalNotes = notes.trim();
+    if (hasDifferentDeliveryAddress && deliveryAddress.trim()) {
+      const deliveryTag = `Teslimat Adresi: ${deliveryAddress.trim()}`;
+      if (!finalNotes.includes(deliveryAddress.trim())) {
+        finalNotes = finalNotes ? `${finalNotes}\n${deliveryTag}` : deliveryTag;
+      }
+    }
+
+    return {
+      invoiceNumber: `${prefix}${nextSeq} (TASLAK)`,
+      type: invType,
+      contactId: contactId,
+      contactName: contact?.name || "Cari Seçilmedi",
+      taxNumber: contact?.taxNumber || "",
+      issueDate,
+      dueDate,
+      items: computedItems,
+      subtotal,
+      totalVat,
+      grandTotal,
+      paidAmount: 0,
+      remainingAmount: grandTotal,
+      status: "draft",
+      currency: "TRY",
+      notes: finalNotes,
+    };
+  };
+
   const handleAddItem = () => {
     setItems([
       ...items,
@@ -338,9 +419,31 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setPaymentModalInvoice(null);
   };
 
+  // Years memo
+  const availableYears = React.useMemo(() => {
+    const yearsSet = new Set<number>();
+    yearsSet.add(new Date().getFullYear());
+    invoices.forEach((inv) => {
+      const { year } = getDateYearAndMonth(inv.issueDate || inv.createdAt);
+      if (year) yearsSet.add(year);
+    });
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [invoices]);
+
   // Filter logic
   const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
   const filteredInvoices = invoices.filter((inv) => {
+    // Year & Month Filter
+    const { year: invYear, month: invMonth } = getDateYearAndMonth(inv.issueDate || inv.createdAt);
+
+    if (selectedYear !== "all" && invYear !== parseInt(selectedYear, 10)) {
+      return false;
+    }
+
+    if (selectedMonth !== "all" && invMonth !== parseInt(selectedMonth, 10)) {
+      return false;
+    }
+
     const matchesSearch =
       !activeSearchQuery ||
       inv.invoiceNumber.toLowerCase().includes(activeSearchQuery) ||
@@ -370,16 +473,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
       "Cari Hesap / Müşteri",
       "Düzenleme Tarihi",
       "Vade Tarihi",
-      "KDV Hariç Tutar",
+      "Stok / Kalem Adı",
+      "Miktar",
+      "Birim",
+      "Birim Fiyat",
+      "KDV (%)",
       "KDV Tutarı",
-      "Genel Toplam",
+      "Kalem Toplamı (KDV Dahil)",
+      "Fatura Genel Toplamı",
       "Ödenen Tutar",
       "Kalan Bakiye",
       "Para Birimi",
       "Durum",
-      "Açıklama / Kalem Özeti",
+      "Açıklama / Not",
     ];
-    const rows = filteredInvoices.map((inv) => {
+
+    const rows: (string | number | boolean | null | undefined)[][] = [];
+
+    filteredInvoices.forEach((inv) => {
       const statusLabel =
         inv.status === "paid"
           ? "Ödendi"
@@ -391,30 +502,64 @@ export const Invoices: React.FC<InvoicesProps> = ({
           ? "Gönderildi"
           : "Taslak";
       const typeLabel = inv.type === "sales" ? "Satış (Gelir) Faturası" : "Alış (Gider) Faturası";
-      const itemsSummary = inv.items.map((i) => `${i.description} (${i.quantity} ${i.unit})`).join("; ");
       const invCurrency = inv.currency || "TRY";
 
-      return [
-        inv.invoiceNumber,
-        typeLabel,
-        inv.contactName,
-        inv.issueDate,
-        inv.dueDate || "-",
-        formatCurrency(inv.subtotal || 0, invCurrency),
-        formatCurrency(inv.totalVat ?? (inv as any).vatTotal ?? 0, invCurrency),
-        formatCurrency(inv.grandTotal || 0, invCurrency),
-        formatCurrency(inv.paidAmount || 0, invCurrency),
-        formatCurrency(inv.remainingAmount ?? ((inv.grandTotal || 0) - (inv.paidAmount || 0)), invCurrency),
-        invCurrency,
-        statusLabel,
-        itemsSummary,
-      ];
+      if (inv.items && inv.items.length > 0) {
+        inv.items.forEach((item) => {
+          rows.push([
+            inv.invoiceNumber,
+            typeLabel,
+            inv.contactName,
+            inv.issueDate,
+            inv.dueDate || "-",
+            item.description || "Belirtilmedi",
+            item.quantity ?? 0,
+            item.unit || "Adet",
+            formatCurrency(item.unitPrice || 0, invCurrency),
+            `%${item.vatRate ?? 0}`,
+            formatCurrency(item.vatAmount || 0, invCurrency),
+            formatCurrency(item.totalWithVat ?? ((item.totalWithoutVat || 0) + (item.vatAmount || 0)), invCurrency),
+            formatCurrency(inv.grandTotal || 0, invCurrency),
+            formatCurrency(inv.paidAmount || 0, invCurrency),
+            formatCurrency(inv.remainingAmount ?? ((inv.grandTotal || 0) - (inv.paidAmount || 0)), invCurrency),
+            invCurrency,
+            statusLabel,
+            inv.notes || "-",
+          ]);
+        });
+      } else {
+        rows.push([
+          inv.invoiceNumber,
+          typeLabel,
+          inv.contactName,
+          inv.issueDate,
+          inv.dueDate || "-",
+          inv.notes || "Genel Kalem / Belirtilmedi",
+          1,
+          "Adet",
+          formatCurrency(inv.subtotal || inv.grandTotal || 0, invCurrency),
+          `%${inv.totalVat && inv.subtotal ? Math.round((inv.totalVat / inv.subtotal) * 100) : 0}`,
+          formatCurrency(inv.totalVat || 0, invCurrency),
+          formatCurrency(inv.grandTotal || 0, invCurrency),
+          formatCurrency(inv.grandTotal || 0, invCurrency),
+          formatCurrency(inv.paidAmount || 0, invCurrency),
+          formatCurrency(inv.remainingAmount ?? ((inv.grandTotal || 0) - (inv.paidAmount || 0)), invCurrency),
+          invCurrency,
+          statusLabel,
+          inv.notes || "-",
+        ]);
+      }
     });
 
     return {
-      filename: `Fatura_Listesi_${new Date().toISOString().split("T")[0]}`,
-      title: forcedType === "sales" ? "SATIŞ FATURALARI LİSTESİ" : forcedType === "purchase" ? "ALIŞ FATURALARI LİSTESİ" : "TÜM FATURALAR LİSTESİ",
-      subtitle: `Toplam ${filteredInvoices.length} Adet Fatura Kaydı`,
+      filename: `Fatura_Detayli_Stok_Listesi_${new Date().toISOString().split("T")[0]}`,
+      title:
+        forcedType === "sales"
+          ? "SATIŞ (GELİR) FATURALARI STOK & KALEM DETAY LİSTESİ"
+          : forcedType === "purchase"
+          ? "ALIŞ (GİDER) FATURALARI STOK & KALEM DETAY LİSTESİ"
+          : "GELİR VE GİDER FATURALARI STOK & KALEM DETAY LİSTESİ",
+      subtitle: `Toplam ${filteredInvoices.length} Adet Fatura (${rows.length} Satır Kalem Kaydı)`,
       headers,
       rows,
     };
@@ -570,9 +715,55 @@ export const Invoices: React.FC<InvoicesProps> = ({
           </button>
         </div>
 
-        {/* Search & Export */}
+        {/* Search, Year/Month & Export */}
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          <div className="relative w-full md:w-64">
+          {/* Yıl Filtresi */}
+          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <span className="text-slate-400 font-bold">Yıl:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+            >
+              <option value="all">Tüm Yıllar</option>
+              {availableYears.map((y) => (
+                <option key={y} value={y.toString()}>{y}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Ay Filtresi */}
+          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+            <Filter className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <span className="text-slate-400 font-bold">Ay:</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+            >
+              <option value="all">Tüm Aylar</option>
+              {TURKISH_MONTHS.map((m) => (
+                <option key={m.id} value={m.id.toString()}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {(selectedYear !== "all" || selectedMonth !== "all") && (
+            <button
+              onClick={() => {
+                setSelectedYear("all");
+                setSelectedMonth("all");
+              }}
+              className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              title="Yıl ve Ay filtresini temizle"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Temizle</span>
+            </button>
+          )}
+
+          <div className="relative w-full sm:w-64">
             <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -1208,6 +1399,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   İptal
                 </button>
                 <button
+                  type="button"
+                  onClick={() => setIsDraftPreviewOpen(true)}
+                  className="px-4 py-2.5 bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Eye className="w-4 h-4 text-purple-700" />
+                  <span>Faturayı Önizle</span>
+                </button>
+                <button
                   type="submit"
                   className="px-6 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs cursor-pointer"
                 >
@@ -1217,6 +1416,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* MODAL: Draft Invoice Preview */}
+      {isDraftPreviewOpen && (
+        <InvoicePreviewModal
+          invoice={getDraftInvoice()}
+          companySettings={companySettings}
+          contact={contacts.find((c) => c.id === contactId)}
+          isDraft={true}
+          onClose={() => setIsDraftPreviewOpen(false)}
+          onConfirm={() => {
+            setIsDraftPreviewOpen(false);
+            const dummyEvent = { preventDefault: () => {} } as React.FormEvent;
+            handleSaveInvoice(dummyEvent);
+          }}
+          onSelectTab={onSelectTab}
+        />
       )}
 
       {/* MODAL: Record Payment / Collection */}

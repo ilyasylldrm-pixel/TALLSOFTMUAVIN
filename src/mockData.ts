@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction } from "./types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject } from "./types";
 import { generateMonthlyIntegratedData } from "./utils/generateMonthlyDemoData";
 
 const generatedData = generateMonthlyIntegratedData();
@@ -1250,5 +1250,93 @@ export const initialOrders: Order[] = [
     notes: "Sipariş tamamlandı ve Fatura GIB20260000045 olarak kesildi.",
     createdAt: "2026-07-15",
   },
+];
+
+export const initialCostProjects: CostProject[] = [
+  {
+    id: "prj_001",
+    code: "PRJ-2026-001",
+    name: "Maslak Plaza İç Mimari & Şantiye Uygulama",
+    category: "İnşaat / Taahhüt",
+    contactId: "c1",
+    contactName: "TeknoHolding A.Ş.",
+    startDate: "2026-02-01",
+    endDate: "2026-08-30",
+    budget: 450000,
+    contractPrice: 680000,
+    status: "active",
+    description: "Maslak Plaza B Blok 5. Kat mekanik, elektrik ve dekorasyon maliyet takibi.",
+    createdAt: "2026-02-01",
+    costItems: [
+      {
+        id: "pitem_1",
+        type: "material",
+        description: "Granit Seramik & Yapıştırıcı Sarf Malzemeleri",
+        quantity: 350,
+        unit: "m²",
+        unitCost: 420,
+        totalCost: 147000,
+        date: "2026-02-15",
+        notes: "60x120 Lüks granit"
+      },
+      {
+        id: "pitem_2",
+        type: "subcontractor",
+        description: "Elektrik & Zayıf Akım Tesisatı Taşeron Ödemesi",
+        quantity: 1,
+        unit: "Hizmet",
+        unitCost: 85000,
+        totalCost: 85000,
+        date: "2026-03-01"
+      },
+      {
+        id: "pitem_3",
+        type: "labor",
+        description: "Saha Usta ve İşçilik Yevmiyeleri (Şubat-Mart)",
+        quantity: 45,
+        unit: "Adam/Gün",
+        unitCost: 1800,
+        totalCost: 81000,
+        date: "2026-03-15"
+      }
+    ]
+  },
+  {
+    id: "prj_002",
+    code: "PRJ-2026-002",
+    name: "E-Ticaret & Lojistik Mobil Uygulama",
+    category: "Yazılım / Ar-Ge",
+    contactId: "c2",
+    contactName: "Atlas Lojistik A.Ş.",
+    startDate: "2026-03-10",
+    endDate: "2026-09-15",
+    budget: 220000,
+    contractPrice: 340000,
+    status: "active",
+    description: "iOS ve Android sürücü takip ve sipariş yönetim mobil yazılım projesi.",
+    createdAt: "2026-03-10",
+    costItems: [
+      {
+        id: "pitem_4",
+        type: "labor",
+        description: "Senior Mobil Yazılım Uzmanı Adam/Ay",
+        quantity: 2,
+        unit: "Ay",
+        unitCost: 65000,
+        totalCost: 130000,
+        date: "2026-04-01"
+      },
+      {
+        id: "pitem_5",
+        type: "overhead",
+        description: "AWS Bulut Altyapısı & Harita API Lisansları",
+        quantity: 1,
+        unit: "Paket",
+        unitCost: 24000,
+        totalCost: 24000,
+        date: "2026-04-10"
+      }
+    ]
+  }
 ];
 

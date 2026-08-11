@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   Wallet,
   BarChart3,
+  TrendingUp,
   Sparkles,
   Settings,
   Plus,
@@ -20,6 +21,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Package as PackageIcon,
+  Boxes,
   Store,
   Warehouse as WarehouseIcon,
   MapPin,
@@ -53,6 +55,7 @@ export type NavItem =
   | "expenses"
   | "products"
   | "products_list"
+  | "products_costs"
   | "orders"
   | "orders_module"
   | "hr"
@@ -111,14 +114,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "quotes_and_slips", label: "Gelir & Gider Fişleri", icon: FileSpreadsheet, hasSubItems: true },
     { id: "contacts", label: "Cari Hesaplar", icon: Users },
     { id: "accounts", label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
-    { id: "products", label: "Stok & Hizmetler", icon: PackageIcon },
+    { id: "products", label: "Stoklar", icon: PackageIcon },
+    { id: "products_costs", label: "Maliyetler", icon: TrendingUp },
     { id: "hr", label: "İnsan Kaynakları", icon: UserCheck },
     { id: "files", label: "Bulut Dosya Deposu", icon: HardDrive },
     { id: "reports", label: "Vergilendirme", icon: BarChart3 },
     { id: "ai", label: "AI Muavin Asistanı", icon: Sparkles, badge: "Canlı" },
     { id: "settings", label: "Sistem Ayarları", icon: Settings },
   ];
-
 
   const companySubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "company_profile", label: "Firma Profili & Adres", icon: Building },
@@ -236,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   if (isOrderItem) {
                     setIsOrdersExpanded((prev) => !prev);
                     if (!["orders", "orders_module", "quotes"].includes(currentTab)) {
-                      onSelectTab("orders");
+                      handleSelectTabWithMobileClose("orders");
                     }
                   } else if (isInvoiceItem) {
                     setIsInvoicesExpanded((prev) => !prev);
@@ -250,7 +253,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         "waybills_receipt",
                       ].includes(currentTab)
                     ) {
-                      onSelectTab("invoices_sales");
+                      handleSelectTabWithMobileClose("invoices_sales");
                     }
                   } else if (isQuotesAndSlipsItem) {
                     setIsQuotesAndSlipsExpanded((prev) => !prev);
@@ -261,20 +264,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         "expenses",
                       ].includes(currentTab)
                     ) {
-                      onSelectTab("income_slips");
+                      handleSelectTabWithMobileClose("income_slips");
                     }
                   } else if (isFinanceItem) {
                     setIsFinanceExpanded((prev) => !prev);
                     if (currentTab !== "accounts") {
-                      onSelectTab("accounts");
+                      handleSelectTabWithMobileClose("accounts");
                     }
                   } else if (isCompanyItem) {
                     setIsCompanyExpanded((prev) => !prev);
                     if (!["company", "company_profile", "company_branches", "company_warehouses"].includes(currentTab)) {
-                      onSelectTab("company_profile");
+                      handleSelectTabWithMobileClose("company_profile");
                     }
                   } else {
-                    onSelectTab(item.id as NavItem);
+                    handleSelectTabWithMobileClose(item.id as NavItem);
                   }
                 }}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${

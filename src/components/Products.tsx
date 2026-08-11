@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useDeferredValue } from "react";
-import { Product, Invoice, Contact, Warehouse } from "../types";
+import { Product, Invoice, Contact, Warehouse, CostProject, Employee, Transaction } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
+import { ProductCostsView } from "./ProductCostsView";
 import {
   Package,
   Plus,
@@ -33,6 +34,10 @@ import {
   Boxes,
   Send,
   CheckCircle2,
+  BarChart3,
+  Wallet,
+  Calculator,
+  Percent,
 } from "lucide-react";
 
 interface ProductsProps {
@@ -40,10 +45,18 @@ interface ProductsProps {
   invoices?: Invoice[];
   contacts?: Contact[];
   warehouses?: Warehouse[];
+  costProjects?: CostProject[];
+  employees?: Employee[];
+  transactions?: Transaction[];
   globalSearchTerm?: string;
+  activeSubTab?: "list" | "costs";
+  onSelectSubTab?: (subTab: "list" | "costs") => void;
   onAddProduct: (product: Product) => void;
   onUpdateProduct?: (product: Product) => void;
   onDeleteProduct: (id: string) => void;
+  onAddCostProject?: (project: CostProject) => void;
+  onUpdateCostProject?: (project: CostProject) => void;
+  onDeleteCostProject?: (id: string) => void;
 }
 
 export interface ProductMovement {
@@ -60,6 +73,7 @@ export interface ProductMovement {
   totalWithVat: number;
   vatRate: number;
   itemDescription: string;
+  runningBalance?: number;
 }
 
 const defaultWarehouses: Warehouse[] = [
@@ -168,7 +182,8 @@ function getProductMovements(product: Product, invoices: Invoice[] = []): Produc
     });
   });
 
-  movements.sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime());
+  // Eskiden yeniye sırala (Oldest to Newest)
+  movements.sort((a, b) => new Date(a.issueDate).getTime() - new Date(b.issueDate).getTime());
   return movements;
 }
 
@@ -207,9 +222,26 @@ function getProductAnalytics(product: Product, invoices: Invoice[] = []) {
       vatRate: openingVat,
       itemDescription: `${product.name} - Mevcut Stok Devir Bakiye Kaydı`,
     });
-
-    movements.sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime());
   }
+
+  // Eskiden yeniye sırala (Oldest to Newest, opening devir on top)
+  movements.sort((a, b) => {
+    const timeA = new Date(a.issueDate).getTime();
+    const timeB = new Date(b.issueDate).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    return a.id.startsWith("devir_") ? -1 : 1;
+  });
+
+  // Calculate Yürüyen Stok Bakiye (Running Stock Balance)
+  let accumulatedStock = 0;
+  movements.forEach((m) => {
+    if (m.type === "purchase") {
+      accumulatedStock += m.quantity;
+    } else {
+      accumulatedStock -= m.quantity;
+    }
+    m.runningBalance = accumulatedStock;
+  });
 
   const purchaseMovements = movements.filter((m) => m.type === "purchase");
 
@@ -254,12 +286,38 @@ export const Products: React.FC<ProductsProps> = ({
   invoices = [],
   contacts = [],
   warehouses = [],
+  costProjects = [],
+  employees = [],
+  transactions = [],
   globalSearchTerm = "",
+  activeSubTab,
+  onSelectSubTab,
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
+  onAddCostProject,
+  onUpdateCostProject,
+  onDeleteCostProject,
 }) => {
   const activeWarehouses = warehouses && warehouses.length > 0 ? warehouses : defaultWarehouses;
+
+  const [internalTab, setInternalTab] = useState<"list" | "costs">("list");
+  const activeTab = activeSubTab || internalTab;
+
+  const handleTabChange = (tab: "list" | "costs") => {
+    setInternalTab(tab);
+    if (onSelectSubTab) {
+      onSelectSubTab(tab);
+    }
+  };
+
+  // Maliyetler tab state
+  const [costMethod, setCostMethod] = useState<"card" | "weighted_avg">("weighted_avg");
+  const [costStockTypeFilter, setCostStockTypeFilter] = useState<string>("all");
+  const [costMarginFilter, setCostMarginFilter] = useState<"all" | "low" | "high" | "negative">("all");
+  const [costSearch, setCostSearch] = useState("");
+  const [simulatedInflation, setSimulatedInflation] = useState<number>(0);
+  const [targetMargin, setTargetMargin] = useState<number>(25);
 
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -276,10 +334,94 @@ export const Products: React.FC<ProductsProps> = ({
     return map;
   }, [products, invoices]);
 
+  // Calculations for Maliyetler module
+  const costProductsData = useMemo(() => {
+    return products.map((p) => {
+      const analytics = analyticsMap.get(p.id);
+      const cardBuy = p.buyPrice || 0;
+      const cardSell = p.sellPrice || 0;
+      const avgBuy = analytics?.avgBuyPrice && analytics.avgBuyPrice > 0 ? analytics.avgBuyPrice : cardBuy;
+      const avgSell = analytics?.avgSellPrice && analytics.avgSellPrice > 0 ? analytics.avgSellPrice : cardSell;
+
+      const baseBuy = costMethod === "weighted_avg" ? avgBuy : cardBuy;
+      const simBuy = baseBuy * (1 + simulatedInflation / 100);
+      const effectiveSell = cardSell;
+
+      const unitProfit = effectiveSell - simBuy;
+      const marginPercent = simBuy > 0 ? (unitProfit / simBuy) * 100 : 0;
+      const suggestedSellPrice = simBuy * (1 + targetMargin / 100);
+
+      const qty = p.stockQuantity || 0;
+      const totalCost = qty * simBuy;
+      const totalRevenue = qty * effectiveSell;
+      const totalProfit = totalRevenue - totalCost;
+
+      return {
+        product: p,
+        qty,
+        cardBuy,
+        cardSell,
+        avgBuy,
+        avgSell,
+        effectiveBuy: simBuy,
+        effectiveSell,
+        unitProfit,
+        marginPercent,
+        totalCost,
+        totalRevenue,
+        totalProfit,
+        suggestedSellPrice,
+      };
+    });
+  }, [products, analyticsMap, costMethod, simulatedInflation, targetMargin]);
+
+  const filteredCostProducts = useMemo(() => {
+    return costProductsData.filter((item) => {
+      const p = item.product;
+      const q = (globalSearchTerm || costSearch).toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.code.toLowerCase().includes(q) ||
+        (p.category && p.category.toLowerCase().includes(q));
+
+      if (!matchesSearch) return false;
+
+      if (costStockTypeFilter !== "all") {
+        if ((p.stockType || "Ticari Mal") !== costStockTypeFilter) return false;
+      }
+
+      if (costMarginFilter === "low" && item.marginPercent >= 15) return false;
+      if (costMarginFilter === "high" && item.marginPercent < 30) return false;
+      if (costMarginFilter === "negative" && item.marginPercent > 0) return false;
+
+      return true;
+    });
+  }, [costProductsData, globalSearchTerm, costSearch, costStockTypeFilter, costMarginFilter]);
+
+  const costTotals = useMemo(() => {
+    let totalValuation = 0;
+    let totalPotentialRevenue = 0;
+    let totalPotentialProfit = 0;
+    let totalItems = 0;
+
+    filteredCostProducts.forEach((item) => {
+      totalValuation += item.totalCost;
+      totalPotentialRevenue += item.totalRevenue;
+      totalPotentialProfit += item.totalProfit;
+      totalItems += item.qty;
+    });
+
+    const overallMargin = totalValuation > 0 ? (totalPotentialProfit / totalValuation) * 100 : 0;
+
+    return { totalValuation, totalPotentialRevenue, totalPotentialProfit, totalItems, overallMargin };
+  }, [filteredCostProducts]);
+
   // Selected product for Ekstre Modal
   const [selectedEkstreProduct, setSelectedEkstreProduct] = useState<Product | null>(null);
   const [ekstreTab, setEkstreTab] = useState<"all" | "purchase" | "sales">("all");
   const [ekstreSearch, setEkstreSearch] = useState("");
+  const [ekstreWarehouseId, setEkstreWarehouseId] = useState<string>("all");
 
   // Warehouse Transfer Modal State
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -634,9 +776,67 @@ export const Products: React.FC<ProductsProps> = ({
     };
   };
 
+  const getCostsExportData = (): ExportData => {
+    const headers = [
+      "Stok Kodu",
+      "Ürün / Hizmet Adı",
+      "Stok Türü",
+      "Kategori",
+      "Mevcut Miktar",
+      "Birim",
+      "Birim Alış Maliyeti",
+      "AOF (Ortalama Alış)",
+      "Birim Satış Fiyatı",
+      "Birim Kar",
+      "Kar Marjı (%)",
+      "Toplam Envanter Maliyeti",
+      "Tahmini Toplam Ciro",
+      "Potansiyel Toplam Kar",
+    ];
+    const rows = filteredCostProducts.map((item) => [
+      item.product.code || "",
+      item.product.name || "",
+      item.product.stockType || "Ticari Mal",
+      item.product.category || "Genel",
+      item.qty,
+      item.product.unit || "Adet",
+      formatCurrency(item.effectiveBuy, item.product.currency || "TRY"),
+      formatCurrency(item.avgBuy, item.product.currency || "TRY"),
+      formatCurrency(item.effectiveSell, item.product.currency || "TRY"),
+      formatCurrency(item.unitProfit, item.product.currency || "TRY"),
+      `%${item.marginPercent.toFixed(1)}`,
+      formatCurrency(item.totalCost, item.product.currency || "TRY"),
+      formatCurrency(item.totalRevenue, item.product.currency || "TRY"),
+      formatCurrency(item.totalProfit, item.product.currency || "TRY"),
+    ]);
+    return {
+      filename: `Stok_Maliyet_ve_Kar_Analizi_${new Date().toISOString().split("T")[0]}`,
+      title: "STOK MALİYET VE KAR MARJI ANALİZ RAPORU",
+      subtitle: `Yöntem: ${costMethod === "weighted_avg" ? "Ağırlıklı Ortalama Maliyet (AOF)" : "Kart Tanımlı Maliyet"} | Ürün Sayısı: ${filteredCostProducts.length}`,
+      headers,
+      rows,
+    };
+  };
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Header (Lila Bal Peteği & Geometrik Desen) */}
+      {activeTab === "costs" ? (
+        <ProductCostsView
+          products={products}
+          invoices={invoices}
+          contacts={contacts}
+          costProjects={costProjects}
+          employees={employees}
+          transactions={transactions}
+          globalSearchTerm={globalSearchTerm}
+          analyticsMap={analyticsMap}
+          onAddCostProject={onAddCostProject}
+          onUpdateCostProject={onUpdateCostProject}
+          onDeleteCostProject={onDeleteCostProject}
+        />
+      ) : (
+        <>
+          {/* Header (Lila Bal Peteği & Geometrik Desen) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div
           className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
@@ -1055,18 +1255,19 @@ export const Products: React.FC<ProductsProps> = ({
 
                     {/* Actions Column */}
                     <td className="py-3 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex items-center justify-center gap-1.5">
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                         {/* Ekstre Button */}
                         <button
                           onClick={() => {
                             setSelectedEkstreProduct(p);
                             setEkstreTab("all");
                             setEkstreSearch("");
+                            setEkstreWarehouseId(selectedWarehouseId || "all");
                           }}
                           title="Ürün Ekstresi & Depo Detayı"
-                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                         >
-                          <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                          <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                           <span>Ekstre</span>
                         </button>
 
@@ -1074,9 +1275,9 @@ export const Products: React.FC<ProductsProps> = ({
                         <button
                           onClick={() => handleOpenTransferModal(p.id)}
                           title="Depolar Arası Transfer Et"
-                          className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                          className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                         >
-                          <ArrowRightLeft className="w-3.5 h-3.5 text-amber-600" />
+                          <ArrowRightLeft className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           <span>Transfer</span>
                         </button>
 
@@ -1084,9 +1285,10 @@ export const Products: React.FC<ProductsProps> = ({
                         <button
                           onClick={() => handleOpenAddModal(p)}
                           title="Stok Kartını Düzenle"
-                          className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 p-1.5 rounded-lg text-xs transition-colors cursor-pointer shadow-2xs"
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                         >
-                          <Edit2 className="w-3.5 h-3.5 text-purple-700" />
+                          <Edit2 className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                          <span>Düzenle</span>
                         </button>
 
                         {/* Delete Button */}
@@ -1097,9 +1299,10 @@ export const Products: React.FC<ProductsProps> = ({
                             }
                           }}
                           title="Stok Kartını Sil"
-                          className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 p-1.5 rounded-lg text-xs transition-colors cursor-pointer shadow-2xs"
+                          className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span>Sil</span>
                         </button>
                       </div>
                     </td>
@@ -1131,6 +1334,8 @@ export const Products: React.FC<ProductsProps> = ({
           </div>
         )}
       </div>
+        </>
+      )}
 
       {/* WAREHOUSE STOCK TRANSFER MODAL */}
       {isTransferModalOpen && (
@@ -1315,6 +1520,49 @@ export const Products: React.FC<ProductsProps> = ({
             {/* Scrollable Content Body */}
             <div className="p-5 overflow-y-auto space-y-4 flex-1">
 
+            {/* DEPO SEÇİMİ VE DEPO MEVCUT KALANI CARD */}
+            <div className="bg-gradient-to-r from-purple-50 via-indigo-50/50 to-amber-50/60 border border-purple-200/80 rounded-2xl p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <WarehouseIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-purple-900 mb-0.5">
+                    Depo Seçimi & Bakiye Sorgulama
+                  </label>
+                  <select
+                    value={ekstreWarehouseId}
+                    onChange={(e) => setEkstreWarehouseId(e.target.value)}
+                    className="bg-white border border-purple-200 text-slate-900 font-extrabold text-xs rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 cursor-pointer shadow-2xs w-full sm:w-64"
+                  >
+                    <option value="all">🏢 Tüm Depolar (Konsolide Toplam)</option>
+                    {activeWarehouses.map((wh) => (
+                      <option key={wh.id} value={wh.id}>
+                        🏬 {wh.name} ({wh.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-white/95 px-4 py-2.5 rounded-xl border border-purple-200 flex items-center justify-between sm:justify-end gap-3 shadow-2xs">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    {ekstreWarehouseId === "all"
+                      ? "Tüm Depolar Toplam Kalan"
+                      : `${activeWarehouses.find((w) => w.id === ekstreWarehouseId)?.name || "Seçili Depo"} Mevcut Kalanı`}
+                  </div>
+                  <div className="text-base font-black font-mono text-purple-950">
+                    {getProductStockInWarehouse(selectedEkstreProduct, ekstreWarehouseId, activeWarehouses)}{" "}
+                    <span className="text-xs font-bold text-purple-700">{selectedEkstreProduct.unit}</span>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-black font-mono shrink-0">
+                  Mevcut Kalan
+                </span>
+              </div>
+            </div>
+
             {/* DEPO BAZLI STOK DAĞILIMI CARD */}
             <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
@@ -1336,13 +1584,26 @@ export const Products: React.FC<ProductsProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                 {activeWarehouses.map((wh) => {
                   const qty = getProductStockInWarehouse(selectedEkstreProduct, wh.id, activeWarehouses);
+                  const isSelected = ekstreWarehouseId === wh.id;
                   return (
-                    <div key={wh.id} className="bg-white/80 p-2.5 rounded-lg border border-amber-200/60 flex items-center justify-between">
+                    <div
+                      key={wh.id}
+                      onClick={() => setEkstreWarehouseId(wh.id)}
+                      className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                        isSelected
+                          ? "bg-purple-100/90 border-purple-400 ring-2 ring-purple-400/20 shadow-2xs"
+                          : "bg-white/80 border-amber-200/60 hover:bg-white"
+                      }`}
+                    >
                       <div>
                         <div className="font-extrabold text-slate-900 text-xs">{wh.name}</div>
                         <div className="text-[10px] text-slate-500 font-mono">{wh.code} • {wh.address.city}</div>
                       </div>
-                      <span className="font-black font-mono text-xs text-amber-900 bg-amber-100 px-2 py-1 rounded-md border border-amber-200">
+                      <span className={`font-black font-mono text-xs px-2 py-1 rounded-md border ${
+                        isSelected
+                          ? "text-purple-950 bg-purple-200 border-purple-300"
+                          : "text-amber-900 bg-amber-100 border-amber-200"
+                      }`}>
                         {qty} {selectedEkstreProduct.unit}
                       </span>
                     </div>
@@ -1456,7 +1717,11 @@ export const Products: React.FC<ProductsProps> = ({
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative w-full sm:w-64">
+                <span className="text-[10px] bg-purple-50 text-purple-800 border border-purple-200 font-bold px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                  <Clock className="w-3 h-3 text-purple-600" />
+                  Eskiden Yeniye Sıralı
+                </span>
+                <div className="relative w-full sm:w-52">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
@@ -1472,7 +1737,7 @@ export const Products: React.FC<ProductsProps> = ({
 
             {/* Table of Movements */}
             <div className="overflow-x-auto custom-scrollbar w-full rounded-xl border border-slate-200 max-h-72">
-              <table className="w-full text-left text-xs min-w-[750px]">
+              <table className="w-full text-left text-xs min-w-[850px]">
                 <thead className="bg-slate-100 text-slate-700 font-extrabold sticky top-0 z-10 border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-3">Tarih</th>
@@ -1482,6 +1747,7 @@ export const Products: React.FC<ProductsProps> = ({
                     <th className="py-2.5 px-3 text-right">Miktar</th>
                     <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
                     <th className="py-2.5 px-3 text-right">Toplam (KDV Dahil)</th>
+                    <th className="py-2.5 px-3 text-right text-purple-900 bg-purple-100/70">Yürüyen Stok Bakiye</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1503,7 +1769,7 @@ export const Products: React.FC<ProductsProps> = ({
                         <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{m.invoiceNumber}</td>
                         <td className="py-2.5 px-3 font-semibold text-slate-900">{m.contactName}</td>
                         <td className="py-2.5 px-3 text-right font-mono font-extrabold text-slate-900">
-                          {m.quantity} {m.unit}
+                          {isPurchase ? "+" : "-"}{m.quantity} {m.unit}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-700">
                           ₺{m.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
@@ -1511,13 +1777,16 @@ export const Products: React.FC<ProductsProps> = ({
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                           ₺{m.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-black text-purple-900 bg-purple-50/40">
+                          {m.runningBalance !== undefined ? m.runningBalance : "-"} {m.unit}
+                        </td>
                       </tr>
                     );
                   })}
 
                   {filteredEkstreMovements.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="text-center py-8 text-slate-400">
+                      <td colSpan={8} className="text-center py-8 text-slate-400">
                         Bu kriterlere uygun fatura hareketi bulunamadı.
                       </td>
                     </tr>

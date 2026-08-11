@@ -49,6 +49,7 @@ import {
   LeaveRequest,
   AdvanceRequest,
   LegalDeduction,
+  CostProject,
 } from "./types";
 
 import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X } from "lucide-react";
@@ -135,6 +136,29 @@ export default function App() {
   useEffect(() => { if (data.leaveRequests) saveStoredData("LEAVE_REQUESTS", data.leaveRequests); }, [data.leaveRequests]);
   useEffect(() => { if (data.advanceRequests) saveStoredData("ADVANCE_REQUESTS", data.advanceRequests); }, [data.advanceRequests]);
   useEffect(() => { if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions); }, [data.legalDeductions]);
+  useEffect(() => { if (data.costProjects) saveStoredData("COST_PROJECTS", data.costProjects); }, [data.costProjects]);
+
+  // Handlers for Cost Projects
+  const handleAddCostProject = (newProject: CostProject) => {
+    setData((prev) => ({
+      ...prev,
+      costProjects: [newProject, ...(prev.costProjects || [])],
+    }));
+  };
+
+  const handleUpdateCostProject = (updatedProject: CostProject) => {
+    setData((prev) => ({
+      ...prev,
+      costProjects: (prev.costProjects || []).map((p) => (p.id === updatedProject.id ? updatedProject : p)),
+    }));
+  };
+
+  const handleDeleteCostProject = (projectId: string) => {
+    setData((prev) => ({
+      ...prev,
+      costProjects: (prev.costProjects || []).filter((p) => p.id !== projectId),
+    }));
+  };
 
   // Handlers for Waybills (İrsaliyeler)
   const handleAddWaybill = (newWaybill: Waybill) => {
@@ -1216,7 +1240,10 @@ export default function App() {
       case "expenses":
         return "Gider Fişi";
       case "products":
-        return "Stok & Hizmetler";
+      case "products_list":
+        return "Stoklar & Depolar";
+      case "products_costs":
+        return "Maliyetler & Kar Analizi";
       case "hr":
         return "İnsan Kaynakları";
       case "reports":
@@ -1408,16 +1435,24 @@ export default function App() {
             />
           )}
 
-          {(currentTab === "products" || currentTab === "products_list") && (
+          {(currentTab === "products" || currentTab === "products_list" || currentTab === "products_costs") && (
             <Products
               products={data.products}
               invoices={data.invoices}
               contacts={data.contacts}
               warehouses={data.warehouses || []}
+              costProjects={data.costProjects || []}
+              employees={data.employees || []}
+              transactions={data.transactions || []}
               globalSearchTerm={searchTerm}
+              activeSubTab={currentTab === "products_costs" ? "costs" : "list"}
+              onSelectSubTab={(sub) => setCurrentTab(sub === "costs" ? "products_costs" : "products_list")}
               onAddProduct={handleAddProduct}
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
+              onAddCostProject={handleAddCostProject}
+              onUpdateCostProject={handleUpdateCostProject}
+              onDeleteCostProject={handleDeleteCostProject}
             />
           )}
 
@@ -1467,6 +1502,7 @@ export default function App() {
               companySettings={data.settings}
               branches={data.branches || []}
               warehouses={data.warehouses || []}
+              costProjects={data.costProjects || []}
               onAddEmployee={handleAddEmployee}
               onUpdateEmployee={handleUpdateEmployee}
               onDeleteEmployee={handleDeleteEmployee}
