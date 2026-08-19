@@ -31,6 +31,14 @@ import {
   EyeOff,
   FileText,
   ExternalLink,
+  Globe,
+  Copy,
+  Calendar,
+  Smartphone,
+  Info,
+  Shield,
+  Fingerprint,
+  CheckCheck,
 } from "lucide-react";
 
 export type CompanySubTab = "profile" | "branches" | "warehouses";
@@ -75,10 +83,13 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   // Profile Form State
   const [profileForm, setProfileForm] = useState<CompanySettings>(settings);
   const [isSaved, setIsSaved] = useState(false);
+  const [isCredSaved, setIsCredSaved] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Credential Password Visibility
   const [showTaxPasswords, setShowTaxPasswords] = useState(false);
   const [showSgkPasswords, setShowSgkPasswords] = useState(false);
+  const [showEDevletPasswords, setShowEDevletPasswords] = useState(false);
   const [isGibModalOpen, setIsGibModalOpen] = useState(false);
 
   const handleTaxCredChange = (field: string, value: string) => {
@@ -99,6 +110,30 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         [field]: value,
       },
     }));
+  };
+
+  const handleEDevletCredChange = (field: string, value: string) => {
+    setProfileForm((prev) => ({
+      ...prev,
+      eDevletCredentials: {
+        ...prev.eDevletCredentials,
+        [field]: value,
+      },
+    }));
+  };
+
+  const copyToClipboard = (text: string | undefined, keyId: string) => {
+    if (!text) return;
+    navigator.clipboard?.writeText(text);
+    setCopiedKey(keyId);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleSaveCredentials = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    onSaveSettings(profileForm);
+    setIsCredSaved(true);
+    setTimeout(() => setIsCredSaved(false), 3000);
   };
 
   // Branch Modal State
@@ -601,27 +636,166 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             </div>
           </div>
 
-          {/* VERGİ DAİRESİ ŞİFRE VE ERİŞİM BİLGİLERİ */}
+          {/* Submit Action for Profile */}
+          <div className="flex items-center justify-between bg-purple-50/60 p-4 rounded-2xl border border-purple-200/60">
+            {isSaved ? (
+              <span className="text-xs font-extrabold text-emerald-600 flex items-center gap-1.5">
+                <Check className="w-4 h-4" />
+                Firma bilgileri ve detaylı adres başarıyla kaydedildi!
+              </span>
+            ) : (
+              <span className="text-xs text-purple-900/80 font-medium">
+                Firma profili ve adres değişikliklerinizi kaydetmek için butona basınız.
+              </span>
+            )}
+
+            <button
+              type="submit"
+              className="bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold px-6 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-2"
+            >
+              <Save className="w-4 h-4 text-[#EF7D2C]" />
+              <span>Firma Bilgilerini Kaydet</span>
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* SUB-TAB: E-İŞLEMLER (GİB, SGK, E-DEVLET VE KURUM ŞİFRELERİ) */}
+      {(false as any) && (
+        <form onSubmit={handleSaveCredentials} className="space-y-6">
+          {/* E-İşlemler Üst Bilgilendirme & Hızlı Portal Bağlantıları */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    E-İşlemler Modülü
+                  </span>
+                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    Resmi Kurum Portalları
+                  </span>
+                </div>
+                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-purple-600" />
+                  E-İşlemler, GİB, SGK ve Şirket Müdürü E-Devlet Şifreleri
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Vergi dairesi, SGK işveren portalı ve şirket müdürünün e-Devlet giriş şifrelerini tek bir güvenli panelden yönetin.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsGibModalOpen(true)}
+                  className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Dijital Vergi Dairesi
+                </button>
+              </div>
+            </div>
+
+            {/* Hızlı Portal Başlatıcı Kartları */}
+            <div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-purple-600" />
+                Sık Kullanılan Resmi E-Devlet ve Kurum Portalları
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                <a
+                  href="https://dijital.gib.gov.tr"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-red-50/60 border border-slate-200/80 hover:border-red-200 text-slate-700 hover:text-red-700 transition-all group"
+                >
+                  <div className="truncate">
+                    <div className="text-xs font-bold truncate">Dijital Vergi Dairesi</div>
+                    <div className="text-[10px] text-slate-400 group-hover:text-red-500 truncate">dijital.gib.gov.tr</div>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-red-600 shrink-0 ml-1" />
+                </a>
+
+                <a
+                  href="https://giris.turkiye.gov.tr/Giris/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-blue-50/60 border border-slate-200/80 hover:border-blue-200 text-slate-700 hover:text-blue-700 transition-all group"
+                >
+                  <div className="truncate">
+                    <div className="text-xs font-bold truncate">e-Devlet Kapısı</div>
+                    <div className="text-[10px] text-slate-400 group-hover:text-blue-500 truncate">turkiye.gov.tr</div>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 ml-1" />
+                </a>
+
+                <a
+                  href="https://uyg.sgk.gov.tr/IsverenSistemi/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-emerald-50/60 border border-slate-200/80 hover:border-emerald-200 text-slate-700 hover:text-emerald-700 transition-all group"
+                >
+                  <div className="truncate">
+                    <div className="text-xs font-bold truncate">SGK İşveren Sistemi</div>
+                    <div className="text-[10px] text-slate-400 group-hover:text-emerald-500 truncate">uyg.sgk.gov.tr</div>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 shrink-0 ml-1" />
+                </a>
+
+                <a
+                  href="https://earsivportal.efatura.gov.tr/intragiris.html"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-amber-50/60 border border-slate-200/80 hover:border-amber-200 text-slate-700 hover:text-amber-700 transition-all group"
+                >
+                  <div className="truncate">
+                    <div className="text-xs font-bold truncate">GİB e-Arşiv Portalı</div>
+                    <div className="text-[10px] text-slate-400 group-hover:text-amber-500 truncate">earsivportal.gov.tr</div>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-600 shrink-0 ml-1" />
+                </a>
+
+                <a
+                  href="https://mersis.gtb.gov.tr/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-purple-50/60 border border-slate-200/80 hover:border-purple-200 text-slate-700 hover:text-purple-700 transition-all group"
+                >
+                  <div className="truncate">
+                    <div className="text-xs font-bold truncate">MERSİS Portalı</div>
+                    <div className="text-[10px] text-slate-400 group-hover:text-purple-500 truncate">mersis.gtb.gov.tr</div>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 shrink-0 ml-1" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* 1. BÖLÜM: VERGİ DAİRESİ & GİB PORTAL ŞİFRELERİ */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <Lock className="w-4 h-4 text-purple-600" />
-                Vergi Dairesi & GİB Portal Şifreleri
-              </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-red-600" />
+                  1. Vergi Dairesi & GİB Portal Şifreleri
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  İnteraktif Vergi Dairesi, e-Beyanname ve Dijital Vergi Dairesi giriş bilgileriniz.
+                </p>
+              </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsGibModalOpen(true)}
-                  className="text-xs font-extrabold text-white bg-red-700 hover:bg-red-800 px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" /> Dijital Vergi Dairesine Bağlan
+                  <ExternalLink className="w-3.5 h-3.5" /> Dijital VD Bağlan
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowTaxPasswords(!showTaxPasswords)}
-                  className="text-xs font-bold text-slate-700 hover:text-purple-700 bg-slate-100 hover:bg-purple-100 px-3 py-1 rounded-lg border border-slate-200/80 transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="text-xs font-bold text-slate-700 hover:text-red-700 bg-slate-100 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   {showTaxPasswords ? (
                     <>
@@ -629,7 +803,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                     </>
                   ) : (
                     <>
-                      <Eye className="w-3.5 h-3.5 text-purple-600" /> Şifreleri Göster
+                      <Eye className="w-3.5 h-3.5 text-red-600" /> Şifreleri Göster
                     </>
                   )}
                 </button>
@@ -638,63 +812,130 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <User className="w-3.5 h-3.5 text-purple-600" /> Kullanıcı Kodu
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-red-600" /> Kullanıcı Kodu
+                  </span>
+                  {profileForm.taxCredentials?.userCode && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.taxCredentials?.userCode, "tax_userCode")}
+                      className="text-[10px] text-slate-400 hover:text-red-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "tax_userCode" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </label>
                 <input
                   type="text"
                   placeholder="GİB / İnteraktif VD Kullanıcı Kodu"
                   value={profileForm.taxCredentials?.userCode || ""}
                   onChange={(e) => handleTaxCredChange("userCode", e.target.value)}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono"
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <Key className="w-3.5 h-3.5 text-purple-600" /> Parola
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Key className="w-3.5 h-3.5 text-red-600" /> Parola
+                  </span>
+                  {profileForm.taxCredentials?.password && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.taxCredentials?.password, "tax_password")}
+                      className="text-[10px] text-slate-400 hover:text-red-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "tax_password" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </label>
                 <input
                   type={showTaxPasswords ? "text" : "password"}
                   placeholder="GİB Parola"
                   value={profileForm.taxCredentials?.password || ""}
                   onChange={(e) => handleTaxCredChange("password", e.target.value)}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono"
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <Lock className="w-3.5 h-3.5 text-purple-600" /> Şifre
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5 text-red-600" /> Şifre (e-Beyanname)
+                  </span>
+                  {profileForm.taxCredentials?.codeSecret && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.taxCredentials?.codeSecret, "tax_codeSecret")}
+                      className="text-[10px] text-slate-400 hover:text-red-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "tax_codeSecret" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </label>
                 <input
                   type={showTaxPasswords ? "text" : "password"}
                   placeholder="e-Beyanname / İnternet VD Şifresi"
                   value={profileForm.taxCredentials?.codeSecret || ""}
                   onChange={(e) => handleTaxCredChange("codeSecret", e.target.value)}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono"
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
                 />
               </div>
             </div>
           </div>
 
-          {/* SGK ŞİFRE VE ERİŞİM BİLGİLERİ */}
+          {/* 2. BÖLÜM: SGK (SOSYAL GÜVENLİK KURUMU) ŞİFRELERİ */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                SGK (Sosyal Güvenlik Kurumu) Şifreleri
-              </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  2. SGK (Sosyal Güvenlik Kurumu) Şifreleri
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  e-SGK, e-Bildirge v2, İşveren Sistemi ve MUHSGK bildirim şifreleriniz.
+                </p>
+              </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/60">
-                  e-SGK / e-Bildirge / İşveren Portalı
-                </span>
+                <a
+                  href="https://uyg.sgk.gov.tr/IsverenSistemi/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> e-SGK İşveren Portalı
+                </a>
 
                 <button
                   type="button"
                   onClick={() => setShowSgkPasswords(!showSgkPasswords)}
-                  className="text-xs font-bold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-100 px-3 py-1 rounded-lg border border-slate-200/80 transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="text-xs font-bold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   {showSgkPasswords ? (
                     <>
@@ -711,69 +952,341 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <FileText className="w-3.5 h-3.5 text-emerald-600" /> SGK İşyeri Sicil No
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <FileText className="w-3.5 h-3.5 text-emerald-600" /> SGK İşyeri Sicil No
+                  </span>
+                  {profileForm.sgkCredentials?.workplaceRegistrationNo && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.sgkCredentials?.workplaceRegistrationNo, "sgk_regNo")}
+                      className="text-[10px] text-slate-400 hover:text-emerald-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "sgk_regNo" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </label>
                 <input
                   type="text"
                   placeholder="2.8470.01.01.1029384..."
                   value={profileForm.sgkCredentials?.workplaceRegistrationNo || ""}
                   onChange={(e) => handleSgkCredChange("workplaceRegistrationNo", e.target.value)}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono"
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <User className="w-3.5 h-3.5 text-emerald-600" /> Kullanıcı Kodu
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-emerald-600" /> Kullanıcı Kodu
+                  </span>
+                  {profileForm.sgkCredentials?.userCode && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.sgkCredentials?.userCode, "sgk_userCode")}
+                      className="text-[10px] text-slate-400 hover:text-emerald-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "sgk_userCode" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </label>
                 <input
                   type="text"
                   placeholder="SGK e-Bildirge Kullanıcı Kodu"
                   value={profileForm.sgkCredentials?.userCode || ""}
                   onChange={(e) => handleSgkCredChange("userCode", e.target.value)}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono"
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <Key className="w-3.5 h-3.5 text-emerald-600" /> Sistem Şifresi
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Key className="w-3.5 h-3.5 text-emerald-600" /> Sistem Şifresi
+                  </span>
+                  {profileForm.sgkCredentials?.systemPassword && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.sgkCredentials?.systemPassword, "sgk_sysPass")}
+                      className="text-[10px] text-slate-400 hover:text-emerald-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "sgk_sysPass" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </label>
                 <input
                   type={showSgkPasswords ? "text" : "password"}
                   placeholder="e-SGK Sistem Şifresi"
                   value={profileForm.sgkCredentials?.systemPassword || ""}
                   onChange={(e) => handleSgkCredChange("systemPassword", e.target.value)}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono"
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <Lock className="w-3.5 h-3.5 text-emerald-600" /> İşyeri Şifresi
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5 text-emerald-600" /> İşyeri Şifresi
+                  </span>
+                  {profileForm.sgkCredentials?.workplacePassword && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.sgkCredentials?.workplacePassword, "sgk_wpPass")}
+                      className="text-[10px] text-slate-400 hover:text-emerald-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "sgk_wpPass" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </label>
                 <input
                   type={showSgkPasswords ? "text" : "password"}
                   placeholder="e-SGK İşyeri Şifresi"
                   value={profileForm.sgkCredentials?.workplacePassword || ""}
                   onChange={(e) => handleSgkCredChange("workplacePassword", e.target.value)}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono"
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
                 />
               </div>
             </div>
           </div>
 
-          {/* Submit Action */}
-          <div className="flex items-center justify-between bg-purple-50/60 p-4 rounded-2xl border border-purple-200/60">
-            {isSaved ? (
+          {/* 3. BÖLÜM: ŞİRKET MÜDÜRÜ / YETKİLİSİ E-DEVLET ŞİFRELERİ (AYRI BÖLÜM) */}
+          <div className="bg-white p-6 rounded-2xl border border-blue-200/80 shadow-xs space-y-4 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                    Yönetici & İmza Yetkilisi
+                  </span>
+                </div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 mt-1">
+                  <Fingerprint className="w-4 h-4 text-blue-600" />
+                  3. Şirket Müdürü / İmza Yetkilisi E-Devlet Şifreleri
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Ticaret Sicil, MERSİS, e-İmza, Noter ve e-Devlet kurumsal yetkili işlemlerinde kullanılan şifre ve yetki bilgileri.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href="https://giris.turkiye.gov.tr/Giris/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> e-Devlet Kapısına Git
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setShowEDevletPasswords(!showEDevletPasswords)}
+                  className="text-xs font-bold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {showEDevletPasswords ? (
+                    <>
+                      <EyeOff className="w-3.5 h-3.5 text-rose-600" /> Şifreleri Gizle
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-3.5 h-3.5 text-blue-600" /> Şifreleri Göster
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-blue-600" /> Müdür / Yetkili Adı Soyadı
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Örn: Ahmet Yılmaz"
+                  value={profileForm.eDevletCredentials?.managerName || ""}
+                  onChange={(e) => handleEDevletCredChange("managerName", e.target.value)}
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 text-xs transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Fingerprint className="w-3.5 h-3.5 text-blue-600" /> T.C. Kimlik Numarası
+                  </span>
+                  {profileForm.eDevletCredentials?.tcKimlikNo && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.eDevletCredentials?.tcKimlikNo, "edevlet_tckn")}
+                      className="text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "edevlet_tckn" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  maxLength={11}
+                  placeholder="11 Haneli TCKN"
+                  value={profileForm.eDevletCredentials?.tcKimlikNo || ""}
+                  onChange={(e) => handleEDevletCredChange("tcKimlikNo", e.target.value.replace(/\D/g, ""))}
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Key className="w-3.5 h-3.5 text-blue-600" /> e-Devlet Şifresi
+                  </span>
+                  {profileForm.eDevletCredentials?.eDevletPassword && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.eDevletCredentials?.eDevletPassword, "edevlet_pass")}
+                      className="text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "edevlet_pass" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </label>
+                <input
+                  type={showEDevletPasswords ? "text" : "password"}
+                  placeholder="e-Devlet Giriş Şifresi"
+                  value={profileForm.eDevletCredentials?.eDevletPassword || ""}
+                  onChange={(e) => handleEDevletCredChange("eDevletPassword", e.target.value)}
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Smartphone className="w-3.5 h-3.5 text-blue-600" /> Mobil İmza / Telefon
+                  </span>
+                  {profileForm.eDevletCredentials?.mobileSignaturePhone && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(profileForm.eDevletCredentials?.mobileSignaturePhone, "edevlet_phone")}
+                      className="text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-0.5 cursor-pointer font-normal"
+                    >
+                      {copiedKey === "edevlet_phone" ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="w-3 h-3" /> Kopyalandı
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> Kopyala
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  placeholder="+90 (5xx) xxx xx xx"
+                  value={profileForm.eDevletCredentials?.mobileSignaturePhone || ""}
+                  onChange={(e) => handleEDevletCredChange("mobileSignaturePhone", e.target.value)}
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600" /> İmza Sirküleri / Yetki Bitiş Tarihi
+                </label>
+                <input
+                  type="date"
+                  value={profileForm.eDevletCredentials?.validUntil || ""}
+                  onChange={(e) => handleEDevletCredChange("validUntil", e.target.value)}
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 text-xs transition-colors"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <Info className="w-3.5 h-3.5 text-blue-600" /> Yetki Kapsamı ve Özel Notlar
+                </label>
+                <input
+                  type="text"
+                  placeholder="Örn: A Grubu Münferit İmza Yetkilisi (Şirket Müdürü / YK Başkanı)"
+                  value={profileForm.eDevletCredentials?.notes || ""}
+                  onChange={(e) => handleEDevletCredChange("notes", e.target.value)}
+                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 text-xs transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* Güvenlik Notu */}
+            <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3 flex items-start gap-2.5 text-slate-700">
+              <Shield className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <span className="font-bold text-blue-900">Güvenlik & Gizlilik Bilgilendirmesi:</span> Kurumsal e-işlemler, vergi dairesi ve e-Devlet şifreleri şirketinizin muhasebe ve resmi işlemlerini kolaylaştırmak amacıyla güvenli veritabanınızda saklanır. Yetkisiz kişilerle paylaşılmamalıdır.
+              </div>
+            </div>
+          </div>
+
+          {/* Submit Action for E-İşlemler */}
+          <div className="flex items-center justify-between bg-purple-50/60 p-4 rounded-2xl border border-purple-200/60 shadow-xs">
+            {isCredSaved ? (
               <span className="text-xs font-extrabold text-emerald-600 flex items-center gap-1.5">
                 <Check className="w-4 h-4" />
-                Firma bilgileri ve detaylı adres başarıyla kaydedildi!
+                GİB, SGK ve e-Devlet şifreleri başarıyla kaydedildi!
               </span>
             ) : (
               <span className="text-xs text-purple-900/80 font-medium">
-                Değişikliklerinizi kaydetmek için kaydet butonuna basınız.
+                Yapılan tüm kurum ve şifre değişikliklerini kaydetmek için butona basınız.
               </span>
             )}
 
@@ -782,7 +1295,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
               className="bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold px-6 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-2"
             >
               <Save className="w-4 h-4 text-[#EF7D2C]" />
-              <span>Firma Bilgilerini Kaydet</span>
+              <span>E-İşlem ve Kurum Şifrelerini Kaydet</span>
             </button>
           </div>
         </form>

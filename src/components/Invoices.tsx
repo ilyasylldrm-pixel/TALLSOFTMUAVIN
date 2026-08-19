@@ -9,6 +9,8 @@ import {
   Account,
   CompanySettings,
   getContactAccountCode,
+  EXPENSE_CATEGORIES,
+  ExpenseCategory,
 } from "../types";
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
@@ -17,6 +19,7 @@ import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { NavItem } from "./Sidebar";
 import {
   FileText,
+  FileSpreadsheet,
   Plus,
   Search,
   Printer,
@@ -40,6 +43,7 @@ import {
   Eye,
   Calendar,
   Filter,
+  Tag,
 } from "lucide-react";
 
 const TURKISH_MONTHS = [
@@ -120,9 +124,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
   onSelectTab,
 }) => {
   const [filterType, setFilterType] = useState<string>(forcedType || "all");
+  const [docSubTab, setDocSubTab] = useState<"invoices" | "receipts" | "all">("invoices");
+  const [formDocKind, setFormDocKind] = useState<"invoice" | "receipt">("invoice");
   const [search, setSearch] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedExpenseCategoryFilter, setSelectedExpenseCategoryFilter] = useState<string>("all");
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(
@@ -288,7 +295,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const getDraftInvoice = (): Partial<Invoice> => {
     const contact = contacts.find((c) => c.id === contactId);
     const { subtotal, totalVat, grandTotal, computedItems } = calculateTotals();
-    const prefix = invType === "sales" ? "MUV2026" : "ALS2026";
+    const isReceipt = formDocKind === "receipt";
+    const prefix = invType === "sales"
+      ? isReceipt ? "GLF2026" : "MUV2026"
+      : isReceipt ? "GDF2026" : "TED2026";
     const nextSeq = String(invoices.length + 1).padStart(7, "0");
 
     let finalNotes = notes.trim();
@@ -299,9 +309,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
       }
     }
 
+    const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
+
     return {
       invoiceNumber: `${prefix}${nextSeq} (TASLAK)`,
       type: invType,
+      docKind: forcedType ? formDocKind : "invoice",
+      expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       contactId: contactId,
       contactName: contact?.name || "Cari Seçilmedi",
       taxNumber: contact?.taxNumber || "",
@@ -334,6 +348,47 @@ export const Invoices: React.FC<InvoicesProps> = ({
         totalWithVat: 0,
       },
     ]);
+  };
+
+  const handleAddExpenseCategoryItem = (cat: string) => {
+    const isFirstEmpty =
+      items.length === 1 &&
+      (!items[0].description ||
+        items[0].description === "Yazılım Danışmanlık ve Sistem Destek Hizmeti" ||
+        (EXPENSE_CATEGORIES as readonly string[]).includes(items[0].description));
+
+    if (isFirstEmpty) {
+      setItems([
+        {
+          id: items[0].id,
+          expenseCategory: cat,
+          description: cat,
+          quantity: items[0].quantity || 1,
+          unit: "Adet",
+          unitPrice: items[0].unitPrice || 0,
+          vatRate: 20,
+          totalWithoutVat: 0,
+          vatAmount: 0,
+          totalWithVat: 0,
+        },
+      ]);
+    } else {
+      setItems([
+        ...items,
+        {
+          id: "item_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+          expenseCategory: cat,
+          description: cat,
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: 0,
+          vatRate: 20,
+          totalWithoutVat: 0,
+          vatAmount: 0,
+          totalWithVat: 0,
+        },
+      ]);
+    }
   };
 
   const handleRemoveItem = (id: string) => {
@@ -373,7 +428,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     const { subtotal, totalVat, grandTotal, computedItems } = calculateTotals();
 
-    const prefix = invType === "sales" ? "MUV2026" : "ALS2026";
+    const isReceipt = formDocKind === "receipt";
+    const prefix = invType === "sales"
+      ? isReceipt ? "GLF2026" : "MUV2026"
+      : isReceipt ? "GDF2026" : "TED2026";
     const nextSeq = String(invoices.length + 1).padStart(7, "0");
 
     let finalNotes = notes.trim();
@@ -384,10 +442,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
       }
     }
 
+    const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
+
     const newInvoice: Invoice = {
       id: "inv_" + Date.now(),
       invoiceNumber: `${prefix}${nextSeq}`,
       type: invType,
+      docKind: forcedType ? formDocKind : "invoice",
+      expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       contactId: contact.id,
       contactName: contact.name,
       taxNumber: contact.taxNumber,
@@ -406,6 +468,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
     };
 
     onAddInvoice(newInvoice);
+    if (forcedType) {
+      setDocSubTab(formDocKind === "receipt" ? "receipts" : "invoices");
+    }
     setHasDifferentDeliveryAddress(false);
     setDeliveryAddress("");
     setIsCreateModalOpen(false);
@@ -430,6 +495,32 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return Array.from(yearsSet).sort((a, b) => b - a);
   }, [invoices]);
 
+  // Counts for Gelir Faturası vs Gelir Fişi
+  const salesInvoicesCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "sales" && (i.docKind === "invoice" || !i.docKind)).length;
+  }, [invoices]);
+
+  const salesReceiptsCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "sales" && i.docKind === "receipt").length;
+  }, [invoices]);
+
+  const allSalesCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "sales").length;
+  }, [invoices]);
+
+  // Counts for Gider Faturası vs Gider Fişi
+  const purchaseInvoicesCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "purchase" && (i.docKind === "invoice" || !i.docKind)).length;
+  }, [invoices]);
+
+  const purchaseReceiptsCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "purchase" && i.docKind === "receipt").length;
+  }, [invoices]);
+
+  const allPurchaseCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "purchase").length;
+  }, [invoices]);
+
   // Filter logic
   const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
   const filteredInvoices = invoices.filter((inv) => {
@@ -444,6 +535,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
       return false;
     }
 
+    if (selectedExpenseCategoryFilter !== "all") {
+      const matchesCat =
+        inv.expenseCategory === selectedExpenseCategoryFilter ||
+        inv.items.some(
+          (item) =>
+            item.expenseCategory === selectedExpenseCategoryFilter ||
+            item.description === selectedExpenseCategoryFilter
+        );
+      if (!matchesCat) return false;
+    }
+
     const matchesSearch =
       !activeSearchQuery ||
       inv.invoiceNumber.toLowerCase().includes(activeSearchQuery) ||
@@ -453,8 +555,21 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     if (!matchesSearch) return false;
 
-    if (filterType === "sales") return inv.type === "sales";
-    if (filterType === "purchase") return inv.type === "purchase";
+    // When inside "Gelir Faturası & Fişleri" module (forcedType === "sales")
+    if (forcedType === "sales") {
+      if (inv.type !== "sales") return false;
+      if (docSubTab === "invoices" && inv.docKind === "receipt") return false;
+      if (docSubTab === "receipts" && inv.docKind !== "receipt") return false;
+    } else if (forcedType === "purchase") {
+      // When inside "Gider Faturası & Fişleri" module (forcedType === "purchase")
+      if (inv.type !== "purchase") return false;
+      if (docSubTab === "invoices" && inv.docKind === "receipt") return false;
+      if (docSubTab === "receipts" && inv.docKind !== "receipt") return false;
+    } else {
+      if (filterType === "sales") return inv.type === "sales";
+      if (filterType === "purchase") return inv.type === "purchase";
+    }
+
     if (filterType === "overdue") return inv.status === "overdue";
     if (filterType === "paid") return inv.status === "paid";
     if (filterType === "pending") return inv.status === "sent" || inv.status === "partial";
@@ -468,8 +583,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   const getInvoicesExportData = (): ExportData => {
     const headers = [
-      "Fatura No",
-      "Fatura Tipi",
+      "Fatura / Fiş No",
+      "Belge Türü",
       "Cari Hesap / Müşteri",
       "Düzenleme Tarihi",
       "Vade Tarihi",
@@ -501,7 +616,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
           : inv.status === "sent"
           ? "Gönderildi"
           : "Taslak";
-      const typeLabel = inv.type === "sales" ? "Satış (Gelir) Faturası" : "Alış (Gider) Faturası";
+      const typeLabel =
+        inv.type === "sales"
+          ? inv.docKind === "receipt"
+            ? "Satış (Gelir) Fişi"
+            : "Satış (Gelir) Faturası"
+          : inv.docKind === "receipt"
+          ? "Alış (Gider) Fişi"
+          : "Alış (Gider) Faturası";
       const invCurrency = inv.currency || "TRY";
 
       if (inv.items && inv.items.length > 0) {
@@ -606,16 +728,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
         <div className="relative z-10">
           <h2 className="text-lg font-extrabold text-slate-950">
             {forcedType === "sales"
-              ? "Gelir Faturaları (Satış)"
-              : forcedType === "purchase"
-              ? "Gider Faturaları (Alış)"
-              : "Gelir & Gider Faturaları"}
+               ? "Gelir Faturası & Fişleri"
+               : forcedType === "purchase"
+               ? "Gider Faturası & Fişleri"
+               : "Gelir & Gider Faturaları"}
           </h2>
           <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
             {forcedType === "sales"
-              ? "Müşterilerinize kestiğiniz gelir faturaları ve tahsilat takibi."
+              ? "Müşterilerinize kestiğiniz gelir faturaları, gelir fişleri ve tahsilat takibi."
               : forcedType === "purchase"
-              ? "Tedarikçilerden gelen gider faturaları ve ödeme takibi."
+              ? "Tedarikçilerden gelen gider faturaları, fişler ve ödeme takibi."
               : "Resmi e-Fatura / e-Arşiv uyumlu faturalarınızı oluşturun ve ödeme takibi yapın."}
           </p>
         </div>
@@ -623,30 +745,224 @@ export const Invoices: React.FC<InvoicesProps> = ({
         <div className="relative z-10 flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setIsCollectAllModalOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-            title="Tüm açık/ödenmemiş gelir ve gider faturalarını topluca tahsil et & öde"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
+            title="Tüm açık/ödenmemiş belgeleri topluca tahsil et"
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-100" />
-            <span>Tümünü Tahsil Et & Öde</span>
+            <span>Tümünü Tahsil Et</span>
           </button>
-          <button
-            onClick={() => {
-              if (forcedType) setInvType(forcedType);
-              setIsCreateModalOpen(true);
-            }}
-            className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-          >
-            <Plus className="w-4 h-4 text-purple-800 font-bold" />
-            <span>
-              {forcedType === "sales"
-                ? "Yeni Gelir Faturası Kes"
-                : forcedType === "purchase"
-                ? "Yeni Gider Faturası Kaydet"
-                : "Yeni Fatura Kes / Kaydet"}
-            </span>
-          </button>
+
+          {forcedType === "sales" ? (
+            <>
+              <button
+                onClick={() => {
+                  setInvType("sales");
+                  setFormDocKind("invoice");
+                  setIsCreateModalOpen(true);
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Yeni Gelir Faturası Kes</span>
+              </button>
+              <button
+                onClick={() => {
+                  setInvType("sales");
+                  setFormDocKind("receipt");
+                  setIsCreateModalOpen(true);
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Yeni Gelir Fişi Ekle</span>
+              </button>
+            </>
+          ) : forcedType === "purchase" ? (
+            <>
+              <button
+                onClick={() => {
+                  setInvType("purchase");
+                  setFormDocKind("invoice");
+                  setIsCreateModalOpen(true);
+                }}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Yeni Gider Faturası Kaydet</span>
+              </button>
+              <button
+                onClick={() => {
+                  setInvType("purchase");
+                  setFormDocKind("receipt");
+                  setIsCreateModalOpen(true);
+                }}
+                className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Yeni Gider Fişi Ekle</span>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => {
+                if (forcedType) setInvType(forcedType);
+                setIsCreateModalOpen(true);
+              }}
+              className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4 text-purple-800 font-bold" />
+              <span>Yeni Fatura Kes / Kaydet</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Gelir Faturası & Fişleri / Gider Faturası & Fişleri Sub-Navigation Section */}
+      {forcedType === "sales" && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-purple-50/80 via-white to-indigo-50/80 p-2.5 rounded-2xl border border-purple-200/80 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDocSubTab("invoices")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                docSubTab === "invoices"
+                  ? "bg-purple-600 text-white shadow-sm shadow-purple-200"
+                  : "bg-white text-purple-900 border border-purple-200 hover:bg-purple-50"
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Gelir Faturaları</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  docSubTab === "invoices"
+                    ? "bg-white/20 text-white"
+                    : "bg-purple-100 text-purple-800"
+                }`}
+              >
+                {salesInvoicesCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDocSubTab("receipts")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                docSubTab === "receipts"
+                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200"
+                  : "bg-white text-indigo-900 border border-indigo-200 hover:bg-indigo-50"
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Gelir Fişleri</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  docSubTab === "receipts"
+                    ? "bg-white/20 text-white"
+                    : "bg-indigo-100 text-indigo-800"
+                }`}
+              >
+                {salesReceiptsCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDocSubTab("all")}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                docSubTab === "all"
+                  ? "bg-slate-800 text-white"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <span>Tümü ({allSalesCount})</span>
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-500 font-medium px-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+            <span>
+              {docSubTab === "invoices"
+                ? "Müşterilere düzenlenen resmi e-Fatura ve e-Arşiv gelir faturaları listeleniyor."
+                : docSubTab === "receipts"
+                ? "Perakende, yazar kasa ve nakit/banka gelir fişleri listeleniyor."
+                : "Tüm gelir faturaları ve gelir fişleri birlikte listeleniyor."}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {forcedType === "purchase" && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-amber-50/80 via-white to-orange-50/80 p-2.5 rounded-2xl border border-amber-200/80 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDocSubTab("invoices")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                docSubTab === "invoices"
+                  ? "bg-amber-600 text-white shadow-sm shadow-amber-200"
+                  : "bg-white text-amber-900 border border-amber-200 hover:bg-amber-50"
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Gider Faturaları</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  docSubTab === "invoices"
+                    ? "bg-white/20 text-white"
+                    : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {purchaseInvoicesCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDocSubTab("receipts")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                docSubTab === "receipts"
+                  ? "bg-orange-600 text-white shadow-sm shadow-orange-200"
+                  : "bg-white text-orange-900 border border-orange-200 hover:bg-orange-50"
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Gider Fişleri</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  docSubTab === "receipts"
+                    ? "bg-white/20 text-white"
+                    : "bg-orange-100 text-orange-800"
+                }`}
+              >
+                {purchaseReceiptsCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDocSubTab("all")}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                docSubTab === "all"
+                  ? "bg-slate-800 text-white"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <span>Tümü ({allPurchaseCount})</span>
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-500 font-medium px-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+            <span>
+              {docSubTab === "invoices"
+                ? "Tedarikçilerden gelen resmi e-Fatura ve e-Arşiv alış (gider) faturaları listeleniyor."
+                : docSubTab === "receipts"
+                ? "Akaryakıt, yemek, otopark, noter, kırtasiye ve muhtelif masraf/gider fişleri listeleniyor."
+                : "Tüm gider faturaları ve gider fişleri birlikte listeleniyor."}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Filter Tabs & Search */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -749,14 +1065,35 @@ export const Invoices: React.FC<InvoicesProps> = ({
             </select>
           </div>
 
-          {(selectedYear !== "all" || selectedMonth !== "all") && (
+          {/* Masraf Kalemi Filtresi (Gider Modülü veya Gider Seçiliyken) */}
+          {(forcedType === "purchase" || filterType === "purchase") && (
+            <div className="flex items-center gap-1.5 bg-white border border-amber-300/80 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+              <Tag className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="text-slate-400 font-bold">Masraf:</span>
+              <select
+                value={selectedExpenseCategoryFilter}
+                onChange={(e) => setSelectedExpenseCategoryFilter(e.target.value)}
+                className="bg-transparent font-extrabold text-amber-900 focus:outline-none cursor-pointer max-w-[150px] truncate"
+              >
+                <option value="all">Tüm Kalemler ({EXPENSE_CATEGORIES.length})</option>
+                {EXPENSE_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(selectedYear !== "all" || selectedMonth !== "all" || selectedExpenseCategoryFilter !== "all") && (
             <button
               onClick={() => {
                 setSelectedYear("all");
                 setSelectedMonth("all");
+                setSelectedExpenseCategoryFilter("all");
               }}
               className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-              title="Yıl ve Ay filtresini temizle"
+              title="Filtreleri temizle"
             >
               <X className="w-3.5 h-3.5" />
               <span>Temizle</span>
@@ -795,8 +1132,36 @@ export const Invoices: React.FC<InvoicesProps> = ({
             <tbody>
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
-                    Kayıtlı fatura bulunamadı.
+                  <td colSpan={7} className="text-center py-10 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <FileText className="w-8 h-8 text-purple-200" />
+                      <p className="font-semibold text-slate-600">
+                        {forcedType === "sales"
+                          ? docSubTab === "receipts"
+                            ? "Kayıtlı gelir fişi bulunamadı."
+                            : docSubTab === "invoices"
+                            ? "Kayıtlı gelir faturası bulunamadı."
+                            : "Kayıtlı gelir faturası veya fişi bulunamadı."
+                          : forcedType === "purchase"
+                          ? docSubTab === "receipts"
+                            ? "Kayıtlı gider fişi bulunamadı."
+                            : docSubTab === "invoices"
+                            ? "Kayıtlı gider faturası bulunamadı."
+                            : "Kayıtlı gider faturası veya fişi bulunamadı."
+                          : "Kayıtlı fatura bulunamadı."}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {forcedType === "sales"
+                          ? docSubTab === "receipts"
+                            ? "Yukarıdaki '+ Yeni Gelir Fişi Ekle' butonuyla yeni fiş ekleyebilirsiniz."
+                            : "Yukarıdaki '+ Yeni Gelir Faturası Kes' butonuyla yeni fatura oluşturabilirsiniz."
+                          : forcedType === "purchase"
+                          ? docSubTab === "receipts"
+                            ? "Yukarıdaki '+ Yeni Gider Fişi Ekle' butonuyla yeni fiş ekleyebilirsiniz."
+                            : "Yukarıdaki '+ Yeni Gider Faturası Kaydet' butonuyla yeni fatura oluşturabilirsiniz."
+                          : "Yeni fatura eklemek için yukarıdaki butonu kullanabilirsiniz."}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -809,15 +1174,51 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       <div className="font-extrabold text-slate-900 group-hover:text-purple-950 font-mono text-sm transition-colors">
                         {inv.invoiceNumber}
                       </div>
-                      <span
-                        className={`inline-block px-1.5 py-0.2 text-[10px] font-bold rounded uppercase mt-0.5 transition-all ${
-                          inv.type === "sales"
-                            ? "bg-blue-50 text-blue-700 border border-blue-200 group-hover:border-blue-300"
-                            : "bg-amber-50 text-amber-700 border border-amber-200 group-hover:border-amber-300"
-                        }`}
-                      >
-                        {inv.type === "sales" ? "Satış" : "Alış"}
-                      </span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {inv.type === "sales" ? (
+                          inv.docKind === "receipt" ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 group-hover:border-indigo-300">
+                              <FileSpreadsheet className="w-2.5 h-2.5 text-indigo-600" />
+                              Gelir Fişi
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-200 group-hover:border-purple-300">
+                              <FileText className="w-2.5 h-2.5 text-purple-600" />
+                              Gelir Faturası
+                            </span>
+                          )
+                        ) : inv.docKind === "receipt" ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-orange-50 text-orange-700 border border-orange-200 group-hover:border-orange-300">
+                              <FileSpreadsheet className="w-2.5 h-2.5 text-orange-600" />
+                              Gider Fişi
+                            </span>
+                            {(inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory) && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-900 border border-amber-200 group-hover:border-amber-300">
+                                <Tag className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                <span className="truncate max-w-[130px]">
+                                  {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200 group-hover:border-amber-300">
+                              <FileText className="w-2.5 h-2.5 text-amber-600" />
+                              Gider Faturası
+                            </span>
+                            {(inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory) && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-900 border border-amber-200 group-hover:border-amber-300">
+                                <Tag className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                <span className="truncate max-w-[130px]">
+                                  {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
@@ -973,9 +1374,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-4xl w-full p-6 shadow-2xl space-y-6 my-8">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-lg font-extrabold text-slate-900">
-                Yeni Fatura Hazırla (Satış / Alış)
-              </h3>
+              <div className="flex items-center gap-2">
+                {formDocKind === "receipt" ? (
+                  <FileSpreadsheet className={`w-5 h-5 ${forcedType === "purchase" ? "text-orange-600" : "text-indigo-600"}`} />
+                ) : (
+                  <FileText className={`w-5 h-5 ${forcedType === "purchase" ? "text-amber-600" : "text-purple-600"}`} />
+                )}
+                <h3 className="text-lg font-extrabold text-slate-900">
+                  {forcedType === "sales"
+                    ? formDocKind === "receipt"
+                      ? "Yeni Gelir Fişi Ekle / Kaydet"
+                      : "Yeni Gelir Faturası Kes / Hazırla"
+                    : forcedType === "purchase"
+                    ? formDocKind === "receipt"
+                      ? "Yeni Gider Fişi Ekle / Kaydet"
+                      : "Yeni Gider Faturası Kaydet / Hazırla"
+                    : "Yeni Fatura Hazırla (Satış / Alış)"}
+                </h3>
+              </div>
               <button
                 onClick={() => setIsCreateModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
@@ -988,19 +1404,57 @@ export const Invoices: React.FC<InvoicesProps> = ({
               {/* Top Controls & Selected Cari Information */}
               <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Fatura Tipi *
-                    </label>
-                    <select
-                      value={invType}
-                      onChange={(e) => setInvType(e.target.value as InvoiceType)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900"
-                    >
-                      <option value="sales">Satış Faturası (Müşteriye)</option>
-                      <option value="purchase">Alış Faturası (Tedarikçiden)</option>
-                    </select>
-                  </div>
+                  {forcedType ? (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Belge Türü *
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5 bg-slate-200/80 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setFormDocKind("invoice")}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            formDocKind === "invoice"
+                              ? forcedType === "purchase"
+                                ? "bg-amber-600 text-white shadow-2xs"
+                                : "bg-purple-600 text-white shadow-2xs"
+                              : "text-slate-700 hover:text-slate-900"
+                          }`}
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>{forcedType === "purchase" ? "Gider Fat." : "Gelir Fat."}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormDocKind("receipt")}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            formDocKind === "receipt"
+                              ? forcedType === "purchase"
+                                ? "bg-orange-600 text-white shadow-2xs"
+                                : "bg-indigo-600 text-white shadow-2xs"
+                              : "text-slate-700 hover:text-slate-900"
+                          }`}
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                          <span>{forcedType === "purchase" ? "Gider Fişi" : "Gelir Fişi"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Fatura Tipi *
+                      </label>
+                      <select
+                        value={invType}
+                        onChange={(e) => setInvType(e.target.value as InvoiceType)}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900"
+                      >
+                        <option value="sales">Satış Faturası (Müşteriye)</option>
+                        <option value="purchase">Alış Faturası (Tedarikçiden)</option>
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1161,7 +1615,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="text-xs font-bold uppercase text-slate-700 tracking-wider">
-                    Fatura Kalemleri & Ürün/Hizmetler
+                    {invType === "purchase" ? "Gider / Masraf Kalemleri & Ürünler" : "Fatura Kalemleri & Ürün/Hizmetler"}
                   </h4>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -1206,7 +1660,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     <thead>
                       <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
                         <th className="py-2 px-3">
-                          <span>Ürün / Açıklama</span>
+                          <span>{invType === "purchase" ? "Masraf Kalemi / Açıklama" : "Ürün / Açıklama"}</span>
                         </th>
                         <th className="py-2 px-3 w-20 text-center">Miktar</th>
                         <th className="py-2 px-3 w-20 text-center">Birim</th>
@@ -1221,46 +1675,105 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <tr key={item.id} className="hover:bg-slate-50">
                           <td className="p-2">
                             <div className="space-y-1.5">
-                              <div className="flex items-center gap-1.5">
-                                {products.length > 0 && (
-                                  <select
-                                    value={item.productId || ""}
+                              {invType === "purchase" ? (
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <select
+                                      value={item.expenseCategory || ""}
+                                      onChange={(e) => {
+                                        const selectedCat = e.target.value;
+                                        handleItemChange(item.id, "expenseCategory", selectedCat);
+                                        if (
+                                          selectedCat &&
+                                          (!item.description ||
+                                            (EXPENSE_CATEGORIES as readonly string[]).includes(item.description) ||
+                                            item.description === "Yazılım Danışmanlık ve Sistem Destek Hizmeti")
+                                        ) {
+                                          handleItemChange(item.id, "description", selectedCat);
+                                        }
+                                      }}
+                                      className="w-full bg-amber-50/90 border border-amber-300 rounded-lg p-1.5 text-xs font-bold text-amber-950 focus:ring-2 focus:ring-amber-500"
+                                    >
+                                      <option value="">-- Masraf / Gider Kalemi Seçin ({EXPENSE_CATEGORIES.length} Kalem) --</option>
+                                      {EXPENSE_CATEGORIES.map((cat) => (
+                                        <option key={cat} value={cat}>
+                                          {cat}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {products.length > 0 && (
+                                      <select
+                                        value={item.productId || ""}
+                                        onChange={(e) =>
+                                          handleItemChange(item.id, "productId", e.target.value)
+                                        }
+                                        className="w-48 bg-slate-50 border border-slate-200 rounded-lg p-1 text-[11px] font-medium text-slate-900 truncate"
+                                        title="Stok listesinden ürün bağla"
+                                      >
+                                        <option value="">-- Stok Bağla --</option>
+                                        {products.map((p) => (
+                                          <option key={p.id} value={p.id}>
+                                            {p.name} (₺{p.buyPrice})
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
+                                  </div>
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Açıklama / Masraf Detayı (ör: Araç Yakıtı - 34 ABC 123 Plaka)"
+                                    value={item.description}
                                     onChange={(e) =>
-                                      handleItemChange(item.id, "productId", e.target.value)
+                                      handleItemChange(item.id, "description", e.target.value)
                                     }
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-[11px] font-medium text-slate-900"
-                                  >
-                                    <option value="">-- Stok Listesinden Seç --</option>
-                                    {products.map((p) => (
-                                      <option key={p.id} value={p.id}>
-                                        {p.stockType ? `[${p.stockType}] ` : ""}{p.name} {p.barcode ? `(Barkod: ${p.barcode})` : ""} - ₺{invType === "sales" ? p.sellPrice : p.buyPrice}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setTargetItemRowId(item.id);
-                                    setIsProductPickerOpen(true);
-                                  }}
-                                  className="bg-purple-100 hover:bg-purple-200 text-purple-900 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
-                                  title="Stok Listesinden Seç ve Ekle"
-                                >
-                                  <Package className="w-3.5 h-3.5 text-purple-700" />
-                                  <span>Stok Seç & Ekle</span>
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                required
-                                placeholder="Açıklama (ör: Yazılım danışmanlık hizmeti)"
-                                value={item.description}
-                                onChange={(e) =>
-                                  handleItemChange(item.id, "description", e.target.value)
-                                }
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 placeholder-slate-400 font-medium"
-                              />
+                                    className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 placeholder-slate-400 font-medium"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    {products.length > 0 && (
+                                      <select
+                                        value={item.productId || ""}
+                                        onChange={(e) =>
+                                          handleItemChange(item.id, "productId", e.target.value)
+                                        }
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-[11px] font-medium text-slate-900"
+                                      >
+                                        <option value="">-- Stok Listesinden Seç --</option>
+                                        {products.map((p) => (
+                                          <option key={p.id} value={p.id}>
+                                            {p.stockType ? `[${p.stockType}] ` : ""}{p.name} {p.barcode ? `(Barkod: ${p.barcode})` : ""} - ₺{invType === "sales" ? p.sellPrice : p.buyPrice}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setTargetItemRowId(item.id);
+                                        setIsProductPickerOpen(true);
+                                      }}
+                                      className="bg-purple-100 hover:bg-purple-200 text-purple-900 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+                                      title="Stok Listesinden Seç ve Ekle"
+                                    >
+                                      <Package className="w-3.5 h-3.5 text-purple-700" />
+                                      <span>Stok Seç & Ekle</span>
+                                    </button>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Açıklama (ör: Yazılım danışmanlık hizmeti)"
+                                    value={item.description}
+                                    onChange={(e) =>
+                                      handleItemChange(item.id, "description", e.target.value)
+                                    }
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 placeholder-slate-400 font-medium"
+                                  />
+                                </div>
+                              )}
                             </div>
                           </td>
 
@@ -1404,13 +1917,31 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   className="px-4 py-2.5 bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <Eye className="w-4 h-4 text-purple-700" />
-                  <span>Faturayı Önizle</span>
+                  <span>
+                    {formDocKind === "receipt" ? "Fişi Önizle" : "Faturayı Önizle"}
+                  </span>
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs cursor-pointer"
+                  className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs cursor-pointer ${
+                    forcedType === "purchase"
+                      ? formDocKind === "receipt"
+                        ? "bg-orange-600 hover:bg-orange-700"
+                        : "bg-amber-600 hover:bg-amber-700"
+                      : formDocKind === "receipt"
+                      ? "bg-indigo-600 hover:bg-indigo-700"
+                      : "bg-purple-600 hover:bg-purple-700"
+                  }`}
                 >
-                  Faturayı Kaydet ve Oluştur
+                  {forcedType === "sales"
+                    ? formDocKind === "receipt"
+                      ? "Gelir Fişini Kaydet"
+                      : "Gelir Faturasını Kaydet & Kes"
+                    : forcedType === "purchase"
+                    ? formDocKind === "receipt"
+                      ? "Gider Fişini Kaydet"
+                      : "Gider Faturasını Kaydet"
+                    : "Faturayı Kaydet ve Oluştur"}
                 </button>
               </div>
             </form>

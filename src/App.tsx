@@ -17,6 +17,7 @@ const Reports = lazy(() => import("./components/Reports").then((m) => ({ default
 const AiAssistant = lazy(() => import("./components/AiAssistant").then((m) => ({ default: m.AiAssistant })));
 const Settings = lazy(() => import("./components/Settings").then((m) => ({ default: m.Settings })));
 const CompanyManagement = lazy(() => import("./components/CompanyManagement").then((m) => ({ default: m.CompanyManagement })));
+const EServices = lazy(() => import("./components/EServices").then((m) => ({ default: m.EServices })));
 const HRManagement = lazy(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement })));
 const FileManager = lazy(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
@@ -1257,6 +1258,9 @@ export default function App() {
         return "Firma Şubeleri";
       case "company_warehouses":
         return "Firma Depoları";
+      case "company_e_services":
+      case "e_services":
+        return "E-İşlemler (GİB, SGK, E-Devlet)";
       case "settings":
         return "Sistem Ayarları";
       case "admin":
@@ -1582,6 +1586,15 @@ export default function App() {
                 else if (tab === "warehouses") setCurrentTab("company_warehouses");
                 else setCurrentTab("company_profile");
               }}
+            />
+          )}
+
+          {currentTab === "e_services" && (
+            <EServices
+              settings={data.settings}
+              branches={data.branches || []}
+              warehouses={data.warehouses || []}
+              onSaveSettings={handleSaveSettings}
             />
           )}
 

@@ -202,17 +202,29 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               </div>
 
               <div className="text-left sm:text-right space-y-1.5 shrink-0">
-                <div className="inline-block bg-slate-900 text-white text-xs font-bold uppercase px-3 py-1 rounded tracking-wider">
-                  {invType === "sales" ? "e-ARŞİV FATURA" : "ALIŞ FATURASI"}
+                <div className={`inline-block text-white text-xs font-bold uppercase px-3 py-1 rounded tracking-wider ${
+                  invoice.docKind === "receipt"
+                    ? invType === "sales"
+                      ? "bg-indigo-700"
+                      : "bg-amber-700"
+                    : "bg-slate-900"
+                }`}>
+                  {invoice.docKind === "receipt"
+                    ? invType === "sales"
+                      ? "GELİR / PERAKENDE SATIŞ FİŞİ"
+                      : "GİDER / MASRAF FİŞİ"
+                    : invType === "sales"
+                    ? "e-ARŞİV FATURA"
+                    : "ALIŞ (GİDER) FATURASI"}
                 </div>
                 <div className="text-xs font-mono font-bold text-slate-900">
-                  FATURA NO: {invNumber}
+                  {invoice.docKind === "receipt" ? "FİŞ NO:" : "FATURA NO:"} {invNumber}
                 </div>
                 <div className="text-xs text-slate-500 font-mono">
                   ETTN: {invoice.id ? `8a491029-3810-4b10-${invoice.id.slice(0, 8)}` : "8a491029-3810-4b10-8201-948123019283"}
                 </div>
                 <div className="text-xs text-slate-600">
-                  <strong>Fatura Tarihi:</strong> {formatDate(issueDate)}
+                  <strong>{invoice.docKind === "receipt" ? "Düzenleme Tarihi:" : "Fatura Tarihi:"}</strong> {formatDate(issueDate)}
                 </div>
                 <div className="text-xs text-slate-600">
                   <strong>Son Ödeme / Vade:</strong> {formatDate(dueDate)}
@@ -300,7 +312,14 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                       <tr key={item.id || idx} className="hover:bg-slate-50/80">
                         <td className="py-3 px-3 font-mono text-slate-500">{idx + 1}</td>
                         <td className="py-3 px-3 font-semibold text-slate-900">
-                          {item.description || "Hizmet / Ürün Kalemi"}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span>{item.description || "Hizmet / Ürün Kalemi"}</span>
+                            {item.expenseCategory && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                                {item.expenseCategory}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-3 text-center font-bold">{item.quantity}</td>
                         <td className="py-3 px-3 text-center text-slate-600">{item.unit || "Adet"}</td>

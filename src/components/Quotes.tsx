@@ -17,9 +17,51 @@ import {
   Printer,
   Building2,
   ShoppingCart,
+  Calendar,
+  Filter,
 } from "lucide-react";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { Logo } from "./Logo";
+
+const TURKISH_MONTHS = [
+  { id: 1, name: "Ocak" },
+  { id: 2, name: "Şubat" },
+  { id: 3, name: "Mart" },
+  { id: 4, name: "Nisan" },
+  { id: 5, name: "Mayıs" },
+  { id: 6, name: "Haziran" },
+  { id: 7, name: "Temmuz" },
+  { id: 8, name: "Ağustos" },
+  { id: 9, name: "Eylül" },
+  { id: 10, name: "Ekim" },
+  { id: 11, name: "Kasım" },
+  { id: 12, name: "Aralık" },
+];
+
+const getDateYearAndMonth = (dateStr?: string) => {
+  if (!dateStr) return { year: null, month: null };
+  if (dateStr.includes("-")) {
+    const parts = dateStr.split("-");
+    if (parts.length >= 2) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  if (dateStr.includes(".")) {
+    const parts = dateStr.split(".");
+    if (parts.length >= 3) {
+      const y = parseInt(parts[2], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  }
+  return { year: null, month: null };
+};
 
 interface QuotesProps {
   quotes: Quote[];
@@ -45,6 +87,8 @@ export const Quotes: React.FC<QuotesProps> = ({
   onDeleteQuote,
 }) => {
   const [search, setSearch] = useState("");
+  const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [printingQuote, setPrintingQuote] = useState<Quote | null>(null);
@@ -202,14 +246,44 @@ export const Quotes: React.FC<QuotesProps> = ({
     setIsModalOpen(false);
   };
 
+  // Available Years
+  const availableYears = React.useMemo(() => {
+    const yearsSet = new Set<number>();
+    quotes.forEach((q) => {
+      const { year } = getDateYearAndMonth(q.issueDate);
+      if (year) yearsSet.add(year);
+    });
+    if (yearsSet.size === 0) {
+      yearsSet.add(new Date().getFullYear());
+    }
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [quotes]);
+
   const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
-  const filteredQuotes = quotes.filter(
-    (q) =>
-      !activeSearchQuery ||
-      q.quoteNumber.toLowerCase().includes(activeSearchQuery) ||
-      q.contactName.toLowerCase().includes(activeSearchQuery) ||
-      (q.notes && q.notes.toLowerCase().includes(activeSearchQuery))
-  );
+  const filteredQuotes = quotes.filter((q) => {
+    // Year filter
+    if (selectedYear !== "all") {
+      const { year } = getDateYearAndMonth(q.issueDate);
+      if (!year || year.toString() !== selectedYear) return false;
+    }
+
+    // Month filter
+    if (selectedMonth !== "all") {
+      const { month } = getDateYearAndMonth(q.issueDate);
+      if (!month || month.toString() !== selectedMonth) return false;
+    }
+
+    // Search query
+    if (activeSearchQuery) {
+      const matchesSearch =
+        q.quoteNumber.toLowerCase().includes(activeSearchQuery) ||
+        q.contactName.toLowerCase().includes(activeSearchQuery) ||
+        (q.notes && q.notes.toLowerCase().includes(activeSearchQuery));
+      if (!matchesSearch) return false;
+    }
+
+    return true;
+  });
 
   const displayedQuotes = filteredQuotes.slice(0, displayLimit);
 
@@ -268,18 +342,66 @@ export const Quotes: React.FC<QuotesProps> = ({
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table & Filter Bar */}
       <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs overflow-hidden space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="relative w-full max-w-sm">
-            <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Proforma no veya Müşteri ara..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
-            />
+          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+            {/* Yıl Filtresi */}
+            <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+              <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+              <span className="text-slate-400 font-bold">Yıl:</span>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+              >
+                <option value="all">Tüm Yıllar</option>
+                {availableYears.map((y) => (
+                  <option key={y} value={y.toString()}>{y}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Ay Filtresi */}
+            <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+              <Filter className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+              <span className="text-slate-400 font-bold">Ay:</span>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+              >
+                <option value="all">Tüm Aylar</option>
+                {TURKISH_MONTHS.map((m) => (
+                  <option key={m.id} value={m.id.toString()}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {(selectedYear !== "all" || selectedMonth !== "all") && (
+              <button
+                onClick={() => {
+                  setSelectedYear("all");
+                  setSelectedMonth("all");
+                }}
+                className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                title="Yıl ve Ay filtresini temizle"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Temizle</span>
+              </button>
+            )}
+
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Proforma no veya Müşteri ara..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
+              />
+            </div>
           </div>
           <ExportButtons
             getExportData={() => ({

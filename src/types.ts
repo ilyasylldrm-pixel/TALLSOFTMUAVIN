@@ -30,9 +30,37 @@ export function getContactAccountCode(contact: Partial<Contact>): string {
   return `${prefix}.${taxNum}`;
 }
 
+export const EXPENSE_CATEGORIES = [
+  "Yemek ve ulaşım",
+  "İş yeri eğitimleri",
+  "Kira ödemeleri",
+  "Elektrik Faturası",
+  "Su Faturası",
+  "Doğalgaz faturası",
+  "Aidat giderleri",
+  "Kargo ve posta",
+  "Araç kiralama",
+  "Yakıt harcamaları",
+  "Bakım ve onarım",
+  "Seyahat harcamaları",
+  "Dijital reklamlar",
+  "Tasarım ve baskı",
+  "Web sitesi ve SEO",
+  "Demirbaş alımları",
+  "Kırtasiye harcamaları",
+  "Temizlik ve mutfak",
+  "Danışmanlık ücretleri",
+  "Yazılım lisansları",
+  "Nakliye",
+  "Hammaliye",
+] as const;
+
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
 export interface InvoiceItem {
   id: string;
   productId?: string;
+  expenseCategory?: string; // Masraf / Gider Kalemi (Yemek ve ulaşım, Kira ödemeleri, vb.)
   description: string;
   quantity: number;
   unit: string; // Adet, Saat, Ay, Kg, vb.
@@ -49,10 +77,14 @@ export type InvoiceStatus = "draft" | "sent" | "paid" | "partial" | "overdue" | 
 
 export type EDocumentType = "e_fatura" | "e_arsiv" | "paper";
 
+export type DocumentKind = "invoice" | "receipt"; // invoice = Fatura, receipt = Fiş (Gelir/Gider Fişi)
+
 export interface Invoice {
   id: string;
   invoiceNumber: string; // ör: GIB20260000001
   type: InvoiceType;
+  docKind?: DocumentKind; // "invoice" = Gelir/Gider Faturası, "receipt" = Gelir/Gider Fişi
+  expenseCategory?: string; // Ana Masraf / Gider Kalemi
   contactId: string;
   contactName: string;
   taxNumber?: string;
@@ -312,11 +344,58 @@ export interface TaxOfficeCredentials {
   codeSecret?: string;    // Şifre
 }
 
+export interface WorkplaceSgkCredential {
+  id: string;
+  name: string;                     // Şube / Depo / Birim Adı (ör: "Merkez", "Ankara Şubesi", "Gebze Depo")
+  type?: "main" | "branch" | "warehouse" | "other"; // Birim Türü
+  referenceId?: string;             // İlgili Şube veya Depo ID'si
+  workplaceRegistrationNo: string;  // SGK İşyeri Sicil No (Noktasız)
+  userCode: string;                 // SGK e-Bildirge Kullanıcı Kodu
+  workplaceCode: string;            // SGK İşyeri Kodu (Şube/Sıra No ör: 000, 001)
+  systemPassword?: string;          // Sistem Şifresi
+  workplacePassword?: string;       // İşyeri Şifresi
+}
+
 export interface SgkCredentials {
   userCode?: string;               // SGK e-Bildirge Kullanıcı Kodu
+  workplaceCode?: string;          // SGK İşyeri Kodu (Şube/İşyeri Sıra No)
   systemPassword?: string;         // Sistem Şifresi
   workplacePassword?: string;      // İşyeri Şifresi
   workplaceRegistrationNo?: string; // SGK İşyeri Sicil / Tescil No
+  workplaces?: WorkplaceSgkCredential[]; // Şube, depo ve diğer birimlerin SGK şifreleri
+}
+
+export interface EDevletCredentials {
+  managerName?: string;          // Şirket Müdürü / Yetkili Adı Soyadı
+  tcKimlikNo?: string;           // T.C. Kimlik Numarası
+  eDevletPassword?: string;      // e-Devlet Şifresi
+  mobileSignaturePhone?: string; // Kayıtlı Telefon / Mobil İmza Numarası
+  validUntil?: string;           // İmza Yetkisi Geçerlilik Tarihi
+  notes?: string;                // Yetki Kapsamı / Notlar
+}
+
+export type ETebligatAuthority = "GIB" | "SGK";
+export type ETebligatStatus = "unread" | "read" | "in_process" | "appealed" | "paid" | "archived";
+
+export interface ETebligatItem {
+  id: string;
+  authority: ETebligatAuthority; // "GIB" (Vergi Dairesi) | "SGK" (Sosyal Güvenlik Kurumu)
+  senderUnit: string; // ör: "Kadıköy Vergi Dairesi Müdürlüğü" veya "İstanbul SGK İl Müdürlüğü"
+  documentTitle: string; // ör: "Ödeme Emri (6183 S.K. 55. Md.)", "Vergi / Ceza İhbarnamesi", "İzahata Davet Yazısı", "SGK Prim Farkı ve İPC Bildirimi"
+  documentType?: string; // İhbarname, Ödeme Emri, İzahata Davet, Bilgi İsteme vb.
+  barcodeNumber: string; // ör: "GIB-2026-ETEB-8492019"
+  envelopeId?: string; // ör: "e-ZRF-2026-948204"
+  sentDate: string; // Gönderim Tarihi (ör: "2026-08-14")
+  deliveryDate: string; // Tebellüğ Tarihi (Sisteme ulaştıktan 5 gün sonra yasal tebellüğ edilmiş sayılır)
+  legalDeadlineDate?: string; // Yasal Süre Bitiş Tarihi (İtiraz / Dava / Ödeme Son Günü)
+  amount?: number; // Varsa Tebliğ Edilen Tutar / Borç (₺)
+  status: ETebligatStatus; // unread, read, in_process, appealed, paid, archived
+  contentSummary?: string; // Tebligat Konusu & İçerik Özeti
+  workplaceId?: string; // İlgili SGK İşyeri veya Şube
+  workplaceName?: string;
+  notes?: string;
+  pdfUrl?: string;
+  receiptNumber?: string; // Mazbata No
 }
 
 export interface CompanySettings {
@@ -346,6 +425,8 @@ export interface CompanySettings {
   currency: string;
   taxCredentials?: TaxOfficeCredentials;
   sgkCredentials?: SgkCredentials;
+  eDevletCredentials?: EDevletCredentials;
+  eTebligatlar?: ETebligatItem[];
 }
 
 export interface LedgerEntry {

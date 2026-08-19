@@ -9,7 +9,8 @@ import {
   PromissoryNote,
   LeaveRequest,
   AdvanceRequest,
-  InvoiceItem
+  InvoiceItem,
+  EXPENSE_CATEGORIES,
 } from "../types";
 
 // Base Demo Accounts
@@ -311,6 +312,10 @@ export function generateMonthlyIntegratedData() {
 
       const items: InvoiceItem[] = [];
 
+      const purchaseExpenseCategory = !isSales
+        ? EXPENSE_CATEGORIES[invIdx % EXPENSE_CATEGORIES.length]
+        : undefined;
+
       for (let k = 0; k < itemsPerInvoice; k++) {
         const productIndex = invIdx * itemsPerInvoice + k;
         const prod = productsForThisMonth[productIndex];
@@ -321,10 +326,17 @@ export function generateMonthlyIntegratedData() {
         const vatAmount = (totalWithoutVat * prod.vatRate) / 100;
         const totalWithVat = totalWithoutVat + vatAmount;
 
+        const itemDesc = isSales
+          ? `${prod.name} (${prod.code})`
+          : purchaseExpenseCategory
+          ? `${purchaseExpenseCategory} - ${prod.name}`
+          : `${prod.name} (${prod.code})`;
+
         items.push({
           id: `item_${m.num}_${invCounter}_${k}`,
           productId: prod.id,
-          description: `${prod.name} (${prod.code})`,
+          expenseCategory: purchaseExpenseCategory,
+          description: itemDesc,
           quantity: qty,
           unit: prod.unit,
           unitPrice: price,
@@ -343,12 +355,21 @@ export function generateMonthlyIntegratedData() {
       const paidAmount = grandTotal;
       const remainingAmount = 0;
 
+      const isReceipt = invIdx % 3 === 0;
+      const docKind: Invoice["docKind"] = isReceipt ? "receipt" : "invoice";
+
       const inv: Invoice = {
         id: `inv_${invCounter}`,
         invoiceNumber: isSales
-          ? `MUV2026${m.num}${invCounter.toString().slice(-4)}`
-          : `TED2026${m.num}${invCounter.toString().slice(-4)}`,
+          ? isReceipt
+            ? `GLF2026${m.num}${invCounter.toString().slice(-4)}`
+            : `MUV2026${m.num}${invCounter.toString().slice(-4)}`
+          : isReceipt
+            ? `GDF2026${m.num}${invCounter.toString().slice(-4)}`
+            : `TED2026${m.num}${invCounter.toString().slice(-4)}`,
         type: isSales ? "sales" : "purchase",
+        docKind,
+        expenseCategory: purchaseExpenseCategory,
         contactId: contact.id,
         contactName: contact.name,
         taxNumber: contact.taxNumber || "1234567890",
@@ -363,8 +384,12 @@ export function generateMonthlyIntegratedData() {
         status,
         currency: "TRY",
         notes: isSales
-          ? `Sayın ${contact.name}, ${m.name} 2026 dönemi stok teslim ve hizmet faturasıdır (${items.length} kalem).`
-          : `${m.name} 2026 dönemi tedarikçi mal alım faturası (${items.length} kalem).`,
+          ? isReceipt
+            ? `Sayın ${contact.name}, ${m.name} 2026 dönemi perakende satış ve gelir fişidir (${items.length} kalem).`
+            : `Sayın ${contact.name}, ${m.name} 2026 dönemi e-Fatura / e-Arşiv satış faturasıdır (${items.length} kalem).`
+          : isReceipt
+            ? `${m.name} 2026 dönemi ${purchaseExpenseCategory || "masraf"} fişidir (${items.length} kalem).`
+            : `${m.name} 2026 dönemi ${purchaseExpenseCategory || "tedarikçi"} alım faturası (${items.length} kalem).`,
         createdAt: issueDate,
       };
 

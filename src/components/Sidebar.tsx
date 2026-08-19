@@ -29,6 +29,7 @@ import {
   UserCheck,
   HardDrive,
   ShieldAlert,
+  ShieldCheck,
   ShoppingCart,
   Truck,
   X,
@@ -66,6 +67,8 @@ export type NavItem =
   | "company_profile"
   | "company_branches"
   | "company_warehouses"
+  | "company_e_services"
+  | "e_services"
   | "settings"
   | "admin";
 
@@ -95,7 +98,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isOrdersExpanded, setIsOrdersExpanded] = useState(true);
   const [isFinanceExpanded, setIsFinanceExpanded] = useState(true);
   const [isInvoicesExpanded, setIsInvoicesExpanded] = useState(true);
-  const [isQuotesAndSlipsExpanded, setIsQuotesAndSlipsExpanded] = useState(true);
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
 
   const isAdmin =
@@ -109,9 +111,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       : []),
     { id: "dashboard", label: "Ana Sayfa", icon: LayoutDashboard },
     { id: "company", label: "Firma Bilgileri", icon: Building2, hasSubItems: true },
+    { id: "e_services", label: "E-İşlemler", icon: ShieldCheck, badge: "Resmi" },
     { id: "invoices", label: "E-Belgeler", icon: FileText, hasSubItems: true },
     { id: "orders_module", label: "Sipariş & Proforma", icon: ShoppingCart, hasSubItems: true },
-    { id: "quotes_and_slips", label: "Gelir & Gider Fişleri", icon: FileSpreadsheet, hasSubItems: true },
     { id: "contacts", label: "Cari Hesaplar", icon: Users },
     { id: "accounts", label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
     { id: "products", label: "Stoklar", icon: PackageIcon },
@@ -130,8 +132,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const invoiceSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
-    { id: "invoices_sales", label: "Gelir Faturası", icon: FileText },
-    { id: "invoices_purchase", label: "Gider Faturası", icon: FileText },
+    { id: "invoices_sales", label: "Gelir Faturası & Fişleri", icon: FileText },
+    { id: "invoices_purchase", label: "Gider Faturası & Fişleri", icon: FileText },
     { id: "waybills_dispatch", label: "Giden İrsaliyeler", icon: ArrowUpRight },
     { id: "waybills_receipt", label: "Gelen İrsaliyeler", icon: ArrowDownLeft },
   ];
@@ -139,11 +141,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const orderSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "orders", label: "Siparişler & Sipariş Oluştur", icon: ShoppingCart },
     { id: "quotes", label: "Proforma Faturalar", icon: FileSpreadsheet },
-  ];
-
-  const quotesAndSlipsSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
-    { id: "income_slips", label: "Gelir Fişi", icon: ArrowDownLeft },
-    { id: "expenses", label: "Gider Fişi", icon: ArrowUpRight },
   ];
 
   const financeSubModules: { id: FinanceSubModule; label: string; icon: React.ElementType }[] = [
@@ -202,7 +199,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const Icon = item.icon;
           const isOrderItem = item.id === "orders_module" || item.id === "orders";
           const isInvoiceItem = item.id === "invoices";
-          const isQuotesAndSlipsItem = item.id === "quotes_and_slips";
           const isFinanceItem = item.id === "accounts";
           const isCompanyItem = item.id === "company";
           const isProductItem = item.id === "products";
@@ -218,16 +214,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 "waybills_dispatch",
                 "waybills_receipt",
               ].includes(currentTab)
-            : isQuotesAndSlipsItem
-            ? [
-                "quotes_and_slips",
-                "income_slips",
-                "expenses",
-              ].includes(currentTab)
             : isFinanceItem
             ? currentTab === "accounts"
             : isCompanyItem
-            ? ["company", "company_profile", "company_branches", "company_warehouses"].includes(currentTab)
+            ? ["company", "company_profile", "company_branches", "company_warehouses", "company_e_services"].includes(currentTab)
             : isProductItem
             ? ["products", "products_list"].includes(currentTab)
             : currentTab === item.id;
@@ -254,17 +244,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       ].includes(currentTab)
                     ) {
                       handleSelectTabWithMobileClose("invoices_sales");
-                    }
-                  } else if (isQuotesAndSlipsItem) {
-                    setIsQuotesAndSlipsExpanded((prev) => !prev);
-                    if (
-                      ![
-                        "quotes_and_slips",
-                        "income_slips",
-                        "expenses",
-                      ].includes(currentTab)
-                    ) {
-                      handleSelectTabWithMobileClose("income_slips");
                     }
                   } else if (isFinanceItem) {
                     setIsFinanceExpanded((prev) => !prev);
@@ -306,12 +285,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )
                 ) : isInvoiceItem ? (
                   isInvoicesExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
-                  )
-                ) : isQuotesAndSlipsItem ? (
-                  isQuotesAndSlipsExpanded ? (
                     <ChevronDown className="w-4 h-4 text-slate-400" />
                   ) : (
                     <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -390,36 +363,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   })}
                 </div>
               )}
-
-              {/* Sub-modules for Gelir & Gider Fişleri */}
-              {isQuotesAndSlipsItem && isQuotesAndSlipsExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
-                  {quotesAndSlipsSubModules.map((sub) => {
-                    const SubIcon = sub.icon;
-                    const isSubActive = currentTab === sub.id;
-
-                    return (
-                      <button
-                        key={sub.id}
-                        onClick={() => onSelectTab(sub.id)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                          isSubActive
-                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                        }`}
-                      >
-                        <SubIcon
-                          className={`w-3.5 h-3.5 ${
-                            isSubActive ? "text-white" : "text-slate-400"
-                          }`}
-                        />
-                        <span>{sub.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
 
               {/* Sub-modules for Finans Yönetimi */}
               {isFinanceItem && isFinanceExpanded && (
