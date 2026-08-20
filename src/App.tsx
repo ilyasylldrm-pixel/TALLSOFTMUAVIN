@@ -483,6 +483,61 @@ export default function App() {
     });
   };
 
+  const handleUpdateInvoice = (updatedInvoice: Invoice) => {
+    setData((prev) => {
+      const oldInvoice = prev.invoices.find((i) => i.id === updatedInvoice.id);
+      let updatedContacts = prev.contacts;
+
+      if (oldInvoice) {
+        const oldDelta = oldInvoice.type === "sales" ? oldInvoice.grandTotal : -oldInvoice.grandTotal;
+        const newDelta = updatedInvoice.type === "sales" ? updatedInvoice.grandTotal : -updatedInvoice.grandTotal;
+
+        if (oldInvoice.contactId === updatedInvoice.contactId) {
+          const diff = newDelta - oldDelta;
+          if (diff !== 0) {
+            updatedContacts = prev.contacts.map((c) => {
+              if (c.id === updatedInvoice.contactId) {
+                const newBal = c.balance + diff;
+                return {
+                  ...c,
+                  balance: newBal,
+                  balanceType: newBal > 0 ? ("receivable" as const) : newBal < 0 ? ("payable" as const) : ("balanced" as const),
+                };
+              }
+              return c;
+            });
+          }
+        } else {
+          updatedContacts = prev.contacts.map((c) => {
+            if (c.id === oldInvoice.contactId) {
+              const newBal = c.balance - oldDelta;
+              return {
+                ...c,
+                balance: newBal,
+                balanceType: newBal > 0 ? ("receivable" as const) : newBal < 0 ? ("payable" as const) : ("balanced" as const),
+              };
+            }
+            if (c.id === updatedInvoice.contactId) {
+              const newBal = c.balance + newDelta;
+              return {
+                ...c,
+                balance: newBal,
+                balanceType: newBal > 0 ? ("receivable" as const) : newBal < 0 ? ("payable" as const) : ("balanced" as const),
+              };
+            }
+            return c;
+          });
+        }
+      }
+
+      return {
+        ...prev,
+        invoices: prev.invoices.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv)),
+        contacts: updatedContacts as Contact[],
+      };
+    });
+  };
+
   const handleDeleteInvoice = (id: string) => {
     setData((prev) => ({
       ...prev,
@@ -1362,7 +1417,7 @@ export default function App() {
                   : undefined
               }
               onAddInvoice={handleAddInvoice}
-              onUpdateInvoice={() => {}}
+              onUpdateInvoice={handleUpdateInvoice}
               onDeleteInvoice={handleDeleteInvoice}
               onAddTransactionFromInvoice={handleAddTransactionFromInvoice}
               onCollectAllInvoices={handleCollectAllInvoices}

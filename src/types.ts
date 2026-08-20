@@ -656,4 +656,20 @@ export interface CostProject {
   createdAt: string;
 }
 
+export interface ExtractedDocumentData {
+  taxNumber?: string; // Vergi Numarası / TCKN
+  companyTitle?: string; // Ünvan (Satıcı/Düzenleyen Firma)
+  invoiceNumber?: string; // Fiş veya Fatura Numarası
+  issueDate?: string; // Belge Düzenleme Tarihi (YYYY-MM-DD)
+  docType?: "Fatura" | "Fiş" | "Diğer";
+  subtotal?: number; // Matrah (KDV Hariç Tutar)
+  vatRate?: number; // KDV Oranı (%)
+  vatAmount?: number; // KDV Tutarı
+  grandTotal?: number; // Genel Toplam
+  paymentMethod?: "Nakit" | "Kredi Kartı" | "Banka Transferi / EFT" | "Çek" | "Senet" | "Açık Hesap / Vadeli";
+  expenseCategory?: string; // Masraf Kalemi
+  notes?: string;
+  isTransferredToAccounting?: boolean; // Ön muhasebeye aktarıldı mı?
+}
+
 

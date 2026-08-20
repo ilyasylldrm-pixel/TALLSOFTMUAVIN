@@ -51,6 +51,22 @@ export {
   onAuthStateChanged
 };
 
+export interface ExtractedDocumentData {
+  taxNumber?: string; // Vergi Numarası / TCKN
+  companyTitle?: string; // Ünvan (Satıcı/Düzenleyen Firma)
+  invoiceNumber?: string; // Fiş veya Fatura Numarası
+  issueDate?: string; // Belge Düzenleme Tarihi (YYYY-MM-DD)
+  docType?: "Fatura" | "Fiş" | "Diğer";
+  subtotal?: number; // Matrah (KDV Hariç Tutar)
+  vatRate?: number; // KDV Oranı (%)
+  vatAmount?: number; // KDV Tutarı
+  grandTotal?: number; // Genel Toplam
+  paymentMethod?: "Nakit" | "Kredi Kartı" | "Banka Transferi / EFT" | "Çek" | "Senet" | "Açık Hesap / Vadeli";
+  expenseCategory?: string; // Masraf Kalemi
+  notes?: string;
+  isTransferredToAccounting?: boolean; // Ön muhasebeye aktarıldı mı?
+}
+
 export interface UserFileMetadata {
   id: string;
   userId: string;
@@ -64,6 +80,7 @@ export interface UserFileMetadata {
   storagePath?: string; // Firebase Storage path
   fileData?: string; // Fallback Base64 data for previewing/downloading
   expiresAt?: number; // Expiration timestamp in ms (for temporary WhatsApp shares)
+  extractedData?: ExtractedDocumentData;
 }
 
 export interface UserProfileData {

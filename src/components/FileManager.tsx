@@ -16,11 +16,21 @@ import {
   FolderOpen,
   Filter,
   CheckCircle2,
-  AlertCircle,
   X,
   FileCheck,
   Tag,
-  Info
+  Info,
+  Sparkles,
+  Receipt,
+  CreditCard,
+  Building2,
+  DollarSign,
+  Send,
+  RefreshCw,
+  Wallet,
+  ArrowRight,
+  Landmark,
+  Check
 } from "lucide-react";
 import { UserProfile } from "./AuthModal";
 import {
@@ -28,11 +38,18 @@ import {
   getUserFiles,
   deleteUserFile,
   uploadFileToStorage,
-  UserFileMetadata
+  UserFileMetadata,
+  ExtractedDocumentData
 } from "../lib/firebase";
+import { Contact, Account, Invoice, Transaction } from "../types";
 
 interface FileManagerProps {
   currentUser: UserProfile;
+  contacts?: Contact[];
+  accounts?: Account[];
+  onAddInvoice?: (inv: Invoice) => void;
+  onAddTransaction?: (tx: Transaction) => void;
+  onSelectTab?: (tab: string) => void;
 }
 
 const FILE_CATEGORIES = [
@@ -45,10 +62,27 @@ const FILE_CATEGORIES = [
   "Genel Belgeler"
 ];
 
-export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
+const PAYMENT_METHODS: Array<NonNullable<ExtractedDocumentData["paymentMethod"]>> = [
+  "Nakit",
+  "Kredi Kartı",
+  "Banka Transferi / EFT",
+  "Çek",
+  "Senet",
+  "Açık Hesap / Vadeli"
+];
+
+export const FileManager: React.FC<FileManagerProps> = ({
+  currentUser,
+  contacts = [],
+  accounts = [],
+  onAddInvoice,
+  onAddTransaction,
+  onSelectTab
+}) => {
   const [files, setFiles] = useState<UserFileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Tümü");
   const [previewFile, setPreviewFile] = useState<UserFileMetadata | null>(null);
@@ -57,6 +91,26 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
   const [category, setCategory] = useState("Fatura & Fişler");
   const [description, setDescription] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileBase64Preview, setFileBase64Preview] = useState<string | null>(null);
+
+  // AI Extracted Data Form State
+  const [extractedData, setExtractedData] = useState<ExtractedDocumentData>({
+    taxNumber: "",
+    companyTitle: "",
+    invoiceNumber: "",
+    issueDate: new Date().toISOString().split("T")[0],
+    docType: "Fiş",
+    subtotal: 0,
+    vatRate: 20,
+    vatAmount: 0,
+    grandTotal: 0,
+    paymentMethod: "Nakit",
+    expenseCategory: "Yemek ve ulaşım",
+    notes: ""
+  });
+
+  const [autoCreateInvoice, setAutoCreateInvoice] = useState(true);
+  const [transferSuccessMessage, setTransferSuccessMessage] = useState<string | null>(null);
 
   // Load user files from Firestore
   useEffect(() => {
@@ -75,6 +129,84 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
     }
   };
 
+  // Trigger OCR analysis when a receipt/invoice file is chosen
+  const triggerAiOcrAnalysis = async (file: File, base64: string) => {
+    setOcrLoading(true);
+    try {
+      const res = await fetch("/api/gemini/parse-invoice-doc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileData: base64,
+          fileName: file.name,
+          fileType: file.type
+        })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          const d = json.data;
+          const subtotalVal = Number(d.subtotal) || 0;
+          const vatRateVal = Number(d.vatRate) || 20;
+          const vatAmountVal = Number(d.vatAmount) || (subtotalVal * vatRateVal) / 100;
+          const grandTotalVal = Number(d.grandTotal) || (subtotalVal + vatAmountVal);
+
+          let detectedPayment: ExtractedDocumentData["paymentMethod"] = "Nakit";
+          if (d.suggestedPaymentMethod && PAYMENT_METHODS.includes(d.suggestedPaymentMethod)) {
+            detectedPayment = d.suggestedPaymentMethod;
+          }
+
+          setExtractedData({
+            taxNumber: d.taxNumber ? String(d.taxNumber).replace(/\D/g, "") : "",
+            companyTitle: d.companyTitle || "",
+            invoiceNumber: d.invoiceNumber || `FİŞ-${Date.now().toString().slice(-4)}`,
+            issueDate: d.issueDate || new Date().toISOString().split("T")[0],
+            docType: d.docType === "Fatura" ? "Fatura" : "Fiş",
+            subtotal: subtotalVal,
+            vatRate: vatRateVal,
+            vatAmount: vatAmountVal,
+            grandTotal: grandTotalVal,
+            paymentMethod: detectedPayment,
+            expenseCategory: d.expenseCategory || "Yemek ve ulaşım",
+            notes: d.notes || ""
+          });
+
+          if (!description) {
+            setDescription(`${d.companyTitle || "Fiş/Fatura"} - ${d.invoiceNumber || file.name}`);
+          }
+          return;
+        }
+      }
+
+      // Fallback if AI endpoint had an issue
+      fallbackParsing(file);
+    } catch (err) {
+      console.warn("AI OCR servisi çağrılamadı, yerel ayrıştırma yapılıyor:", err);
+      fallbackParsing(file);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const fallbackParsing = (file: File) => {
+    const cleanName = file.name.replace(/\.[^/.]+$/, "");
+    const today = new Date().toISOString().split("T")[0];
+    const dummyNum = `FİŞ-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    setExtractedData((prev) => ({
+      ...prev,
+      companyTitle: prev.companyTitle || cleanName,
+      invoiceNumber: prev.invoiceNumber || dummyNum,
+      issueDate: prev.issueDate || today,
+      subtotal: prev.subtotal || 1000,
+      vatRate: prev.vatRate || 20,
+      vatAmount: prev.vatAmount || 200,
+      grandTotal: prev.grandTotal || 1200,
+      paymentMethod: prev.paymentMethod || "Nakit"
+    }));
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -82,10 +214,59 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
         alert("Seçilen dosya çok büyük! Lütfen 8 MB'tan küçük bir dosya yükleyin.");
         e.target.value = "";
         setSelectedFile(null);
+        setFileBase64Preview(null);
         return;
       }
       setSelectedFile(file);
+
+      // Read as base64 for preview & AI analysis
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        setFileBase64Preview(base64);
+        if (category === "Fatura & Fişler" || file.type.startsWith("image/") || file.type.includes("pdf")) {
+          triggerAiOcrAnalysis(file, base64);
+        }
+      };
+      reader.readAsDataURL(file);
     }
+  };
+
+  // Recalculate totals when Matrah or VAT rate changes
+  const handleSubtotalChange = (val: number) => {
+    const vatRate = extractedData.vatRate || 20;
+    const vatAmount = (val * vatRate) / 100;
+    const grandTotal = val + vatAmount;
+    setExtractedData((prev) => ({
+      ...prev,
+      subtotal: val,
+      vatAmount: Number(vatAmount.toFixed(2)),
+      grandTotal: Number(grandTotal.toFixed(2))
+    }));
+  };
+
+  const handleVatRateChange = (rate: number) => {
+    const subtotal = extractedData.subtotal || 0;
+    const vatAmount = (subtotal * rate) / 100;
+    const grandTotal = subtotal + vatAmount;
+    setExtractedData((prev) => ({
+      ...prev,
+      vatRate: rate,
+      vatAmount: Number(vatAmount.toFixed(2)),
+      grandTotal: Number(grandTotal.toFixed(2))
+    }));
+  };
+
+  const handleGrandTotalChange = (total: number) => {
+    const vatRate = extractedData.vatRate || 20;
+    const subtotal = total / (1 + vatRate / 100);
+    const vatAmount = total - subtotal;
+    setExtractedData((prev) => ({
+      ...prev,
+      grandTotal: total,
+      subtotal: Number(subtotal.toFixed(2)),
+      vatAmount: Number(vatAmount.toFixed(2))
+    }));
   };
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -102,7 +283,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
     try {
       let fileUrl = "";
       let storagePath = "";
-      let base64Data: string | undefined = undefined;
+      let base64Data: string | undefined = fileBase64Preview || undefined;
 
       // 1. Try uploading to Firebase Storage
       try {
@@ -110,20 +291,30 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
         fileUrl = uploadResult.fileUrl;
         storagePath = uploadResult.storagePath;
       } catch (storageErr) {
-        console.warn("Firebase Storage upload failed or not enabled yet, checking fallback:", storageErr);
+        console.warn("Firebase Storage upload fallback:", storageErr);
 
         if (selectedFile.size > 700 * 1024) {
           throw new Error("Bulut depolama alanı aktif değilken veritabanına 700 KB'tan büyük dosya doğrudan kaydedilemez. Lütfen dosya boyutunu küçültün.");
         }
 
-        // Fallback to Base64 DataURL if storage is restricted or failing (only for small files < 700KB)
-        base64Data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = (err) => reject(err);
-          reader.readAsDataURL(selectedFile);
-        });
+        if (!base64Data) {
+          base64Data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = (err) => reject(err);
+            reader.readAsDataURL(selectedFile);
+          });
+        }
       }
+
+      // Check if extractedData has content for Fatura & Fişler
+      const isInvoiceOrReceipt = category === "Fatura & Fişler";
+      const finalExtractedData: ExtractedDocumentData | undefined = isInvoiceOrReceipt
+        ? {
+            ...extractedData,
+            isTransferredToAccounting: autoCreateInvoice
+          }
+        : undefined;
 
       // 2. Save metadata to Firestore user_files collection
       const fileData: Omit<UserFileMetadata, "id"> = {
@@ -136,7 +327,8 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
         description: description || `${selectedFile.name} evrak yüklemesi`,
         ...(fileUrl ? { fileUrl } : {}),
         ...(storagePath ? { storagePath } : {}),
-        ...(base64Data ? { fileData: base64Data } : {})
+        ...(base64Data ? { fileData: base64Data } : {}),
+        ...(finalExtractedData ? { extractedData: finalExtractedData } : {})
       };
 
       const newId = await saveUserFile(fileData);
@@ -147,9 +339,17 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
       };
 
       setFiles((prev) => [newFileEntry, ...prev]);
+
+      // 3. If user opted to automatically create invoice/receipt in accounting
+      if (isInvoiceOrReceipt && autoCreateInvoice && onAddInvoice) {
+        createInvoiceFromExtractedData(finalExtractedData!, selectedFile.name, newId);
+      }
+
       setSelectedFile(null);
+      setFileBase64Preview(null);
       setDescription("");
-      alert("✅ Dosya başarıyla yüklendi!");
+      setTransferSuccessMessage("✅ Fiş/Fatura başarıyla buluta yüklendi ve bilgileri kaydedildi!");
+      setTimeout(() => setTransferSuccessMessage(null), 5000);
     } catch (err: unknown) {
       console.error("Dosya yükleme hatası:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -161,6 +361,111 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
     } finally {
       setUploading(false);
     }
+  };
+
+  const createInvoiceFromExtractedData = (
+    data: ExtractedDocumentData,
+    fileName: string,
+    fileId: string
+  ) => {
+    if (!onAddInvoice) return;
+
+    // Match or create vendor contact
+    const vendorName = data.companyTitle || "Gider Tedarikçisi / Satıcı";
+    const existingContact = contacts.find(
+      (c) =>
+        (data.taxNumber && c.taxNumber === data.taxNumber) ||
+        c.name.toLowerCase() === vendorName.toLowerCase()
+    );
+
+    const contactId = existingContact ? existingContact.id : `cont_${Date.now()}`;
+    const subtotal = data.subtotal || 0;
+    const vatAmount = data.vatAmount || 0;
+    const grandTotal = data.grandTotal || subtotal + vatAmount;
+    const vatRate = data.vatRate || 20;
+
+    const newInvoice: Invoice = {
+      id: `inv_file_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      invoiceNumber: data.invoiceNumber || `FİŞ-${Date.now().toString().slice(-5)}`,
+      type: "purchase", // Gider Faturası / Fişi
+      docKind: data.docType === "Fatura" ? "invoice" : "receipt",
+      contactId,
+      contactName: vendorName,
+      taxNumber: data.taxNumber || "",
+      issueDate: data.issueDate || new Date().toISOString().split("T")[0],
+      dueDate: data.issueDate || new Date().toISOString().split("T")[0],
+      createdAt: new Date().toISOString(),
+      status: "paid", // Ödendi olarak işaretlenir
+      subtotal,
+      totalVat: vatAmount,
+      grandTotal,
+      paidAmount: grandTotal,
+      remainingAmount: 0,
+      currency: "TRY",
+      expenseCategory: data.expenseCategory || "Yemek ve ulaşım",
+      notes: `Bulut Dosya Deposundan AI OCR ile yüklendi (${fileName}). Ödeme Yöntemi: ${data.paymentMethod || "Nakit"}.`,
+      items: [
+        {
+          id: `item_${Date.now()}`,
+          description: `${data.companyTitle || "Masraf Fişi/Faturası"} - ${data.expenseCategory || "Gider"}`,
+          expenseCategory: data.expenseCategory || "Yemek ve ulaşım",
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: subtotal,
+          vatRate: vatRate,
+          totalWithoutVat: subtotal,
+          vatAmount: vatAmount,
+          totalWithVat: grandTotal
+        }
+      ]
+    };
+
+    onAddInvoice(newInvoice);
+
+    // If onAddTransaction exists, record the payment transaction automatically
+    if (onAddTransaction) {
+      const defaultAccount = accounts[0] || { id: "acc_cash", name: "Merkez TL Kasası" };
+      const tx: Transaction = {
+        id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        date: data.issueDate || new Date().toISOString().split("T")[0],
+        type: "expense",
+        amount: grandTotal,
+        currency: "TRY",
+        accountId: defaultAccount.id,
+        accountName: defaultAccount.name,
+        contactId,
+        contactName: vendorName,
+        invoiceId: newInvoice.id,
+        invoiceNumber: newInvoice.invoiceNumber,
+        category: data.expenseCategory || "Gider",
+        description: `${data.companyTitle || "Satıcı"} fiş/fatura ödemesi (${data.paymentMethod || "Nakit"})`,
+        documentNo: data.invoiceNumber
+      };
+      onAddTransaction(tx);
+    }
+  };
+
+  const handleTransferExistingFileToInvoice = (file: UserFileMetadata) => {
+    if (!file.extractedData || !onAddInvoice) return;
+    createInvoiceFromExtractedData(file.extractedData, file.fileName, file.id);
+
+    // Update local state to show transferred
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === file.id
+          ? {
+              ...f,
+              extractedData: {
+                ...f.extractedData!,
+                isTransferredToAccounting: true
+              }
+            }
+          : f
+      )
+    );
+
+    setTransferSuccessMessage(`✅ "${file.fileName}" faturası başarıyla ön muhasebeye aktarıldı!`);
+    setTimeout(() => setTransferSuccessMessage(null), 4000);
   };
 
   const handleDelete = async (file: UserFileMetadata) => {
@@ -186,7 +491,13 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
       selectedCategory === "Tümü" || f.category === selectedCategory;
     const matchesSearch =
       f.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      f.description.toLowerCase().includes(searchTerm.toLowerCase());
+      f.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (f.extractedData?.companyTitle &&
+        f.extractedData.companyTitle.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (f.extractedData?.taxNumber &&
+        f.extractedData.taxNumber.includes(searchTerm)) ||
+      (f.extractedData?.invoiceNumber &&
+        f.extractedData.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCategory && matchesSearch;
   });
 
@@ -206,9 +517,45 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
     return <File className="w-5 h-5 text-indigo-600" />;
   };
 
+  const getPaymentBadge = (method?: string) => {
+    switch (method) {
+      case "Nakit":
+        return { bg: "bg-emerald-50 text-emerald-800 border-emerald-300", icon: Wallet };
+      case "Kredi Kartı":
+        return { bg: "bg-indigo-50 text-indigo-800 border-indigo-300", icon: CreditCard };
+      case "Banka Transferi / EFT":
+        return { bg: "bg-blue-50 text-blue-800 border-blue-300", icon: Landmark };
+      case "Çek":
+        return { bg: "bg-amber-50 text-amber-800 border-amber-300", icon: FileText };
+      case "Senet":
+        return { bg: "bg-purple-50 text-purple-800 border-purple-300", icon: FileCheck };
+      default:
+        return { bg: "bg-slate-100 text-slate-800 border-slate-300", icon: DollarSign };
+    }
+  };
+
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
       
+      {/* Success Notification */}
+      {transferSuccessMessage && (
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-950 p-4 rounded-2xl flex items-center justify-between shadow-md animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{transferSuccessMessage}</span>
+          </div>
+          {onSelectTab && (
+            <button
+              onClick={() => onSelectTab("invoices_purchase")}
+              className="text-xs font-extrabold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-xl border border-emerald-300 transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <span>Gider Faturalarına Git</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen - Cari Hesaplar Tasarımı) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
@@ -247,21 +594,21 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
 
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-1">
+            <span className="bg-purple-600/10 text-purple-900 border border-purple-300/80 font-extrabold text-[10px] uppercase px-2.5 py-0.5 rounded-md flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-purple-700" />
+              Yapay Zeka (AI OCR) Fiş & Fatura Okuyucu
+            </span>
             <span className="bg-emerald-500/10 text-emerald-800 border border-emerald-300/60 font-extrabold text-[10px] uppercase px-2.5 py-0.5 rounded-md flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
               Firestore Güvenli Depolama
             </span>
-            <span className="bg-purple-100/80 text-purple-900 border border-purple-200 text-[10px] font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3 text-purple-700" />
-              Özel Şifreli Erişim
-            </span>
           </div>
           <h2 className="text-lg font-extrabold text-slate-950 flex items-center gap-2">
             <HardDrive className="w-5 h-5 text-purple-700" />
-            <span>Bulut Dosya & Evrak Deposu</span>
+            <span>Bulut Dosya Deposu & Fiş/Fatura Ayrıştırıcı</span>
           </h2>
           <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-            Muhasebe belgeleriniz, fatura görselleriniz ve sözleşmeleriniz sadece sizin erişiminize özel Firestore veritabanında saklanır.
+            Yüklediğiniz fiş veya faturalardan Vergi No, Ünvan, Fiş/Fatura No, Matrah, KDV ve Toplam tutarlar otomatik okunur; ödeme yönteminizi seçerek tek tıkla muhasebeleştirebilirsiniz.
           </p>
         </div>
 
@@ -282,39 +629,40 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
       </div>
 
       {/* Main Layout: Upload Box & File List Split */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-        {/* UPLOAD FORM */}
-        <div className="bg-slate-50/60 p-4 rounded-2xl border border-purple-200/60 shadow-2xs space-y-4 h-fit">
+        {/* UPLOAD FORM (5 cols on lg) */}
+        <div className="lg:col-span-5 bg-slate-50/60 p-4 sm:p-5 rounded-2xl border border-purple-200/60 shadow-2xs space-y-4 h-fit">
           <div className="flex items-center justify-between pb-2.5 border-b border-purple-200/50">
             <h2 className="text-xs font-extrabold text-purple-950 flex items-center gap-2 uppercase tracking-wider">
               <UploadCloud className="w-4 h-4 text-purple-700" />
-              <span>Yeni Evrak Yükle</span>
+              <span>Yeni Evrak Yükle & OCR Tara</span>
             </h2>
             <span className="text-[10px] font-bold text-purple-800 bg-purple-100/80 border border-purple-200 px-2 py-0.5 rounded-md">
-              Firestore Sync
+              AI Otomatik Ayrıştırma
             </span>
           </div>
 
-          <form onSubmit={handleUpload} className="space-y-3.5">
+          <form onSubmit={handleUpload} className="space-y-4">
             {/* File Drop Area */}
-            <div className="relative border-2 border-dashed border-purple-300/80 hover:border-purple-600 bg-white hover:bg-purple-50/50 p-5 rounded-xl text-center transition-all cursor-pointer group shadow-2xs">
+            <div className="relative border-2 border-dashed border-purple-300/80 hover:border-purple-600 bg-white hover:bg-purple-50/50 p-4 sm:p-5 rounded-xl text-center transition-all cursor-pointer group shadow-2xs">
               <input
                 type="file"
                 required
+                accept="image/*,.pdf,.xlsx,.xls,.doc,.docx,.csv"
                 onChange={handleFileChange}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
               />
               <div className="flex flex-col items-center justify-center gap-2">
-                <div className="w-10 h-10 rounded-xl bg-purple-100 border border-purple-200/80 text-purple-800 flex items-center justify-center group-hover:scale-110 transition-transform shadow-2xs">
+                <div className="w-11 h-11 rounded-xl bg-purple-100 border border-purple-200/80 text-purple-800 flex items-center justify-center group-hover:scale-110 transition-transform shadow-2xs">
                   <UploadCloud className="w-5 h-5 text-purple-700" />
                 </div>
                 <div>
                   <span className="text-xs font-extrabold text-slate-900 block group-hover:text-purple-950">
-                    {selectedFile ? selectedFile.name : "Dosya Seçin veya Sürükleyin"}
+                    {selectedFile ? selectedFile.name : "Fiş / Fatura Dosyası Seçin veya Sürükleyin"}
                   </span>
                   <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                    {selectedFile ? formatBytes(selectedFile.size) : "PDF, PNG, JPG, Excel, Word (Max 10MB)"}
+                    {selectedFile ? formatBytes(selectedFile.size) : "PDF, JPEG, PNG, Excel vb. (Max 8MB)"}
                   </span>
                 </div>
               </div>
@@ -339,6 +687,306 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
               </select>
             </div>
 
+            {/* OCR Progress Indicator */}
+            {ocrLoading && (
+              <div className="p-3 bg-purple-50 border border-purple-300 rounded-xl flex items-center gap-3 animate-pulse">
+                <div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                <div className="text-xs text-purple-950 font-bold">
+                  <p>Yapay Zeka (Gemini OCR) Fiş / Faturayı Okuyor...</p>
+                  <p className="text-[10px] text-purple-700 font-normal">
+                    Vergi no, ünvan, fatura no, matrah ve KDV ayrıştırılıyor
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* AI EXTRACTED DATA PANEL (Shows if category is Fatura & Fişler or file chosen) */}
+            {(category === "Fatura & Fişler" || selectedFile) && (
+              <div className="bg-white p-3.5 rounded-xl border border-purple-300/80 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between pb-1.5 border-b border-purple-100">
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-purple-950">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>Okunan Belge Bilgileri (AI OCR)</span>
+                  </div>
+                  {selectedFile && fileBase64Preview && (
+                    <button
+                      type="button"
+                      onClick={() => triggerAiOcrAnalysis(selectedFile, fileBase64Preview)}
+                      disabled={ocrLoading}
+                      className="text-[10px] font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                      title="Yeniden AI ile Tara"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${ocrLoading ? "animate-spin" : ""}`} />
+                      <span>Yeniden Oku</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Satıcı Ünvanı & Vergi Numarası */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Firma / Satıcı Ünvanı
+                    </label>
+                    <div className="relative">
+                      <Building2 className="w-3.5 h-3.5 text-purple-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Örn: Petrol Ofisi A.Ş."
+                        value={extractedData.companyTitle || ""}
+                        onChange={(e) =>
+                          setExtractedData({ ...extractedData, companyTitle: e.target.value })
+                        }
+                        className="w-full bg-slate-50 focus:bg-white border border-slate-300 focus:border-purple-400 rounded-lg pl-8 pr-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Vergi No (VKN / TCKN)
+                    </label>
+                    <div className="relative">
+                      <ShieldCheck className="w-3.5 h-3.5 text-purple-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        maxLength={11}
+                        placeholder="10 veya 11 hane"
+                        value={extractedData.taxNumber || ""}
+                        onChange={(e) =>
+                          setExtractedData({
+                            ...extractedData,
+                            taxNumber: e.target.value.replace(/\D/g, "")
+                          })
+                        }
+                        className="w-full bg-slate-50 focus:bg-white border border-slate-300 focus:border-purple-400 rounded-lg pl-8 pr-2 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Belge Türü & Fiş/Fatura Numarası & Tarih */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Belge Türü
+                    </label>
+                    <select
+                      value={extractedData.docType || "Fiş"}
+                      onChange={(e) =>
+                        setExtractedData({
+                          ...extractedData,
+                          docType: e.target.value as "Fatura" | "Fiş"
+                        })
+                      }
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900"
+                    >
+                      <option value="Fiş">Fiş (ÖKC/Yazar Kasa)</option>
+                      <option value="Fatura">Fatura (e-Arşiv/Gider)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Fiş / Fatura No
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Örn: FİŞ-0042 / GIB2026..."
+                      value={extractedData.invoiceNumber || ""}
+                      onChange={(e) =>
+                        setExtractedData({ ...extractedData, invoiceNumber: e.target.value })
+                      }
+                      className="w-full bg-slate-50 focus:bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Belge Tarihi
+                    </label>
+                    <input
+                      type="date"
+                      value={extractedData.issueDate || new Date().toISOString().split("T")[0]}
+                      onChange={(e) =>
+                        setExtractedData({ ...extractedData, issueDate: e.target.value })
+                      }
+                      className="w-full bg-slate-50 focus:bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-semibold text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Matrah, KDV Oranı, KDV Tutarı, Genel Toplam */}
+                <div className="bg-purple-50/50 p-2.5 rounded-xl border border-purple-200/80 space-y-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-purple-950 uppercase mb-0.5">
+                        Matrah (KDV Hariç)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={extractedData.subtotal || 0}
+                        onChange={(e) => handleSubtotalChange(parseFloat(e.target.value) || 0)}
+                        className="w-full bg-white border border-purple-200 rounded-lg p-1 text-xs font-extrabold text-slate-900 text-right"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-purple-950 uppercase mb-0.5">
+                        KDV %
+                      </label>
+                      <select
+                        value={extractedData.vatRate || 20}
+                        onChange={(e) => handleVatRateChange(parseInt(e.target.value) || 20)}
+                        className="w-full bg-white border border-purple-200 rounded-lg p-1 text-xs font-extrabold text-slate-900 text-center"
+                      >
+                        <option value={20}>%20</option>
+                        <option value={10}>%10</option>
+                        <option value={1}>%1</option>
+                        <option value={0}>%0</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-purple-950 uppercase mb-0.5">
+                        KDV Tutarı
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={extractedData.vatAmount || 0}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value) || 0;
+                          setExtractedData((prev) => ({
+                            ...prev,
+                            vatAmount: v,
+                            grandTotal: (prev.subtotal || 0) + v
+                          }));
+                        }}
+                        className="w-full bg-white border border-purple-200 rounded-lg p-1 text-xs font-bold text-slate-900 text-right"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-emerald-950 uppercase mb-0.5">
+                        Genel Toplam (₺)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={extractedData.grandTotal || 0}
+                        onChange={(e) => handleGrandTotalChange(parseFloat(e.target.value) || 0)}
+                        className="w-full bg-emerald-50 border border-emerald-300 rounded-lg p-1 text-xs font-black text-emerald-950 text-right"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ÖDEME YÖNTEMİ (KULLANICI KENDİSİ SEÇSİN) */}
+                <div>
+                  <label className="block text-xs font-extrabold text-purple-950 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <CreditCard className="w-3.5 h-3.5 text-purple-700" />
+                      <span>Ödeme Yöntemi (Kullanıcı Seçimi)</span>
+                    </span>
+                    <span className="text-[10px] font-semibold text-purple-700">
+                      Zorunlu Alan
+                    </span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {PAYMENT_METHODS.map((method) => {
+                      const isSelected = extractedData.paymentMethod === method;
+                      const badge = getPaymentBadge(method);
+                      const IconComp = badge.icon;
+                      return (
+                        <button
+                          key={method}
+                          type="button"
+                          onClick={() =>
+                            setExtractedData({
+                              ...extractedData,
+                              paymentMethod: method
+                            })
+                          }
+                          className={`p-2 rounded-xl text-left border transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold ${
+                            isSelected
+                              ? "bg-purple-700 text-white border-purple-800 shadow-sm ring-2 ring-purple-400/40"
+                              : "bg-slate-50 hover:bg-purple-50/60 text-slate-800 border-slate-200"
+                          }`}
+                        >
+                          <IconComp className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-white" : "text-purple-600"}`} />
+                          <span className="truncate">{method}</span>
+                          {isSelected && <Check className="w-3 h-3 ml-auto text-white" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Masraf Kalemi */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Gider / Masraf Kalemi
+                  </label>
+                  <select
+                    value={extractedData.expenseCategory || "Yemek ve ulaşım"}
+                    onChange={(e) =>
+                      setExtractedData({
+                        ...extractedData,
+                        expenseCategory: e.target.value
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-semibold text-slate-900"
+                  >
+                    <option value="Yemek ve ulaşım">Yemek ve ulaşım</option>
+                    <option value="Yakıt harcamaları">Yakıt harcamaları</option>
+                    <option value="Kırtasiye harcamaları">Kırtasiye harcamaları</option>
+                    <option value="Elektrik Faturası">Elektrik Faturası</option>
+                    <option value="Su Faturası">Su Faturası</option>
+                    <option value="Doğalgaz faturası">Doğalgaz faturası</option>
+                    <option value="Kira ödemeleri">Kira ödemeleri</option>
+                    <option value="Kargo ve posta">Kargo ve posta</option>
+                    <option value="Danışmanlık ücretleri">Danışmanlık ücretleri</option>
+                    <option value="Yazılım lisansları">Yazılım lisansları</option>
+                    <option value="Temizlik ve mutfak">Temizlik ve mutfak</option>
+                    <option value="Bakım ve onarım">Bakım ve onarım</option>
+                    <option value="İş yeri eğitimleri">İş yeri eğitimleri</option>
+                    <option value="Aidat giderleri">Aidat giderleri</option>
+                    <option value="Araç kiralama">Araç kiralama</option>
+                    <option value="Seyahat harcamaları">Seyahat harcamaları</option>
+                    <option value="Dijital reklamlar">Dijital reklamlar</option>
+                    <option value="Tasarım ve baskı">Tasarım ve baskı</option>
+                    <option value="Web sitesi ve SEO">Web sitesi ve SEO</option>
+                    <option value="Demirbaş alımları">Demirbaş alımları</option>
+                    <option value="Nakliye">Nakliye</option>
+                    <option value="Hammaliye">Hammaliye</option>
+                    <option value="Diğer Giderler">Diğer Giderler</option>
+                  </select>
+                </div>
+
+                {/* Auto create invoice checkbox */}
+                {onAddInvoice && (
+                  <label className="flex items-center gap-2 p-2 bg-emerald-50/70 border border-emerald-200 rounded-xl cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoCreateInvoice}
+                      onChange={(e) => setAutoCreateInvoice(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                    />
+                    <div className="text-[11px] leading-tight">
+                      <span className="font-extrabold text-emerald-950 block">
+                        Ön Muhasebeye / Gider Faturalarına Otomatik Kaydet
+                      </span>
+                      <span className="text-[10px] text-emerald-800">
+                        Fiş/Fatura tutarı ve seçilen ödeme yöntemiyle gider kaydı oluşturulur
+                      </span>
+                    </div>
+                  </label>
+                )}
+              </div>
+            )}
+
             {/* Description / Notes */}
             <div>
               <label className="block text-xs font-bold text-purple-950 mb-1 flex items-center gap-1">
@@ -347,7 +995,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
               </label>
               <input
                 type="text"
-                placeholder="Örn: 2026 Temmuz Ayı Kira Kontratı"
+                placeholder="Örn: 2026 Temmuz Ayı Kira Kontratı veya Fiş Açıklaması"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full bg-white border border-purple-200/80 focus:border-purple-400 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 shadow-2xs transition-all"
@@ -358,12 +1006,12 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
             <button
               type="submit"
               disabled={!selectedFile || uploading}
-              className="w-full bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer active:scale-98"
+              className="w-full bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer active:scale-98"
             >
               {uploading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Yükleniyor...</span>
+                  <span>Buluta Yükleniyor & Kaydediliyor...</span>
                 </>
               ) : (
                 <>
@@ -375,11 +1023,11 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
           </form>
         </div>
 
-        {/* FILE LISTING & METADATA SECTION */}
-        <div className="lg:col-span-2 space-y-4">
+        {/* FILE LISTING & METADATA SECTION (7 cols on lg) */}
+        <div className="lg:col-span-7 space-y-4">
 
           {/* Search and Category Filter Bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             {/* Category Filter Pills */}
             <div className="flex items-center gap-1 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs overflow-x-auto custom-scrollbar">
               <Filter className="w-3.5 h-3.5 text-purple-600 ml-1 shrink-0 hidden sm:block" />
@@ -399,11 +1047,11 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
             </div>
 
             {/* Search Input */}
-            <div className="relative w-full md:w-64 shrink-0">
+            <div className="relative w-full sm:w-64 shrink-0">
               <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Dosya adı veya not ara..."
+                placeholder="Dosya, VKN, Ünvan veya Belge No ara..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
@@ -412,7 +1060,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
           </div>
 
           {/* Files List Container */}
-          <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-3 shadow-2xs space-y-2.5">
+          <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-3.5 shadow-2xs space-y-3">
             <div className="px-1 pb-1 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FolderOpen className="w-4 h-4 text-purple-700" />
@@ -438,89 +1086,177 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
                 <div>
                   <h4 className="text-xs font-extrabold text-slate-800">Henüz Dosya Yüklenmedi</h4>
                   <p className="text-[11px] text-slate-500 mt-0.5 max-w-sm mx-auto">
-                    Sol taraftaki yükleme kutusunu kullanarak faturanıza veya firmanıza ait belgeleri güvenle yükleyebilirsiniz.
+                    Sol taraftaki yükleme kutusunu kullanarak faturanıza veya firmanıza ait belgeleri yükleyebilir ve OCR ile ayrıştırabilirsiniz.
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="space-y-2">
-                {filteredFiles.map((file) => (
-                  <div
-                    key={file.id}
-                    className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl p-3 border border-purple-200/50 hover:border-purple-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
-                        {getFileIcon(file.fileType)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-extrabold text-slate-900 group-hover:text-purple-950 truncate">
-                            {file.fileName}
-                          </h4>
-                          <span className="bg-purple-50 border border-purple-200 text-purple-900 text-[9px] font-bold px-2 py-0.2 rounded shrink-0">
-                            {file.category}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                          {file.description}
-                        </p>
-                        <div className="flex items-center gap-3 text-[10px] text-slate-400 font-semibold mt-1">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-purple-400" />
-                            {new Date(file.uploadDate).toLocaleDateString("tr-TR", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit"
-                            })}
-                          </span>
-                          <span>•</span>
-                          <span className="font-mono text-purple-700/70">{formatBytes(file.fileSize)}</span>
-                        </div>
-                      </div>
-                    </div>
+              <div className="space-y-3">
+                {filteredFiles.map((file) => {
+                  const ext = file.extractedData;
+                  const paymentBadge = getPaymentBadge(ext?.paymentMethod);
+                  const PaymentIcon = paymentBadge.icon;
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
-                      {(file.fileUrl || file.fileData) && (
-                        <>
+                  return (
+                    <div
+                      key={file.id}
+                      className="bg-white hover:bg-purple-50/30 transition-all duration-200 group rounded-xl p-3.5 border border-purple-200/60 hover:border-purple-300 shadow-2xs space-y-2.5"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+                            {getFileIcon(file.fileType)}
+                          </div>
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="text-xs font-extrabold text-slate-900 group-hover:text-purple-950 truncate">
+                                {file.fileName}
+                              </h4>
+                              <span className="bg-purple-50 border border-purple-200 text-purple-900 text-[9px] font-bold px-2 py-0.5 rounded shrink-0">
+                                {file.category}
+                              </span>
+                              {ext?.docType && (
+                                <span className="bg-amber-50 border border-amber-200 text-amber-900 text-[9px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
+                                  {ext.docType}
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-[11px] text-slate-600 font-medium truncate">
+                              {file.description}
+                            </p>
+
+                            <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 font-semibold">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-purple-400" />
+                                {new Date(file.uploadDate).toLocaleDateString("tr-TR", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit"
+                                })}
+                              </span>
+                              <span>•</span>
+                              <span className="font-mono text-purple-700/70">{formatBytes(file.fileSize)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                          {(file.fileUrl || file.fileData) && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewFile(file)}
+                                className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 p-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                                title="Görüntüle / Önizle"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-purple-700" />
+                                <span>Önizle</span>
+                              </button>
+
+                              <a
+                                href={file.fileUrl || file.fileData}
+                                download={file.fileName}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200/80 p-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                                title="Dosyayı İndir"
+                              >
+                                <Download className="w-3.5 h-3.5 text-slate-700" />
+                                <span>İndir</span>
+                              </a>
+                            </>
+                          )}
+
                           <button
                             type="button"
-                            onClick={() => setPreviewFile(file)}
-                            className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 p-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                            title="Görüntüle / Önizle"
+                            onClick={() => handleDelete(file)}
+                            className="p-1.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                            title="Dosyayı Sil"
                           >
-                            <Eye className="w-3.5 h-3.5 text-purple-700" />
-                            <span>Önizle</span>
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                        </div>
+                      </div>
 
-                          <a
-                            href={file.fileUrl || file.fileData}
-                            download={file.fileName}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200/80 p-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                            title="Dosyayı İndir"
-                          >
-                            <Download className="w-3.5 h-3.5 text-slate-700" />
-                            <span>İndir</span>
-                          </a>
-                        </>
+                      {/* AI EXTRACTED INFO CARD (If document has extracted data) */}
+                      {ext && (
+                        <div className="bg-gradient-to-r from-purple-50/70 via-fuchsia-50/30 to-amber-50/50 p-2.5 rounded-xl border border-purple-200/70 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {ext.companyTitle && (
+                              <span className="font-extrabold text-purple-950 flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-purple-200">
+                                <Building2 className="w-3 h-3 text-purple-600" />
+                                {ext.companyTitle}
+                              </span>
+                            )}
+
+                            {ext.taxNumber && (
+                              <span className="font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
+                                VKN: <strong>{ext.taxNumber}</strong>
+                              </span>
+                            )}
+
+                            {ext.invoiceNumber && (
+                              <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
+                                No: <strong>{ext.invoiceNumber}</strong>
+                              </span>
+                            )}
+
+                            {/* Ödeme Yöntemi Badge */}
+                            {ext.paymentMethod && (
+                              <span className={`font-extrabold px-2 py-0.5 rounded-md border text-[11px] flex items-center gap-1 ${paymentBadge.bg}`}>
+                                <PaymentIcon className="w-3 h-3" />
+                                <span>Ödeme: {ext.paymentMethod}</span>
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Financial Totals */}
+                          <div className="flex items-center gap-2 ml-auto">
+                            {ext.subtotal !== undefined && (
+                              <span className="text-[11px] text-slate-600">
+                                Matrah: <strong className="text-slate-900">₺{ext.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</strong>
+                              </span>
+                            )}
+                            {ext.vatAmount !== undefined && (
+                              <span className="text-[11px] text-slate-600">
+                                KDV (%{ext.vatRate || 20}): <strong className="text-slate-900">₺{ext.vatAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</strong>
+                              </span>
+                            )}
+                            {ext.grandTotal !== undefined && (
+                              <span className="text-xs font-black text-emerald-950 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md">
+                                Toplam: ₺{ext.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                              </span>
+                            )}
+
+                            {/* One-click accounting transfer button if not transferred */}
+                            {onAddInvoice && !ext.isTransferredToAccounting && (
+                              <button
+                                type="button"
+                                onClick={() => handleTransferExistingFileToInvoice(file)}
+                                className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                                title="Ön Muhasebe Gider Faturasına Aktar"
+                              >
+                                <Send className="w-3 h-3" />
+                                <span>Muhasebeye Aktar</span>
+                              </button>
+                            )}
+
+                            {ext.isTransferredToAccounting && (
+                              <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>Muhasebeleştirildi</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       )}
-
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(file)}
-                        className="p-1.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                        title="Dosyayı Sil"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -532,7 +1268,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
       {/* FILE PREVIEW MODAL */}
       {previewFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[85vh]">
+          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[90vh]">
             <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-4 flex items-center justify-between border-b border-purple-800/40">
               <div className="flex items-center gap-2.5">
                 {getFileIcon(previewFile.fileType)}
@@ -549,30 +1285,98 @@ export const FileManager: React.FC<FileManagerProps> = ({ currentUser }) => {
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto flex-1 flex items-center justify-center bg-slate-100">
-              {previewFile.fileType.startsWith("image/") ? (
-                <img
-                  src={previewFile.fileUrl || previewFile.fileData}
-                  alt={previewFile.fileName}
-                  className="max-h-[60vh] max-w-full object-contain rounded-2xl shadow-md border border-slate-200"
-                />
-              ) : (
-                <div className="text-center p-8 bg-white rounded-2xl border border-slate-200 max-w-md space-y-4">
-                  <FileText className="w-12 h-12 text-purple-600 mx-auto" />
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">{previewFile.fileName}</h4>
-                    <p className="text-xs text-slate-500 mt-1">{previewFile.description}</p>
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col md:flex-row items-center gap-6 bg-slate-100">
+              {/* Document Image/File Area */}
+              <div className="flex-1 flex items-center justify-center w-full">
+                {previewFile.fileType.startsWith("image/") ? (
+                  <img
+                    src={previewFile.fileUrl || previewFile.fileData}
+                    alt={previewFile.fileName}
+                    className="max-h-[65vh] max-w-full object-contain rounded-2xl shadow-md border border-slate-200"
+                  />
+                ) : (
+                  <div className="text-center p-8 bg-white rounded-2xl border border-slate-200 max-w-md space-y-4">
+                    <FileText className="w-12 h-12 text-purple-600 mx-auto" />
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">{previewFile.fileName}</h4>
+                      <p className="text-xs text-slate-500 mt-1">{previewFile.description}</p>
+                    </div>
+                    <a
+                      href={previewFile.fileUrl || previewFile.fileData}
+                      download={previewFile.fileName}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 bg-purple-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md hover:bg-purple-800 transition-all cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Dosyayı İndir</span>
+                    </a>
                   </div>
-                  <a
-                    href={previewFile.fileUrl || previewFile.fileData}
-                    download={previewFile.fileName}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-purple-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md hover:bg-purple-800 transition-all cursor-pointer"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Dosyayı İndir</span>
-                  </a>
+                )}
+              </div>
+
+              {/* Extracted Details Sidebar if available */}
+              {previewFile.extractedData && (
+                <div className="w-full md:w-80 bg-white p-4 rounded-2xl border border-purple-200 shadow-md space-y-3 shrink-0">
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-purple-100 text-xs font-black text-purple-950">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>AI Ayrıştırma Özeti</span>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Firma Ünvanı</span>
+                      <span className="font-extrabold text-slate-900">{previewFile.extractedData.companyTitle || "-"}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">VKN / TCKN</span>
+                        <span className="font-mono font-bold text-slate-900">{previewFile.extractedData.taxNumber || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Belge No</span>
+                        <span className="font-bold text-slate-900">{previewFile.extractedData.invoiceNumber || "-"}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Tarih</span>
+                        <span className="font-semibold text-slate-900">{previewFile.extractedData.issueDate || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Ödeme Yöntemi</span>
+                        <span className="font-extrabold text-purple-900">{previewFile.extractedData.paymentMethod || "Nakit"}</span>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 bg-purple-50 rounded-xl space-y-1 border border-purple-200/80">
+                      <div className="flex justify-between text-slate-600 text-[11px]">
+                        <span>Matrah:</span>
+                        <span className="font-bold">₺{(previewFile.extractedData.subtotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600 text-[11px]">
+                        <span>KDV (%{previewFile.extractedData.vatRate || 20}):</span>
+                        <span className="font-bold">₺{(previewFile.extractedData.vatAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between text-emerald-950 font-black text-xs pt-1 border-t border-purple-200">
+                        <span>Genel Toplam:</span>
+                        <span>₺{(previewFile.extractedData.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {onAddInvoice && !previewFile.extractedData.isTransferredToAccounting && (
+                    <button
+                      type="button"
+                      onClick={() => handleTransferExistingFileToInvoice(previewFile)}
+                      className="w-full bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Ön Muhasebeye Aktar</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

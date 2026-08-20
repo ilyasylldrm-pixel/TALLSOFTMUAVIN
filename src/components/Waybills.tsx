@@ -109,9 +109,12 @@ export const Waybills: React.FC<WaybillsProps> = ({
       setActiveTab(forcedType);
     }
   }, [forcedType]);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingWaybillId, setEditingWaybillId] = useState<string | null>(null);
+  const [editingWaybillNumber, setEditingWaybillNumber] = useState<string | null>(null);
   const [selectedWaybillForView, setSelectedWaybillForView] = useState<Waybill | null>(null);
   const [convertConfirmWaybill, setConvertConfirmWaybill] = useState<Waybill | null>(null);
 
@@ -149,6 +152,8 @@ export const Waybills: React.FC<WaybillsProps> = ({
 
   // Open Modal Helper
   const handleOpenNewWaybillModal = (type: WaybillType = "dispatch") => {
+    setEditingWaybillId(null);
+    setEditingWaybillNumber(null);
     setWaybillType(type);
     const prefix = type === "dispatch" ? "IRS-SEVK-" : "IRS-AL-";
     const num = Math.floor(10000 + Math.random() * 90000);
@@ -213,7 +218,52 @@ export const Waybills: React.FC<WaybillsProps> = ({
         },
       ]);
     }
+    setIsModalOpen(true);
+  };
 
+  const handleOpenEditWaybillModal = (waybill: Waybill) => {
+    setEditingWaybillId(waybill.id);
+    setEditingWaybillNumber(waybill.waybillNumber);
+    setWaybillType(waybill.type);
+    setWaybillNumber(waybill.waybillNumber);
+    setSelectedContactId(waybill.contactId);
+    setWaybillDate(waybill.waybillDate || new Date().toISOString().split("T")[0]);
+    setDispatchDate(
+      waybill.dispatchDate ||
+        `${waybill.waybillDate || new Date().toISOString().split("T")[0]} 10:00`
+    );
+    setVehiclePlate(waybill.vehiclePlate || "");
+    setDriverName(waybill.driverName || "");
+    setDriverTckn(waybill.driverTckn || "");
+    setDeliveryAddress(waybill.deliveryAddress || "");
+    setSelectedWarehouseId(waybill.warehouseId || warehouses[0]?.id || "");
+    setNotes(waybill.notes || "");
+
+    if (waybill.items && waybill.items.length > 0) {
+      setItems(
+        waybill.items.map((i, idx) => ({
+          ...i,
+          id: i.id || `item_${idx}_${Date.now()}`,
+        }))
+      );
+    } else {
+      setItems([
+        {
+          id: "item_1",
+          productId: "",
+          productCode: "",
+          description: "İrsaliye Kalemi",
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: waybill.subtotal || 0,
+          vatRate: 20,
+          discountRate: 0,
+          totalWithoutVat: waybill.subtotal || 0,
+          vatAmount: waybill.totalVat || 0,
+          totalWithVat: waybill.grandTotal || 0,
+        },
+      ]);
+    }
     setIsModalOpen(true);
   };
 
@@ -305,7 +355,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
   const totalVat = items.reduce((acc, i) => acc + (i.vatAmount || 0), 0);
   const grandTotal = subtotal + totalVat;
 
-  // Submit New Waybill
+  // Submit New / Edited Waybill
   const handleSaveWaybill = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedContactId) {
@@ -316,6 +366,44 @@ export const Waybills: React.FC<WaybillsProps> = ({
     if (!contactObj) return;
 
     const whObj = warehouses.find((w) => w.id === selectedWarehouseId);
+
+    if (editingWaybillId) {
+      const existing = waybills.find((w) => w.id === editingWaybillId);
+      const updatedWaybill: Waybill = {
+        id: editingWaybillId,
+        waybillNumber: waybillNumber || existing?.waybillNumber || "IRS-2026",
+        type: waybillType,
+        contactId: contactObj.id,
+        contactName: contactObj.name,
+        contactPhone: contactObj.phone,
+        contactEmail: contactObj.email,
+        taxNumber: contactObj.taxNumber,
+        waybillDate,
+        dispatchDate,
+        vehiclePlate,
+        driverName,
+        driverTckn,
+        deliveryAddress,
+        warehouseId: whObj?.id,
+        warehouseName: whObj?.name,
+        items,
+        subtotal,
+        totalVat,
+        grandTotal,
+        currency: existing?.currency || "₺",
+        status: existing?.status || "shipped",
+        notes,
+        createdAt: existing?.createdAt || new Date().toISOString().split("T")[0],
+      };
+
+      if (onUpdateWaybill) {
+        onUpdateWaybill(updatedWaybill);
+      }
+      setEditingWaybillId(null);
+      setEditingWaybillNumber(null);
+      setIsModalOpen(false);
+      return;
+    }
 
     const newWaybill: Waybill = {
       id: "way_" + Date.now(),
@@ -930,6 +1018,16 @@ export const Waybills: React.FC<WaybillsProps> = ({
 
                     <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                       <div className="flex items-center justify-center gap-1.5">
+                        {/* Düzenle Button */}
+                        <button
+                          onClick={() => handleOpenEditWaybillModal(waybill)}
+                          className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="İrsaliyeyi Düzenle"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Düzenle</span>
+                        </button>
+
                         {/* İncele Button */}
                         <button
                           onClick={() => setSelectedWaybillForView(waybill)}
@@ -1010,7 +1108,9 @@ export const Waybills: React.FC<WaybillsProps> = ({
                 </div>
                 <div>
                   <h2 className="text-lg font-bold">
-                    Yeni {waybillType === "dispatch" ? "Sevk" : "Alış"} İrsaliyesi Düzenle
+                    {editingWaybillId
+                      ? `${waybillType === "dispatch" ? "Sevk" : "Alış"} İrsaliyesini Düzenle (${editingWaybillNumber || ""})`
+                      : `Yeni ${waybillType === "dispatch" ? "Sevk" : "Alış"} İrsaliyesi Düzenle`}
                   </h2>
                   <p className="text-xs text-slate-300 font-medium">
                     Cari firma, araç plaka, sürücü ve stok kalemlerini girin
@@ -1018,7 +1118,11 @@ export const Waybills: React.FC<WaybillsProps> = ({
                 </div>
               </div>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => {
+                  setEditingWaybillId(null);
+                  setEditingWaybillNumber(null);
+                  setIsModalOpen(false);
+                }}
                 className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1340,7 +1444,11 @@ export const Waybills: React.FC<WaybillsProps> = ({
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => {
+                    setEditingWaybillId(null);
+                    setEditingWaybillNumber(null);
+                    setIsModalOpen(false);
+                  }}
                   className="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
                 >
                   Vazgeç
@@ -1350,7 +1458,11 @@ export const Waybills: React.FC<WaybillsProps> = ({
                   className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>İrsaliyeyi Kaydet & Sevk Et</span>
+                  <span>
+                    {editingWaybillId
+                      ? "Değişiklikleri Güncelle & Kaydet"
+                      : "İrsaliyeyi Kaydet & Sevk Et"}
+                  </span>
                 </button>
               </div>
             </form>
@@ -1375,6 +1487,18 @@ export const Waybills: React.FC<WaybillsProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const wb = selectedWaybillForView;
+                    setSelectedWaybillForView(null);
+                    handleOpenEditWaybillModal(wb);
+                  }}
+                  className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="İrsaliyeyi Düzenle"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Düzenle</span>
+                </button>
                 <button
                   onClick={() => window.print()}
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"

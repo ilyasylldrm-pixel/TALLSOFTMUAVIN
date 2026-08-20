@@ -14,6 +14,7 @@ import {
 } from "../types";
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
+import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerModal";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { NavItem } from "./Sidebar";
@@ -44,6 +45,12 @@ import {
   Calendar,
   Filter,
   Tag,
+  Sparkles,
+  UploadCloud,
+  Camera,
+  Receipt,
+  ScanLine,
+  Edit2,
 } from "lucide-react";
 
 const TURKISH_MONTHS = [
@@ -135,6 +142,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(
     !!initialContactIdForNewInvoice
   );
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [editingInvoiceNumber, setEditingInvoiceNumber] = useState<string | null>(null);
+  const [isAiScannerModalOpen, setIsAiScannerModalOpen] = useState<boolean>(false);
   const [printingInvoice, setPrintingInvoice] = useState<Invoice | null>(null);
   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState<boolean>(false);
   const [paymentModalInvoice, setPaymentModalInvoice] = useState<Invoice | null>(null);
@@ -265,6 +275,92 @@ export const Invoices: React.FC<InvoicesProps> = ({
       totalWithVat: 6000,
     },
   ]);
+
+  const handleOpenNewInvoiceModal = (
+    docKind: "invoice" | "receipt" = "invoice",
+    type?: InvoiceType
+  ) => {
+    setEditingInvoiceId(null);
+    setEditingInvoiceNumber(null);
+    setFormDocKind(docKind);
+    const targetType = type || forcedType || "sales";
+    setInvType(targetType);
+    setContactId(initialContactIdForNewInvoice || contacts[0]?.id || "");
+    setIssueDate(new Date().toISOString().split("T")[0]);
+    setDueDate(
+      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0]
+    );
+    setNotes("Ödemenin süresinde yapılması rica olunur.");
+    setHasDifferentDeliveryAddress(false);
+    setDeliveryAddress("");
+    setItems([
+      {
+        id: "item_1",
+        description:
+          targetType === "purchase"
+            ? "Ofis & Kırtasiye / Mal & Hizmet Alımı"
+            : "Yazılım Danışmanlık ve Sistem Destek Hizmeti",
+        quantity: 1,
+        unit: "Adet",
+        unitPrice: targetType === "purchase" ? 1500 : 5000,
+        vatRate: 20,
+        totalWithoutVat: targetType === "purchase" ? 1500 : 5000,
+        vatAmount: targetType === "purchase" ? 300 : 1000,
+        totalWithVat: targetType === "purchase" ? 1800 : 6000,
+      },
+    ]);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleOpenEditInvoiceModal = (inv: Invoice) => {
+    setEditingInvoiceId(inv.id);
+    setEditingInvoiceNumber(inv.invoiceNumber);
+    setInvType(inv.type);
+    setFormDocKind(inv.docKind || "invoice");
+    setContactId(inv.contactId || contacts[0]?.id || "");
+    setIssueDate(inv.issueDate || new Date().toISOString().split("T")[0]);
+    setDueDate(inv.dueDate || new Date().toISOString().split("T")[0]);
+
+    let noteText = inv.notes || "";
+    if (noteText.includes("Teslimat Adresi: ")) {
+      const match = noteText.match(/Teslimat Adresi:\s*(.*)/);
+      if (match && match[1]) {
+        setHasDifferentDeliveryAddress(true);
+        setDeliveryAddress(match[1]);
+        noteText = noteText.replace(/Teslimat Adresi:\s*.*\n?/, "").trim();
+      }
+    } else {
+      setHasDifferentDeliveryAddress(false);
+      setDeliveryAddress("");
+    }
+    setNotes(noteText);
+
+    if (inv.items && inv.items.length > 0) {
+      setItems(
+        inv.items.map((item, idx) => ({
+          ...item,
+          id: item.id || `item_${idx}_${Date.now()}`,
+        }))
+      );
+    } else {
+      setItems([
+        {
+          id: "item_1",
+          description: "Hizmet / Ürün Kalemi",
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: inv.subtotal || 0,
+          vatRate: 20,
+          totalWithoutVat: inv.subtotal || 0,
+          vatAmount: inv.totalVat || 0,
+          totalWithVat: inv.grandTotal || 0,
+        },
+      ]);
+    }
+    setIsCreateModalOpen(true);
+  };
 
   // Recalculate invoice totals dynamically
   const calculateTotals = () => {
@@ -444,6 +540,53 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
 
+    if (editingInvoiceId) {
+      const existing = invoices.find((i) => i.id === editingInvoiceId);
+      const paid = existing?.paidAmount || 0;
+      const remaining = Math.max(0, grandTotal - paid);
+      let status: InvoiceStatus = existing?.status || "sent";
+      if (status !== "cancelled") {
+        if (remaining <= 0) {
+          status = "paid";
+        } else if (paid > 0) {
+          status = "partial";
+        } else {
+          status = "sent";
+        }
+      }
+
+      const updatedInvoice: Invoice = {
+        id: editingInvoiceId,
+        invoiceNumber: existing?.invoiceNumber || `${prefix}${nextSeq}`,
+        type: invType,
+        docKind: formDocKind,
+        expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
+        contactId: contact.id,
+        contactName: contact.name,
+        taxNumber: contact.taxNumber,
+        issueDate,
+        dueDate,
+        items: computedItems,
+        subtotal,
+        totalVat,
+        grandTotal,
+        paidAmount: paid,
+        remainingAmount: remaining,
+        status,
+        currency: existing?.currency || "TRY",
+        notes: finalNotes,
+        createdAt: existing?.createdAt || new Date().toISOString().split("T")[0],
+      };
+
+      onUpdateInvoice(updatedInvoice);
+      setEditingInvoiceId(null);
+      setEditingInvoiceNumber(null);
+      setHasDifferentDeliveryAddress(false);
+      setDeliveryAddress("");
+      setIsCreateModalOpen(false);
+      return;
+    }
+
     const newInvoice: Invoice = {
       id: "inv_" + Date.now(),
       invoiceNumber: `${prefix}${nextSeq}`,
@@ -482,6 +625,85 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     onAddTransactionFromInvoice(paymentModalInvoice, selectedAccountId, paymentAmount);
     setPaymentModalInvoice(null);
+  };
+
+  const handleSaveInvoiceDirectlyFromAi = (
+    newInvoice: Invoice,
+    paymentInfo?: { accountId: string; paidAmount: number; paymentMethod: string }
+  ) => {
+    // If contact doesn't exist, create it locally
+    const existingContact = contacts.find((c) => c.id === newInvoice.contactId);
+    if (!existingContact && newInvoice.contactName) {
+      const newContact: Contact = {
+        id: newInvoice.contactId,
+        name: newInvoice.contactName,
+        taxNumber: newInvoice.taxNumber || undefined,
+        contactType: "vendor",
+        balance: 0,
+        balanceType: "balanced",
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      contacts.push(newContact);
+    }
+
+    onAddInvoice(newInvoice);
+
+    if (paymentInfo && paymentInfo.paidAmount > 0) {
+      onAddTransactionFromInvoice(newInvoice, paymentInfo.accountId, paymentInfo.paidAmount);
+    }
+  };
+
+  const handleApplyAiDataToForm = (data: ExtractedExpenseData, matchedContactId?: string) => {
+    setInvType("purchase");
+    setFormDocKind(data.docType === "Fatura" ? "invoice" : "receipt");
+
+    if (matchedContactId) {
+      setContactId(matchedContactId);
+    } else if (data.companyTitle) {
+      const createdContact: Contact = {
+        id: "cnt_ocr_" + Date.now(),
+        name: data.companyTitle.trim(),
+        taxNumber: data.taxNumber?.trim() || undefined,
+        contactType: "vendor",
+        balance: 0,
+        balanceType: "balanced",
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      contacts.push(createdContact);
+      setContactId(createdContact.id);
+    }
+
+    if (data.issueDate) {
+      setIssueDate(data.issueDate);
+      setDueDate(data.issueDate);
+    }
+
+    if (data.notes) {
+      setNotes(data.notes);
+    }
+
+    const subtotal = data.subtotal || 0;
+    const vatRate = data.vatRate || 20;
+    const vatAmount = data.vatAmount || (subtotal * vatRate) / 100;
+    const grandTotal = data.grandTotal || subtotal + vatAmount;
+    const expenseCategory = data.expenseCategory || "Yemek ve ulaşım";
+
+    setItems([
+      {
+        id: "item_ocr_" + Date.now(),
+        description: `${data.companyTitle || "Gider"} - ${expenseCategory}`,
+        expenseCategory: expenseCategory,
+        quantity: 1,
+        unit: "Adet",
+        unitPrice: subtotal,
+        vatRate: vatRate,
+        totalWithoutVat: subtotal,
+        vatAmount: vatAmount,
+        totalWithVat: grandTotal,
+      },
+    ]);
+
+    setIsCreateModalOpen(true);
   };
 
   // Years memo
@@ -755,22 +977,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
           {forcedType === "sales" ? (
             <>
               <button
-                onClick={() => {
-                  setInvType("sales");
-                  setFormDocKind("invoice");
-                  setIsCreateModalOpen(true);
-                }}
+                onClick={() => handleOpenNewInvoiceModal("invoice", "sales")}
                 className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 <span>+ Yeni Gelir Faturası Kes</span>
               </button>
               <button
-                onClick={() => {
-                  setInvType("sales");
-                  setFormDocKind("receipt");
-                  setIsCreateModalOpen(true);
-                }}
+                onClick={() => handleOpenNewInvoiceModal("receipt", "sales")}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
               >
                 <Plus className="w-4 h-4" />
@@ -780,39 +994,46 @@ export const Invoices: React.FC<InvoicesProps> = ({
           ) : forcedType === "purchase" ? (
             <>
               <button
-                onClick={() => {
-                  setInvType("purchase");
-                  setFormDocKind("invoice");
-                  setIsCreateModalOpen(true);
-                }}
+                onClick={() => setIsAiScannerModalOpen(true)}
+                className="bg-gradient-to-r from-amber-600 via-orange-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all shrink-0 hover:scale-[1.02] active:scale-98 ring-2 ring-amber-300/40"
+                title="Yapay Zeka (AI OCR) ile fiş/fatura fotoğrafı veya PDF yükleyip otomatik ayrıştırın"
+              >
+                <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
+                <span>✨ AI Fiş / Fatura Tara & Ekle</span>
+              </button>
+              <button
+                onClick={() => handleOpenNewInvoiceModal("invoice", "purchase")}
                 className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
               >
                 <Plus className="w-4 h-4" />
-                <span>+ Yeni Gider Faturası Kaydet</span>
+                <span>+ Yeni Gider Faturası</span>
               </button>
               <button
-                onClick={() => {
-                  setInvType("purchase");
-                  setFormDocKind("receipt");
-                  setIsCreateModalOpen(true);
-                }}
+                onClick={() => handleOpenNewInvoiceModal("receipt", "purchase")}
                 className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
               >
                 <Plus className="w-4 h-4" />
-                <span>+ Yeni Gider Fişi Ekle</span>
+                <span>+ Yeni Gider Fişi</span>
               </button>
             </>
           ) : (
-            <button
-              onClick={() => {
-                if (forcedType) setInvType(forcedType);
-                setIsCreateModalOpen(true);
-              }}
-              className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-            >
-              <Plus className="w-4 h-4 text-purple-800 font-bold" />
-              <span>Yeni Fatura Kes / Kaydet</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsAiScannerModalOpen(true)}
+                className="bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+                title="Yapay Zeka ile Fiş/Fatura Tara"
+              >
+                <Sparkles className="w-4 h-4 text-amber-200" />
+                <span>✨ AI Fiş/Fatura Tara</span>
+              </button>
+              <button
+                onClick={() => handleOpenNewInvoiceModal("invoice", forcedType || "sales")}
+                className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4 text-purple-800 font-bold" />
+                <span>Yeni Fatura Kes / Kaydet</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -948,6 +1169,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
               }`}
             >
               <span>Tümü ({allPurchaseCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAiScannerModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold text-amber-950 bg-gradient-to-r from-amber-100 to-orange-100 hover:from-amber-200 hover:to-orange-200 border border-amber-300 transition-all cursor-pointer shadow-2xs"
+              title="Yapay Zeka (AI OCR) Fiş / Fatura Tarayıcıyı Aç"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-700 animate-pulse" />
+              <span>AI ile Belge Tara</span>
             </button>
           </div>
 
@@ -1316,6 +1547,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                     <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                       <div className="flex items-center justify-center gap-1.5">
+                        {/* Edit Button */}
+                        <button
+                          onClick={() => handleOpenEditInvoiceModal(inv)}
+                          title={inv.docKind === "receipt" ? "Fişi Düzenle" : "Faturayı Düzenle"}
+                          className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Düzenle</span>
+                        </button>
+
                         {/* Print / View Modal */}
                         <button
                           onClick={() => setPrintingInvoice(inv)}
@@ -1376,12 +1617,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 {formDocKind === "receipt" ? (
-                  <FileSpreadsheet className={`w-5 h-5 ${forcedType === "purchase" ? "text-orange-600" : "text-indigo-600"}`} />
+                  <FileSpreadsheet className={`w-5 h-5 ${forcedType === "purchase" || invType === "purchase" ? "text-orange-600" : "text-indigo-600"}`} />
                 ) : (
-                  <FileText className={`w-5 h-5 ${forcedType === "purchase" ? "text-amber-600" : "text-purple-600"}`} />
+                  <FileText className={`w-5 h-5 ${forcedType === "purchase" || invType === "purchase" ? "text-amber-600" : "text-purple-600"}`} />
                 )}
                 <h3 className="text-lg font-extrabold text-slate-900">
-                  {forcedType === "sales"
+                  {editingInvoiceId ? (
+                    invType === "sales"
+                      ? formDocKind === "receipt"
+                        ? `Gelir Fişini Düzenle (${editingInvoiceNumber || ""})`
+                        : `Gelir Faturasını Düzenle (${editingInvoiceNumber || ""})`
+                      : formDocKind === "receipt"
+                      ? `Gider Fişini Düzenle (${editingInvoiceNumber || ""})`
+                      : `Gider Faturasını Düzenle (${editingInvoiceNumber || ""})`
+                  ) : forcedType === "sales"
                     ? formDocKind === "receipt"
                       ? "Yeni Gelir Fişi Ekle / Kaydet"
                       : "Yeni Gelir Faturası Kes / Hazırla"
@@ -1393,7 +1642,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </h3>
               </div>
               <button
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setEditingInvoiceId(null);
+                  setEditingInvoiceNumber(null);
+                  setIsCreateModalOpen(false);
+                }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1401,6 +1654,41 @@ export const Invoices: React.FC<InvoicesProps> = ({
             </div>
 
             <form onSubmit={handleSaveInvoice} className="space-y-5">
+              {/* AI OCR Scanner Shortcut for Gider Faturaları */}
+              {(forcedType === "purchase" || invType === "purchase") && (
+                <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-purple-500/10 p-3 rounded-2xl border border-amber-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 to-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Sparkles className="w-4 h-4 text-amber-100 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-extrabold text-amber-950">
+                          Fiş veya Faturanız Var mı?
+                        </span>
+                        <span className="bg-amber-200/80 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full">
+                          AI OCR Otomatik Doldurma
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 font-medium">
+                        Fotoğraf veya PDF yükleyin; firma ünvanı, VKN, tutar, KDV ve masraf kalemi anında doldurulsun.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreateModalOpen(false);
+                      setIsAiScannerModalOpen(true);
+                    }}
+                    className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all shrink-0 active:scale-95"
+                  >
+                    <UploadCloud className="w-4 h-4 text-amber-200" />
+                    <span>AI ile Fiş/Fatura Tara</span>
+                  </button>
+                </div>
+              )}
+
               {/* Top Controls & Selected Cari Information */}
               <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -1906,7 +2194,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
               <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
+                  onClick={() => {
+                    setEditingInvoiceId(null);
+                    setEditingInvoiceNumber(null);
+                    setIsCreateModalOpen(false);
+                  }}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 cursor-pointer"
                 >
                   İptal
@@ -1924,7 +2216,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 <button
                   type="submit"
                   className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs cursor-pointer ${
-                    forcedType === "purchase"
+                    forcedType === "purchase" || invType === "purchase"
                       ? formDocKind === "receipt"
                         ? "bg-orange-600 hover:bg-orange-700"
                         : "bg-amber-600 hover:bg-amber-700"
@@ -1933,7 +2225,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       : "bg-purple-600 hover:bg-purple-700"
                   }`}
                 >
-                  {forcedType === "sales"
+                  {editingInvoiceId ? (
+                    "Değişiklikleri Güncelle & Kaydet"
+                  ) : forcedType === "sales"
                     ? formDocKind === "receipt"
                       ? "Gelir Fişini Kaydet"
                       : "Gelir Faturasını Kaydet & Kes"
@@ -2512,6 +2806,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {/* AI Expense Scanner Modal */}
+      {isAiScannerModalOpen && (
+        <AiExpenseScannerModal
+          isOpen={isAiScannerModalOpen}
+          onClose={() => setIsAiScannerModalOpen(false)}
+          contacts={contacts}
+          accounts={accounts}
+          onSaveInvoiceDirectly={handleSaveInvoiceDirectlyFromAi}
+          onApplyToForm={handleApplyAiDataToForm}
+        />
       )}
     </div>
   );

@@ -567,7 +567,7 @@ export const EServices: React.FC<EServicesProps> = ({
             <div>
               <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
                 <span className="flex items-center gap-1">
-                  <Lock className="w-3.5 h-3.5 text-red-600" /> Şifre (e-Beyanname)
+                  <Lock className="w-3.5 h-3.5 text-red-600" /> Şifre
                 </span>
                 {form.taxCredentials?.codeSecret && (
                   <button
@@ -589,7 +589,7 @@ export const EServices: React.FC<EServicesProps> = ({
               </label>
               <input
                 type={showTaxPasswords ? "text" : "password"}
-                placeholder="e-Beyanname / İnternet VD Şifresi"
+                placeholder="GİB Şifre"
                 value={form.taxCredentials?.codeSecret || ""}
                 onChange={(e) => handleTaxCredChange("codeSecret", e.target.value)}
                 className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
