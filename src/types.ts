@@ -453,6 +453,7 @@ export interface Employee {
   id: string;
   tckn: string;
   fullName: string;
+  gender?: "Erkek" | "Kadın" | string;
   title: string;
   department: DepartmentType | string;
   startDate: string;
@@ -497,6 +498,10 @@ export interface PayrollRecord {
   salaryType: "net" | "gross";
   bonusAmount?: number;
   overtimePay?: number;
+  overtimeNormalHours?: number; // Hafta içi %50 zamlı mesai saati
+  overtimeWeekendHours?: number; // Hafta tatili %100 zamlı mesai saati
+  overtimeHolidayDays?: number; // Resmi tatil 1 günlük ek ücretli mesai günü
+  overtimeHolidayHours?: number; // Resmi tatil saatlik mesai saati
   foodAllowance?: number;
   roadAllowance?: number;
   advanceDeduction?: number;
@@ -540,7 +545,7 @@ export interface AdvanceRequest {
   id: string;
   employeeId: string;
   employeeName: string;
-  type: "Avans" | "Masraf" | "Prim";
+  type: "Avans" | "Masraf" | "Masraf Avansı" | "Prim" | string;
   amount: number;
   requestDate: string;
   description: string;

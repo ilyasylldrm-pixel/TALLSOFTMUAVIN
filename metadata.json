@@ -1,6 +1,6 @@
 {
   "name": "Muavin - Ön Muhasebe Programı",
-  "description": "Cari hesap takibi, fatura oluşturma, kasa ve banka yönetimi, KDV/Stopaj raporları, gelir-gider analizi ve AI destekli akıllı finans asistanı.",
+  "description": "Cari hesap takibi, fatura, kasa/banka, bordro ve puantaj yönetimi, resmi izin formları (babalık, yıllık, ücretsiz izin, devamsızlık tutanağı), KDV/Stopaj raporları ve AI destekli finans asistanı.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
