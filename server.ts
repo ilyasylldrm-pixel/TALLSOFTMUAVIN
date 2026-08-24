@@ -1,11 +1,26 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import { fileURLToPath } from "node:url";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { getMysoftRouter } from "./src/services/mysoftRoutes.ts";
 
-dotenv.config();
+function loadServerEnv() {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  for (const candidate of [
+    path.join(process.cwd(), ".env"),
+    path.join(process.cwd(), "muavin.env"),
+    path.join(here, ".env"),
+    path.join(here, "muavin.env"),
+    path.join(here, "..", ".env"),
+    path.join(here, "..", "muavin.env"),
+  ]) {
+    dotenv.config({ path: candidate });
+  }
+}
+
+loadServerEnv();
 
 const app = express();
 const PORT = 3000;
