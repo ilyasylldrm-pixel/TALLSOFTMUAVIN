@@ -1,15 +1,31 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { getMysoftRouter } from "./src/services/mysoftRoutes.ts";
 
-dotenv.config();
+// Cloud Run / IIS: cwd and sibling files. Avoid import.meta.url so the CJS
+ // bundle (dist/server.cjs) starts cleanly.
+function loadServerEnv() {
+  const cwd = process.cwd();
+  for (const candidate of [
+    path.join(cwd, ".env"),
+    path.join(cwd, "muavin.env"),
+    path.join(cwd, "dist", "muavin.env"),
+    path.join(cwd, "..", ".env"),
+    path.join(cwd, "..", "muavin.env"),
+  ]) {
+    dotenv.config({ path: candidate });
+  }
+}
+
+loadServerEnv();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: "10mb" }));
+app.use("/api/mysoft", getMysoftRouter());
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;
@@ -324,6 +340,7 @@ Strictly JSON formatında yanıt ver.`;
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -342,4 +359,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error("Sunucu başlatılamadı:", error);
+  process.exit(1);
+});
