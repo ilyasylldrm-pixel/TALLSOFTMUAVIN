@@ -5,6 +5,8 @@ import {
   File,
   Image,
   FileSpreadsheet,
+  FileCode,
+  Code2,
   Trash2,
   Download,
   Eye,
@@ -30,7 +32,8 @@ import {
   Wallet,
   ArrowRight,
   Landmark,
-  Check
+  Check,
+  Plus
 } from "lucide-react";
 import { UserProfile } from "./AuthModal";
 import {
@@ -41,7 +44,8 @@ import {
   UserFileMetadata,
   ExtractedDocumentData
 } from "../lib/firebase";
-import { Contact, Account, Invoice, Transaction } from "../types";
+import { Contact, Account, Invoice, Transaction, EXPENSE_CATEGORIES, InvoiceTaxItem, TaxType } from "../types";
+import { parseXmlInvoice } from "../utils/xmlInvoiceParser";
 
 interface FileManagerProps {
   currentUser: UserProfile;
@@ -130,7 +134,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
   };
 
   // Trigger OCR analysis when a receipt/invoice file is chosen
-  const triggerAiOcrAnalysis = async (file: File, base64: string) => {
+  const triggerAiOcrAnalysis = async (file: File, base64: string, textContent?: string) => {
     setOcrLoading(true);
     try {
       const res = await fetch("/api/gemini/parse-invoice-doc", {
@@ -139,7 +143,8 @@ export const FileManager: React.FC<FileManagerProps> = ({
         body: JSON.stringify({
           fileData: base64,
           fileName: file.name,
-          fileType: file.type
+          fileType: file.type || (file.name.endsWith(".xml") ? "application/xml" : undefined),
+          textContent: textContent || undefined
         })
       });
 
@@ -162,13 +167,20 @@ export const FileManager: React.FC<FileManagerProps> = ({
             companyTitle: d.companyTitle || "",
             invoiceNumber: d.invoiceNumber || `FİŞ-${Date.now().toString().slice(-4)}`,
             issueDate: d.issueDate || new Date().toISOString().split("T")[0],
-            docType: d.docType === "Fatura" ? "Fatura" : "Fiş",
-            subtotal: subtotalVal,
+            docType: d.docType === "Mal Alımı" ? "Mal Alımı" : d.docType === "Fatura" ? "Fatura" : "Fiş",
+            subtotal: Number(subtotalVal.toFixed(2)),
             vatRate: vatRateVal,
-            vatAmount: vatAmountVal,
-            grandTotal: grandTotalVal,
+            vatAmount: Number(vatAmountVal.toFixed(2)),
+            taxItems: Array.isArray(d.taxItems) ? d.taxItems : undefined,
+            withholdingAmount: d.withholdingAmount ? Number(d.withholdingAmount) : undefined,
+            otvAmount: d.otvAmount ? Number(d.otvAmount) : undefined,
+            oivAmount: d.oivAmount ? Number(d.oivAmount) : undefined,
+            accommodationTaxAmount: d.accommodationTaxAmount ? Number(d.accommodationTaxAmount) : undefined,
+            stampTaxAmount: d.stampTaxAmount ? Number(d.stampTaxAmount) : undefined,
+            withholdingTaxAmount: d.withholdingTaxAmount ? Number(d.withholdingTaxAmount) : undefined,
+            grandTotal: Number(grandTotalVal.toFixed(2)),
             paymentMethod: detectedPayment,
-            expenseCategory: d.expenseCategory || "Yemek ve ulaşım",
+            expenseCategory: d.expenseCategory || (d.docType === "Mal Alımı" ? "Mal Alımı" : "Mal Alımı"),
             notes: d.notes || ""
           });
 
@@ -219,16 +231,45 @@ export const FileManager: React.FC<FileManagerProps> = ({
       }
       setSelectedFile(file);
 
-      // Read as base64 for preview & AI analysis
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        setFileBase64Preview(base64);
-        if (category === "Fatura & Fişler" || file.type.startsWith("image/") || file.type.includes("pdf")) {
-          triggerAiOcrAnalysis(file, base64);
-        }
-      };
-      reader.readAsDataURL(file);
+      const isXml = file.name.toLowerCase().endsWith(".xml") || file.type.includes("xml");
+
+      if (isXml) {
+        // Parse XML directly (UBL-TR / e-Fatura / e-Arşiv / Fiş XML)
+        const textReader = new FileReader();
+        textReader.onload = () => {
+          const xmlText = textReader.result as string;
+          const parsed = parseXmlInvoice(xmlText, file.name);
+          if (parsed.success && parsed.data) {
+            setCategory("Fatura & Fişler");
+            setExtractedData(parsed.data);
+            if (!description) {
+              setDescription(`${parsed.data.companyTitle || "e-Fatura"} - ${parsed.data.invoiceNumber || file.name}`);
+            }
+          } else {
+            // If local XML parser failed, try server OCR with XML text content
+            triggerAiOcrAnalysis(file, "", xmlText);
+          }
+        };
+        textReader.readAsText(file);
+
+        // Also read as base64/data URL for file storage
+        const base64Reader = new FileReader();
+        base64Reader.onload = () => {
+          setFileBase64Preview(base64Reader.result as string);
+        };
+        base64Reader.readAsDataURL(file);
+      } else {
+        // Read as base64 for preview & AI analysis
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result as string;
+          setFileBase64Preview(base64);
+          if (category === "Fatura & Fişler" || file.type.startsWith("image/") || file.type.includes("pdf")) {
+            triggerAiOcrAnalysis(file, base64);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -383,12 +424,13 @@ export const FileManager: React.FC<FileManagerProps> = ({
     const vatAmount = data.vatAmount || 0;
     const grandTotal = data.grandTotal || subtotal + vatAmount;
     const vatRate = data.vatRate || 20;
+    const isGoodsPurchase = data.docType === "Mal Alımı" || data.expenseCategory === "Mal Alımı";
 
     const newInvoice: Invoice = {
       id: `inv_file_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      invoiceNumber: data.invoiceNumber || `FİŞ-${Date.now().toString().slice(-5)}`,
-      type: "purchase", // Gider Faturası / Fişi
-      docKind: data.docType === "Fatura" ? "invoice" : "receipt",
+      invoiceNumber: data.invoiceNumber || `${isGoodsPurchase ? "MAL-" : "FİŞ-"}${Date.now().toString().slice(-5)}`,
+      type: "purchase", // Alış / Gider Faturası
+      docKind: data.docType === "Fiş" ? "receipt" : "invoice",
       contactId,
       contactName: vendorName,
       taxNumber: data.taxNumber || "",
@@ -398,17 +440,24 @@ export const FileManager: React.FC<FileManagerProps> = ({
       status: "paid", // Ödendi olarak işaretlenir
       subtotal,
       totalVat: vatAmount,
+      taxItems: data.taxItems,
+      totalWithholding: data.withholdingAmount,
+      totalOtv: data.otvAmount,
+      totalOiv: data.oivAmount,
+      totalAccommodationTax: data.accommodationTaxAmount,
+      totalStampTax: data.stampTaxAmount,
+      totalStopaj: data.withholdingTaxAmount,
       grandTotal,
       paidAmount: grandTotal,
       remainingAmount: 0,
       currency: "TRY",
-      expenseCategory: data.expenseCategory || "Yemek ve ulaşım",
-      notes: `Bulut Dosya Deposundan AI OCR ile yüklendi (${fileName}). Ödeme Yöntemi: ${data.paymentMethod || "Nakit"}.`,
+      expenseCategory: data.expenseCategory || (isGoodsPurchase ? "Mal Alımı" : "Yemek ve ulaşım"),
+      notes: `Bulut Dosya Deposundan AI/XML ile yüklendi (${fileName}). Tür: ${data.docType || "Fatura"}. Ödeme Yöntemi: ${data.paymentMethod || "Nakit"}.`,
       items: [
         {
           id: `item_${Date.now()}`,
-          description: `${data.companyTitle || "Masraf Fişi/Faturası"} - ${data.expenseCategory || "Gider"}`,
-          expenseCategory: data.expenseCategory || "Yemek ve ulaşım",
+          description: `${data.companyTitle || "Satıcı"} - ${data.expenseCategory || (isGoodsPurchase ? "Mal Alımı" : "Gider")}`,
+          expenseCategory: data.expenseCategory || (isGoodsPurchase ? "Mal Alımı" : "Yemek ve ulaşım"),
           quantity: 1,
           unit: "Adet",
           unitPrice: subtotal,
@@ -509,7 +558,9 @@ export const FileManager: React.FC<FileManagerProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const getFileIcon = (type: string) => {
+  const getFileIcon = (type: string, fileName?: string) => {
+    const isXml = type.includes("xml") || (fileName && fileName.toLowerCase().endsWith(".xml"));
+    if (isXml) return <FileCode className="w-5 h-5 text-amber-600" />;
     if (type.startsWith("image/")) return <Image className="w-5 h-5 text-purple-600" />;
     if (type.includes("pdf")) return <FileText className="w-5 h-5 text-rose-600" />;
     if (type.includes("sheet") || type.includes("excel") || type.includes("csv"))
@@ -649,7 +700,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
               <input
                 type="file"
                 required
-                accept="image/*,.pdf,.xlsx,.xls,.doc,.docx,.csv"
+                accept="image/*,.pdf,.xml,.xlsx,.xls,.doc,.docx,.csv"
                 onChange={handleFileChange}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
               />
@@ -659,10 +710,10 @@ export const FileManager: React.FC<FileManagerProps> = ({
                 </div>
                 <div>
                   <span className="text-xs font-extrabold text-slate-900 block group-hover:text-purple-950">
-                    {selectedFile ? selectedFile.name : "Fiş / Fatura Dosyası Seçin veya Sürükleyin"}
+                    {selectedFile ? selectedFile.name : "Fiş, Fatura veya XML Belgesi Seçin ya da Sürükleyin"}
                   </span>
                   <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                    {selectedFile ? formatBytes(selectedFile.size) : "PDF, JPEG, PNG, Excel vb. (Max 8MB)"}
+                    {selectedFile ? formatBytes(selectedFile.size) : "e-Fatura / e-Arşiv XML, PDF, JPEG, PNG vb. (Max 8MB)"}
                   </span>
                 </div>
               </div>
@@ -765,6 +816,68 @@ export const FileManager: React.FC<FileManagerProps> = ({
                   </div>
                 </div>
 
+                {/* İşlem / Belge Türü Seçimi (Mal Alımı, Gider Faturası, Masraf Fişi) */}
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    İşlem / Belge Türü Seçimi
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExtractedData({
+                          ...extractedData,
+                          docType: "Mal Alımı",
+                          expenseCategory: "Mal Alımı"
+                        })
+                      }
+                      className={`p-1.5 rounded-lg text-center border transition-all text-xs font-black cursor-pointer flex items-center justify-center gap-1 ${
+                        extractedData.docType === "Mal Alımı" || extractedData.expenseCategory === "Mal Alımı"
+                          ? "bg-purple-700 text-white border-purple-800 shadow-xs ring-2 ring-purple-400/40"
+                          : "bg-purple-50/70 hover:bg-purple-100 text-purple-950 border-purple-200"
+                      }`}
+                    >
+                      <span>📦 Mal Alımı (Stok)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExtractedData({
+                          ...extractedData,
+                          docType: "Fatura",
+                          expenseCategory: extractedData.expenseCategory === "Mal Alımı" ? "Yemek ve ulaşım" : extractedData.expenseCategory
+                        })
+                      }
+                      className={`p-1.5 rounded-lg text-center border transition-all text-xs font-bold cursor-pointer flex items-center justify-center gap-1 ${
+                        extractedData.docType === "Fatura" && extractedData.expenseCategory !== "Mal Alımı"
+                          ? "bg-purple-700 text-white border-purple-800 shadow-xs ring-2 ring-purple-400/40"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200"
+                      }`}
+                    >
+                      <span>🏢 Gider Faturası</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExtractedData({
+                          ...extractedData,
+                          docType: "Fiş",
+                          expenseCategory: extractedData.expenseCategory === "Mal Alımı" ? "Yemek ve ulaşım" : extractedData.expenseCategory
+                        })
+                      }
+                      className={`p-1.5 rounded-lg text-center border transition-all text-xs font-bold cursor-pointer flex items-center justify-center gap-1 ${
+                        extractedData.docType === "Fiş" && extractedData.expenseCategory !== "Mal Alımı"
+                          ? "bg-purple-700 text-white border-purple-800 shadow-xs ring-2 ring-purple-400/40"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200"
+                      }`}
+                    >
+                      <span>🧾 Masraf Fişi</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Belge Türü & Fiş/Fatura Numarası & Tarih */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div>
@@ -773,16 +886,19 @@ export const FileManager: React.FC<FileManagerProps> = ({
                     </label>
                     <select
                       value={extractedData.docType || "Fiş"}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const val = e.target.value as "Mal Alımı" | "Fatura" | "Fiş";
                         setExtractedData({
                           ...extractedData,
-                          docType: e.target.value as "Fatura" | "Fiş"
-                        })
-                      }
+                          docType: val,
+                          expenseCategory: val === "Mal Alımı" ? "Mal Alımı" : extractedData.expenseCategory
+                        });
+                      }}
                       className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900"
                     >
+                      <option value="Mal Alımı">Mal Alımı Faturası (Ticari Mal)</option>
+                      <option value="Fatura">Gider Faturası (e-Arşiv/Hizmet)</option>
                       <option value="Fiş">Fiş (ÖKC/Yazar Kasa)</option>
-                      <option value="Fatura">Fatura (e-Arşiv/Gider)</option>
                     </select>
                   </div>
 
@@ -881,6 +997,159 @@ export const FileManager: React.FC<FileManagerProps> = ({
                       />
                     </div>
                   </div>
+
+                  {/* Vergi Kalemleri Dökümü (Tüm Vergi Türleri) */}
+                  <div className="pt-2 border-t border-purple-100 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-purple-950 flex items-center gap-1">
+                        <span>📋 Tüm Vergi Kalemleri</span>
+                        <span className="text-[10px] bg-purple-100 text-purple-800 font-bold px-1.5 py-0.2 rounded-full">
+                          {(extractedData.taxItems && extractedData.taxItems.length) || 1} Kalem
+                        </span>
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentItems = extractedData.taxItems || [
+                            {
+                              id: `tax_${Date.now()}`,
+                              taxType: "KDV" as const,
+                              taxName: `Katma Değer Vergisi (%${extractedData.vatRate || 20})`,
+                              rate: extractedData.vatRate || 20,
+                              taxAmount: extractedData.vatAmount || 0,
+                              taxableAmount: extractedData.subtotal || 0,
+                            }
+                          ];
+                          const newItem: InvoiceTaxItem = {
+                            id: `tax_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                            taxType: "ÖİV",
+                            taxName: "Özel İletişim Vergisi (%10)",
+                            rate: 10,
+                            taxableAmount: extractedData.subtotal || 0,
+                            taxAmount: Number((((extractedData.subtotal || 0) * 10) / 100).toFixed(2)),
+                          };
+                          const updated = [...currentItems, newItem];
+                          const totalTax = updated.reduce((s, it) => (it.taxType === "KDV Tevkifatı" || it.taxType === "Stopaj" ? s - it.taxAmount : s + it.taxAmount), 0);
+                          setExtractedData((prev) => ({
+                            ...prev,
+                            taxItems: updated,
+                            grandTotal: Number(((prev.subtotal || 0) + totalTax).toFixed(2))
+                          }));
+                        }}
+                        className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200 flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Vergi Türü Ekle</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-1 max-h-32 overflow-y-auto pr-0.5">
+                      {extractedData.taxItems && extractedData.taxItems.length > 0 ? (
+                        extractedData.taxItems.map((tax, idx) => (
+                          <div
+                            key={tax.id || idx}
+                            className="bg-purple-50/50 border border-purple-100 rounded-lg p-1.5 flex items-center justify-between gap-1.5 text-xs"
+                          >
+                            <div className="flex items-center gap-1 min-w-0 flex-1">
+                              <select
+                                value={tax.taxType}
+                                onChange={(e) => {
+                                  const tType = e.target.value as TaxType;
+                                  const updated = [...(extractedData.taxItems || [])];
+                                  updated[idx] = { ...updated[idx], taxType: tType, taxName: tType };
+                                  setExtractedData({ ...extractedData, taxItems: updated });
+                                }}
+                                className="bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] font-bold text-slate-800"
+                              >
+                                <option value="KDV">KDV</option>
+                                <option value="KDV Tevkifatı">KDV Tevkifatı</option>
+                                <option value="ÖTV">ÖTV</option>
+                                <option value="ÖİV">ÖİV</option>
+                                <option value="Konaklama Vergisi">Konaklama</option>
+                                <option value="Damga Vergisi">Damga</option>
+                                <option value="Stopaj">Stopaj</option>
+                                <option value="BSMV">BSMV</option>
+                              </select>
+
+                              <input
+                                type="text"
+                                value={tax.taxName}
+                                placeholder="Vergi Açıklaması"
+                                onChange={(e) => {
+                                  const updated = [...(extractedData.taxItems || [])];
+                                  updated[idx] = { ...updated[idx], taxName: e.target.value };
+                                  setExtractedData({ ...extractedData, taxItems: updated });
+                                }}
+                                className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 flex-1 min-w-[70px]"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] text-slate-400 font-bold">%</span>
+                              <input
+                                type="number"
+                                value={tax.rate ?? 0}
+                                onChange={(e) => {
+                                  const r = parseFloat(e.target.value) || 0;
+                                  const updated = [...(extractedData.taxItems || [])];
+                                  const matrah = updated[idx].taxableAmount || extractedData.subtotal || 0;
+                                  const taxAmt = Number(((matrah * r) / 100).toFixed(2));
+                                  updated[idx] = { ...updated[idx], rate: r, taxAmount: taxAmt };
+                                  const totalTax = updated.reduce((s, it) => (it.taxType === "KDV Tevkifatı" || it.taxType === "Stopaj" ? s - it.taxAmount : s + it.taxAmount), 0);
+                                  setExtractedData({
+                                    ...extractedData,
+                                    taxItems: updated,
+                                    grandTotal: Number(((extractedData.subtotal || 0) + totalTax).toFixed(2))
+                                  });
+                                }}
+                                className="w-8 bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] font-bold text-center"
+                              />
+
+                              <span className="text-[10px] text-slate-400 font-bold">₺</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={tax.taxAmount}
+                                onChange={(e) => {
+                                  const amt = parseFloat(e.target.value) || 0;
+                                  const updated = [...(extractedData.taxItems || [])];
+                                  updated[idx] = { ...updated[idx], taxAmount: amt };
+                                  const totalTax = updated.reduce((s, it) => (it.taxType === "KDV Tevkifatı" || it.taxType === "Stopaj" ? s - it.taxAmount : s + it.taxAmount), 0);
+                                  setExtractedData({
+                                    ...extractedData,
+                                    taxItems: updated,
+                                    grandTotal: Number(((extractedData.subtotal || 0) + totalTax).toFixed(2))
+                                  });
+                                }}
+                                className="w-16 bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] font-mono font-bold text-right"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = (extractedData.taxItems || []).filter((_, i) => i !== idx);
+                                  const totalTax = updated.reduce((s, it) => (it.taxType === "KDV Tevkifatı" || it.taxType === "Stopaj" ? s - it.taxAmount : s + it.taxAmount), 0);
+                                  setExtractedData({
+                                    ...extractedData,
+                                    taxItems: updated.length > 0 ? updated : undefined,
+                                    grandTotal: Number(((extractedData.subtotal || 0) + (updated.length > 0 ? totalTax : (extractedData.vatAmount || 0))).toFixed(2))
+                                  });
+                                }}
+                                className="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-[10px] text-slate-500 italic">
+                          Standart KDV (%{extractedData.vatRate || 20}): ₺{(extractedData.vatAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* ÖDEME YÖNTEMİ (KULLANICI KENDİSİ SEÇSİN) */}
@@ -924,44 +1193,28 @@ export const FileManager: React.FC<FileManagerProps> = ({
                   </div>
                 </div>
 
-                {/* Masraf Kalemi */}
+                {/* Gider / Masraf / Alış Kalemi */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Gider / Masraf Kalemi
+                    Gider / Alış Kalemi *
                   </label>
                   <select
-                    value={extractedData.expenseCategory || "Yemek ve ulaşım"}
-                    onChange={(e) =>
+                    value={extractedData.expenseCategory || (extractedData.docType === "Mal Alımı" ? "Mal Alımı" : "Yemek ve ulaşım")}
+                    onChange={(e) => {
+                      const cat = e.target.value;
                       setExtractedData({
                         ...extractedData,
-                        expenseCategory: e.target.value
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-semibold text-slate-900"
+                        expenseCategory: cat,
+                        docType: cat === "Mal Alımı" ? "Mal Alımı" : extractedData.docType
+                      });
+                    }}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="Yemek ve ulaşım">Yemek ve ulaşım</option>
-                    <option value="Yakıt harcamaları">Yakıt harcamaları</option>
-                    <option value="Kırtasiye harcamaları">Kırtasiye harcamaları</option>
-                    <option value="Elektrik Faturası">Elektrik Faturası</option>
-                    <option value="Su Faturası">Su Faturası</option>
-                    <option value="Doğalgaz faturası">Doğalgaz faturası</option>
-                    <option value="Kira ödemeleri">Kira ödemeleri</option>
-                    <option value="Kargo ve posta">Kargo ve posta</option>
-                    <option value="Danışmanlık ücretleri">Danışmanlık ücretleri</option>
-                    <option value="Yazılım lisansları">Yazılım lisansları</option>
-                    <option value="Temizlik ve mutfak">Temizlik ve mutfak</option>
-                    <option value="Bakım ve onarım">Bakım ve onarım</option>
-                    <option value="İş yeri eğitimleri">İş yeri eğitimleri</option>
-                    <option value="Aidat giderleri">Aidat giderleri</option>
-                    <option value="Araç kiralama">Araç kiralama</option>
-                    <option value="Seyahat harcamaları">Seyahat harcamaları</option>
-                    <option value="Dijital reklamlar">Dijital reklamlar</option>
-                    <option value="Tasarım ve baskı">Tasarım ve baskı</option>
-                    <option value="Web sitesi ve SEO">Web sitesi ve SEO</option>
-                    <option value="Demirbaş alımları">Demirbaş alımları</option>
-                    <option value="Nakliye">Nakliye</option>
-                    <option value="Hammaliye">Hammaliye</option>
-                    <option value="Diğer Giderler">Diğer Giderler</option>
+                    {EXPENSE_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat === "Mal Alımı" ? "📦 Mal Alımı (Ticari Mallar / Stok)" : cat}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1105,7 +1358,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                         <div className="flex items-start gap-3 min-w-0">
                           <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200/80 flex items-center justify-center shrink-0 shadow-2xs">
-                            {getFileIcon(file.fileType)}
+                            {getFileIcon(file.fileType, file.fileName)}
                           </div>
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
@@ -1271,7 +1524,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
           <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[90vh]">
             <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-4 flex items-center justify-between border-b border-purple-800/40">
               <div className="flex items-center gap-2.5">
-                {getFileIcon(previewFile.fileType)}
+                {getFileIcon(previewFile.fileType, previewFile.fileName)}
                 <div>
                   <h3 className="text-xs font-black text-white">{previewFile.fileName}</h3>
                   <p className="text-[10px] text-purple-200/80">{previewFile.category} • {formatBytes(previewFile.fileSize)}</p>
@@ -1285,15 +1538,62 @@ export const FileManager: React.FC<FileManagerProps> = ({
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto flex-1 flex flex-col md:flex-row items-center gap-6 bg-slate-100">
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col md:flex-row items-stretch gap-6 bg-slate-100">
               {/* Document Image/File Area */}
-              <div className="flex-1 flex items-center justify-center w-full">
+              <div className="flex-1 flex items-center justify-center w-full min-h-[300px]">
                 {previewFile.fileType.startsWith("image/") ? (
                   <img
                     src={previewFile.fileUrl || previewFile.fileData}
                     alt={previewFile.fileName}
                     className="max-h-[65vh] max-w-full object-contain rounded-2xl shadow-md border border-slate-200"
                   />
+                ) : previewFile.fileName.toLowerCase().endsWith(".xml") || previewFile.fileType.includes("xml") ? (
+                  <div className="w-full bg-white rounded-2xl border border-purple-200/80 shadow-md p-5 flex flex-col gap-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-purple-100">
+                      <div className="flex items-center gap-2 text-xs font-extrabold text-purple-950">
+                        <FileCode className="w-5 h-5 text-amber-600" />
+                        <span>e-Fatura / e-Arşiv UBL-TR XML Belgesi</span>
+                      </div>
+                      <span className="text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-md">
+                        XML Formatı
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-200/70 text-xs space-y-1.5">
+                      <div className="flex justify-between text-slate-700">
+                        <span className="font-semibold text-slate-500">Dosya Adı:</span>
+                        <span className="font-bold font-mono text-purple-950">{previewFile.fileName}</span>
+                      </div>
+                      {previewFile.extractedData?.companyTitle && (
+                        <div className="flex justify-between text-slate-700">
+                          <span className="font-semibold text-slate-500">Satıcı:</span>
+                          <span className="font-bold text-slate-900">{previewFile.extractedData.companyTitle}</span>
+                        </div>
+                      )}
+                      {previewFile.extractedData?.invoiceNumber && (
+                        <div className="flex justify-between text-slate-700">
+                          <span className="font-semibold text-slate-500">Fatura No:</span>
+                          <span className="font-bold font-mono text-slate-900">{previewFile.extractedData.invoiceNumber}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        UBL-TR standartlarına uygun olarak okunmuş ve ayrıştırılmıştır.
+                      </span>
+                      <a
+                        href={previewFile.fileUrl || previewFile.fileData}
+                        download={previewFile.fileName}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>XML Dosyasını İndir</span>
+                      </a>
+                    </div>
+                  </div>
                 ) : (
                   <div className="text-center p-8 bg-white rounded-2xl border border-slate-200 max-w-md space-y-4">
                     <FileText className="w-12 h-12 text-purple-600 mx-auto" />
@@ -1356,10 +1656,24 @@ export const FileManager: React.FC<FileManagerProps> = ({
                         <span>Matrah:</span>
                         <span className="font-bold">₺{(previewFile.extractedData.subtotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
                       </div>
-                      <div className="flex justify-between text-slate-600 text-[11px]">
-                        <span>KDV (%{previewFile.extractedData.vatRate || 20}):</span>
-                        <span className="font-bold">₺{(previewFile.extractedData.vatAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
-                      </div>
+                      {previewFile.extractedData.taxItems && previewFile.extractedData.taxItems.length > 0 ? (
+                        <div className="py-1 my-1 border-y border-purple-200/60 space-y-0.5">
+                          {previewFile.extractedData.taxItems.map((tx, ti) => (
+                            <div key={tx.id || ti} className="flex justify-between text-slate-700 text-[10px]">
+                              <span>{tx.taxName || tx.taxType}</span>
+                              <span className="font-mono font-bold">
+                                {tx.taxType === "KDV Tevkifatı" || tx.taxType === "Stopaj" ? "-" : "+"}
+                                ₺{tx.taxAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex justify-between text-slate-600 text-[11px]">
+                          <span>KDV (%{previewFile.extractedData.vatRate || 20}):</span>
+                          <span className="font-bold">₺{(previewFile.extractedData.vatAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-emerald-950 font-black text-xs pt-1 border-t border-purple-200">
                         <span>Genel Toplam:</span>
                         <span>₺{(previewFile.extractedData.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>

@@ -30,6 +30,7 @@ import {
   deleteObject
 } from "firebase/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
+import { InvoiceTaxItem } from "../types";
 
 // Initialize Firebase App lazily/safely
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -56,10 +57,18 @@ export interface ExtractedDocumentData {
   companyTitle?: string; // Ünvan (Satıcı/Düzenleyen Firma)
   invoiceNumber?: string; // Fiş veya Fatura Numarası
   issueDate?: string; // Belge Düzenleme Tarihi (YYYY-MM-DD)
-  docType?: "Fatura" | "Fiş" | "Diğer";
+  docType?: "Fatura" | "Fiş" | "Mal Alımı" | "Diğer";
+  purchaseType?: "Mal Alımı" | "Gider / Masraf" | "Fiş";
   subtotal?: number; // Matrah (KDV Hariç Tutar)
   vatRate?: number; // KDV Oranı (%)
   vatAmount?: number; // KDV Tutarı
+  taxItems?: InvoiceTaxItem[]; // Tüm vergi kalemleri dökümü (KDV %1/%10/%20, Tevkifat, ÖTV, ÖİV, Konaklama, Stopaj, Damga vb.)
+  withholdingAmount?: number; // Toplam Tevkifat Tutarı
+  otvAmount?: number; // Toplam ÖTV Tutarı
+  oivAmount?: number; // Toplam ÖİV Tutarı
+  accommodationTaxAmount?: number; // Toplam Konaklama Vergisi Tutarı
+  stampTaxAmount?: number; // Toplam Damga Vergisi
+  withholdingTaxAmount?: number; // Toplam Stopaj Tutarı
   grandTotal?: number; // Genel Toplam
   paymentMethod?: "Nakit" | "Kredi Kartı" | "Banka Transferi / EFT" | "Çek" | "Senet" | "Açık Hesap / Vadeli";
   expenseCategory?: string; // Masraf Kalemi
@@ -97,15 +106,43 @@ export interface UserProfileData {
   createdAt?: string;
 }
 
+// Deeply remove any undefined fields before saving to Firestore to prevent "Unsupported field value: undefined" errors
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === "object") {
+    // If it is a Firestore FieldValue (e.g. serverTimestamp) or Date, return as-is
+    if (data instanceof Date) return data;
+    if ("_methodName" in (data as any) || "_delegate" in (data as any)) {
+      return data;
+    }
+    
+    const cleanObj: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        cleanObj[key] = sanitizeForFirestore(value);
+      }
+    }
+    return cleanObj as T;
+  }
+  return data;
+}
+
 // 1. User Profile Operations
 export async function saveUserProfile(user: UserProfileData): Promise<void> {
   const userRef = doc(db, "users", user.userId);
   await setDoc(
     userRef,
-    {
+    sanitizeForFirestore({
       ...user,
       updatedAt: new Date().toISOString()
-    },
+    }),
     { merge: true }
   );
 }
@@ -206,10 +243,11 @@ export async function saveUserFile(file: Omit<UserFileMetadata, "id">): Promise<
     throw new Error("Veritabanı uyarısı: Dosya boyutu veritabanı doküman limitini (1 MB) aşıyor.");
   }
   const filesCol = collection(db, "user_files");
-  const docRef = await addDoc(filesCol, {
+  const sanitized = sanitizeForFirestore({
     ...file,
     createdAt: serverTimestamp()
   });
+  const docRef = await addDoc(filesCol, sanitized);
   return docRef.id;
 }
 

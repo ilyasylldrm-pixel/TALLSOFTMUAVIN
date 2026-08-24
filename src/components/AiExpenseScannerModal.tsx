@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Receipt,
   FileText,
+  FileCode,
   Calendar,
   Wallet,
   CreditCard,
@@ -20,17 +21,25 @@ import {
   ArrowRight,
   Plus
 } from "lucide-react";
-import { Contact, Account, Invoice, EXPENSE_CATEGORIES } from "../types";
+import { Contact, Account, Invoice, EXPENSE_CATEGORIES, InvoiceTaxItem, TaxType } from "../types";
+import { parseXmlInvoice } from "../utils/xmlInvoiceParser";
 
 export type ExtractedExpenseData = {
   taxNumber?: string;
   companyTitle?: string;
   invoiceNumber?: string;
   issueDate?: string;
-  docType?: "Fatura" | "Fiş";
+  docType?: "Mal Alımı" | "Fatura" | "Fiş";
   subtotal?: number;
   vatRate?: number;
   vatAmount?: number;
+  taxItems?: InvoiceTaxItem[];
+  withholdingAmount?: number;
+  otvAmount?: number;
+  oivAmount?: number;
+  accommodationTaxAmount?: number;
+  stampTaxAmount?: number;
+  withholdingTaxAmount?: number;
   grandTotal?: number;
   paymentMethod?: "Nakit" | "Kredi Kartı" | "Banka Transferi / EFT" | "Çek" | "Senet" | "Açık Hesap / Vadeli";
   expenseCategory?: string;
@@ -88,7 +97,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
 
   if (!isOpen) return null;
 
-  const triggerOcr = async (file: File, base64: string) => {
+  const triggerOcr = async (file: File, base64: string, textContent?: string) => {
     setScanning(true);
     try {
       const res = await fetch("/api/gemini/parse-invoice-doc", {
@@ -97,7 +106,8 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
         body: JSON.stringify({
           fileData: base64,
           fileName: file.name,
-          fileType: file.type
+          fileType: file.type || (file.name.endsWith(".xml") ? "application/xml" : undefined),
+          textContent: textContent || undefined
         })
       });
 
@@ -123,13 +133,20 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
             companyTitle: d.companyTitle || "",
             invoiceNumber: d.invoiceNumber || `FİŞ-${Date.now().toString().slice(-4)}`,
             issueDate: d.issueDate || new Date().toISOString().split("T")[0],
-            docType: d.docType === "Fatura" ? "Fatura" : "Fiş",
+            docType: d.docType === "Mal Alımı" ? "Mal Alımı" : d.docType === "Fatura" ? "Fatura" : "Fiş",
             subtotal: Number(subtotalVal.toFixed(2)),
             vatRate: vatRateVal,
             vatAmount: Number(vatAmountVal.toFixed(2)),
+            taxItems: Array.isArray(d.taxItems) ? d.taxItems : undefined,
+            withholdingAmount: d.withholdingAmount ? Number(d.withholdingAmount) : undefined,
+            otvAmount: d.otvAmount ? Number(d.otvAmount) : undefined,
+            oivAmount: d.oivAmount ? Number(d.oivAmount) : undefined,
+            accommodationTaxAmount: d.accommodationTaxAmount ? Number(d.accommodationTaxAmount) : undefined,
+            stampTaxAmount: d.stampTaxAmount ? Number(d.stampTaxAmount) : undefined,
+            withholdingTaxAmount: d.withholdingTaxAmount ? Number(d.withholdingTaxAmount) : undefined,
             grandTotal: Number(grandTotalVal.toFixed(2)),
             paymentMethod: detectedPayment,
-            expenseCategory: d.expenseCategory || "Yemek ve ulaşım",
+            expenseCategory: d.expenseCategory || (d.docType === "Mal Alımı" ? "Mal Alımı" : "Mal Alımı"),
             notes: d.notes || ""
           });
           return;
@@ -172,13 +189,36 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
       }
       setSelectedFile(file);
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        setFilePreview(base64);
-        triggerOcr(file, base64);
-      };
-      reader.readAsDataURL(file);
+      const isXml = file.name.toLowerCase().endsWith(".xml") || file.type.includes("xml");
+
+      if (isXml) {
+        // Read XML directly and parse
+        const textReader = new FileReader();
+        textReader.onload = () => {
+          const xmlText = textReader.result as string;
+          const parsed = parseXmlInvoice(xmlText, file.name);
+          if (parsed.success && parsed.data) {
+            setExtractedData(parsed.data);
+          } else {
+            triggerOcr(file, "", xmlText);
+          }
+        };
+        textReader.readAsText(file);
+
+        const base64Reader = new FileReader();
+        base64Reader.onload = () => {
+          setFilePreview(base64Reader.result as string);
+        };
+        base64Reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result as string;
+          setFilePreview(base64);
+          triggerOcr(file, base64);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -233,14 +273,15 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
     const grandTotal = extractedData.grandTotal || subtotal + vatAmount;
     const vatRate = extractedData.vatRate || 20;
 
+    const isGoodsPurchase = extractedData.docType === "Mal Alımı" || extractedData.expenseCategory === "Mal Alımı";
     const newInvoice: Invoice = {
       id: `inv_ocr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       invoiceNumber:
         extractedData.invoiceNumber ||
-        `${extractedData.docType === "Fatura" ? "TED2026" : "GDF2026"}${Date.now().toString().slice(-6)}`,
+        `${isGoodsPurchase ? "MAL2026" : extractedData.docType === "Fatura" ? "TED2026" : "GDF2026"}${Date.now().toString().slice(-6)}`,
       type: "purchase",
-      docKind: extractedData.docType === "Fatura" ? "invoice" : "receipt",
-      expenseCategory: extractedData.expenseCategory || "Yemek ve ulaşım",
+      docKind: extractedData.docType === "Fiş" ? "receipt" : "invoice",
+      expenseCategory: extractedData.expenseCategory || (isGoodsPurchase ? "Mal Alımı" : "Yemek ve ulaşım"),
       contactId,
       contactName: vendorName,
       taxNumber: extractedData.taxNumber || "",
@@ -250,16 +291,23 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
       status: isPaid ? "paid" : "sent",
       subtotal,
       totalVat: vatAmount,
+      taxItems: extractedData.taxItems,
+      totalWithholding: extractedData.withholdingAmount,
+      totalOtv: extractedData.otvAmount,
+      totalOiv: extractedData.oivAmount,
+      totalAccommodationTax: extractedData.accommodationTaxAmount,
+      totalStampTax: extractedData.stampTaxAmount,
+      totalStopaj: extractedData.withholdingTaxAmount,
       grandTotal,
       paidAmount: isPaid ? grandTotal : 0,
       remainingAmount: isPaid ? 0 : grandTotal,
       currency: "TRY",
-      notes: `Yapay Zeka (AI OCR) ile tarandı (${selectedFile?.name || "Evrak"}). Ödeme Yöntemi: ${extractedData.paymentMethod || "Nakit"}. ${extractedData.notes || ""}`.trim(),
+      notes: `Yapay Zeka (AI OCR) / XML ile tarandı (${selectedFile?.name || "Evrak"}). Tür: ${extractedData.docType || "Fatura"}. Ödeme Yöntemi: ${extractedData.paymentMethod || "Nakit"}. ${extractedData.notes || ""}`.trim(),
       items: [
         {
           id: `item_${Date.now()}`,
-          description: `${vendorName} - ${extractedData.expenseCategory || "Gider / Masraf"}`,
-          expenseCategory: extractedData.expenseCategory || "Yemek ve ulaşım",
+          description: `${vendorName} - ${extractedData.expenseCategory || (isGoodsPurchase ? "Mal Alımı" : "Gider / Masraf")}`,
+          expenseCategory: extractedData.expenseCategory || (isGoodsPurchase ? "Mal Alımı" : "Yemek ve ulaşım"),
           quantity: 1,
           unit: "Adet",
           unitPrice: subtotal,
@@ -335,7 +383,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
           <div className="relative border-2 border-dashed border-purple-300 hover:border-purple-600 bg-purple-50/40 hover:bg-purple-50/80 p-5 rounded-2xl text-center transition-all cursor-pointer group">
             <input
               type="file"
-              accept="image/*,.pdf,.xlsx,.csv"
+              accept="image/*,.pdf,.xml,.xlsx,.csv"
               onChange={handleFileChange}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
@@ -345,10 +393,10 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
               </div>
               <div className="text-center sm:text-left">
                 <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-purple-900">
-                  {selectedFile ? selectedFile.name : "Fiş veya Fatura Dosyası Seçin ya da Sürükleyin"}
+                  {selectedFile ? selectedFile.name : "Fiş, Fatura veya XML Belgesi Seçin ya da Sürükleyin"}
                 </h4>
                 <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
-                  JPEG, PNG, WebP veya PDF formatında masraf fişi, akaryakıt fişi veya e-Arşiv faturası (Max 8 MB)
+                  e-Fatura / e-Arşiv XML, JPEG, PNG, WebP veya PDF formatında masraf fişi, akaryakıt fişi veya fatura (Max 8 MB)
                 </p>
               </div>
               {selectedFile && filePreview && (
@@ -442,6 +490,68 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                   </div>
                 </div>
 
+                {/* Belge / İşlem Türü Seçimi (Mal Alımı, Gider Faturası, Masraf Fişi) */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    İşlem / Belge Türü Seçimi
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExtractedData({
+                          ...extractedData,
+                          docType: "Mal Alımı",
+                          expenseCategory: "Mal Alımı"
+                        })
+                      }
+                      className={`p-2 rounded-xl text-center border transition-all text-xs font-black cursor-pointer flex items-center justify-center gap-1.5 ${
+                        extractedData.docType === "Mal Alımı" || extractedData.expenseCategory === "Mal Alımı"
+                          ? "bg-purple-700 text-white border-purple-800 shadow-xs ring-2 ring-purple-400/40"
+                          : "bg-purple-50/70 hover:bg-purple-100 text-purple-950 border-purple-200"
+                      }`}
+                    >
+                      <span>📦 Mal Alımı (Stok)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExtractedData({
+                          ...extractedData,
+                          docType: "Fatura",
+                          expenseCategory: extractedData.expenseCategory === "Mal Alımı" ? "Yemek ve ulaşım" : extractedData.expenseCategory
+                        })
+                      }
+                      className={`p-2 rounded-xl text-center border transition-all text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5 ${
+                        extractedData.docType === "Fatura" && extractedData.expenseCategory !== "Mal Alımı"
+                          ? "bg-purple-700 text-white border-purple-800 shadow-xs ring-2 ring-purple-400/40"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200"
+                      }`}
+                    >
+                      <span>🏢 Gider Faturası</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExtractedData({
+                          ...extractedData,
+                          docType: "Fiş",
+                          expenseCategory: extractedData.expenseCategory === "Mal Alımı" ? "Yemek ve ulaşım" : extractedData.expenseCategory
+                        })
+                      }
+                      className={`p-2 rounded-xl text-center border transition-all text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5 ${
+                        extractedData.docType === "Fiş" && extractedData.expenseCategory !== "Mal Alımı"
+                          ? "bg-purple-700 text-white border-purple-800 shadow-xs ring-2 ring-purple-400/40"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200"
+                      }`}
+                    >
+                      <span>🧾 Masraf Fişi</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Belge Türü, No ve Tarih */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <div>
@@ -450,16 +560,19 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                     </label>
                     <select
                       value={extractedData.docType || "Fiş"}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const val = e.target.value as "Mal Alımı" | "Fatura" | "Fiş";
                         setExtractedData({
                           ...extractedData,
-                          docType: e.target.value as "Fatura" | "Fiş"
-                        })
-                      }
+                          docType: val,
+                          expenseCategory: val === "Mal Alımı" ? "Mal Alımı" : extractedData.expenseCategory
+                        });
+                      }}
                       className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900"
                     >
-                      <option value="Fiş">Masraf Fişi (Yazar Kasa)</option>
-                      <option value="Fatura">Gider Faturası (e-Arşiv)</option>
+                      <option value="Mal Alımı">Mal Alımı Faturası (Ticari Mal)</option>
+                      <option value="Fatura">Gider Faturası (e-Arşiv / Hizmet)</option>
+                      <option value="Fiş">Masraf Fişi (Yazar Kasa / ÖKC)</option>
                     </select>
                   </div>
 
@@ -493,24 +606,26 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                   </div>
                 </div>
 
-                {/* Gider / Masraf Kalemi */}
+                {/* Gider / Masraf / Alış Kalemi */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Gider / Masraf Kalemi *
+                    Gider / Alış Kalemi *
                   </label>
                   <select
-                    value={extractedData.expenseCategory || "Yemek ve ulaşım"}
-                    onChange={(e) =>
+                    value={extractedData.expenseCategory || (extractedData.docType === "Mal Alımı" ? "Mal Alımı" : "Yemek ve ulaşım")}
+                    onChange={(e) => {
+                      const cat = e.target.value;
                       setExtractedData({
                         ...extractedData,
-                        expenseCategory: e.target.value
-                      })
-                    }
+                        expenseCategory: cat,
+                        docType: cat === "Mal Alımı" ? "Mal Alımı" : extractedData.docType
+                      });
+                    }}
                     className="w-full bg-amber-50/80 border border-amber-300 rounded-xl p-2 text-xs font-bold text-amber-950 focus:ring-2 focus:ring-amber-500"
                   >
                     {EXPENSE_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
-                        {cat}
+                        {cat === "Mal Alımı" ? "📦 Mal Alımı (Ticari Mallar / Stok)" : cat}
                       </option>
                     ))}
                   </select>
@@ -579,6 +694,163 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                         onChange={(e) => handleGrandTotalChange(parseFloat(e.target.value) || 0)}
                         className="w-full bg-emerald-50 border border-emerald-300 rounded-lg p-1.5 text-xs font-black text-emerald-950 text-right"
                       />
+                    </div>
+                  </div>
+
+                  {/* Vergi Kalemleri Dökümü (Tüm Vergi Türleri: KDV, Tevkifat, ÖTV, ÖİV, Konaklama, Stopaj, Damga vb.) */}
+                  <div className="pt-2 border-t border-purple-100 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-purple-950 flex items-center gap-1">
+                        <span>📋 Belgedeki Tüm Vergi Kalemleri</span>
+                        <span className="text-[10px] bg-purple-100 text-purple-800 font-bold px-1.5 py-0.2 rounded-full">
+                          {(extractedData.taxItems && extractedData.taxItems.length) || 1} Kalem
+                        </span>
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentItems = extractedData.taxItems || [
+                            {
+                              id: `tax_${Date.now()}`,
+                              taxType: "KDV" as const,
+                              taxName: `Katma Değer Vergisi (%${extractedData.vatRate || 20})`,
+                              rate: extractedData.vatRate || 20,
+                              taxAmount: extractedData.vatAmount || 0,
+                              taxableAmount: extractedData.subtotal || 0,
+                            }
+                          ];
+                          const newItem: InvoiceTaxItem = {
+                            id: `tax_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                            taxType: "ÖİV",
+                            taxName: "Özel İletişim Vergisi (%10)",
+                            rate: 10,
+                            taxableAmount: extractedData.subtotal || 0,
+                            taxAmount: Number((((extractedData.subtotal || 0) * 10) / 100).toFixed(2)),
+                          };
+                          const updated = [...currentItems, newItem];
+                          const totalTax = updated.reduce((s, it) => (it.taxType === "KDV Tevkifatı" || it.taxType === "Stopaj" ? s - it.taxAmount : s + it.taxAmount), 0);
+                          setExtractedData((prev) => ({
+                            ...prev,
+                            taxItems: updated,
+                            grandTotal: Number(((prev.subtotal || 0) + totalTax).toFixed(2))
+                          }));
+                        }}
+                        className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200 flex items-center gap-0.5 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Vergi Türü Ekle</span>
+                      </button>
+                    </div>
+
+                    {/* Tax Items List */}
+                    <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                      {extractedData.taxItems && extractedData.taxItems.length > 0 ? (
+                        extractedData.taxItems.map((tax, idx) => (
+                          <div
+                            key={tax.id || idx}
+                            className="bg-slate-50/90 border border-slate-200 rounded-lg p-1.5 flex items-center justify-between gap-2 text-xs"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <select
+                                value={tax.taxType}
+                                onChange={(e) => {
+                                  const tType = e.target.value as TaxType;
+                                  const updated = [...(extractedData.taxItems || [])];
+                                  updated[idx] = { ...updated[idx], taxType: tType, taxName: tType };
+                                  setExtractedData({ ...extractedData, taxItems: updated });
+                                }}
+                                className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-slate-800"
+                              >
+                                <option value="KDV">KDV</option>
+                                <option value="KDV Tevkifatı">KDV Tevkifatı</option>
+                                <option value="ÖTV">ÖTV</option>
+                                <option value="ÖİV">ÖİV</option>
+                                <option value="Konaklama Vergisi">Konaklama Vergisi</option>
+                                <option value="Damga Vergisi">Damga Vergisi</option>
+                                <option value="Stopaj">Stopaj</option>
+                                <option value="BSMV">BSMV</option>
+                                <option value="Borsa Tescil / Fon">Borsa Tescil</option>
+                              </select>
+
+                              <input
+                                type="text"
+                                value={tax.taxName}
+                                placeholder="Vergi Açıklaması"
+                                onChange={(e) => {
+                                  const updated = [...(extractedData.taxItems || [])];
+                                  updated[idx] = { ...updated[idx], taxName: e.target.value };
+                                  setExtractedData({ ...extractedData, taxItems: updated });
+                                }}
+                                className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 flex-1 min-w-[100px]"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] text-slate-500 font-bold">%</span>
+                              <input
+                                type="number"
+                                value={tax.rate ?? 0}
+                                onChange={(e) => {
+                                  const r = parseFloat(e.target.value) || 0;
+                                  const updated = [...(extractedData.taxItems || [])];
+                                  const matrah = updated[idx].taxableAmount || extractedData.subtotal || 0;
+                                  const taxAmt = Number(((matrah * r) / 100).toFixed(2));
+                                  updated[idx] = { ...updated[idx], rate: r, taxAmount: taxAmt };
+                                  const totalTax = updated.reduce((s, it) => (it.taxType === "KDV Tevkifatı" || it.taxType === "Stopaj" ? s - it.taxAmount : s + it.taxAmount), 0);
+                                  setExtractedData({
+                                    ...extractedData,
+                                    taxItems: updated,
+                                    grandTotal: Number(((extractedData.subtotal || 0) + totalTax).toFixed(2))
+                                  });
+                                }}
+                                className="w-10 bg-white border border-slate-300 rounded px-1 py-0.5 text-[11px] font-bold text-center"
+                              />
+
+                              <span className="text-[10px] text-slate-500 font-bold">₺</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={tax.taxAmount}
+                                onChange={(e) => {
+                                  const amt = parseFloat(e.target.value) || 0;
+                                  const updated = [...(extractedData.taxItems || [])];
+                                  updated[idx] = { ...updated[idx], taxAmount: amt };
+                                  const totalTax = updated.reduce((s, it) => (it.taxType === "KDV Tevkifatı" || it.taxType === "Stopaj" ? s - it.taxAmount : s + it.taxAmount), 0);
+                                  setExtractedData({
+                                    ...extractedData,
+                                    taxItems: updated,
+                                    grandTotal: Number(((extractedData.subtotal || 0) + totalTax).toFixed(2))
+                                  });
+                                }}
+                                className="w-18 bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-mono font-black text-right"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = (extractedData.taxItems || []).filter((_, i) => i !== idx);
+                                  const totalTax = updated.reduce((s, it) => (it.taxType === "KDV Tevkifatı" || it.taxType === "Stopaj" ? s - it.taxAmount : s + it.taxAmount), 0);
+                                  setExtractedData({
+                                    ...extractedData,
+                                    taxItems: updated.length > 0 ? updated : undefined,
+                                    grandTotal: Number(((extractedData.subtotal || 0) + (updated.length > 0 ? totalTax : (extractedData.vatAmount || 0))).toFixed(2))
+                                  });
+                                }}
+                                className="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer"
+                                title="Vergi Kalemini Sil"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-[11px] text-slate-500 italic bg-slate-50 rounded-lg p-1.5 border border-slate-200 flex items-center justify-between">
+                          <span>Standart KDV (%{extractedData.vatRate || 20}): <strong>₺{(extractedData.vatAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</strong></span>
+                          <span className="text-[10px] text-purple-700 font-bold">(Tüm vergi türleri desteklenir)</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

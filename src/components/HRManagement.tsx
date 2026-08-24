@@ -57,6 +57,7 @@ import { sgkOccupations } from "../data/sgkOccupations";
 import { sgkTerminationReasons } from "../data/sgkTerminationReasons";
 import { HRDocumentFormsModal, HRFormType } from "./HRDocumentFormsModal";
 import { SeveranceNoticeCalculator } from "./SeveranceNoticeCalculator";
+import { PayrollPrintModal } from "./PayrollPrintModal";
 
 interface HRManagementProps {
   employees: Employee[];
@@ -130,6 +131,9 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [formsModalAdvanceRequest, setFormsModalAdvanceRequest] = useState<AdvanceRequest | undefined>(undefined);
   const [selectedEmployeeForDetail, setSelectedEmployeeForDetail] = useState<Employee | null>(null);
   const [selectedPayrollRecord, setSelectedPayrollRecord] = useState<PayrollRecord | null>(null);
+  const [isPayrollPrintModalOpen, setIsPayrollPrintModalOpen] = useState(false);
+  const [payrollPrintSelectedEmpId, setPayrollPrintSelectedEmpId] = useState<string | undefined>(undefined);
+  const [payrollPrintInitialMode, setPayrollPrintInitialMode] = useState<"month" | "year">("month");
 
   // Legal Deductions Modal & Form States
   const [isAddLegalDeductionOpen, setIsAddLegalDeductionOpen] = useState(false);
@@ -1704,7 +1708,21 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPayrollPrintSelectedEmpId(undefined);
+                    setPayrollPrintInitialMode("month");
+                    setIsPayrollPrintModalOpen(true);
+                  }}
+                  className="bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                  title="Seçilen Ay veya Tüm Yıl Bordro İcmalini Resmi Şablonda Yazdır / PDF İndir"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Bordro Yazdır / İcmal</span>
+                </button>
+
                 <ExportButtons
                   getExportData={() => ({
                     filename: `Bordro_Icmali_${payrollMonth}_${new Date().toISOString().split("T")[0]}`,
@@ -1873,12 +1891,16 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                             )}
 
                             <button
-                              onClick={() => setSelectedPayrollRecord(rec)}
+                              onClick={() => {
+                                setPayrollPrintSelectedEmpId(rec.employeeId);
+                                setPayrollPrintInitialMode("month");
+                                setIsPayrollPrintModalOpen(true);
+                              }}
                               className="bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-200/70 font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                              title="Bordro Pusulası Görüntüle ve Yazdır"
+                              title={`${rec.employeeName} için Seçilen Ay veya Tüm Yıl Bordrosunu Yazdır`}
                             >
-                              <Printer className="w-3.5 h-3.5" />
-                              Pusula
+                              <Printer className="w-3.5 h-3.5 text-purple-700" />
+                              Bordro Yazdır
                             </button>
                           </div>
                         </td>
@@ -5522,6 +5544,26 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           initialFormType={formsModalType}
           leaveRequest={formsModalLeaveRequest}
           advanceRequest={formsModalAdvanceRequest}
+        />
+      )}
+
+      {/* MODAL: RESMİ BORDRO VE MAAŞ PUSULASI YAZDIRMA (AYLIK & TÜM YIL) */}
+      {isPayrollPrintModalOpen && (
+        <PayrollPrintModal
+          isOpen={isPayrollPrintModalOpen}
+          onClose={() => {
+            setIsPayrollPrintModalOpen(false);
+            setPayrollPrintSelectedEmpId(undefined);
+          }}
+          employees={employees}
+          companySettings={companySettings}
+          selectedMonth={payrollMonth}
+          initialEmployeeId={payrollPrintSelectedEmpId}
+          initialMode={payrollPrintInitialMode}
+          payrollCustomizations={payrollCustomizations}
+          advanceRequests={advanceRequests}
+          leaveRequests={leaveRequests}
+          legalDeductions={legalDeductions}
         />
       )}
     </div>

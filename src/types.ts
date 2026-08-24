@@ -31,6 +31,7 @@ export function getContactAccountCode(contact: Partial<Contact>): string {
 }
 
 export const EXPENSE_CATEGORIES = [
+  "Mal Alımı",
   "Yemek ve ulaşım",
   "İş yeri eğitimleri",
   "Kira ödemeleri",
@@ -56,6 +57,30 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export type TaxType =
+  | "KDV"
+  | "KDV Tevkifatı"
+  | "ÖTV"
+  | "ÖİV"
+  | "Konaklama Vergisi"
+  | "Damga Vergisi"
+  | "Stopaj"
+  | "BSMV"
+  | "Borsa Tescil / Fon"
+  | "Diğer Vergi";
+
+export interface InvoiceTaxItem {
+  id?: string;
+  taxType: TaxType | string; // "KDV", "KDV Tevkifatı", "ÖTV", "ÖİV", "Konaklama Vergisi", "Damga Vergisi", "Stopaj", "BSMV", "Diğer Vergi"
+  taxTypeCode?: string; // "0015", "9015", "0071", "4080", "0059", "0040", "0003", "0021", "8001" vb.
+  taxName?: string; // Açıklama / Adı (Örn: "Katma Değer Vergisi (%20)", "Özel İletişim Vergisi (%10)", "KDV Tevkifatı (5/10)")
+  rate?: number; // Vergi Oranı (%)
+  taxableAmount?: number; // Matrah (Vergiye esas tutar)
+  taxAmount: number; // Hesaplanan vergi tutarı
+  exemptionCode?: string; // İstisna Kodu (örn: 351, 301)
+  exemptionReason?: string; // İstisna Sebebi
+}
 
 export interface InvoiceItem {
   id: string;
@@ -169,6 +194,12 @@ export interface Invoice {
   subtotal: number; // KDV Hariç Ara Toplam
   totalVat: number; // Toplam KDV
   totalWithholding?: number; // Toplam Tevkifat
+  totalOtv?: number; // Toplam ÖTV (Özel Tüketim Vergisi)
+  totalOiv?: number; // Toplam ÖİV (Özel İletişim Vergisi)
+  totalAccommodationTax?: number; // Toplam Konaklama Vergisi (%2)
+  totalStampTax?: number; // Toplam Damga Vergisi
+  totalStopaj?: number; // Toplam Stopaj / Gelir Vergisi Kesintisi
+  taxItems?: InvoiceTaxItem[]; // Faturadaki tüm vergi kalemleri ve dökümü (KDV, ÖTV, ÖİV, Tevkifat, Konaklama vb.)
   grandTotal: number; // Genel Toplam
   paidAmount: number; // Ödenen Miktar
   remainingAmount: number; // Kalan

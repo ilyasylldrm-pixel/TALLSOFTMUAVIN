@@ -85,10 +85,15 @@ Bana doğal dilde sorular sorabilir veya doğrudan komut verebilirsiniz:
 
       const data = await response.json();
 
+      let replyText = data.result;
+      if (!response.ok || !replyText) {
+        replyText = data.error || "Yapay zeka servisleri şu anda yoğunluk yaşıyor. Lütfen birkaç saniye sonra tekrar deneyiniz.";
+      }
+
       const aiMsg: ChatMessage = {
         id: "ai_" + Date.now(),
         sender: "ai",
-        text: data.result || "İsteğiniz işlendi.",
+        text: replyText,
         timestamp: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
       };
 

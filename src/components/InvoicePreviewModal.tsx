@@ -379,27 +379,105 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               {/* Totals Summary */}
               <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2 text-xs">
                 <div className="flex justify-between text-slate-600">
-                  <span>Ara Toplam (KDV Hariç):</span>
+                  <span>Ara Toplam (Matrah):</span>
                   <span className="font-mono font-bold">
                     {currSymbol}
                     {subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Hesaplanan Toplam KDV:</span>
-                  <span className="font-mono font-bold">
-                    {currSymbol}
-                    {totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                {totalWithholding > 0 && (
-                  <div className="flex justify-between text-amber-700">
-                    <span>Hesaplanan Tevkifat Tutarı:</span>
-                    <span className="font-mono font-bold">
-                      -{currSymbol}
-                      {totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+
+                {/* Detailed Tax Breakdown from taxItems if present */}
+                {invoice.taxItems && invoice.taxItems.length > 0 ? (
+                  <div className="py-1 my-1 border-y border-dashed border-slate-300 space-y-1">
+                    <span className="text-[10px] font-black uppercase text-purple-900 tracking-wider block">
+                      Vergi Kalemleri Dökümü
                     </span>
+                    {invoice.taxItems.map((tax, tIdx) => (
+                      <div key={tax.id || tIdx} className="flex justify-between text-slate-700 text-[11px] pl-1">
+                        <span className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-purple-500 inline-block"></span>
+                          <span>{tax.taxName || tax.taxType}</span>
+                          {tax.rate !== undefined && tax.rate > 0 && !tax.taxName.includes(`%${tax.rate}`) && (
+                            <span className="text-slate-500 font-semibold">(%{tax.rate})</span>
+                          )}
+                          {tax.taxableAmount !== undefined && tax.taxableAmount > 0 && (
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              [Matrah: {currSymbol}{tax.taxableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}]
+                            </span>
+                          )}
+                        </span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {tax.taxType === "KDV Tevkifatı" || tax.taxType === "Stopaj" ? "-" : "+"}
+                          {currSymbol}
+                          {tax.taxAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ))}
                   </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Hesaplanan Toplam KDV:</span>
+                      <span className="font-mono font-bold">
+                        {currSymbol}
+                        {totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    {invoice.totalOtv && invoice.totalOtv > 0 && (
+                      <div className="flex justify-between text-purple-700">
+                        <span>Özel Tüketim Vergisi (ÖTV):</span>
+                        <span className="font-mono font-bold">
+                          +{currSymbol}
+                          {invoice.totalOtv.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    {invoice.totalOiv && invoice.totalOiv > 0 && (
+                      <div className="flex justify-between text-purple-700">
+                        <span>Özel İletişim Vergisi (ÖİV):</span>
+                        <span className="font-mono font-bold">
+                          +{currSymbol}
+                          {invoice.totalOiv.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    {invoice.totalAccommodationTax && invoice.totalAccommodationTax > 0 && (
+                      <div className="flex justify-between text-purple-700">
+                        <span>Konaklama Vergisi (%2):</span>
+                        <span className="font-mono font-bold">
+                          +{currSymbol}
+                          {invoice.totalAccommodationTax.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    {invoice.totalStampTax && invoice.totalStampTax > 0 && (
+                      <div className="flex justify-between text-purple-700">
+                        <span>Damga Vergisi:</span>
+                        <span className="font-mono font-bold">
+                          +{currSymbol}
+                          {invoice.totalStampTax.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    {totalWithholding > 0 && (
+                      <div className="flex justify-between text-amber-700">
+                        <span>Hesaplanan Tevkifat Tutarı:</span>
+                        <span className="font-mono font-bold">
+                          -{currSymbol}
+                          {totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    {invoice.totalStopaj && invoice.totalStopaj > 0 && (
+                      <div className="flex justify-between text-amber-700">
+                        <span>Stopaj Kesintisi:</span>
+                        <span className="font-mono font-bold">
+                          -{currSymbol}
+                          {invoice.totalStopaj.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <div className="pt-2 border-t-2 border-slate-900 flex justify-between items-center text-sm font-black">
