@@ -780,8 +780,8 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       ? "Gelen e-İrsaliyeler"
       : "Giden e-İrsaliyeler"
     : activeDirection === "inbox"
-      ? "Gelen e-Belgeler"
-      : "Giden e-Belgeler";
+      ? "Gelen e-Faturalar"
+      : "Giden e-Faturalar";
   const DirectionIcon =
     activeDirection === "inbox" ? ArrowDownLeft : ArrowUpRight;
 
@@ -798,7 +798,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           <p className="text-sm text-slate-500 mt-1">
             {isDespatch
               ? "Mysoft gelen ve giden e-irsaliye listesi. Belgeler seçilen müşterinin VKN’si ile çekilir."
-              : "Önce iş ortağına bağlı e-belge müşterileri çekilir. Mali müşavir mükellefi değil; belgeler seçilen müşterinin VKN’si ile alınır."}
+              : "Mysoft Gelen / Giden Fatura ekranı. Firma seçip senkronize edin; kabul, red, PDF/XML buradan."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

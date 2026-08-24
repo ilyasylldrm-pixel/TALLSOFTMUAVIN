@@ -18,6 +18,11 @@ import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerM
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { NavItem } from "./Sidebar";
+import { sendMysoftOutgoingInvoice } from "../services/mysoftEDocumentService";
+import {
+  buildMysoftInvoiceOutboxPayload,
+  extractMysoftOutboxResult,
+} from "../services/mysoftInvoicePayload";
 import {
   FileText,
   FileSpreadsheet,
@@ -47,6 +52,7 @@ import {
   Tag,
   Sparkles,
   UploadCloud,
+  Loader2,
   Camera,
   Receipt,
   ScanLine,
@@ -181,6 +187,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
   // Delivery Address State
   const [hasDifferentDeliveryAddress, setHasDifferentDeliveryAddress] = useState<boolean>(false);
   const [deliveryAddress, setDeliveryAddress] = useState<string>("");
+  /** Mysoft Giden Fatura (invoiceOutbox) — only for gelir e-fatura. */
+  const [sendToMysoft, setSendToMysoft] = useState(true);
+  const [mysoftEDocType, setMysoftEDocType] = useState<"e_fatura" | "e_arsiv">("e_fatura");
+  const [isSavingMysoft, setIsSavingMysoft] = useState(false);
+  const [mysoftSaveError, setMysoftSaveError] = useState<string | null>(null);
+  const [mysoftSaveNotice, setMysoftSaveNotice] = useState<string | null>(null);
 
   const handleQuickCreateContact = (e: React.FormEvent) => {
     e.preventDefault();
@@ -517,10 +529,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
     );
   };
 
-  const handleSaveInvoice = (e: React.FormEvent) => {
+  const handleSaveInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     const contact = contacts.find((c) => c.id === contactId);
     if (!contact) return;
+    if (isSavingMysoft) return;
 
     const { subtotal, totalVat, grandTotal, computedItems } = calculateTotals();
 
@@ -539,6 +552,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
     }
 
     const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
+    const shouldSendMysoft =
+      sendToMysoft &&
+      invType === "sales" &&
+      formDocKind === "invoice" &&
+      !editingInvoiceId;
 
     if (editingInvoiceId) {
       const existing = invoices.find((i) => i.id === editingInvoiceId);
@@ -576,6 +594,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
         currency: existing?.currency || "TRY",
         notes: finalNotes,
         createdAt: existing?.createdAt || new Date().toISOString().split("T")[0],
+        eDocumentType: existing?.eDocumentType,
+        eDocumentEttn: existing?.eDocumentEttn,
       };
 
       onUpdateInvoice(updatedInvoice);
@@ -587,7 +607,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       return;
     }
 
-    const newInvoice: Invoice = {
+    let newInvoice: Invoice = {
       id: "inv_" + Date.now(),
       invoiceNumber: `${prefix}${nextSeq}`,
       type: invType,
@@ -608,7 +628,48 @@ export const Invoices: React.FC<InvoicesProps> = ({
       currency: "TRY",
       notes: finalNotes,
       createdAt: new Date().toISOString().split("T")[0],
+      eDocumentType: shouldSendMysoft ? mysoftEDocType : undefined,
     };
+
+    if (shouldSendMysoft) {
+      setMysoftSaveError(null);
+      setMysoftSaveNotice(null);
+      setIsSavingMysoft(true);
+      try {
+        const payload = buildMysoftInvoiceOutboxPayload({
+          invoice: newInvoice,
+          contact,
+          company: companySettings,
+          eDocumentType: mysoftEDocType,
+          isSaveAsDraft: false,
+        });
+        const result = await sendMysoftOutgoingInvoice(payload);
+        const outbox = extractMysoftOutboxResult(result);
+        if (outbox.invoiceETTN) {
+          newInvoice = {
+            ...newInvoice,
+            eDocumentEttn: outbox.invoiceETTN,
+            invoiceNumber: outbox.docNo || newInvoice.invoiceNumber,
+            eDocumentType: mysoftEDocType,
+          };
+        }
+        setMysoftSaveNotice(
+          outbox.invoiceETTN
+            ? `Mysoft'a gönderildi. ETTN: ${outbox.invoiceETTN}`
+            : "Fatura Mysoft giden kutuya iletildi.",
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Mysoft giden fatura gönderimi başarısız.";
+        setMysoftSaveError(message);
+        setIsSavingMysoft(false);
+        return;
+      } finally {
+        setIsSavingMysoft(false);
+      }
+    }
 
     onAddInvoice(newInvoice);
     if (forcedType) {
@@ -2191,12 +2252,66 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-200">
+              <div className="pt-3 flex flex-col gap-3 border-t border-slate-200">
+                {invType === "sales" && formDocKind === "invoice" && !editingInvoiceId && (
+                  <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-3 space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sendToMysoft}
+                        onChange={(event) => setSendToMysoft(event.target.checked)}
+                        className="mt-0.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span>
+                        <span className="block text-xs font-bold text-purple-950">
+                          Mysoft’a giden fatura olarak gönder (GİB)
+                        </span>
+                        <span className="block text-[11px] text-purple-800/80 mt-0.5">
+                          Dökümandaki Giden Fatura Ekleme (invoiceOutbox) ile aynı akış.
+                        </span>
+                      </span>
+                    </label>
+                    {sendToMysoft && (
+                      <div className="flex flex-wrap gap-2 pl-6">
+                        <button
+                          type="button"
+                          onClick={() => setMysoftEDocType("e_fatura")}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                            mysoftEDocType === "e_fatura"
+                              ? "bg-purple-600 text-white border-purple-600"
+                              : "bg-white text-slate-600 border-slate-200"
+                          }`}
+                        >
+                          e-Fatura
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMysoftEDocType("e_arsiv")}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                            mysoftEDocType === "e_arsiv"
+                              ? "bg-purple-600 text-white border-purple-600"
+                              : "bg-white text-slate-600 border-slate-200"
+                          }`}
+                        >
+                          e-Arşiv
+                        </button>
+                      </div>
+                    )}
+                    {mysoftSaveError && (
+                      <p className="text-[11px] font-semibold text-rose-700 pl-6">{mysoftSaveError}</p>
+                    )}
+                    {mysoftSaveNotice && (
+                      <p className="text-[11px] font-semibold text-emerald-700 pl-6">{mysoftSaveNotice}</p>
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setEditingInvoiceId(null);
                     setEditingInvoiceNumber(null);
+                    setMysoftSaveError(null);
                     setIsCreateModalOpen(false);
                   }}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 cursor-pointer"
@@ -2215,7 +2330,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs cursor-pointer ${
+                  disabled={isSavingMysoft}
+                  className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs cursor-pointer disabled:opacity-60 flex items-center gap-2 ${
                     forcedType === "purchase" || invType === "purchase"
                       ? formDocKind === "receipt"
                         ? "bg-orange-600 hover:bg-orange-700"
@@ -2225,18 +2341,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       : "bg-purple-600 hover:bg-purple-700"
                   }`}
                 >
-                  {editingInvoiceId ? (
-                    "Değişiklikleri Güncelle & Kaydet"
-                  ) : forcedType === "sales"
-                    ? formDocKind === "receipt"
-                      ? "Gelir Fişini Kaydet"
-                      : "Gelir Faturasını Kaydet & Kes"
-                    : forcedType === "purchase"
-                    ? formDocKind === "receipt"
-                      ? "Gider Fişini Kaydet"
-                      : "Gider Faturasını Kaydet"
-                    : "Faturayı Kaydet ve Oluştur"}
+                  {isSavingMysoft && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {editingInvoiceId
+                    ? "Değişiklikleri Güncelle & Kaydet"
+                    : forcedType === "sales" || invType === "sales"
+                      ? formDocKind === "receipt"
+                        ? "Gelir Fişini Kaydet"
+                        : sendToMysoft
+                          ? isSavingMysoft
+                            ? "Mysoft'a gönderiliyor..."
+                            : "Kaydet & Mysoft'a Kes"
+                          : "Gelir Faturasını Kaydet & Kes"
+                      : forcedType === "purchase" || invType === "purchase"
+                        ? formDocKind === "receipt"
+                          ? "Gider Fişini Kaydet"
+                          : "Gider Faturasını Kaydet"
+                        : "Faturayı Kaydet ve Oluştur"}
                 </button>
+                </div>
               </div>
             </form>
           </div>

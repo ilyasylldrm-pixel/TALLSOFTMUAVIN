@@ -1387,9 +1387,9 @@ export default function App() {
       case "invoices_purchase":
         return "Gider Faturası";
       case "e_documents_incoming":
-        return "Gelen e-Belgeler";
+        return "Gelen e-Faturalar";
       case "e_documents_outgoing":
-        return "Giden e-Belgeler";
+        return "Giden e-Faturalar";
       case "quotes":
         return "Proforma Faturalar";
       case "quotes_and_slips":
