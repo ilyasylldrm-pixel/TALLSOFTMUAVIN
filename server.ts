@@ -1,20 +1,19 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { fileURLToPath } from "node:url";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { getMysoftRouter } from "./src/services/mysoftRoutes.ts";
 
+// Cloud Run / IIS: cwd and sibling files. Avoid import.meta.url so the CJS
+ // bundle (dist/server.cjs) starts cleanly.
 function loadServerEnv() {
-  const here = path.dirname(fileURLToPath(import.meta.url));
+  const cwd = process.cwd();
   for (const candidate of [
-    path.join(process.cwd(), ".env"),
-    path.join(process.cwd(), "muavin.env"),
-    path.join(here, ".env"),
-    path.join(here, "muavin.env"),
-    path.join(here, "..", ".env"),
-    path.join(here, "..", "muavin.env"),
+    path.join(cwd, ".env"),
+    path.join(cwd, "muavin.env"),
+    path.join(cwd, "dist", "muavin.env"),
+    path.join(cwd, "..", ".env"),
+    path.join(cwd, "..", "muavin.env"),
   ]) {
     dotenv.config({ path: candidate });
   }
@@ -23,7 +22,7 @@ function loadServerEnv() {
 loadServerEnv();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: "10mb" }));
 app.use("/api/mysoft", getMysoftRouter());
@@ -314,6 +313,7 @@ Strictly JSON formatında yanıt ver.`;
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -332,4 +332,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error("Sunucu başlatılamadı:", error);
+  process.exit(1);
+});

@@ -19,15 +19,10 @@ jobs:
           node-version: "20"
       - name: server.ts Windows/IIS duzeltmeleri
         run: |
-          perl -0pi -e 's/const PORT = 3000;/const PORT = process.env.PORT || 3000;/g' server.ts
+          # PORT zaten process.env.PORT; IIS host binding'i genis birak.
           perl -0pi -e 's/app\.listen\(PORT, "0\.0\.0\.0", \(\) => \{/app.listen(PORT, () => {/g' server.ts
-          # dotenv yollari server.ts icinde (muavin.env / .env); burada tekrar yazma.
           perl -0pi -e 's{const distPath = path\.join\(process\.cwd\(\), "dist"\);}{const distPath = __dirname;}g' server.ts
           perl -0pi -e 's/model: "gemini-3\.6-flash",/model: process.env.GEMINI_MODEL || "gemini-2.5-flash",/g' server.ts
-          if grep -q 'import { createServer as createViteServer } from "vite";' server.ts; then
-            perl -0pi -e 's/import \{ createServer as createViteServer \} from "vite";\n//' server.ts
-            perl -0pi -e 's/const vite = await createViteServer\(\{/const { createServer: createViteServer } = await import("vite");\n    const vite = await createViteServer({/' server.ts
-          fi
       - name: Derleme
         run: |
           npm install
