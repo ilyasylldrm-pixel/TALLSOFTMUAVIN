@@ -231,17 +231,29 @@ const statusTone = (status: string) => {
   };
 };
 
+const formatLocalIsoDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const getSyncRange = (period: SyncPeriod) => {
-  if (period === "all") return {};
   const to = new Date();
   const from = new Date(to);
-  if (period === "this_month") from.setDate(1);
-  else from.setMonth(from.getMonth() - 2, 1);
+  if (period === "this_month") {
+    from.setDate(1);
+  } else if (period === "three_months") {
+    from.setMonth(from.getMonth() - 2, 1);
+  } else {
+    // Mysoft period endpoints reject empty dates; "all" means last 12 months.
+    from.setFullYear(from.getFullYear() - 1);
+    from.setDate(1);
+  }
   return {
-    // The service maps these values to Mysoft's documented startDate/endDate
-    // request fields. Keep the UI period selector in sync with that contract.
-    startDate: from.toISOString().slice(0, 10),
-    endDate: to.toISOString().slice(0, 10),
+    // Local calendar dates — toISOString() shifts the day in UTC+3.
+    startDate: formatLocalIsoDate(from),
+    endDate: formatLocalIsoDate(to),
   };
 };
 
@@ -250,8 +262,8 @@ const normalizeDirection = (value?: EDocumentDirection): "inbox" | "outbox" =>
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) {
-    if (/00243|İş Ortağı hesabınız/i.test(error.message)) {
-      return "İş ortağı anahtarında belge çekmek için müşteri VKN/TCKN seçin.";
+    if (/tarih.*boş|boş.*tarih|startDate|endDate/i.test(error.message)) {
+      return "Mysoft tarih aralığı istiyor. Dönem seçili olsa bile istekte startDate/endDate gitmeli; sayfayı yenileyip tekrar deneyin.";
     }
     if (/00164|firma kaydı bulunamadı/i.test(error.message)) {
       return "Mysoft 00164: bu VKN/TCKN erişim anahtarına tanımlı değil.";
@@ -425,10 +437,17 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       setIsLoading(true);
       setError(null);
       try {
+        const range = getSyncRange(period);
         const result = await listMysoftEDocuments(requestedDirection, {
           signal: controller.signal,
           tenantIdentifierNumber: activeTenantIdentifierNumber,
           companyId: activeManagedCompanyId,
+          startDate: range.startDate,
+          endDate: range.endDate,
+          // Numbered paging accepts multi-day ranges; day-chunked legacy list does not.
+          ...(normalizeDirection(requestedDirection) === "inbox"
+            ? { pageSize: 100, pageNumber: 1 }
+            : {}),
         });
         if (!controller.signal.aborted) {
           const rows = Array.isArray(result) ? result : [];
@@ -455,6 +474,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       activeDirection,
       activeManagedCompanyId,
       activeTenantIdentifierNumber,
+      period,
       tenants.length,
       tenantsLoading,
     ],
@@ -487,6 +507,10 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         ...getSyncRange(period),
         tenantIdentifierNumber: activeTenantIdentifierNumber,
         companyId: activeManagedCompanyId,
+        // Prefer paging so "Bu ay" is one multi-day range, not day-by-day calls.
+        ...(activeDirection === "inbox" || activeDirection === "incoming"
+          ? { pageSize: 100, pageNumber: 1 }
+          : {}),
       });
       // Sync already returns the authoritative merged snapshot.  Use it
       // directly so the UI does not immediately issue a second, first-page
@@ -796,7 +820,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           >
             <option value="this_month">Bu ayı getir</option>
             <option value="three_months">Son 3 ayı getir</option>
-            <option value="all">Tüm dönemi getir</option>
+            <option value="all">Son 12 ayı getir</option>
           </select>
           <button
             type="button"
