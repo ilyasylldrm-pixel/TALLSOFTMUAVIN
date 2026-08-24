@@ -7,9 +7,19 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'lucide-react',
+      ],
     },
     build: {
       target: 'esnext',
@@ -18,16 +28,17 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('xlsx')) {
-                return 'vendor-pdf-excel';
-              }
-              if (id.includes('lucide-react')) {
-                return 'vendor-icons';
-              }
-              if (id.includes('firebase')) {
-                return 'vendor-firebase';
-              }
+            if (!id.includes('node_modules')) return;
+            // Keep a single React runtime. Splitting lucide-react away from
+            // react/jsx-runtime makes React 19 throw "older version of React".
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)([\\/]|$)/.test(id)) {
+              return 'vendor-react';
+            }
+            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('xlsx')) {
+              return 'vendor-pdf-excel';
+            }
+            if (id.includes('firebase')) {
+              return 'vendor-firebase';
             }
           },
         },

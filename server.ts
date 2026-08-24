@@ -3,6 +3,7 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { getMysoftRouter } from "./src/services/mysoftRoutes.ts";
 
 dotenv.config();
 
@@ -10,6 +11,7 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
+app.use("/api/mysoft", getMysoftRouter());
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;

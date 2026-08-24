@@ -18,6 +18,7 @@ const AiAssistant = lazy(() => import("./components/AiAssistant").then((m) => ({
 const Settings = lazy(() => import("./components/Settings").then((m) => ({ default: m.Settings })));
 const CompanyManagement = lazy(() => import("./components/CompanyManagement").then((m) => ({ default: m.CompanyManagement })));
 const EServices = lazy(() => import("./components/EServices").then((m) => ({ default: m.EServices })));
+const EDocuments = lazy(() => import("./components/EDocuments"));
 const HRManagement = lazy(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement })));
 const FileManager = lazy(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
@@ -51,6 +52,8 @@ import {
   AdvanceRequest,
   LegalDeduction,
   CostProject,
+  MysoftEDocument,
+  getContactAccountCode,
 } from "./types";
 
 import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X } from "lucide-react";
@@ -479,6 +482,116 @@ export default function App() {
         ...prev,
         invoices: [invoice, ...prev.invoices],
         contacts: updatedContacts as Contact[],
+      };
+    });
+  };
+
+  const handleImportMysoftInvoice = (document: MysoftEDocument) => {
+    const isIncoming =
+      document.canonicalDirection === "incoming" ||
+      document.direction === "inbox" ||
+      document.direction === "incoming";
+    const taxNumber =
+      document.taxNumber ||
+      (isIncoming ? document.senderTaxNumber : document.receiverTaxNumber) ||
+      "";
+    const contactName =
+      document.accountName ||
+      (isIncoming ? document.senderName : document.receiverName) ||
+      "Mysoft e-Belge";
+    const invoiceNumber =
+      document.documentNo ||
+      document.number ||
+      document.documentNumber ||
+      document.ettn ||
+      `MS-${Date.now()}`;
+    const issueDate = (document.issueDate || document.date || new Date().toISOString()).slice(0, 10);
+    const dueDate = (document.dueDate || issueDate).slice(0, 10);
+    const grandTotal = Number(document.grandTotal ?? document.amount) || 0;
+    const subtotal = Number(document.subtotal) || grandTotal;
+    const vatTotal = Number(document.vatTotal) || 0;
+    const eDocumentType =
+      document.documentType === "e_arsiv" ||
+      document.documentType === "e_fatura" ||
+      document.documentType === "paper"
+        ? document.documentType
+        : "e_fatura";
+
+    setData((prev) => {
+      if (document.ettn && prev.invoices.some((invoice) => invoice.eDocumentEttn === document.ettn)) {
+        return prev;
+      }
+
+      let contacts = prev.contacts;
+      let contact =
+        (taxNumber ? contacts.find((item) => item.taxNumber === taxNumber) : undefined) ||
+        contacts.find((item) => item.name === contactName);
+
+      if (!contact) {
+        const contactType = isIncoming ? "vendor" : "customer";
+        contact = {
+          id: "ct_mysoft_" + Date.now(),
+          name: contactName,
+          contactType,
+          taxNumber: taxNumber || undefined,
+          balance: 0,
+          balanceType: "balanced",
+          createdAt: new Date().toISOString(),
+          accountCode: getContactAccountCode({ contactType, taxNumber }),
+        };
+        contacts = [contact, ...contacts];
+      }
+
+      const invoice: Invoice = {
+        id: "inv_mysoft_" + Date.now(),
+        invoiceNumber,
+        type: isIncoming ? "purchase" : "sales",
+        contactId: contact.id,
+        contactName: contact.name,
+        taxNumber: contact.taxNumber,
+        issueDate,
+        dueDate,
+        items: [
+          {
+            id: "it_mysoft_" + Date.now(),
+            description: `${String(document.documentType || "e-Belge")} ${invoiceNumber}`,
+            quantity: 1,
+            unit: "Adet",
+            unitPrice: subtotal,
+            vatRate: subtotal > 0 ? Math.round((vatTotal / subtotal) * 100) : 0,
+            totalWithoutVat: subtotal,
+            vatAmount: vatTotal,
+            totalWithVat: grandTotal,
+          },
+        ],
+        subtotal,
+        totalVat: vatTotal,
+        grandTotal,
+        paidAmount: 0,
+        remainingAmount: grandTotal,
+        status: "sent",
+        currency: document.currency === "₺" ? "TRY" : document.currency || "TRY",
+        notes: document.ettn ? `Mysoft ETTN: ${document.ettn}` : undefined,
+        createdAt: new Date().toISOString(),
+        eDocumentType,
+        eDocumentEttn: document.ettn,
+      };
+
+      const delta = invoice.type === "sales" ? invoice.grandTotal : -invoice.grandTotal;
+      const updatedContacts = contacts.map((item) => {
+        if (item.id !== contact.id) return item;
+        const newBal = item.balance + delta;
+        return {
+          ...item,
+          balance: newBal,
+          balanceType: newBal > 0 ? "receivable" : newBal < 0 ? "payable" : "balanced",
+        } as Contact;
+      });
+
+      return {
+        ...prev,
+        contacts: updatedContacts,
+        invoices: [invoice, ...prev.invoices],
       };
     });
   };
@@ -1273,6 +1386,10 @@ export default function App() {
         return "Gelir Faturası";
       case "invoices_purchase":
         return "Gider Faturası";
+      case "e_documents_incoming":
+        return "Gelen e-Belgeler";
+      case "e_documents_outgoing":
+        return "Giden e-Belgeler";
       case "quotes":
         return "Proforma Faturalar";
       case "quotes_and_slips":
@@ -1423,6 +1540,15 @@ export default function App() {
               onCollectAllInvoices={handleCollectAllInvoices}
               initialContactIdForNewInvoice={initialContactIdForInvoice}
               onSelectTab={setCurrentTab}
+            />
+          )}
+
+          {(currentTab === "e_documents_incoming" || currentTab === "e_documents_outgoing") && (
+            <EDocuments
+              direction={currentTab === "e_documents_outgoing" ? "outgoing" : "incoming"}
+              companySettings={data.settings}
+              globalSearchTerm={searchTerm}
+              onImportInvoice={handleImportMysoftInvoice}
             />
           )}
 

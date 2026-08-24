@@ -77,6 +77,72 @@ export type InvoiceStatus = "draft" | "sent" | "paid" | "partial" | "overdue" | 
 
 export type EDocumentType = "e_fatura" | "e_arsiv" | "paper";
 
+export type CanonicalEDocumentDirection = "incoming" | "outgoing";
+export type EDocumentDirection = CanonicalEDocumentDirection | "inbox" | "outbox";
+export type EDocumentStatus =
+  | "queued"
+  | "sent"
+  | "delivered"
+  | "accepted"
+  | "rejected"
+  | "draft"
+  | "cancelled"
+  | "unknown"
+  | string;
+
+export interface MysoftEDocument {
+  id: string;
+  companyId?: string;
+  direction: EDocumentDirection;
+  canonicalDirection?: CanonicalEDocumentDirection;
+  documentType: EDocumentType | string;
+  ettn?: string;
+  documentNo?: string;
+  number?: string;
+  documentNumber?: string;
+  issueDate?: string;
+  date?: string;
+  dueDate?: string;
+  status: EDocumentStatus;
+  statusText?: string;
+  statusLabel?: string;
+  senderName?: string;
+  senderTaxNumber?: string;
+  receiverName?: string;
+  receiverTaxNumber?: string;
+  accountName?: string;
+  taxNumber?: string;
+  subtotal?: number;
+  vatTotal?: number;
+  grandTotal?: number;
+  amount?: number;
+  currency?: string;
+  currencyRate?: number;
+  archived?: boolean;
+  profile?: string;
+  source?: "mysoft" | "local";
+  syncedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  downloadUrl?: string;
+  items?: unknown[];
+  lines?: unknown[];
+  partyName?: string;
+  partyTaxNumber?: string;
+  raw?: Record<string, unknown>;
+}
+
+export interface ManagedCompany {
+  id: string;
+  name?: string;
+  taxNumber?: string;
+  tenantIdentifierNumber?: string;
+}
+
+export interface MysoftCredentials {
+  tenantIdentifierNumber?: string;
+}
+
 export type DocumentKind = "invoice" | "receipt"; // invoice = Fatura, receipt = Fiş (Gelir/Gider Fişi)
 
 export interface Invoice {
@@ -427,6 +493,9 @@ export interface CompanySettings {
   sgkCredentials?: SgkCredentials;
   eDevletCredentials?: EDevletCredentials;
   eTebligatlar?: ETebligatItem[];
+  /** Firma VKN/TCKN; Mysoft e-belge çağrılarında tenantIdentifierNumber olarak kullanılır. */
+  tenantIdentifierNumber?: string;
+  mysoftCredentials?: MysoftCredentials;
 }
 
 export interface LedgerEntry {

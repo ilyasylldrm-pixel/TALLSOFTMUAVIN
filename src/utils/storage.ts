@@ -39,6 +39,7 @@ const STORAGE_KEYS = {
   ADVANCE_REQUESTS: "muavin_advance_requests",
   LEGAL_DEDUCTIONS: "muavin_legal_deductions",
   COST_PROJECTS: "muavin_cost_projects",
+  EDOCUMENTS: "muavin_e_documents",
 };
 
 export function getStoredData() {
@@ -188,6 +189,7 @@ export function resetToDemoData() {
   safeSet(STORAGE_KEYS.ADVANCE_REQUESTS, initialAdvanceRequests);
   safeSet(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions);
   safeSet(STORAGE_KEYS.COST_PROJECTS, initialCostProjects);
+  safeSet(STORAGE_KEYS.EDOCUMENTS, []);
 }
 
 
