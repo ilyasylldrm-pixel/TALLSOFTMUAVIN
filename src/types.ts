@@ -87,6 +87,10 @@ export type EDocumentStatus =
   | "rejected"
   | "draft"
   | "cancelled"
+  | "waiting_response"
+  | "responded"
+  | "processed"
+  | "error"
   | "unknown"
   | string;
 
@@ -109,6 +113,8 @@ export interface MysoftEDocument {
   status: EDocumentStatus;
   statusText?: string;
   statusLabel?: string;
+  envelopeStatusText?: string;
+  envelopeStatusCode?: string;
   senderName?: string;
   senderTaxNumber?: string;
   receiverName?: string;

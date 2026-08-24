@@ -48,6 +48,7 @@ import {
   cancelMysoftEDocument,
   sendMysoftDraftEDocument,
   normalizeMysoftTenantIdentifier,
+  resolveMysoftDocumentStatus,
   type MysoftTenant,
 } from "../services/mysoftEDocumentService";
 
@@ -204,45 +205,26 @@ const documentCurrency = (document: MysoftEDocument) => {
 };
 
 const statusTone = (status: string) => {
-  const value = status.toLowerCase();
-  if (
-    ["accepted", "approved", "delivered", "sent", "completed", "success"].some(
-      (item) => value.includes(item),
-    )
-  ) {
-    return {
-      label: status || "Başarılı",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      icon: CheckCircle2,
-    };
-  }
-  if (
-    ["rejected", "cancelled", "canceled", "error", "failed"].some((item) =>
-      value.includes(item),
-    )
-  ) {
-    return {
-      label: status || "Hatalı",
-      className: "bg-rose-50 text-rose-700 border-rose-200",
-      icon: XCircle,
-    };
-  }
-  if (
-    ["draft", "queued", "pending", "processing", "waiting"].some((item) =>
-      value.includes(item),
-    )
-  ) {
-    return {
-      label: status || "Bekliyor",
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-      icon: Clock3,
-    };
-  }
-  return {
-    label: status || "Bilinmiyor",
-    className: "bg-slate-100 text-slate-600 border-slate-200",
-    icon: AlertCircle,
-  };
+  const resolved = resolveMysoftDocumentStatus(status);
+  const className =
+    resolved.tone === "success"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : resolved.tone === "info"
+        ? "bg-sky-50 text-sky-700 border-sky-200"
+        : resolved.tone === "warning"
+          ? "bg-amber-50 text-amber-700 border-amber-200"
+          : resolved.tone === "danger"
+            ? "bg-rose-50 text-rose-700 border-rose-200"
+            : "bg-slate-100 text-slate-600 border-slate-200";
+  const icon =
+    resolved.tone === "success"
+      ? CheckCircle2
+      : resolved.tone === "danger"
+        ? XCircle
+        : resolved.tone === "warning"
+          ? Clock3
+          : AlertCircle;
+  return { label: resolved.label, className, icon, status: resolved.status };
 };
 
 const formatLocalIsoDate = (date: Date) => {
@@ -777,22 +759,20 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
 
   const stats = useMemo(() => {
     const accepted = documents.filter((document) => {
-      const status = documentStatus(document).toLowerCase();
-      return ["accepted", "approved", "delivered", "sent", "success"].some(
-        (token) => status.includes(token),
-      );
+      const tone = resolveMysoftDocumentStatus(documentStatus(document)).tone;
+      return tone === "success" || tone === "info";
     }).length;
     const waiting = documents.filter((document) => {
-      const status = documentStatus(document).toLowerCase();
-      return ["draft", "queued", "pending", "processing", "waiting"].some(
-        (token) => status.includes(token),
-      );
+      return resolveMysoftDocumentStatus(documentStatus(document)).tone === "warning";
+    }).length;
+    const failed = documents.filter((document) => {
+      return resolveMysoftDocumentStatus(documentStatus(document)).tone === "danger";
     }).length;
     const total = documents.reduce(
       (sum, document) => sum + Number(documentAmount(document) || 0),
       0,
     );
-    return { total: documents.length, accepted, waiting, amount: total };
+    return { total: documents.length, accepted, waiting, failed, amount: total };
   }, [documents]);
 
   const directionLabel = isDespatch
@@ -966,7 +946,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
         {[
           {
             label: "Toplam belge",
@@ -985,6 +965,12 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
             value: stats.waiting.toLocaleString("tr-TR"),
             icon: Clock3,
             accent: "text-amber-600 bg-amber-50",
+          },
+          {
+            label: "Hata / red / iptal",
+            value: stats.failed.toLocaleString("tr-TR"),
+            icon: XCircle,
+            accent: "text-rose-600 bg-rose-50",
           },
           {
             label: "Belge toplamı",
@@ -1039,7 +1025,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
               <option value="all">Tüm durumlar</option>
               {availableStatuses.map((status) => (
                 <option key={status} value={status}>
-                  {status}
+                  {resolveMysoftDocumentStatus(status).label}
                 </option>
               ))}
             </select>
@@ -1169,6 +1155,11 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                           <StatusIcon className="w-3 h-3" />
                           {tone.label}
                         </span>
+                        {(data.envelopeStatusText || data.envelopeStatusCode) && (
+                          <span className="block text-[11px] text-slate-400 mt-1 max-w-[180px] truncate" title={String(data.envelopeStatusText || data.envelopeStatusCode)}>
+                            Zarf: {data.envelopeStatusText || data.envelopeStatusCode}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
@@ -1322,8 +1313,16 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                   <div>
                     <span className="text-xs text-slate-400">Durum</span>
                     <p className="text-xs text-slate-700 mt-1">
-                      {documentStatus(selectedDocument)}
+                      {resolveMysoftDocumentStatus(documentStatus(selectedDocument)).label}
                     </p>
+                    {(asRecord(selectedDocument).envelopeStatusText ||
+                      asRecord(selectedDocument).envelopeStatusCode) && (
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Zarf:{" "}
+                        {asRecord(selectedDocument).envelopeStatusText ||
+                          asRecord(selectedDocument).envelopeStatusCode}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <span className="text-xs text-slate-400">Oluşturulma</span>

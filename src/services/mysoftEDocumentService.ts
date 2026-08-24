@@ -373,21 +373,123 @@ function mapDocumentType(value: unknown): EDocumentType | string {
   return asString(value) || "unknown";
 }
 
-function mapStatus(value: unknown, statusCode?: unknown): EDocumentStatus {
-  const text = firstString(value, statusCode);
-  if (!text) return "unknown";
-  const normalized = text
+export type MysoftStatusTone = "success" | "info" | "warning" | "danger" | "muted";
+
+export interface MysoftDocumentStatusInfo {
+  status: EDocumentStatus;
+  label: string;
+  tone: MysoftStatusTone;
+}
+
+const MYSOFT_STATUS_CATALOG: Record<string, MysoftDocumentStatusInfo> = {
+  BOS: { status: "unknown", label: "Boş", tone: "muted" },
+  IPTALEDILDI: { status: "cancelled", label: "İptal edildi", tone: "danger" },
+  TASLAK: { status: "draft", label: "Taslak", tone: "warning" },
+  ARSIVKAYITKUYRUGUNDA: {
+    status: "queued",
+    label: "Arşiv kayıt kuyruğunda",
+    tone: "warning",
+  },
+  GIBEGONDERILECEK: {
+    status: "queued",
+    label: "GİB'e gönderilecek",
+    tone: "warning",
+  },
+  GIBEGONDERILDI: { status: "sent", label: "GİB'e gönderildi", tone: "info" },
+  ALICIYAULASTI: { status: "delivered", label: "Alıcıya ulaştı", tone: "info" },
+  KABULKUYRUGUNDA: {
+    status: "queued",
+    label: "Kabul kuyruğunda",
+    tone: "warning",
+  },
+  REDKUYRUGUNDA: { status: "queued", label: "Ret kuyruğunda", tone: "warning" },
+  YANITBEKLENIYOR: {
+    status: "waiting_response",
+    label: "Yanıt bekleniyor",
+    tone: "warning",
+  },
+  KABUL: { status: "accepted", label: "Kabul", tone: "success" },
+  RED: { status: "rejected", label: "Red", tone: "danger" },
+  HATA: { status: "error", label: "Hata", tone: "danger" },
+  ONAYLANDI: { status: "accepted", label: "Onaylandı", tone: "success" },
+  YANITLANDI: { status: "responded", label: "Yanıtlandı", tone: "success" },
+  ISLENDI: { status: "processed", label: "İşlendi", tone: "success" },
+  ALINDI: { status: "delivered", label: "Alındı", tone: "info" },
+  ACCEPTED: { status: "accepted", label: "Kabul", tone: "success" },
+  REJECTED: { status: "rejected", label: "Red", tone: "danger" },
+  CANCELLED: { status: "cancelled", label: "İptal edildi", tone: "danger" },
+  CANCELED: { status: "cancelled", label: "İptal edildi", tone: "danger" },
+  DRAFT: { status: "draft", label: "Taslak", tone: "warning" },
+  QUEUED: { status: "queued", label: "Kuyrukta", tone: "warning" },
+  SENT: { status: "sent", label: "Gönderildi", tone: "info" },
+  DELIVERED: { status: "delivered", label: "Teslim edildi", tone: "info" },
+  ERROR: { status: "error", label: "Hata", tone: "danger" },
+  FAILED: { status: "error", label: "Hata", tone: "danger" },
+  WAITINGRESPONSE: {
+    status: "waiting_response",
+    label: "Yanıt bekleniyor",
+    tone: "warning",
+  },
+  RESPONDED: { status: "responded", label: "Yanıtlandı", tone: "success" },
+  PROCESSED: { status: "processed", label: "İşlendi", tone: "success" },
+  UNKNOWN: { status: "unknown", label: "Bilinmiyor", tone: "muted" },
+};
+
+function statusLookupKey(value: string): string {
+  return value
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("tr-TR");
-  if (/iptal|cancel/.test(normalized)) return "cancelled";
-  if (/red|reject|ret/.test(normalized)) return "rejected";
-  if (/kabul|accept|onay/.test(normalized)) return "accepted";
-  if (/teslim|deliver/.test(normalized)) return "delivered";
-  if (/gonder|sent|send|success|basar/.test(normalized)) return "sent";
-  if (/taslak|draft/.test(normalized)) return "draft";
-  if (/bekle|kuyruk|queue|pending|processing/.test(normalized)) return "queued";
-  return text;
+    .replace(/İ/g, "I")
+    .replace(/ı/g, "i")
+    .toLocaleUpperCase("en-US")
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+/** Map Mysoft invoice/despatch status texts onto Muavin labels and tones. */
+export function resolveMysoftDocumentStatus(
+  ...values: unknown[]
+): MysoftDocumentStatusInfo {
+  const text = firstString(...values);
+  if (!text) return MYSOFT_STATUS_CATALOG.UNKNOWN;
+  const key = statusLookupKey(text);
+  if (MYSOFT_STATUS_CATALOG[key]) return MYSOFT_STATUS_CATALOG[key];
+  if (key.includes("KABULKUYRUK")) return MYSOFT_STATUS_CATALOG.KABULKUYRUGUNDA;
+  if (key.includes("REDKUYRUK") || key.includes("RETKUYRUK")) {
+    return MYSOFT_STATUS_CATALOG.REDKUYRUGUNDA;
+  }
+  if (key.includes("YANITBEKLEN")) return MYSOFT_STATUS_CATALOG.YANITBEKLENIYOR;
+  if (key.includes("GONDERILECEK")) return MYSOFT_STATUS_CATALOG.GIBEGONDERILECEK;
+  if (key.includes("GONDERILDI")) return MYSOFT_STATUS_CATALOG.GIBEGONDERILDI;
+  if (key.includes("ALICIYAULAS") || key.includes("TESLIM")) {
+    return MYSOFT_STATUS_CATALOG.ALICIYAULASTI;
+  }
+  if (key.includes("ARSIV") && key.includes("KUYRUK")) {
+    return MYSOFT_STATUS_CATALOG.ARSIVKAYITKUYRUGUNDA;
+  }
+  if (key.includes("IPTAL") || key.includes("CANCEL")) {
+    return MYSOFT_STATUS_CATALOG.IPTALEDILDI;
+  }
+  if (key.includes("YANITLANDI")) return MYSOFT_STATUS_CATALOG.YANITLANDI;
+  if (key.includes("ISLENDI") || key.includes("ISLEN")) {
+    return MYSOFT_STATUS_CATALOG.ISLENDI;
+  }
+  if (key.includes("TASLAK") || key.includes("DRAFT")) {
+    return MYSOFT_STATUS_CATALOG.TASLAK;
+  }
+  if (key.includes("HATA") || key.includes("ERROR") || key.includes("FAIL")) {
+    return MYSOFT_STATUS_CATALOG.HATA;
+  }
+  if (key.includes("ONAY")) return MYSOFT_STATUS_CATALOG.ONAYLANDI;
+  if (key === "RED" || key.includes("REJECT") || key === "RET") {
+    return MYSOFT_STATUS_CATALOG.RED;
+  }
+  if (key.includes("KABUL") || key.includes("ACCEPT")) {
+    return MYSOFT_STATUS_CATALOG.KABUL;
+  }
+  if (key.includes("KUYRUK") || key.includes("BEKLE") || key.includes("QUEUE")) {
+    return MYSOFT_STATUS_CATALOG.QUEUED;
+  }
+  return { status: text, label: text, tone: "muted" };
 }
 
 /**
@@ -584,6 +686,17 @@ export function normalizeMysoftEDocument(
         ]),
       ]),
   );
+  const documentStatus = resolveMysoftDocumentStatus(
+    pickField(raw, [
+      "invoiceStatusText",
+      "despatchStatusText",
+      "portalInvoiceStatusEnumText",
+      "statusText",
+      "status",
+      "documentStatus",
+    ]),
+    pickField(raw, ["invoiceStatusCode", "statusCode"]),
+  );
   const normalized: MysoftEDocument = {
     id,
     ...(companyId ? { companyId } : {}),
@@ -609,49 +722,15 @@ export function normalizeMysoftEDocument(
     issueDate,
     date: issueDate,
     dueDate,
-    status: mapStatus(
-      pickField(raw, [
-        "invoiceStatusText",
-        "despatchStatusText",
-        "statusText",
-        "status",
-        "documentStatus",
-        "envelopeStatusDesc",
-      ]),
-      pickField(raw, ["invoiceStatusCode", "statusCode", "envelopeStatusCode"]),
+    status: documentStatus.status,
+    statusText: documentStatus.label,
+    statusLabel: documentStatus.label,
+    envelopeStatusText: firstString(
+      pickField(raw, ["envelopeStatusDesc", "envelopeStatusText"]),
     ),
-    statusText: firstString(
-      pickField(raw, [
-        "invoiceStatusText",
-        "despatchStatusText",
-        "statusText",
-        "envelopeStatusDesc",
-      ]),
+    envelopeStatusCode: firstString(
+      pickField(raw, ["envelopeStatusCode"]),
     ),
-    statusLabel:
-      firstString(
-        pickField(raw, [
-          "invoiceStatusText",
-          "despatchStatusText",
-          "statusText",
-          "envelopeStatusDesc",
-        ]),
-      ) ||
-      mapStatus(
-        pickField(raw, [
-          "invoiceStatusText",
-          "despatchStatusText",
-          "statusText",
-          "status",
-          "documentStatus",
-          "envelopeStatusDesc",
-        ]),
-        pickField(raw, [
-          "invoiceStatusCode",
-          "statusCode",
-          "envelopeStatusCode",
-        ]),
-      ),
     senderName,
     senderTaxNumber,
     receiverName,
