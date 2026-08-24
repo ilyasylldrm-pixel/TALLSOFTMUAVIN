@@ -90,9 +90,12 @@ export type EDocumentStatus =
   | "unknown"
   | string;
 
+export type MysoftDocumentFamily = "invoice" | "despatch";
+
 export interface MysoftEDocument {
   id: string;
   companyId?: string;
+  family?: MysoftDocumentFamily;
   direction: EDocumentDirection;
   canonicalDirection?: CanonicalEDocumentDirection;
   documentType: EDocumentType | string;

@@ -17,6 +17,20 @@ import {
 
 export type MysoftDirection = "incoming" | "outgoing";
 export type MysoftGrantType = "client_credentials" | "password";
+export type MysoftDocumentFamily = "invoice" | "despatch";
+
+export function canonicalMysoftDocumentFamily(
+  value?: string | null,
+): MysoftDocumentFamily {
+  const raw = String(value || "invoice")
+    .trim()
+    .toLowerCase()
+    .replace(/[ _-]/g, "");
+  if (raw === "despatch" || raw === "irsaliye" || raw === "eirsaliye") {
+    return "despatch";
+  }
+  return "invoice";
+}
 
 /**
  * Paths published in Mysoft's eDocument v8 OpenAPI document.  Keeping these
@@ -1091,6 +1105,122 @@ export class MysoftEdocumentClient {
         cessionStatus,
         tenantIdentifierNumber: this.effectiveTenant(tenantIdentifierNumber),
       },
+    });
+  }
+
+  listDespatchIncoming(request: MysoftListRequest = {}): Promise<unknown> {
+    const {
+      afterValue,
+      limit,
+      startDate,
+      endDate,
+      pkAlias,
+      isUseDocDate,
+      tenantIdentifierNumber,
+    } = request;
+    return this.requestDocumentOperation("despatch.incoming.list", {
+      body: { afterValue, limit, startDate, endDate, pkAlias, isUseDocDate },
+      tenantIdentifierNumber,
+    });
+  }
+
+  listDespatchIncomingPaging(request: MysoftListRequest = {}): Promise<unknown> {
+    const {
+      startDate,
+      endDate,
+      pkAlias,
+      docNo,
+      vknTckn,
+      isUseDocDate,
+      archiveStatus,
+      pageSize,
+      pageNumber,
+      tenantIdentifierNumber,
+    } = request;
+    return this.requestDocumentOperation("despatch.incoming.list.paging", {
+      body: {
+        startDate,
+        endDate,
+        pkAlias,
+        docNo,
+        vknTckn,
+        isUseDocDate,
+        archiveStatus,
+        pageSize: pageSize ?? 100,
+        pageNumber: pageNumber ?? 1,
+      },
+      tenantIdentifierNumber,
+    });
+  }
+
+  listDespatchOutgoing(request: MysoftListRequest = {}): Promise<unknown> {
+    const { afterValue, limit, startDate, endDate, tenantIdentifierNumber } = request;
+    return this.requestDocumentOperation("despatch.outgoing.list", {
+      body: { afterValue, limit, startDate, endDate },
+      tenantIdentifierNumber,
+    });
+  }
+
+  getDespatchIncomingModel(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.incoming.model", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
+  getDespatchOutgoingModel(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.outgoing.status", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
+  getDespatchIncomingStatus(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.incoming.status", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
+  getDespatchOutgoingStatus(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.outgoing.status", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
+  getDespatchIncomingPdf(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.incoming.download", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
+  getDespatchOutgoingPdf(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.outgoing.download", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
+  getDespatchIncomingXml(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.incoming.xml", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
+  getDespatchOutgoingXml(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.outgoing.xml", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
+  acknowledgeDespatchIncoming(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.incoming.acknowledge", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
     });
   }
 

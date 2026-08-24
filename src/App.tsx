@@ -1399,11 +1399,11 @@ export default function App() {
       case "orders_module":
         return "Sipariş & Proforma";
       case "waybills":
-        return "İrsaliye Yönetimi & İrsaliye Oluştur";
+        return "İrsaliye Oluştur (Yerel)";
       case "waybills_dispatch":
-        return "Giden İrsaliyeler (Sevk İrsaliyeleri)";
+        return "Giden e-İrsaliyeler";
       case "waybills_receipt":
-        return "Gelen İrsaliyeler (Alış İrsaliyeleri)";
+        return "Gelen e-İrsaliyeler";
       case "accounts":
         return "Finans Yönetimi";
       case "transactions":
@@ -1545,6 +1545,7 @@ export default function App() {
 
           {(currentTab === "e_documents_incoming" || currentTab === "e_documents_outgoing") && (
             <EDocuments
+              family="invoice"
               direction={currentTab === "e_documents_outgoing" ? "outgoing" : "incoming"}
               companySettings={data.settings}
               globalSearchTerm={searchTerm}
@@ -1656,7 +1657,16 @@ export default function App() {
             />
           )}
 
-          {(currentTab === "waybills" || currentTab === "waybills_dispatch" || currentTab === "waybills_receipt") && (
+          {(currentTab === "waybills_dispatch" || currentTab === "waybills_receipt") && (
+            <EDocuments
+              family="despatch"
+              direction={currentTab === "waybills_dispatch" ? "outgoing" : "incoming"}
+              companySettings={data.settings}
+              globalSearchTerm={searchTerm}
+            />
+          )}
+
+          {currentTab === "waybills" && (
             <Waybills
               waybills={data.waybills || []}
               contacts={data.contacts}
@@ -1664,13 +1674,6 @@ export default function App() {
               warehouses={data.warehouses || []}
               companySettings={data.settings}
               globalSearchTerm={searchTerm}
-              forcedType={
-                currentTab === "waybills_dispatch"
-                  ? "dispatch"
-                  : currentTab === "waybills_receipt"
-                  ? "receipt"
-                  : undefined
-              }
               onAddWaybill={handleAddWaybill}
               onUpdateWaybill={handleUpdateWaybill}
               onConvertWaybillToInvoice={handleConvertWaybillToInvoice}

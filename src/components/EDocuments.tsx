@@ -31,6 +31,7 @@ import type {
   CompanySettings,
   EDocumentDirection,
   ManagedCompany,
+  MysoftDocumentFamily,
   MysoftEDocument,
 } from "../types";
 import {
@@ -53,6 +54,8 @@ import {
 export interface EDocumentsProps {
   /** The navigation item controls the API direction without exposing credentials to the browser. */
   direction?: EDocumentDirection;
+  /** invoice = gelen/giden e-Fatura, despatch = gelen/giden e-İrsaliye */
+  family?: MysoftDocumentFamily;
   globalSearchTerm?: string;
   companySettings?: CompanySettings;
   /** Active accountant-managed taxpayer. Used for tenant routing and cache
@@ -129,7 +132,18 @@ const documentIdentity = (document: MysoftEDocument) => {
 
 const documentType = (document: MysoftEDocument) => {
   const data = asRecord(document);
-  return data.documentType || data.typeLabel || data.type || "e-Fatura";
+  const raw = String(
+    data.documentType || data.typeLabel || data.type || "",
+  );
+  const profile = String(data.profile || data.eDespatchType || "");
+  if (
+    data.family === "despatch" ||
+    raw.includes("irsaliye") ||
+    raw.includes("e_irsaliye")
+  ) {
+    return profile ? `e-İrsaliye (${profile})` : "e-İrsaliye";
+  }
+  return raw || "e-Fatura";
 };
 
 const isArchiveDocument = (document: MysoftEDocument) =>
@@ -279,6 +293,7 @@ const getErrorMessage = (error: unknown) => {
  */
 export const EDocuments: React.FC<EDocumentsProps> = ({
   direction,
+  family = "invoice",
   globalSearchTerm = "",
   companySettings,
   activeCompany,
@@ -286,6 +301,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   tenantIdentifierNumber,
   onImportInvoice,
 }) => {
+  const isDespatch = family === "despatch";
   const hintedTaxNumber = normalizeMysoftTenantIdentifier(
     tenantIdentifierNumber ||
       activeCompany?.tenantIdentifierNumber ||
@@ -442,6 +458,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           signal: controller.signal,
           tenantIdentifierNumber: activeTenantIdentifierNumber,
           companyId: activeManagedCompanyId,
+          family,
           startDate: range.startDate,
           endDate: range.endDate,
           // Numbered paging accepts multi-day ranges; day-chunked legacy list does not.
@@ -477,6 +494,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       period,
       tenants.length,
       tenantsLoading,
+      family,
     ],
   );
 
@@ -507,6 +525,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         ...getSyncRange(period),
         tenantIdentifierNumber: activeTenantIdentifierNumber,
         companyId: activeManagedCompanyId,
+        family,
         // Prefer paging so "Bu ay" is one multi-day range, not day-by-day calls.
         ...(activeDirection === "inbox" || activeDirection === "incoming"
           ? { pageSize: 100, pageNumber: 1 }
@@ -549,6 +568,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         direction: documentDirection(document),
         tenantIdentifierNumber: activeTenantIdentifierNumber,
         companyId: activeManagedCompanyId,
+        family,
       });
       if (detailed) setSelectedDocument(detailed);
     } catch (detailLoadError) {
@@ -570,6 +590,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         direction: documentDirection(document),
         tenantIdentifierNumber: activeTenantIdentifierNumber,
         companyId: activeManagedCompanyId,
+        family,
       });
       const fallbackUrl =
         asRecord(document).downloadUrl || asRecord(document)[`${format}Url`];
@@ -673,6 +694,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       direction: documentDirection(selectedDocument),
       tenantIdentifierNumber: activeTenantIdentifierNumber,
       companyId: activeManagedCompanyId,
+      family,
     };
     setActionLoading(action);
     setActionError(null);
@@ -773,8 +795,13 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     return { total: documents.length, accepted, waiting, amount: total };
   }, [documents]);
 
-  const directionLabel =
-    activeDirection === "inbox" ? "Gelen e-Belgeler" : "Giden e-Belgeler";
+  const directionLabel = isDespatch
+    ? activeDirection === "inbox"
+      ? "Gelen e-İrsaliyeler"
+      : "Giden e-İrsaliyeler"
+    : activeDirection === "inbox"
+      ? "Gelen e-Belgeler"
+      : "Giden e-Belgeler";
   const DirectionIcon =
     activeDirection === "inbox" ? ArrowDownLeft : ArrowUpRight;
 
@@ -789,8 +816,9 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
             {directionLabel}
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Önce iş ortağına bağlı e-belge müşterileri çekilir. Mali müşavir
-            mükellefi değil; belgeler seçilen müşterinin VKN’si ile alınır.
+            {isDespatch
+              ? "Mysoft gelen ve giden e-irsaliye listesi. Belgeler seçilen müşterinin VKN’si ile çekilir."
+              : "Önce iş ortağına bağlı e-belge müşterileri çekilir. Mali müşavir mükellefi değil; belgeler seçilen müşterinin VKN’si ile alınır."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1315,6 +1343,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                     <div className="w-full flex flex-wrap items-center justify-end gap-2 pb-2 mb-1 border-b border-slate-100">
                       {!isRejecting ? (
                         <>
+                          {!isDespatch && (
                           <button
                             type="button"
                             onClick={() => void runDocumentAction("accept")}
@@ -1324,6 +1353,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                             {actionLoading === "accept" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                             Kabul et
                           </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => void runDocumentAction("acknowledge")}
@@ -1334,6 +1364,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                             {actionLoading === "acknowledge" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />}
                             Alındı
                           </button>
+                          {!isDespatch && (
                           <button
                             type="button"
                             onClick={() => { setIsRejecting(true); setActionError(null); }}
@@ -1343,6 +1374,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                             <XCircle className="w-4 h-4" />
                             Reddet
                           </button>
+                          )}
                         </>
                       ) : (
                         <div className="w-full rounded-xl border border-rose-200 bg-rose-50/60 p-3 space-y-2">
@@ -1380,6 +1412,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                       )}
                     </div>
                   ) : (
+                    !isDespatch ? (
                     <div className="w-full flex flex-wrap items-center justify-end gap-2 pb-2 mb-1 border-b border-slate-100">
                       {isArchiveDocument(selectedDocument) && (
                         <button
@@ -1402,6 +1435,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                         Taslağı GİB'e gönder
                       </button>
                     </div>
+                    ) : null
                   )}
                   <button
                     type="button"
@@ -1434,7 +1468,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                       Mysoft'ta aç
                     </a>
                   )}
-                  {activeDirection === "inbox" && onImportInvoice && (
+                  {activeDirection === "inbox" && onImportInvoice && !isDespatch && (
                     <button
                       type="button"
                       onClick={() => {

@@ -138,8 +138,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "invoices_purchase", label: "Gider Faturası & Fişleri", icon: FileText },
     { id: "e_documents_incoming", label: "Gelen e-Belgeler", icon: ArrowDownLeft },
     { id: "e_documents_outgoing", label: "Giden e-Belgeler", icon: ArrowUpRight },
-    { id: "waybills_dispatch", label: "Giden İrsaliyeler", icon: ArrowUpRight },
-    { id: "waybills_receipt", label: "Gelen İrsaliyeler", icon: ArrowDownLeft },
+    { id: "waybills_receipt", label: "Gelen e-İrsaliyeler", icon: ArrowDownLeft },
+    { id: "waybills_dispatch", label: "Giden e-İrsaliyeler", icon: ArrowUpRight },
+    { id: "waybills", label: "İrsaliye Oluştur", icon: FileText },
   ];
 
   const orderSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [

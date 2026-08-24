@@ -5,6 +5,7 @@ import {
   MysoftEdocumentClient,
   MysoftListRequest,
   MYSOFT_DOCUMENT_OPERATIONS,
+  canonicalMysoftDocumentFamily,
   getMysoftConfig,
 } from "./mysoftEdocument.ts";
 import { normalizeMysoftTenantIdentifier } from "./mysoftTenant.ts";
@@ -223,6 +224,18 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
         textParam((req.body as Record<string, unknown> | undefined)?.tenantIdentifierNumber),
     );
 
+  const familyFrom = (req: Request) =>
+    canonicalMysoftDocumentFamily(
+      queryText(req, "family") ||
+        queryText(req, "documentFamily") ||
+        textParam((req.body as Record<string, unknown> | undefined)?.family),
+    );
+
+  const isOutgoingDirection = (req: Request): boolean => {
+    const direction = (queryText(req, "direction") || "incoming").toLowerCase();
+    return direction === "outgoing" || direction === "outbox";
+  };
+
   // Generic, but allowlisted, surface for all supported Mysoft document
   // families.  The operation key is looked up in a static map; it is never
   // appended to a URL.  This makes it possible to add a new documented
@@ -325,10 +338,19 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
   router.get(
     "/e-documents",
     run((req) => {
-      const direction = (queryText(req, "direction") || "incoming").toLowerCase();
       const filters = listBody(req, req.query);
       const tenantIdentifierNumber = tenantFrom(req) || filters.tenantIdentifierNumber;
-      return direction === "outgoing" || direction === "outbox"
+      const family = familyFrom(req);
+      if (family === "despatch") {
+        return isOutgoingDirection(req)
+          ? client.listDespatchOutgoing({ ...filters, tenantIdentifierNumber })
+          : queryText(req, "paging") === "true" ||
+              filters.pageNumber !== undefined ||
+              filters.pageSize !== undefined
+            ? client.listDespatchIncomingPaging({ ...filters, tenantIdentifierNumber })
+            : client.listDespatchIncoming({ ...filters, tenantIdentifierNumber });
+      }
+      return isOutgoingDirection(req)
         ? client.listOutgoing({ ...filters, tenantIdentifierNumber })
         : queryText(req, "paging") === "true" ||
             filters.pageNumber !== undefined ||
@@ -347,6 +369,16 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
       }
       const direction = (queryText(req, "direction") || "incoming").toLowerCase();
       const tenantIdentifierNumber = tenantFrom(req);
+      if (familyFrom(req) === "despatch") {
+        if (direction === "outgoing" || direction === "outbox") {
+          return format === "xml"
+            ? client.getDespatchOutgoingXml(invoiceETTN, tenantIdentifierNumber)
+            : client.getDespatchOutgoingPdf(invoiceETTN, tenantIdentifierNumber);
+        }
+        return format === "xml"
+          ? client.getDespatchIncomingXml(invoiceETTN, tenantIdentifierNumber)
+          : client.getDespatchIncomingPdf(invoiceETTN, tenantIdentifierNumber);
+      }
       if (direction === "outgoing" || direction === "outbox") {
         return format === "xml"
           ? client.getOutgoingXml(invoiceETTN, tenantIdentifierNumber)
@@ -372,6 +404,11 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
       const invoiceETTN = ettnOrThrow(req);
       const direction = (queryText(req, "direction") || "incoming").toLowerCase();
       const tenantIdentifierNumber = tenantFrom(req);
+      if (familyFrom(req) === "despatch") {
+        return direction === "outgoing" || direction === "outbox"
+          ? client.getDespatchOutgoingStatus(invoiceETTN, tenantIdentifierNumber)
+          : client.getDespatchIncomingStatus(invoiceETTN, tenantIdentifierNumber);
+      }
       if (direction === "outgoing" || direction === "outbox") {
         return client.getOutgoingStatus(invoiceETTN, tenantIdentifierNumber);
       }
@@ -392,6 +429,11 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
       const invoiceETTN = ettnOrThrow(req);
       const direction = (queryText(req, "direction") || "incoming").toLowerCase();
       const tenantIdentifierNumber = tenantFrom(req);
+      if (familyFrom(req) === "despatch") {
+        return direction === "outgoing" || direction === "outbox"
+          ? client.getDespatchOutgoingStatus(invoiceETTN, tenantIdentifierNumber)
+          : client.getDespatchIncomingModel(invoiceETTN, tenantIdentifierNumber);
+      }
       if (direction === "outgoing" || direction === "outbox") {
         return client.getOutgoingModel(invoiceETTN, tenantIdentifierNumber);
       }
@@ -405,15 +447,27 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
   );
   router.post(
     "/e-documents/:invoiceETTN/accept",
-    run((req) => client.acceptIncoming(ettnOrThrow(req), tenantFrom(req))),
+    run((req) => {
+      if (familyFrom(req) === "despatch") {
+        throw new InvalidMysoftRequestError("e-İrsaliye için fatura kabul işlemi yok");
+      }
+      return client.acceptIncoming(ettnOrThrow(req), tenantFrom(req));
+    }),
   );
   router.post(
     "/e-documents/:invoiceETTN/acknowledge",
-    run((req) => client.acknowledgeIncoming(ettnOrThrow(req), tenantFrom(req))),
+    run((req) =>
+      familyFrom(req) === "despatch"
+        ? client.acknowledgeDespatchIncoming(ettnOrThrow(req), tenantFrom(req))
+        : client.acknowledgeIncoming(ettnOrThrow(req), tenantFrom(req)),
+    ),
   );
   router.post(
     "/e-documents/:invoiceETTN/deny",
     run((req) => {
+      if (familyFrom(req) === "despatch") {
+        throw new InvalidMysoftRequestError("e-İrsaliye için fatura ret işlemi yok");
+      }
       const reason = textParam((req.body as Record<string, unknown> | undefined)?.rejectReason);
       if (!reason) throw new InvalidMysoftRequestError("rejectReason is required");
       return client.rejectIncoming(ettnOrThrow(req), reason, tenantFrom(req));

@@ -3,6 +3,7 @@ import {
   EDocumentDirection,
   EDocumentStatus,
   EDocumentType,
+  MysoftDocumentFamily,
   MysoftEDocument,
 } from "../types";
 import { saveStoredData } from "../utils/storage";
@@ -69,6 +70,8 @@ export interface MysoftListFilters {
   archiveStatus?: number;
   isUseDocDate?: boolean;
   cessionStatus?: number;
+  /** invoice = e-Fatura/e-Arşiv, despatch = e-İrsaliye */
+  family?: MysoftDocumentFamily | string;
 }
 
 export interface MysoftListOptions extends MysoftListFilters {
@@ -90,6 +93,7 @@ export interface MysoftOperationOptions {
   tenantIdentifierNumber?: string;
   /** Local owner id used to isolate cached records between taxpayers. */
   companyId?: string;
+  family?: MysoftDocumentFamily | string;
 }
 
 export interface MysoftSyncOptions extends MysoftListOptions {
@@ -339,13 +343,33 @@ function firstNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
+function canonicalDocumentFamily(
+  value?: string | MysoftDocumentFamily,
+): MysoftDocumentFamily {
+  const raw = String(value || "invoice")
+    .trim()
+    .toLowerCase()
+    .replace(/[ _-]/g, "");
+  if (raw === "despatch" || raw === "irsaliye" || raw === "eirsaliye") {
+    return "despatch";
+  }
+  return "invoice";
+}
+
 function mapDocumentType(value: unknown): EDocumentType | string {
   const raw = (asString(value) || "").toUpperCase().replace(/[ ._-]/g, "");
   if (raw.includes("EFATURA") || raw === "EINVOICE") return "e_fatura";
   if (raw.includes("EARSIV") || raw === "EARCHIVE") return "e_arsiv";
   if (raw.includes("ESMM")) return "e_smm";
   if (raw.includes("EMM")) return "e_mm";
-  if (raw.includes("IRSALIYE") || raw.includes("DESPATCH")) return "e_irsaliye";
+  if (
+    raw.includes("IRSALIYE") ||
+    raw.includes("DESPATCH") ||
+    raw === "SEVK" ||
+    raw === "MATBUDAN"
+  ) {
+    return "e_irsaliye";
+  }
   return asString(value) || "unknown";
 }
 
@@ -375,6 +399,7 @@ export function normalizeMysoftEDocument(
   direction: EDocumentDirection = "incoming",
   syncedAt = new Date().toISOString(),
   companyId?: string,
+  family?: MysoftDocumentFamily,
 ): MysoftEDocument | null {
   const raw = asRecord(input);
   if (!raw) return null;
@@ -394,18 +419,27 @@ export function normalizeMysoftEDocument(
     "sender",
     "satici",
   ]);
+  const inferredFamily: MysoftDocumentFamily =
+    family ||
+    (firstString(
+      pickField(raw, ["eDespatchType", "despatchStatusText", "despatchETTN"]),
+    )
+      ? "despatch"
+      : "invoice");
   const ettn = firstString(
     pickField(raw, [
       "ettn",
       "invoiceETTN",
       "invoiceEttn",
+      "despatchETTN",
+      "despatchEttn",
       "documentETTN",
       "uuid",
       "guid",
     ]),
   );
   const id = firstString(
-    pickField(raw, ["id", "invoiceId", "documentId"]),
+    pickField(raw, ["id", "invoiceId", "despatchId", "documentId"]),
     ettn,
     pickField(raw, ["docNo", "invoiceNumber"]),
   );
@@ -553,11 +587,21 @@ export function normalizeMysoftEDocument(
   const normalized: MysoftEDocument = {
     id,
     ...(companyId ? { companyId } : {}),
+    family: inferredFamily,
     direction: canonical === "outgoing" ? "outbox" : "inbox",
     canonicalDirection: canonical,
-    documentType: mapDocumentType(
-      pickField(raw, ["eDocumentType", "documentType", "invoiceType", "type"]),
-    ),
+    documentType:
+      inferredFamily === "despatch"
+        ? "e_irsaliye"
+        : mapDocumentType(
+            pickField(raw, [
+              "eDocumentType",
+              "documentType",
+              "invoiceType",
+              "eDespatchType",
+              "type",
+            ]),
+          ),
     ettn,
     documentNo,
     number: documentNo,
@@ -568,6 +612,7 @@ export function normalizeMysoftEDocument(
     status: mapStatus(
       pickField(raw, [
         "invoiceStatusText",
+        "despatchStatusText",
         "statusText",
         "status",
         "documentStatus",
@@ -576,12 +621,18 @@ export function normalizeMysoftEDocument(
       pickField(raw, ["invoiceStatusCode", "statusCode", "envelopeStatusCode"]),
     ),
     statusText: firstString(
-      pickField(raw, ["invoiceStatusText", "statusText", "envelopeStatusDesc"]),
+      pickField(raw, [
+        "invoiceStatusText",
+        "despatchStatusText",
+        "statusText",
+        "envelopeStatusDesc",
+      ]),
     ),
     statusLabel:
       firstString(
         pickField(raw, [
           "invoiceStatusText",
+          "despatchStatusText",
           "statusText",
           "envelopeStatusDesc",
         ]),
@@ -589,6 +640,7 @@ export function normalizeMysoftEDocument(
       mapStatus(
         pickField(raw, [
           "invoiceStatusText",
+          "despatchStatusText",
           "statusText",
           "status",
           "documentStatus",
@@ -622,7 +674,7 @@ export function normalizeMysoftEDocument(
       pickField(raw, ["isArchived", "archived", "archiveStatus"]),
     ),
     profile: firstString(
-      pickField(raw, ["profile", "profileId", "invoiceProfile"]),
+      pickField(raw, ["profile", "profileId", "invoiceProfile", "eDespatchType"]),
     ),
     source: "mysoft",
     syncedAt,
@@ -693,10 +745,17 @@ function normalizeRows(
   direction: EDocumentDirection,
   syncedAt = new Date().toISOString(),
   companyId?: string,
+  family?: MysoftDocumentFamily,
 ): MysoftEDocument[] {
   const result: MysoftEDocument[] = [];
   for (const row of toRows(payload)) {
-    const document = normalizeMysoftEDocument(row, direction, syncedAt, companyId);
+    const document = normalizeMysoftEDocument(
+      row,
+      direction,
+      syncedAt,
+      companyId,
+      family,
+    );
     if (document) result.push(document);
   }
   return result;
@@ -868,8 +927,10 @@ export async function getMysoftTenantInfo(
 function fallbackDocuments(
   direction: EDocumentDirection | "all" = "all",
   companyId?: string,
+  family?: MysoftDocumentFamily,
 ): MysoftEDocument[] {
   const canonical = canonicalDirection(direction);
+  const wantedFamily = family ? canonicalDocumentFamily(family) : undefined;
   // Read the e-document key directly instead of going through getStoredData.
   // The latter intentionally supplies demo fixtures for a first-run app, but
   // those fixtures must never be merged into a real Mysoft account when the
@@ -882,6 +943,11 @@ function fallbackDocuments(
         canonicalDirection(document.direction) === canonical,
     )
     .filter((document) => !companyId || !document.companyId || document.companyId === companyId)
+    .filter(
+      (document) =>
+        !wantedFamily ||
+        canonicalDocumentFamily(document.family) === wantedFamily,
+    )
     .map((document) => ({
       ...document,
       direction:
@@ -911,11 +977,12 @@ function fallbackDocuments(
     }));
 }
 
-function documentStorageKey(document: Pick<MysoftEDocument, "direction" | "ettn" | "id" | "companyId">): string {
+function documentStorageKey(document: Pick<MysoftEDocument, "direction" | "ettn" | "id" | "companyId" | "family">): string {
   const direction = canonicalDirection(document.direction);
   const identity = String(document.ettn || document.id || "").trim().toLocaleLowerCase();
   const owner = document.companyId ? `company:${document.companyId}` : "legacy";
-  return `${owner}:${direction}:${identity}`;
+  const family = canonicalDocumentFamily(document.family);
+  return `${owner}:${family}:${direction}:${identity}`;
 }
 
 /** Read only the explicitly persisted e-document snapshot.  getStoredData()
@@ -1344,6 +1411,7 @@ async function requestMysoftEDocumentPage(
       vknTckn: normalizedOptions.vknTckn,
       isUseDocDate: normalizedOptions.isUseDocDate,
       cessionStatus: normalizedOptions.cessionStatus,
+      family: canonicalDocumentFamily(normalizedOptions.family),
     }),
     { method: "GET", signal: normalizedOptions.signal },
   );
@@ -1353,6 +1421,7 @@ async function requestMysoftEDocumentPage(
       canonical === "outgoing" ? "outgoing" : "incoming",
       new Date().toISOString(),
       options.companyId,
+      canonicalDocumentFamily(normalizedOptions.family),
     ),
     afterValue: extractAfterValue(payload),
     totalCount: extractTotalCount(payload),
@@ -1374,7 +1443,11 @@ export async function listMysoftEDocuments(
       "Mysoft e-document list unavailable; using the explicitly requested local snapshot.",
       error,
     );
-    return fallbackDocuments(canonicalDirection(direction), options.companyId);
+    return fallbackDocuments(
+      canonicalDirection(direction),
+      options.companyId,
+      canonicalDocumentFamily(options.family),
+    );
   }
 }
 
@@ -1393,6 +1466,7 @@ export async function getMysoftEDocument(
             ? undefined
             : canonicalDirection(options.direction),
         tenantIdentifierNumber: options.tenantIdentifierNumber,
+        family: canonicalDocumentFamily(options.family),
       })}`,
       {
         method: "GET",
@@ -1407,7 +1481,13 @@ export async function getMysoftEDocument(
         ) as EDocumentDirection)) ||
       options.direction ||
       "incoming";
-    return normalizeMysoftEDocument(raw, direction, new Date().toISOString(), options.companyId);
+    return normalizeMysoftEDocument(
+      raw,
+      direction,
+      new Date().toISOString(),
+      options.companyId,
+      canonicalDocumentFamily(options.family),
+    );
   } catch (error) {
     if (isAbortError(error) || options.fallback !== true) throw error;
     const fallback = fallbackDocuments("all", options.companyId).find(
@@ -1435,6 +1515,7 @@ export async function getMysoftEDocumentStatus(
           ? undefined
           : canonicalDirection(options.direction),
       tenantIdentifierNumber: options.tenantIdentifierNumber,
+      family: canonicalDocumentFamily(options.family),
     })}`,
     {
       method: "GET",
@@ -1562,6 +1643,7 @@ export async function downloadMysoftEDocument(
             ? undefined
             : canonicalDirection(options.direction),
         tenantIdentifierNumber: options.tenantIdentifierNumber,
+        family: canonicalDocumentFamily(options.family),
       })}`,
       {
         method: "GET",
@@ -1661,6 +1743,7 @@ async function runMysoftEDocumentAction(
           ? undefined
           : canonicalDirection(options.direction),
       tenantIdentifierNumber,
+      family: canonicalDocumentFamily(options.family),
     })}`,
     {
       method: "POST",
@@ -1840,17 +1923,22 @@ export async function syncMysoftEDocuments(
       // sync arrives, replace the matching unassigned row instead of leaving
       // a duplicate that could appear under every taxpayer.
       if (document.companyId) {
-        const legacyKey = `legacy:${canonicalDirection(document.direction)}:${String(document.ettn || document.id || "").toLocaleLowerCase()}`;
-        byKey.delete(legacyKey);
+        const identity = String(document.ettn || document.id || "").toLocaleLowerCase();
+        const family = canonicalDocumentFamily(document.family);
+        byKey.delete(`legacy:${family}:${canonicalDirection(document.direction)}:${identity}`);
+        byKey.delete(`legacy:${canonicalDirection(document.direction)}:${identity}`);
       }
       if (byKey.has(key)) updatedCount += 1;
       else addedCount += 1;
       byKey.set(key, document);
     }
     const documents = [...byKey.values()];
-    const scopedDocuments = normalizedOptions.companyId
-      ? documents.filter((document) => document.companyId === normalizedOptions.companyId)
-      : documents;
+    const wantedFamily = canonicalDocumentFamily(normalizedOptions.family);
+    const scopedDocuments = documents.filter((document) => {
+      if (canonicalDocumentFamily(document.family) !== wantedFamily) return false;
+      if (!normalizedOptions.companyId || !document.companyId) return true;
+      return document.companyId === normalizedOptions.companyId;
+    });
     saveStoredData("EDOCUMENTS", documents);
     return {
       documents: scopedDocuments,
@@ -1862,7 +1950,11 @@ export async function syncMysoftEDocuments(
     };
   } catch (error) {
     if (isAbortError(error) || options.fallback !== true) throw error;
-    const documents = fallbackDocuments(direction, normalizedOptions.companyId);
+    const documents = fallbackDocuments(
+      direction,
+      normalizedOptions.companyId,
+      canonicalDocumentFamily(normalizedOptions.family),
+    );
     saveStoredData("EDOCUMENTS", documents);
     return {
       documents,
