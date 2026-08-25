@@ -102,30 +102,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isInvoicesExpanded, setIsInvoicesExpanded] = useState(true);
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
 
+  const userEmail = currentUser?.email?.toLowerCase().trim() || "";
   const isAdmin =
     currentUser?.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" ||
     currentUser?.id === "usr_admin_001" ||
-    currentUser?.role?.includes("Admin");
+    currentUser?.role?.includes("Admin") ||
+    userEmail === "ilyasyildirim@outlook.com.tr" ||
+    userEmail === "ilyasylldrm@gmail.com" ||
+    userEmail.includes("admin");
 
-  const navItems = [
+  const allNavItems = [
     ...(isAdmin
-      ? [{ id: "admin", label: "Admin Yönetici Paneli", icon: ShieldAlert, badge: "Admin" }]
+      ? [{ id: "admin" as NavItem, label: "Admin Yönetici Paneli", icon: ShieldAlert, badge: "Admin" }]
       : []),
-    { id: "dashboard", label: "Ana Sayfa", icon: LayoutDashboard },
-    { id: "company", label: "Firma Bilgileri", icon: Building2, hasSubItems: true },
-    { id: "e_services", label: "E-İşlemler", icon: ShieldCheck, badge: "Resmi" },
-    { id: "invoices", label: "E-Belgeler", icon: FileText, hasSubItems: true },
-    { id: "orders_module", label: "Sipariş & Proforma", icon: ShoppingCart, hasSubItems: true },
-    { id: "contacts", label: "Cari Hesaplar", icon: Users },
-    { id: "accounts", label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
-    { id: "products", label: "Stoklar", icon: PackageIcon },
-    { id: "products_costs", label: "Maliyetler", icon: TrendingUp },
-    { id: "hr", label: "İnsan Kaynakları", icon: UserCheck },
-    { id: "files", label: "Bulut Dosya Deposu", icon: HardDrive },
-    { id: "reports", label: "Vergilendirme", icon: BarChart3 },
-    { id: "ai", label: "AI Muavin Asistanı", icon: Sparkles, badge: "Canlı" },
-    { id: "settings", label: "Sistem Ayarları", icon: Settings },
+    { id: "dashboard" as NavItem, label: "Ana Sayfa", icon: LayoutDashboard },
+    { id: "company" as NavItem, label: "Firma Bilgileri", icon: Building2, hasSubItems: true },
+    { id: "e_services" as NavItem, label: "E-İşlemler", icon: ShieldCheck, badge: "Resmi" },
+    { id: "invoices" as NavItem, label: "E-Belgeler", icon: FileText, hasSubItems: true },
+    { id: "orders_module" as NavItem, label: "Sipariş & Proforma", icon: ShoppingCart, hasSubItems: true },
+    { id: "contacts" as NavItem, label: "Cari Hesaplar", icon: Users },
+    { id: "accounts" as NavItem, label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
+    { id: "products" as NavItem, label: "Stoklar", icon: PackageIcon },
+    { id: "products_costs" as NavItem, label: "Maliyetler", icon: TrendingUp },
+    { id: "hr" as NavItem, label: "İnsan Kaynakları", icon: UserCheck },
+    { id: "files" as NavItem, label: "Bulut Dosya Deposu", icon: HardDrive },
+    { id: "reports" as NavItem, label: "Vergilendirme", icon: BarChart3 },
+    { id: "ai" as NavItem, label: "AI Muavin Asistanı", icon: Sparkles, badge: "Canlı" },
+    { id: "settings" as NavItem, label: "Sistem Ayarları", icon: Settings },
   ];
+
+  // Modül Kısıtlaması Kontrolü (Admin her zaman tüm modüllere erişebilir, normal kullanıcılara modül kısıtlaması uygulanır)
+  const navItems = allNavItems.filter((item) => {
+    if (item.id === "admin") return isAdmin;
+    if (isAdmin) return true;
+    if (!currentUser?.allowedModules || currentUser.allowedModules.length === 0) {
+      return true; // Kısıtlama belirtilmemişse varsayılan olarak serbest
+    }
+    return currentUser.allowedModules.includes(item.id as any);
+  });
 
   const companySubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "company_profile", label: "Firma Profili & Adres", icon: Building },

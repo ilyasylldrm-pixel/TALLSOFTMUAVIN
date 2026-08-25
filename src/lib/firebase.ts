@@ -6,7 +6,9 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser,
-  updateProfile
+  updateProfile,
+  GoogleAuthProvider,
+  signInWithPopup
 } from "firebase/auth";
 import {
   getFirestore,
@@ -30,12 +32,14 @@ import {
   deleteObject
 } from "firebase/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
-import { InvoiceTaxItem } from "../types";
+import { InvoiceTaxItem, AppModuleKey } from "../types";
 
 // Initialize Firebase App lazily/safely
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 export const db =
   firebaseConfig.firestoreDatabaseId &&
@@ -48,6 +52,8 @@ export const storage = getStorage(app);
 export {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   firebaseSignOut,
   onAuthStateChanged
 };
@@ -103,7 +109,11 @@ export interface UserProfileData {
   selectedLogoName: string;
   selectedLogoUrl: string;
   role: string;
+  allowedModules?: AppModuleKey[]; // İzin verilen modüller (Boş/undefined ise tüm modüller serbesttir)
+  passwordPlain?: string; // Admin tarafından oluşturulduğunda kullanıcıya iletilen şifre
+  createdByAdmin?: boolean;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 // Deeply remove any undefined fields before saving to Firestore to prevent "Unsupported field value: undefined" errors
@@ -173,6 +183,17 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
   } catch (err) {
     console.error("Error fetching all users for admin:", err);
     return [];
+  }
+}
+
+// Admin Operations: Delete a user profile from Firestore
+export async function deleteUserProfile(userId: string): Promise<void> {
+  try {
+    const userRef = doc(db, "users", userId);
+    await deleteDoc(userRef);
+  } catch (err) {
+    console.error("Error deleting user profile:", err);
+    throw err;
   }
 }
 

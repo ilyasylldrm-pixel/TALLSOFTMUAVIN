@@ -24,11 +24,14 @@ import {
 import { Logo } from "./Logo";
 import {
   auth,
+  googleProvider,
+  signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   saveUserProfile,
   getUserProfile,
 } from "../lib/firebase";
+import { AppModuleKey } from "../types";
 
 export interface UserProfile {
   id: string;
@@ -41,6 +44,9 @@ export interface UserProfile {
   selectedLogoName: string;
   selectedLogoUrl: string;
   role: string;
+  allowedModules?: AppModuleKey[];
+  passwordPlain?: string;
+  createdByAdmin?: boolean;
 }
 
 interface AuthModalProps {
@@ -274,13 +280,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setSubmitting(true);
-    const isSystemAdmin = email.toLowerCase().includes("admin");
+    const cleanEmail = email.trim().toLowerCase();
+    const isSystemAdmin =
+      cleanEmail.includes("admin") ||
+      cleanEmail === "ilyasyildirim@outlook.com.tr" ||
+      cleanEmail === "ilyasylldrm@gmail.com";
 
     try {
       let firebaseUid = `usr_${Date.now()}`;
       let finalProfile: UserProfile;
 
-      if (email.trim() === "admin@muavin.com" || email.toLowerCase().includes("admin")) {
+      if (cleanEmail === "admin@muavin.com" || cleanEmail === "ilyasyildirim@outlook.com.tr" || cleanEmail.includes("admin")) {
         firebaseUid = "nuT309AyQxQKddnAp1ZJjlSgBXt2";
       }
 
@@ -304,9 +314,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         finalProfile = {
           id: firebaseUid,
-          name: fullName.trim() || "Kullanıcı",
+          name: fullName.trim() || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : "Kullanıcı"),
           email: email.trim(),
-          companyName: companyName.trim() || "Muavin ERP Müşterisi",
+          companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : (companyName.trim() || "Muavin ERP Müşterisi"),
           phone: phone.trim() || "+90 (212) 555 0100",
           taxNumber: taxNumber.trim() || "1234567890",
           selectedLogoId: selectedLogo.id,
@@ -360,20 +370,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           if (dbProfile) {
             finalProfile = {
               id: dbProfile.userId,
-              name: dbProfile.name,
-              email: dbProfile.email,
-              companyName: dbProfile.companyName,
-              phone: dbProfile.phone,
-              taxNumber: dbProfile.taxNumber,
-              selectedLogoId: dbProfile.selectedLogoId,
-              selectedLogoName: dbProfile.selectedLogoName,
-              selectedLogoUrl: dbProfile.selectedLogoUrl,
-              role: dbProfile.role,
+              name: dbProfile.name || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : "Kullanıcı"),
+              email: dbProfile.email || email.trim(),
+              companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : (dbProfile.companyName || "Muavin ERP"),
+              phone: dbProfile.phone || "+90 (212) 555 0100",
+              taxNumber: dbProfile.taxNumber || "1234567890",
+              selectedLogoId: dbProfile.selectedLogoId || selectedLogo.id,
+              selectedLogoName: dbProfile.selectedLogoName || selectedLogo.title,
+              selectedLogoUrl: dbProfile.selectedLogoUrl || selectedLogo.imageUrl,
+              role: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : (dbProfile.role || "Firma Yöneticisi"),
+              allowedModules: dbProfile.allowedModules,
             };
           } else {
             finalProfile = {
               id: firebaseUid,
-              name: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : (email.split("@")[0] || "Müşteri / Yönetici"),
+              name: isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : (email.split("@")[0] || "Müşteri / Yönetici"),
               email: email.trim(),
               companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin Bilişim A.Ş.",
               phone: "+90 (212) 555 0100",
@@ -405,7 +416,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           // Local fallback for offline/development logins
           finalProfile = {
             id: isSystemAdmin ? "nuT309AyQxQKddnAp1ZJjlSgBXt2" : `usr_${Date.now()}`,
-            name: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : (email.split("@")[0] || "Müşteri / Yönetici"),
+            name: isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : (email.split("@")[0] || "Müşteri / Yönetici"),
             email: email.trim(),
             companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin Bilişim A.Ş.",
             phone: "+90 (212) 555 0100",
@@ -431,6 +442,92 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } catch (err: any) {
       console.error("Auth submit error:", err);
       setErrorMessage("Giriş işlemi sırasında beklenmeyen bir hata oluştu.");
+      setSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage("");
+    setSubmitting(true);
+    try {
+      const userCredential = await signInWithPopup(auth, googleProvider);
+      const user = userCredential.user;
+      const firebaseUid = user.uid;
+      const userEmail = user.email || "";
+      const cleanUserEmail = userEmail.trim().toLowerCase();
+      const isSystemAdmin =
+        cleanUserEmail.includes("admin") ||
+        cleanUserEmail === "ilyasyildirim@outlook.com.tr" ||
+        cleanUserEmail === "ilyasylldrm@gmail.com";
+
+      let finalProfile: UserProfile;
+
+      // Fetch or create profile in Firestore
+      const dbProfile = await getUserProfile(firebaseUid);
+      if (dbProfile) {
+        finalProfile = {
+          id: dbProfile.userId,
+          name: dbProfile.name || user.displayName || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : "Google Kullanıcısı"),
+          email: dbProfile.email || userEmail,
+          companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : (dbProfile.companyName || "Muavin ERP Müşterisi"),
+          phone: dbProfile.phone || "+90 (212) 555 0100",
+          taxNumber: dbProfile.taxNumber || "1234567890",
+          selectedLogoId: dbProfile.selectedLogoId || selectedLogo.id,
+          selectedLogoName: dbProfile.selectedLogoName || selectedLogo.title,
+          selectedLogoUrl: dbProfile.selectedLogoUrl || selectedLogo.imageUrl,
+          role: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : (dbProfile.role || "Firma Yöneticisi"),
+          allowedModules: dbProfile.allowedModules,
+        };
+      } else {
+        finalProfile = {
+          id: firebaseUid,
+          name: isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : (user.displayName || userEmail.split("@")[0] || "Google Kullanıcısı"),
+          email: userEmail,
+          companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin Bilişim A.Ş.",
+          phone: "+90 (212) 555 0100",
+          taxNumber: "8470291038",
+          selectedLogoId: selectedLogo.id,
+          selectedLogoName: selectedLogo.title,
+          selectedLogoUrl: selectedLogo.imageUrl,
+          role: isSystemAdmin ? "Sistem Yöneticisi (Admin)" : "Firma Yöneticisi",
+        };
+
+        try {
+          await saveUserProfile({
+            userId: finalProfile.id,
+            email: finalProfile.email,
+            name: finalProfile.name,
+            companyName: finalProfile.companyName,
+            phone: finalProfile.phone,
+            taxNumber: finalProfile.taxNumber,
+            selectedLogoId: finalProfile.selectedLogoId,
+            selectedLogoName: finalProfile.selectedLogoName,
+            selectedLogoUrl: finalProfile.selectedLogoUrl,
+            role: finalProfile.role,
+          });
+        } catch (dbErr) {
+          console.warn("Could not save initial Google user profile to Firestore:", dbErr);
+        }
+      }
+
+      if (rememberMe) {
+        localStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
+      } else {
+        sessionStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
+      }
+
+      setSubmitting(false);
+      onLoginSuccess(finalProfile);
+      onClose();
+    } catch (err: any) {
+      console.error("Google sign in error:", err);
+      if (err.code === "auth/popup-closed-by-user") {
+        setErrorMessage("Google ile giriş penceresi kapatıldı.");
+      } else if (err.code === "auth/popup-blocked") {
+        setErrorMessage("Tarayıcınız açılır pencereyi engelledi. Lütfen açılır pencerelere izin veriniz.");
+      } else {
+        setErrorMessage("Google ile kimlik doğrulama sırasında bir hata oluştu.");
+      }
       setSubmitting(false);
     }
   };
@@ -606,6 +703,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <span>← Web Sitesine Dön</span>
                 </button>
               )}
+            </div>
+
+            {/* GOOGLE SIGN IN BUTTON */}
+            <div className="space-y-3 pt-1">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={submitting}
+                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm py-3 px-4 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs transition-all active:scale-[0.99] cursor-pointer disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                  />
+                </svg>
+                <span>Google ile {mode === "login" ? "Giriş Yap" : "Kayıt Ol"}</span>
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-[11px] font-medium text-slate-400">veya e-posta ile devam edin</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
             </div>
 
             {/* AUTH FORM */}

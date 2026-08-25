@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   ShieldAlert,
   Users,
@@ -18,31 +18,182 @@ import {
   RefreshCw,
   Image,
   FileSpreadsheet,
-  File
+  File,
+  UserPlus,
+  Sliders,
+  Check,
+  KeyRound,
+  Phone,
+  Building2,
+  AlertCircle,
+  Copy,
+  Layers,
+  Sparkles,
+  Table,
+  CheckSquare,
+  Square,
+  ShieldCheck,
+  Save,
+  Wallet,
+  UserCheck,
+  ShoppingCart,
+  PackageIcon,
+  BarChart3,
+  Settings,
+  HelpCircle
 } from "lucide-react";
-import { UserProfile } from "./AuthModal";
+import { UserProfile, BRAND_LOGOS } from "./AuthModal";
 import {
   getAllUsersProfiles,
   getAllFilesForAdmin,
   deleteUserFile,
+  saveUserProfile,
+  deleteUserProfile,
   UserProfileData,
   UserFileMetadata
 } from "../lib/firebase";
+import { ALL_APP_MODULES, AppModuleKey } from "../types";
 
 interface AdminDashboardProps {
   currentUser: UserProfile;
 }
+
+// Key modules highlighted in the table
+const CORE_MATRIX_MODULES: {
+  key: AppModuleKey;
+  label: string;
+  shortLabel: string;
+  icon: React.ElementType;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+}[] = [
+  {
+    key: "contacts",
+    label: "Cari Hesaplar",
+    shortLabel: "Cari",
+    icon: Users,
+    color: "text-purple-700",
+    bgColor: "bg-purple-50",
+    borderColor: "border-purple-200",
+  },
+  {
+    key: "invoices",
+    label: "E-Belgeler / Fatura",
+    shortLabel: "Fatura",
+    icon: FileText,
+    color: "text-blue-700",
+    bgColor: "bg-blue-50",
+    borderColor: "border-blue-200",
+  },
+  {
+    key: "accounts",
+    label: "Finans & Kasa",
+    shortLabel: "Kasa",
+    icon: Wallet,
+    color: "text-emerald-700",
+    bgColor: "bg-emerald-50",
+    borderColor: "border-emerald-200",
+  },
+  {
+    key: "hr",
+    label: "İnsan Kaynakları",
+    shortLabel: "İK",
+    icon: UserCheck,
+    color: "text-rose-700",
+    bgColor: "bg-rose-50",
+    borderColor: "border-rose-200",
+  },
+  {
+    key: "products",
+    label: "Stok & Ürünler",
+    shortLabel: "Stok",
+    icon: PackageIcon,
+    color: "text-amber-700",
+    bgColor: "bg-amber-50",
+    borderColor: "border-amber-200",
+  },
+  {
+    key: "orders_module",
+    label: "Sipariş & Proforma",
+    shortLabel: "Sipariş",
+    icon: ShoppingCart,
+    color: "text-indigo-700",
+    bgColor: "bg-indigo-50",
+    borderColor: "border-indigo-200",
+  },
+  {
+    key: "reports",
+    label: "Vergilendirme & Rapor",
+    shortLabel: "Rapor",
+    icon: BarChart3,
+    color: "text-teal-700",
+    bgColor: "bg-teal-50",
+    borderColor: "border-teal-200",
+  },
+  {
+    key: "files",
+    label: "Bulut Depo",
+    shortLabel: "Depo",
+    icon: HardDrive,
+    color: "text-violet-700",
+    bgColor: "bg-violet-50",
+    borderColor: "border-violet-200",
+  },
+  {
+    key: "ai",
+    label: "AI Asistanı",
+    shortLabel: "AI",
+    icon: Sparkles,
+    color: "text-fuchsia-700",
+    bgColor: "bg-fuchsia-50",
+    borderColor: "border-fuchsia-200",
+  },
+];
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) => {
   const [users, setUsers] = useState<UserProfileData[]>([]);
   const [allFiles, setAllFiles] = useState<UserFileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [userFilter, setUserFilter] = useState<"all" | "hasFiles">("all");
+  const [userFilter, setUserFilter] = useState<"all" | "hasFiles" | "adminCreated">("all");
   const [selectedUser, setSelectedUser] = useState<UserProfileData | null>(null);
   const [previewFile, setPreviewFile] = useState<UserFileMetadata | null>(null);
 
-  useEffect(() => {
+  // Active Main View Tab: "matrix" (Yetkilendirme Matrisi) vs "list" (Detaylı Kullanıcı & Dosya Listesi)
+  const [activeAdminTab, setActiveAdminTab] = useState<"matrix" | "list">("matrix");
+
+  // State for matrix saving feedback per user
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [savedUserFeedback, setSavedUserFeedback] = useState<string | null>(null);
+
+  // New User Creation Modal State
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserCompany, setNewUserCompany] = useState("");
+  const [newUserPhone, setNewUserPhone] = useState("+90 (212) 555 0100");
+  const [newUserTaxNumber, setNewUserTaxNumber] = useState("1234567890");
+  const [newUserRole, setNewUserRole] = useState("Ön Muhasebe Görevlisi");
+  const [newUserAllowedModules, setNewUserAllowedModules] = useState<AppModuleKey[]>(
+    ALL_APP_MODULES.map((m) => m.key)
+  );
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [createUserError, setCreateUserError] = useState("");
+  const [createdSuccessInfo, setCreatedSuccessInfo] = useState<{
+    email: string;
+    passwordPlain: string;
+    name: string;
+    allowedModulesCount: number;
+  } | null>(null);
+
+  // User Permissions Editing Modal State (Full Details Modal)
+  const [editingPermissionsUser, setEditingPermissionsUser] = useState<UserProfileData | null>(null);
+  const [selectedModulesToEdit, setSelectedModulesToEdit] = useState<AppModuleKey[]>([]);
+  const [savingPermissions, setSavingPermissions] = useState(false);
+
+  React.useEffect(() => {
     loadAdminData();
   }, []);
 
@@ -67,7 +218,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
           selectedLogoId: currentUser.selectedLogoId,
           selectedLogoName: currentUser.selectedLogoName,
           selectedLogoUrl: currentUser.selectedLogoUrl,
-          role: currentUser.role
+          role: currentUser.role,
+          allowedModules: currentUser.allowedModules
         });
       }
 
@@ -82,6 +234,168 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
 
   const getFilesForUser = (userId: string) => {
     return allFiles.filter((f) => f.userId === userId);
+  };
+
+  // Check if a specific module is allowed for a user
+  const isModuleAllowed = (user: UserProfileData, moduleKey: AppModuleKey): boolean => {
+    if (
+      user.role?.includes("Admin") ||
+      user.email === "ilyasyildirim@outlook.com.tr" ||
+      user.email === "ilyasylldrm@gmail.com" ||
+      user.userId === "nuT309AyQxQKddnAp1ZJjlSgBXt2"
+    ) {
+      return true; // Admin users have access to all modules
+    }
+    if (!user.allowedModules || user.allowedModules.length === 0) {
+      return true; // If undefined or empty, defaults to full access
+    }
+    return user.allowedModules.includes(moduleKey);
+  };
+
+  // Toggle a single module permission directly from the Matrix Table
+  const handleToggleUserModule = async (user: UserProfileData, moduleKey: AppModuleKey) => {
+    const isSysAdmin =
+      user.role?.includes("Admin") ||
+      user.email === "ilyasyildirim@outlook.com.tr" ||
+      user.email === "ilyasylldrm@gmail.com" ||
+      user.userId === "nuT309AyQxQKddnAp1ZJjlSgBXt2";
+
+    if (isSysAdmin) {
+      alert("Sistem Yöneticisi (Admin) tüm modüllere daimi tam erişim yetkisine sahiptir.");
+      return;
+    }
+
+    // Determine current allowed modules
+    const currentAllowed: AppModuleKey[] =
+      user.allowedModules && user.allowedModules.length > 0
+        ? [...user.allowedModules]
+        : ALL_APP_MODULES.map((m) => m.key);
+
+    let updatedAllowed: AppModuleKey[];
+    if (currentAllowed.includes(moduleKey)) {
+      // Uncheck / Remove permission
+      updatedAllowed = currentAllowed.filter((k) => k !== moduleKey);
+      // Ensure at least dashboard remains
+      if (updatedAllowed.length === 0) {
+        updatedAllowed = ["dashboard"];
+      }
+    } else {
+      // Check / Add permission
+      updatedAllowed = [...currentAllowed, moduleKey];
+    }
+
+    const updatedUser: UserProfileData = {
+      ...user,
+      allowedModules: updatedAllowed,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Optimistic UI update
+    setUsers((prev) =>
+      prev.map((u) => (u.userId === user.userId ? updatedUser : u))
+    );
+
+    // Save to Firestore
+    setSavingUserId(user.userId);
+    try {
+      await saveUserProfile(updatedUser);
+      setSavedUserFeedback(user.userId);
+      setTimeout(() => {
+        setSavedUserFeedback(null);
+      }, 2000);
+
+      // If updating the currently logged-in user, update session
+      if (currentUser.id === user.userId) {
+        currentUser.allowedModules = updatedAllowed;
+        const stored = localStorage.getItem("muavin_active_user");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.allowedModules = updatedAllowed;
+          localStorage.setItem("muavin_active_user", JSON.stringify(parsed));
+        }
+      }
+    } catch (err) {
+      console.error("Error updating module permission:", err);
+      alert("İzin kaydedilirken bir hata oluştu.");
+      loadAdminData(); // revert
+    } finally {
+      setSavingUserId(null);
+    }
+  };
+
+  // Quick Preset: Grant all modules to user
+  const handleGrantAllModules = async (user: UserProfileData) => {
+    const allKeys = ALL_APP_MODULES.map((m) => m.key);
+    const updatedUser: UserProfileData = {
+      ...user,
+      allowedModules: allKeys,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setUsers((prev) =>
+      prev.map((u) => (u.userId === user.userId ? updatedUser : u))
+    );
+
+    setSavingUserId(user.userId);
+    try {
+      await saveUserProfile(updatedUser);
+      setSavedUserFeedback(user.userId);
+      setTimeout(() => setSavedUserFeedback(null), 2000);
+    } catch (err) {
+      console.error("Error updating permissions:", err);
+    } finally {
+      setSavingUserId(null);
+    }
+  };
+
+  // Quick Preset: Grant Standard Accounting Modules (Cari + Fatura + Kasa + İK + Dashboard)
+  const handleGrantStandardAccounting = async (user: UserProfileData) => {
+    const accountingKeys: AppModuleKey[] = ["dashboard", "contacts", "invoices", "accounts", "hr"];
+    const updatedUser: UserProfileData = {
+      ...user,
+      allowedModules: accountingKeys,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setUsers((prev) =>
+      prev.map((u) => (u.userId === user.userId ? updatedUser : u))
+    );
+
+    setSavingUserId(user.userId);
+    try {
+      await saveUserProfile(updatedUser);
+      setSavedUserFeedback(user.userId);
+      setTimeout(() => setSavedUserFeedback(null), 2000);
+    } catch (err) {
+      console.error("Error updating permissions:", err);
+    } finally {
+      setSavingUserId(null);
+    }
+  };
+
+  // Quick Preset: Reset to dashboard only
+  const handleRestrictToDashboardOnly = async (user: UserProfileData) => {
+    const minKeys: AppModuleKey[] = ["dashboard"];
+    const updatedUser: UserProfileData = {
+      ...user,
+      allowedModules: minKeys,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setUsers((prev) =>
+      prev.map((u) => (u.userId === user.userId ? updatedUser : u))
+    );
+
+    setSavingUserId(user.userId);
+    try {
+      await saveUserProfile(updatedUser);
+      setSavedUserFeedback(user.userId);
+      setTimeout(() => setSavedUserFeedback(null), 2000);
+    } catch (err) {
+      console.error("Error updating permissions:", err);
+    } finally {
+      setSavingUserId(null);
+    }
   };
 
   const handleDeleteFile = async (file: UserFileMetadata) => {
@@ -101,6 +415,163 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     }
   };
 
+  const handleDeleteUser = async (userToDelete: UserProfileData) => {
+    if (userToDelete.userId === currentUser.id) {
+      alert("Kendi admin hesabınızı silemezsiniz.");
+      return;
+    }
+    if (!window.confirm(`DİKKAT: "${userToDelete.name}" (${userToDelete.email}) kullanıcısının sistem yetkilerini ve profilini silmek istediğinize emin misiniz?`)) {
+      return;
+    }
+
+    try {
+      await deleteUserProfile(userToDelete.userId);
+      setUsers((prev) => prev.filter((u) => u.userId !== userToDelete.userId));
+      alert("Kullanıcı kaydı başarıyla silindi.");
+    } catch (err) {
+      console.error("User deletion error:", err);
+      alert("Kullanıcı silinirken bir hata oluştu.");
+    }
+  };
+
+  const handleOpenAddUser = () => {
+    setNewUserName("");
+    setNewUserEmail("");
+    setNewUserPassword(generateRandomPassword());
+    setNewUserCompany(currentUser.companyName || "Muavin Finans & ERP Müşterisi");
+    setNewUserPhone("+90 (212) 555 0100");
+    setNewUserTaxNumber("1234567890");
+    setNewUserRole("Ön Muhasebe Sorumlusu");
+    setNewUserAllowedModules(ALL_APP_MODULES.map((m) => m.key));
+    setCreateUserError("");
+    setCreatedSuccessInfo(null);
+    setIsAddUserModalOpen(true);
+  };
+
+  const generateRandomPassword = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$";
+    let pass = "";
+    for (let i = 0; i < 10; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  };
+
+  const toggleModuleSelection = (key: AppModuleKey) => {
+    setNewUserAllowedModules((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const handleSelectAllModules = () => {
+    setNewUserAllowedModules(ALL_APP_MODULES.map((m) => m.key));
+  };
+
+  const handleDeselectAllModules = () => {
+    setNewUserAllowedModules(["dashboard"]);
+  };
+
+  const handleCreateUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateUserError("");
+
+    if (!newUserName.trim() || !newUserEmail.trim() || !newUserPassword.trim()) {
+      setCreateUserError("Lütfen ad soyad, e-posta ve şifre alanlarını eksiksiz doldurunuz.");
+      return;
+    }
+
+    if (newUserAllowedModules.length === 0) {
+      setCreateUserError("Kullanıcıya en az 1 modül erişim yetkisi tanımlamalısınız.");
+      return;
+    }
+
+    setCreatingUser(true);
+    try {
+      const generatedUserId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const newUserProfile: UserProfileData = {
+        userId: generatedUserId,
+        name: newUserName.trim(),
+        email: newUserEmail.trim().toLowerCase(),
+        companyName: newUserCompany.trim() || "Muavin Bilişim A.Ş.",
+        phone: newUserPhone.trim(),
+        taxNumber: newUserTaxNumber.trim(),
+        selectedLogoId: BRAND_LOGOS[0].id,
+        selectedLogoName: BRAND_LOGOS[0].title,
+        selectedLogoUrl: BRAND_LOGOS[0].imageUrl,
+        role: newUserRole,
+        allowedModules: newUserAllowedModules,
+        passwordPlain: newUserPassword,
+        createdByAdmin: true,
+        createdAt: new Date().toISOString()
+      };
+
+      await saveUserProfile(newUserProfile);
+
+      setUsers((prev) => [newUserProfile, ...prev]);
+      setCreatedSuccessInfo({
+        email: newUserProfile.email,
+        passwordPlain: newUserPassword,
+        name: newUserProfile.name,
+        allowedModulesCount: newUserAllowedModules.length
+      });
+    } catch (err: any) {
+      console.error("Create user error:", err);
+      setCreateUserError("Kullanıcı oluşturulurken bir hata oluştu: " + (err.message || "Bilinmeyen hata"));
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
+  const handleOpenEditPermissions = (user: UserProfileData) => {
+    setEditingPermissionsUser(user);
+    setSelectedModulesToEdit(
+      user.allowedModules && user.allowedModules.length > 0
+        ? [...user.allowedModules]
+        : ALL_APP_MODULES.map((m) => m.key)
+    );
+  };
+
+  const handleSaveEditedPermissions = async () => {
+    if (!editingPermissionsUser) return;
+    if (selectedModulesToEdit.length === 0) {
+      alert("Kullanıcıya en az 1 modül yetkisi verilmelidir.");
+      return;
+    }
+
+    setSavingPermissions(true);
+    try {
+      const updatedUser: UserProfileData = {
+        ...editingPermissionsUser,
+        allowedModules: selectedModulesToEdit,
+        updatedAt: new Date().toISOString()
+      };
+
+      await saveUserProfile(updatedUser);
+
+      setUsers((prev) =>
+        prev.map((u) => (u.userId === updatedUser.userId ? updatedUser : u))
+      );
+
+      if (currentUser.id === updatedUser.userId) {
+        currentUser.allowedModules = updatedUser.allowedModules;
+        const stored = localStorage.getItem("muavin_active_user");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.allowedModules = updatedUser.allowedModules;
+          localStorage.setItem("muavin_active_user", JSON.stringify(parsed));
+        }
+      }
+
+      setEditingPermissionsUser(null);
+      alert(`${updatedUser.name} kullanıcısının modül erişim izinleri başarıyla güncellendi.`);
+    } catch (err) {
+      console.error("Save permissions error:", err);
+      alert("İzinler kaydedilirken bir hata oluştu.");
+    } finally {
+      setSavingPermissions(false);
+    }
+  };
+
   const filteredUsers = users.filter((u) => {
     const term = searchTerm.toLowerCase();
     const matchesTerm =
@@ -113,6 +584,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
 
     if (userFilter === "hasFiles") {
       return getFilesForUser(u.userId).length > 0;
+    }
+    if (userFilter === "adminCreated") {
+      return !!u.createdByAdmin;
     }
 
     return true;
@@ -147,207 +621,912 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
           }}
         />
 
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-500/20"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
         <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="bg-rose-500/10 text-rose-700 border border-rose-300/60 font-extrabold text-[10px] uppercase px-2.5 py-0.5 rounded-md flex items-center gap-1">
               <ShieldAlert className="w-3 h-3 text-rose-600" />
-              Admin Yönetici Paneli
+              Sistem Yöneticisi Paneli
             </span>
             <span className="bg-purple-100/80 text-purple-900 border border-purple-200 text-[10px] font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3 text-purple-700" />
-              Sınırsız Veri Denetim Yetkisi
+              <CheckSquare className="w-3 h-3 text-purple-700" />
+              Checkbox Bazlı Modül Yetkilendirme Matrisi
+            </span>
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-emerald-600" />
+              ilyasyildirim@outlook.com.tr
             </span>
           </div>
           <h2 className="text-lg font-extrabold text-slate-950">
-            Kullanıcılar & Bulut Dosya Yönetimi
+            Kullanıcı Modül Yetkilendirme & Evrak Denetim Merkezi
           </h2>
           <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-            Sistemdeki tüm kayıtlı kullanıcıların hesap bilgilerini inceleyin ve yüklenen evrakları denetleyin.
+            Kayıtlı kullanıcıları listeleyebilir; <strong>Cari, Fatura, Kasa, İK</strong> ve diğer tüm modüller için doğrudan checkbox işaretleyerek anlık yetkilendirme ve erişim kısıtlaması uygulayabilirsiniz.
           </p>
         </div>
 
-        <button
-          onClick={loadAdminData}
-          className="relative z-10 bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-        >
-          <RefreshCw className={`w-4 h-4 text-purple-800 font-bold ${loading ? "animate-spin" : ""}`} />
-          <span>Verileri Yenile</span>
-        </button>
-      </div>
-
-      {/* Filter Tabs & Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs">
+        <div className="relative z-10 flex flex-wrap items-center gap-2.5 shrink-0">
           <button
-            onClick={() => setUserFilter("all")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              userFilter === "all" ? "bg-white text-purple-950 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
+            onClick={handleOpenAddUser}
+            className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all active:scale-[0.98]"
           >
-            Tüm Kullanıcılar ({users.length})
+            <UserPlus className="w-4 h-4 text-white" />
+            <span>Yeni Kullanıcı Aç</span>
           </button>
-          <button
-            onClick={() => setUserFilter("hasFiles")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              userFilter === "hasFiles" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Dosyası Olanlar ({users.filter((u) => getFilesForUser(u.userId).length > 0).length})
-          </button>
-        </div>
 
-        {/* Search */}
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Kullanıcı adı, e-posta, firma ara..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
-          />
+          <button
+            onClick={loadAdminData}
+            className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all shrink-0"
+            title="Verileri Yenile"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-purple-800 font-bold ${loading ? "animate-spin" : ""}`} />
+            <span>Yenile</span>
+          </button>
         </div>
       </div>
 
-      {/* Users List Table */}
-      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-        <div className="overflow-x-auto custom-scrollbar w-full">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
-            <thead>
-              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                <th className="pb-2 px-4">Kullanıcı / Ad Soyad</th>
-                <th className="pb-2 px-4">E-Posta Adresi</th>
-                <th className="pb-2 px-4">Firma Unvanı</th>
-                <th className="pb-2 px-4">Kayıt Tarihi</th>
-                <th className="pb-2 px-4 text-center">Yüklü Dosya Sayısı</th>
-                <th className="pb-2 px-4 text-center">İşlem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-500 bg-white rounded-xl border border-purple-100/80">
-                    <div className="w-8 h-8 border-3 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                    <p className="font-extrabold text-xs">Kullanıcı verileri ve dosya detayları yükleniyor...</p>
-                  </td>
-                </tr>
-              ) : filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
-                    Aramanıza uygun kullanıcı kaydı bulunamadı.
-                  </td>
-                </tr>
-              ) : (
-                filteredUsers.map((u) => {
-                  const userFiles = getFilesForUser(u.userId);
-                  const isCurrentAdmin = u.userId === currentUser.id;
+      {/* Main View Switcher & Search Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        {/* View Tabs */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveAdminTab("matrix")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-2xs border ${
+              activeAdminTab === "matrix"
+                ? "bg-purple-700 text-white border-purple-700 shadow-purple-500/20"
+                : "bg-white text-slate-700 border-purple-200/80 hover:bg-purple-50 hover:text-purple-900"
+            }`}
+          >
+            <CheckSquare className="w-4 h-4" />
+            <span>Modül Yetkilendirme Matrisi (Checkbox Tablosu)</span>
+            <span className={`px-1.5 py-0.2 rounded text-[10px] ${activeAdminTab === "matrix" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-800"}`}>
+              {users.length}
+            </span>
+          </button>
 
-                  return (
-                    <tr
-                      key={u.userId}
-                      className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
-                    >
-                      <td className="py-3.5 px-4 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-800 border border-purple-200/80 flex items-center justify-center font-black shrink-0 text-xs">
-                            {u.name ? u.name.charAt(0).toUpperCase() : "U"}
+          <button
+            onClick={() => setActiveAdminTab("list")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-2xs border ${
+              activeAdminTab === "list"
+                ? "bg-purple-700 text-white border-purple-700 shadow-purple-500/20"
+                : "bg-white text-slate-700 border-purple-200/80 hover:bg-purple-50 hover:text-purple-900"
+            }`}
+          >
+            <Table className="w-4 h-4" />
+            <span>Kullanıcı Detayları & Evrak Deposu</span>
+          </button>
+        </div>
+
+        {/* Filter & Search */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Quick Filter */}
+          <div className="flex items-center gap-1 bg-purple-50/60 p-1 rounded-xl border border-purple-200/60 text-xs font-semibold shadow-2xs">
+            <button
+              onClick={() => setUserFilter("all")}
+              className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer text-[11px] ${
+                userFilter === "all" ? "bg-white text-purple-950 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+              }`}
+            >
+              Tümü ({users.length})
+            </button>
+            <button
+              onClick={() => setUserFilter("adminCreated")}
+              className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer text-[11px] ${
+                userFilter === "adminCreated" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+              }`}
+            >
+              Admin Açanlar ({users.filter((u) => u.createdByAdmin).length})
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Kullanıcı veya firma ara..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 1. CHECKBOX BAZLI MODÜL YETKİLENDİRME MATRİSİ (ANA İSTENEN TABLO) */}
+      {/* ========================================================================= */}
+      {activeAdminTab === "matrix" && (
+        <div className="bg-white rounded-2xl border border-purple-200/80 p-3 sm:p-5 shadow-sm space-y-4">
+          {/* Table Header Info Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-purple-100">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-bold">
+                <CheckSquare className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                  Modül Erişim İzinleri Matrisi (Cari • Fatura • Kasa • İK • Stok • Sipariş)
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Kullanıcının satırındaki checkbox kutucuğunu işaretleyerek veya kaldırarak modül erişim yetkisini anında güncelleyebilirsiniz.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-[11px] text-slate-500">
+              <span className="flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
+                İşaretli = Modüle Erişim Açık
+              </span>
+              <span className="flex items-center gap-1 font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                <Square className="w-3 h-3 text-slate-400" />
+                Boş = Kısıtlı / Kapalı
+              </span>
+            </div>
+          </div>
+
+          {/* Matrix Table */}
+          <div className="overflow-x-auto custom-scrollbar w-full">
+            <table className="w-full text-left text-xs border-collapse min-w-[1050px]">
+              <thead>
+                <tr className="bg-slate-50/90 text-purple-950 font-extrabold uppercase tracking-wider text-[10px] border-y border-purple-200/60">
+                  <th className="py-3 px-3 w-56 sticky left-0 bg-slate-50/95 z-10 shadow-r border-r border-purple-100">
+                    Kullanıcı Bilgileri
+                  </th>
+                  {CORE_MATRIX_MODULES.map((mod) => {
+                    const IconComp = mod.icon;
+                    return (
+                      <th key={mod.key} className="py-3 px-2 text-center border-r border-purple-100 min-w-[84px]">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className={`w-6 h-6 rounded-lg ${mod.bgColor} ${mod.color} border ${mod.borderColor} flex items-center justify-center`}>
+                            <IconComp className="w-3.5 h-3.5" />
                           </div>
-                          <div>
-                            <div className="font-extrabold text-slate-900 group-hover:text-purple-950 flex items-center gap-1.5">
-                              <span>{u.name}</span>
-                              {isCurrentAdmin && (
-                                <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[9px] font-extrabold px-1.5 py-0.2 rounded-md">
-                                  Siz (Admin)
+                          <span className="font-bold text-[11px] text-slate-900">{mod.shortLabel}</span>
+                          <span className="text-[9px] text-slate-400 font-normal normal-case truncate max-w-[80px]">
+                            {mod.label}
+                          </span>
+                        </div>
+                      </th>
+                    );
+                  })}
+                  <th className="py-3 px-3 text-center min-w-[130px]">
+                    Hızlı İşlemler
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-100/60">
+                {loading ? (
+                  <tr>
+                    <td colSpan={CORE_MATRIX_MODULES.length + 2} className="text-center py-12 text-slate-500">
+                      <div className="w-8 h-8 border-3 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <p className="font-extrabold text-xs">Kullanıcı yetkileri yükleniyor...</p>
+                    </td>
+                  </tr>
+                ) : filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={CORE_MATRIX_MODULES.length + 2} className="text-center py-8 text-slate-400">
+                      Kayıtlı kullanıcı bulunamadı.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((u) => {
+                    const isSysAdmin =
+                      u.role?.includes("Admin") ||
+                      u.email === "ilyasyildirim@outlook.com.tr" ||
+                      u.email === "ilyasylldrm@gmail.com" ||
+                      u.userId === "nuT309AyQxQKddnAp1ZJjlSgBXt2";
+
+                    const isSaving = savingUserId === u.userId;
+                    const isJustSaved = savedUserFeedback === u.userId;
+
+                    return (
+                      <tr
+                        key={u.userId}
+                        className="hover:bg-purple-50/30 transition-colors group"
+                      >
+                        {/* User Identity Column (Sticky Left) */}
+                        <td className="py-3 px-3 sticky left-0 bg-white group-hover:bg-purple-50/50 z-10 shadow-r border-r border-purple-100 transition-colors">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-100 to-indigo-100 text-purple-900 border border-purple-200 flex items-center justify-center font-black shrink-0 text-xs shadow-2xs">
+                              {u.name ? u.name.charAt(0).toUpperCase() : "U"}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-extrabold text-slate-900 text-xs truncate max-w-[130px]">
+                                  {u.name}
                                 </span>
-                              )}
-                            </div>
-                            <div className="text-[10px] font-mono text-slate-400 group-hover:text-purple-700/60">
-                              UID: {u.userId}
+                                {isSysAdmin && (
+                                  <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[8px] font-black px-1.5 py-0.2 rounded shrink-0">
+                                    Admin
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] font-mono text-purple-900/80 truncate max-w-[140px]">
+                                {u.email}
+                              </div>
+                              <div className="text-[9px] text-slate-400 truncate max-w-[140px]">
+                                {u.companyName || u.role || "Kullanıcı"}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
 
-                      <td className="py-3.5 px-4 font-bold text-slate-800 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="flex items-center gap-1.5 text-slate-700 group-hover:text-purple-950">
-                          <Mail className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                          <span>{u.email}</span>
-                        </div>
-                      </td>
+                          {/* Save feedback indicator */}
+                          {isJustSaved && (
+                            <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-emerald-700 animate-in fade-in">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Yetkiler Kaydedildi</span>
+                            </div>
+                          )}
+                          {isSaving && (
+                            <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-purple-700 animate-pulse">
+                              <RefreshCw className="w-3 h-3 animate-spin text-purple-600" />
+                              <span>Güncelleniyor...</span>
+                            </div>
+                          )}
+                        </td>
 
-                      <td className="py-3.5 px-4 font-semibold text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="flex items-center gap-1.5 text-slate-700 group-hover:text-purple-950">
-                          <Building className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                          <span>{u.companyName || "—"}</span>
-                        </div>
-                      </td>
+                        {/* Interactive Checkbox for each Core Module */}
+                        {CORE_MATRIX_MODULES.map((mod) => {
+                          const allowed = isModuleAllowed(u, mod.key);
 
-                      <td className="py-3.5 px-4 text-slate-500 group-hover:text-purple-800 font-mono text-[11px] border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        {u.createdAt
-                          ? new Date(u.createdAt).toLocaleDateString("tr-TR", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric"
-                            })
-                          : "Yeni Kayıt"}
-                      </td>
+                          return (
+                            <td
+                              key={mod.key}
+                              className="py-3 px-2 text-center border-r border-purple-100/60 align-middle"
+                            >
+                              <div className="flex items-center justify-center">
+                                {isSysAdmin ? (
+                                  <div
+                                    className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center cursor-default shadow-2xs"
+                                    title="Sistem Yöneticisi tam yetkilidir"
+                                  >
+                                    <Check className="w-4 h-4 stroke-[3]" />
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleUserModule(u, mod.key)}
+                                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-2xs border ${
+                                      allowed
+                                        ? "bg-purple-600 border-purple-600 text-white hover:bg-purple-700 active:scale-95"
+                                        : "bg-white border-slate-300 text-transparent hover:border-purple-400 hover:bg-purple-50"
+                                    }`}
+                                    title={`${u.name} için ${mod.label} yetkisini ${allowed ? "kaldır" : "ver"}`}
+                                  >
+                                    <Check className={`w-4 h-4 stroke-[3] ${allowed ? "block" : "hidden"}`} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
 
-                      <td className="py-3.5 px-4 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold ${
-                            userFiles.length > 0
-                              ? "bg-purple-50 border border-purple-200 text-purple-900"
-                              : "bg-slate-100 border border-slate-200 text-slate-400"
-                          }`}
-                        >
-                          <HardDrive className="w-3 h-3 text-purple-600" />
-                          <span>{userFiles.length} Dosya</span>
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <button
-                          onClick={() => setSelectedUser(u)}
-                          className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 p-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer mx-auto"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Dosyaları İncele</span>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        {/* Row Quick Action Buttons */}
+                        <td className="py-3 px-3 text-center align-middle">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {!isSysAdmin && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleGrantAllModules(u)}
+                                  className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1 rounded-md text-[10px] font-bold cursor-pointer transition-all"
+                                  title="Tüm modül izinlerini aç"
+                                >
+                                  Tümünü Aç
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleGrantStandardAccounting(u)}
+                                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-1 rounded-md text-[10px] font-bold cursor-pointer transition-all"
+                                  title="Standart Ön Muhasebe Yetkileri (Cari, Fatura, Kasa, İK)"
+                                >
+                                  Standart
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestrictToDashboardOnly(u)}
+                                  className="bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 px-1.5 py-1 rounded-md text-[10px] font-bold cursor-pointer transition-all"
+                                  title="Sadece Ana Sayfa İzni Bırak"
+                                >
+                                  Sıfırla
+                                </button>
+                              </>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPermissions(u)}
+                              className="p-1 text-indigo-700 hover:bg-indigo-50 rounded-md cursor-pointer transition-colors"
+                              title="Tüm Modülleri Detaylı Düzenle"
+                            >
+                              <Sliders className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. DETAYLI KULLANICI LİSTESİ & EVRAK DENETİMİ VIEW */}
+      {/* ========================================================================= */}
+      {activeAdminTab === "list" && (
+        <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+          <div className="overflow-x-auto custom-scrollbar w-full">
+            <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[900px]">
+              <thead>
+                <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
+                  <th className="pb-2 px-4">Kullanıcı / Rol</th>
+                  <th className="pb-2 px-4">E-Posta & Giriş</th>
+                  <th className="pb-2 px-4">Firma & İletişim</th>
+                  <th className="pb-2 px-4 text-center">İzinli Modüller</th>
+                  <th className="pb-2 px-4 text-center">Dosyalar</th>
+                  <th className="pb-2 px-4 text-center">Yönetim İşlemleri</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12 text-slate-500 bg-white rounded-xl border border-purple-100/80">
+                      <div className="w-8 h-8 border-3 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <p className="font-extrabold text-xs">Kullanıcı verileri ve yetkiler yükleniyor...</p>
+                    </td>
+                  </tr>
+                ) : filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                      Aramanıza uygun kullanıcı kaydı bulunamadı.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((u) => {
+                    const userFiles = getFilesForUser(u.userId);
+                    const isCurrentAdmin = u.userId === currentUser.id;
+                    const isSysAdmin =
+                      u.role?.includes("Admin") ||
+                      u.email === "ilyasyildirim@outlook.com.tr" ||
+                      u.email === "ilyasylldrm@gmail.com";
+                    const allowedCount = u.allowedModules ? u.allowedModules.length : ALL_APP_MODULES.length;
+                    const isFullyOpen = !u.allowedModules || u.allowedModules.length === ALL_APP_MODULES.length;
+
+                    return (
+                      <tr
+                        key={u.userId}
+                        className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                      >
+                        <td className="py-3.5 px-4 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-800 border border-purple-200/80 flex items-center justify-center font-black shrink-0 text-xs">
+                              {u.name ? u.name.charAt(0).toUpperCase() : "U"}
+                            </div>
+                            <div>
+                              <div className="font-extrabold text-slate-900 group-hover:text-purple-950 flex items-center gap-1.5">
+                                <span>{u.name}</span>
+                                {isSysAdmin && (
+                                  <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[9px] font-extrabold px-1.5 py-0.2 rounded-md">
+                                    Sistem Yöneticisi
+                                  </span>
+                                )}
+                                {u.createdByAdmin && (
+                                  <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-bold px-1.5 py-0.2 rounded-md">
+                                    Admin Açtı
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] font-semibold text-slate-500">
+                                {u.role || "Kullanıcı"}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 font-bold text-slate-800 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <div className="flex items-center gap-1.5 text-slate-700 group-hover:text-purple-950">
+                            <Mail className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                            <span className="font-mono text-xs">{u.email}</span>
+                          </div>
+                          {u.passwordPlain && (
+                            <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1 mt-0.5">
+                              <KeyRound className="w-3 h-3 text-amber-500" />
+                              <span>Şifre: <strong className="text-slate-600">{u.passwordPlain}</strong></span>
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 font-semibold text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <div className="flex items-center gap-1.5 text-slate-700 group-hover:text-purple-950">
+                            <Building className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                            <span>{u.companyName || "—"}</span>
+                          </div>
+                          {u.phone && (
+                            <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              <span>{u.phone}</span>
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <div className="inline-flex flex-col items-center">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold ${
+                                isFullyOpen
+                                  ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                                  : "bg-amber-50 border border-amber-200 text-amber-800"
+                              }`}
+                            >
+                              <Sliders className="w-3 h-3" />
+                              <span>{allowedCount} / {ALL_APP_MODULES.length} Modül</span>
+                            </span>
+                            {!isFullyOpen && (
+                              <span className="text-[9px] text-amber-700 font-semibold mt-0.5">
+                                Kısıtlamalı Erişim
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold ${
+                              userFiles.length > 0
+                                ? "bg-purple-50 border border-purple-200 text-purple-900"
+                                : "bg-slate-100 border border-slate-200 text-slate-400"
+                            }`}
+                          >
+                            <HardDrive className="w-3 h-3 text-purple-600" />
+                            <span>{userFiles.length} Dosya</span>
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPermissions(u)}
+                              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 p-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                              title="Modül Yetkilerini Düzenle"
+                            >
+                              <Sliders className="w-3.5 h-3.5 text-indigo-700" />
+                              <span className="hidden sm:inline">Yetkiler</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedUser(u)}
+                              className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 p-1.5 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                              title="Yüklü Dosyaları İncele"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Evraklar</span>
+                            </button>
+
+                            {!isCurrentAdmin && !isSysAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteUser(u)}
+                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                title="Kullanıcıyı Sil"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* NEW USER CREATION MODAL */}
+      {isAddUserModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col my-auto max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-4 sm:p-5 flex items-center justify-between border-b border-purple-800/40 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-600/30 text-purple-300 flex items-center justify-center font-black border border-purple-500/30">
+                  <UserPlus className="w-5 h-5 text-purple-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white">Yeni Kullanıcı Aç & Modül Kısıtlaması Getir</h3>
+                  <p className="text-[11px] text-purple-200/80">Kullanıcının erişebileceği sayfaları ve giriş şifresini belirleyin.</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsAddUserModalOpen(false)}
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+              {createdSuccessInfo ? (
+                <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-4 text-center">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black text-emerald-950">Kullanıcı Başarıyla Oluşturuldu!</h4>
+                    <p className="text-xs text-emerald-800 mt-1">
+                      Kullanıcı aşağıdaki giriş bilgileriyle sisteme giriş yapabilir ve yalnızca tanımladığınız {createdSuccessInfo.allowedModulesCount} modülü kullanabilir.
+                    </p>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-emerald-200 text-left space-y-2 max-w-md mx-auto">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-semibold">Ad Soyad:</span>
+                      <strong className="text-slate-900">{createdSuccessInfo.name}</strong>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-semibold">E-Posta:</span>
+                      <strong className="font-mono text-purple-900">{createdSuccessInfo.email}</strong>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-semibold">Giriş Şifresi:</span>
+                      <strong className="font-mono text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                        {createdSuccessInfo.passwordPlain}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          `Muavin ERP Giriş Bilgileriniz:\nE-Posta: ${createdSuccessInfo.email}\nŞifre: ${createdSuccessInfo.passwordPlain}`
+                        );
+                        alert("Giriş bilgileri panoya kopyalandı.");
+                      }}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Copy className="w-4 h-4" />
+                      <span>Bilgileri Kopyala</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddUserModalOpen(false)}
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
+                    >
+                      Tamamla ve Kapat
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleCreateUserSubmit} className="space-y-4">
+                  {createUserError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>{createUserError}</span>
+                    </div>
+                  )}
+
+                  {/* Form Inputs Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Kullanıcı Adı Soyadı <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Örn: Ahmet Yılmaz"
+                        value={newUserName}
+                        onChange={(e) => setNewUserName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        E-Posta Adresi (Giriş ID) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="Örn: ahmet@sirket.com"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Kullanıcı Şifresi <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          required
+                          value={newUserPassword}
+                          onChange={(e) => setNewUserPassword(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-20 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setNewUserPassword(generateRandomPassword())}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-purple-100 hover:bg-purple-200 text-purple-800 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer"
+                        >
+                          Yeni Üret
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Kullanıcı Rolü / Pozisyonu
+                      </label>
+                      <select
+                        value={newUserRole}
+                        onChange={(e) => setNewUserRole(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
+                      >
+                        <option value="Ön Muhasebe Görevlisi">Ön Muhasebe Görevlisi</option>
+                        <option value="Satış & Fatura Uzmanı">Satış & Fatura Uzmanı</option>
+                        <option value="Depo & Stok Sorumlusu">Depo & Stok Sorumlusu</option>
+                        <option value="Finans & Kasa Yetkilisi">Finans & Kasa Yetkilisi</option>
+                        <option value="İnsan Kaynakları Uzmanı">İnsan Kaynakları Uzmanı</option>
+                        <option value="Firma Yöneticisi">Firma Yöneticisi</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Firma Ünvanı
+                      </label>
+                      <input
+                        type="text"
+                        value={newUserCompany}
+                        onChange={(e) => setNewUserCompany(e.target.value)}
+                        placeholder="Şirket Adı"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Telefon Numarası
+                      </label>
+                      <input
+                        type="text"
+                        value={newUserPhone}
+                        onChange={(e) => setNewUserPhone(e.target.value)}
+                        placeholder="+90 (5XX) XXX XX XX"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* MODULE RESTRICTIONS SELECTOR */}
+                  <div className="pt-3 border-t border-slate-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+                      <div>
+                        <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                          <Sliders className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Modül Erişim Kısıtlamaları ({newUserAllowedModules.length}/{ALL_APP_MODULES.length})</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          Kullanıcının sadece işaretlediğiniz modülleri görmesini sağlayın.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllModules}
+                          className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-2 py-1 rounded-md cursor-pointer"
+                        >
+                          Tümünü Seç
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDeselectAllModules}
+                          className="text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-slate-100 px-2 py-1 rounded-md cursor-pointer"
+                        >
+                          Temizle
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Modules Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto custom-scrollbar p-1">
+                      {ALL_APP_MODULES.map((module) => {
+                        const isChecked = newUserAllowedModules.includes(module.key);
+                        return (
+                          <div
+                            key={module.key}
+                            onClick={() => toggleModuleSelection(module.key)}
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
+                              isChecked
+                                ? "bg-purple-50/70 border-purple-300 shadow-2xs"
+                                : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
+                            }`}
+                          >
+                            <div
+                              className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center shrink-0 border ${
+                                isChecked
+                                  ? "bg-purple-600 border-purple-600 text-white"
+                                  : "border-slate-300 bg-white"
+                              }`}
+                            >
+                              {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-black text-slate-900">{module.label}</span>
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-white text-slate-500 border border-slate-200">
+                                  {module.category}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 truncate mt-0.5">{module.description}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Submit buttons */}
+                  <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddUserModalOpen(false)}
+                      className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                    >
+                      İptal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={creatingUser}
+                      className="px-5 py-2.5 text-xs font-extrabold bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {creatingUser ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <UserPlus className="w-4 h-4" />
+                      )}
+                      <span>Kullanıcıyı Oluştur & Yetkilendir</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PERMISSIONS MODAL */}
+      {editingPermissionsUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in overflow-y-auto">
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-indigo-200 overflow-hidden flex flex-col my-auto max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-indigo-800/40 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600/30 text-indigo-300 flex items-center justify-center font-black border border-indigo-500/30">
+                  <Sliders className="w-5 h-5 text-indigo-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white">
+                    {editingPermissionsUser.name} — Modül Yetkilerini Düzenle
+                  </h3>
+                  <p className="text-[11px] text-indigo-200/80">{editingPermissionsUser.email} • {editingPermissionsUser.role}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setEditingPermissionsUser(null)}
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">
+                  Erişime Açık Modüller ({selectedModulesToEdit.length} / {ALL_APP_MODULES.length})
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModulesToEdit(ALL_APP_MODULES.map((m) => m.key))}
+                    className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md hover:bg-indigo-100 cursor-pointer"
+                  >
+                    Tümünü Aç
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModulesToEdit(["dashboard"])}
+                    className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md hover:bg-slate-200 cursor-pointer"
+                  >
+                    Sadece Ana Sayfa
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto custom-scrollbar p-1">
+                {ALL_APP_MODULES.map((module) => {
+                  const isChecked = selectedModulesToEdit.includes(module.key);
+                  return (
+                    <div
+                      key={module.key}
+                      onClick={() =>
+                        setSelectedModulesToEdit((prev) =>
+                          prev.includes(module.key)
+                            ? prev.filter((k) => k !== module.key)
+                            : [...prev, module.key]
+                        )
+                      }
+                      className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
+                        isChecked
+                          ? "bg-indigo-50/70 border-indigo-300 shadow-2xs"
+                          : "bg-slate-50/50 border-slate-200 opacity-50 hover:opacity-100"
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center shrink-0 border ${
+                          isChecked
+                            ? "bg-indigo-600 border-indigo-600 text-white"
+                            : "border-slate-300 bg-white"
+                        }`}
+                      >
+                        {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-black text-slate-900">{module.label}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{module.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingPermissionsUser(null)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditedPermissions}
+                  disabled={savingPermissions}
+                  className="px-5 py-2.5 text-xs font-extrabold bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  {savingPermissions ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  <span>Yetki Değişikliklerini Kaydet</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* USER FILES INSPECTION MODAL */}
       {selectedUser && (

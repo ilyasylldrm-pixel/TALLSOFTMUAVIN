@@ -104,7 +104,16 @@ export default function App() {
 
   // Auto switch admin to admin tab on login
   useEffect(() => {
-    if (currentUser && (currentUser.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" || currentUser.id === "usr_admin_001" || currentUser.role?.includes("Admin"))) {
+    const userEmail = currentUser?.email?.toLowerCase().trim() || "";
+    const isSysAdmin =
+      currentUser?.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" ||
+      currentUser?.id === "usr_admin_001" ||
+      currentUser?.role?.includes("Admin") ||
+      userEmail === "ilyasyildirim@outlook.com.tr" ||
+      userEmail === "ilyasylldrm@gmail.com" ||
+      userEmail.includes("admin");
+
+    if (currentUser && isSysAdmin) {
       setCurrentTab("admin");
     }
   }, [currentUser]);

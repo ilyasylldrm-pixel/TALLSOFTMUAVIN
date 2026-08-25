@@ -786,4 +786,46 @@ export interface ExtractedDocumentData {
   isTransferredToAccounting?: boolean; // Ön muhasebeye aktarıldı mı?
 }
 
+// Modül Yetkilendirme ve İzin Tanımları
+export type AppModuleKey =
+  | "dashboard"
+  | "company"
+  | "e_services"
+  | "invoices"
+  | "orders_module"
+  | "contacts"
+  | "accounts"
+  | "products"
+  | "products_costs"
+  | "hr"
+  | "files"
+  | "reports"
+  | "ai"
+  | "settings";
+
+export interface AppModuleDefinition {
+  key: AppModuleKey;
+  label: string;
+  description: string;
+  category: "Genel" | "Ticari" | "Finans" | "Yönetim";
+}
+
+export const ALL_APP_MODULES: AppModuleDefinition[] = [
+  { key: "dashboard", label: "Ana Sayfa / Özet", description: "Genel finansal durum ve grafikler", category: "Genel" },
+  { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi", category: "Yönetim" },
+  { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
+  { key: "invoices", label: "E-Belgeler & Faturalar", description: "Satış/Alış faturaları, e-Arşiv ve irsaliyeler", category: "Ticari" },
+  { key: "orders_module", label: "Sipariş & Proforma", description: "Müşteri siparişleri ve proforma teklifler", category: "Ticari" },
+  { key: "contacts", label: "Cari Hesaplar", description: "Müşteri ve tedarikçi cari kartları, ekstreler", category: "Ticari" },
+  { key: "accounts", label: "Finans Yönetimi", description: "Kasa, banka, çek, senet ve virman işlemleri", category: "Finans" },
+  { key: "products", label: "Stok & Ürünler", description: "Ürün kartları, barkod ve stok hareketleri", category: "Ticari" },
+  { key: "products_costs", label: "Maliyet Analizi", description: "Proje ve hammadde maliyet hesaplama", category: "Finans" },
+  { key: "hr", label: "İnsan Kaynakları & Personel", description: "Personel kartları, bordro, izin ve avanslar", category: "Yönetim" },
+  { key: "files", label: "Bulut Dosya Deposu", description: "Kullanıcı ve firma evrak arşivi", category: "Genel" },
+  { key: "reports", label: "Vergilendirme & Raporlar", description: "KDV, Muhtasar, Geçici Vergi ve mizan raporları", category: "Finans" },
+  { key: "ai", label: "AI Muavin Asistanı", description: "Yapay zeka akıllı muhasebe asistanı", category: "Genel" },
+  { key: "settings", label: "Sistem Ayarları", description: "Uygulama ayarları, yedekleme ve genel tercihler", category: "Yönetim" },
+];
+
+
 
