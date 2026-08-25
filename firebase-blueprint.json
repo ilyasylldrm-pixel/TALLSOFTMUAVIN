@@ -2,43 +2,66 @@
   "entities": {
     "users": {
       "title": "Users",
-      "description": "User profile data",
+      "description": "User profile data and preferences",
+      "type": "object",
       "properties": {
-        "userId": { "type": "string" },
-        "email": { "type": "string" },
-        "name": { "type": "string" },
-        "companyName": { "type": "string" },
-        "role": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 254 },
+        "name": { "type": "string", "maxLength": 150 },
+        "companyName": { "type": "string", "maxLength": 200 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "taxNumber": { "type": "string", "maxLength": 20 },
+        "role": { "type": "string", "maxLength": 50 },
         "selectedLogoId": { "type": "number" },
-        "createdAt": { "type": "string" }
-      }
+        "selectedLogoName": { "type": "string", "maxLength": 100 },
+        "selectedLogoUrl": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userId", "email"]
     },
     "user_files": {
       "title": "User Files",
-      "description": "User uploaded files and metadata",
+      "description": "User uploaded files, invoices, receipts and OCR metadata",
+      "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "fileName": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 255 },
         "fileSize": { "type": "number" },
-        "fileType": { "type": "string" },
-        "uploadDate": { "type": "string" },
-        "category": { "type": "string" },
-        "description": { "type": "string" },
-        "fileData": { "type": "string" }
-      }
+        "fileType": { "type": "string", "maxLength": 100 },
+        "uploadDate": { "type": "string", "maxLength": 50 },
+        "category": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "fileUrl": { "type": "string", "maxLength": 2000 },
+        "storagePath": { "type": "string", "maxLength": 500 },
+        "fileData": { "type": "string", "maxLength": 1000000 },
+        "expiresAt": { "type": "number" }
+      },
+      "required": ["userId", "fileName", "uploadDate"]
     },
-    "user_accounts": {
-      "title": "User Accounts",
-      "description": "User bank/cash account data",
+    "admins": {
+      "title": "Admins",
+      "description": "System administrator mapping for secure role-based access control",
+      "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "name": { "type": "string" },
-        "type": { "type": "string" },
-        "balance": { "type": "number" },
-        "currency": { "type": "string" }
-      }
+        "email": { "type": "string", "maxLength": 254 },
+        "grantedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/users" },
+      "description": "Stores user profile and account configuration"
+    },
+    "/user_files/{fileId}": {
+      "schema": { "$ref": "#/entities/user_files" },
+      "description": "Stores user document metadata, receipts, and e-document files"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/admins" },
+      "description": "Trusted administrative access table for role enforcement"
     }
   }
 }

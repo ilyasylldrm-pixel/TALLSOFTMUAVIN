@@ -203,8 +203,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [progress, setProgress] = useState(0);
 
   // Form State
-  const [email, setEmail] = useState("demo@tallsoft.com.tr");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [phone, setPhone] = useState("");
@@ -237,10 +237,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Reset inputs when modal mode changes
   useEffect(() => {
     setErrorMessage("");
-    if (mode === "login" && (!email || email === "")) {
-      setEmail("demo@tallsoft.com.tr");
-      setPassword("123456");
-    }
   }, [mode, isOpen]);
 
   if (!isOpen) return null;
@@ -676,7 +672,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <input
                     type="email"
                     required
-                    placeholder="demo@tallsoft.com.tr"
+                    placeholder="ornek@sirketiniz.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-white border border-slate-200 focus:border-[#8252F6] rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#8252F6]/20 transition-all"
