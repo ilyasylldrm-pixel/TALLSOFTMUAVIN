@@ -19,6 +19,7 @@ export interface BuildMysoftInvoiceOutboxOptions {
   invoiceType?: string;
   /** true = only draft in Mysoft (not sent to GİB). */
   isSaveAsDraft?: boolean;
+  /** @deprecated Mysoft: leave empty; field will be removed. Ignored by builder. */
   connectorGuid?: string;
   prefix?: string;
   /** Portal numaratör set kodu — doluysa prefix kullanılmaz. */
@@ -170,10 +171,7 @@ export function buildMysoftInvoiceOutboxPayload(
     ),
   };
 
-  if (options.connectorGuid?.trim()) {
-    payload.connectorGuid = options.connectorGuid.trim();
-  }
-
+  // Mysoft (2026-08-25): connectorGuid kullanılmamalı — boş bırakılır.
   return payload;
 }
 

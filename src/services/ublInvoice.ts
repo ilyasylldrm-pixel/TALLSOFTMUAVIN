@@ -193,7 +193,6 @@ export function buildUblInvoicePayload(options: UblInvoiceBuildOptions & { tenan
     invoiceTypeUblString: ublXmlToZipBase64(xml, `${String(options.invoice.invoiceNumber || "invoice")}.xml`),
     eDocumentType: normalizedType === "EARSIV" || normalizedType === "EARSIVFATURA" ? "EARSIVFATURA" : "EFATURA",
     tenantIdentifierNumber: options.tenantIdentifierNumber,
-    connectorGuid: options.connectorGuid,
     prefix: options.prefix,
   };
 }

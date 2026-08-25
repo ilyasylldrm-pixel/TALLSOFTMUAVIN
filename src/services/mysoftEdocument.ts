@@ -894,10 +894,9 @@ export class MysoftEdocumentClient {
   }
 
   /** Apply server-side defaults to outgoing invoice payloads without
-   * overwriting an explicit per-company tenant/connector supplied by the UI.
-   * This keeps direct API consumers and the browser proxy consistent: a
-   * connector configured once in deployment still works when a company has
-   * no local connector value. */
+   * overwriting an explicit per-company tenant supplied by the UI.
+   * Mysoft (Uğur Yılmaz, 2026-08-25): do not send connectorGuid — leave it
+   * empty; the field will be removed. */
   private submissionPayload(payload: unknown): unknown {
     if (!isObject(payload) || Array.isArray(payload)) return payload;
     const body = { ...payload } as Record<string, unknown>;
@@ -906,14 +905,7 @@ export class MysoftEdocumentClient {
       : undefined;
     const tenant = this.effectiveTenant(requestedTenant);
     if (tenant) body.tenantIdentifierNumber = tenant;
-    const requestedConnector = typeof body.connectorGuid === "string"
-      ? body.connectorGuid.trim()
-      : "";
-    if (!requestedConnector && this.config.connectorGuid?.trim()) {
-      body.connectorGuid = this.config.connectorGuid.trim();
-    } else if (requestedConnector) {
-      body.connectorGuid = requestedConnector;
-    }
+    delete body.connectorGuid;
     return body;
   }
 
@@ -1542,12 +1534,8 @@ export class MysoftEdocumentClient {
 
   sendOutgoingDraft(payload: MysoftSendDraftRequest | Record<string, unknown>): Promise<unknown> {
     const body = { ...payload } as Record<string, unknown>;
-    if (typeof body.connectorGuid !== "string" || !body.connectorGuid.trim()) {
-      const connectorGuid = this.config.connectorGuid?.trim();
-      if (connectorGuid) body.connectorGuid = connectorGuid;
-    } else {
-      body.connectorGuid = body.connectorGuid.trim();
-    }
+    // Mysoft: connectorGuid unused — omit from draft send.
+    delete body.connectorGuid;
     if (typeof body.tenantIdentifierNumber !== "string" || !body.tenantIdentifierNumber.trim()) {
       const tenantIdentifierNumber = this.effectiveTenant();
       if (tenantIdentifierNumber) body.tenantIdentifierNumber = tenantIdentifierNumber;

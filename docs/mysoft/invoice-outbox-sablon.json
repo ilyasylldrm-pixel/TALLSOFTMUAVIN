@@ -1,7 +1,6 @@
 {
   "isCalculateByApi": true,
   "id": 0,
-  "connectorGuid": "<PORTAL_CONNECTOR_GUID>",
   "eDocumentType": "EFATURA",
   "profile": "TEMELFATURA",
   "invoiceType": "SATIS",

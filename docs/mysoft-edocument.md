@@ -23,8 +23,8 @@ MYSOFT_CLIENT_SECRET=...
 # MYSOFT_REQUIRE_AUTH=true
 # Optional default firm VKN/TCKN used when a request omits tenantIdentifierNumber:
 # MYSOFT_TENANT_IDENTIFIER_NUMBER=...
-# Optional connector UUID used by send-draft when connectorGuid is omitted:
-# MYSOFT_CONNECTOR_GUID=...
+# MYSOFT_CONNECTOR_GUID is obsolete — Mysoft (Uğur Yılmaz, 2026-08-25): leave
+# connectorGuid empty; the field will be removed. Do not set this.
 # For a password grant instead (client id/secret are optional for public clients):
 # MYSOFT_GRANT_TYPE=password
 # MYSOFT_USERNAME=...
@@ -98,7 +98,7 @@ Mysoft’ta “şablon” iki ayrı şeydir; İlyas’ın kastettiği API taraf�
 | `tenantIdentifierNumber` | Faturayı kesen müşteri VKN |
 | `xsltName` / `xsltSetCode` | Görsel şablon — boşsa sunucu portal varsayılanını (`getTenantXslt`) doldurur |
 | `numeratorSetCode` / `prefix` / `docNo` | Numara — set kodu çoğu firmada boş; `getDocumentNumberList` prefix kullanır |
-| `connectorGuid` | API’de listelenmez; iş ortaklığı yöneticisinden / `MYSOFT_CONNECTOR_GUID` |
+| `connectorGuid` | **Kullanma.** Mysoft: boş gönderin; alan ileride kaldırılacak (2026-08-25) |
 | `isCalculateByApi` | `true` → tutarları API hesaplar (Swagger: geliştirme aşamasında) |
 
 Muavin gelir faturası formu bu modeli `src/services/mysoftInvoicePayload.ts`
