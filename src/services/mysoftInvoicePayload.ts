@@ -14,12 +14,22 @@ export interface BuildMysoftInvoiceOutboxOptions {
   company: CompanySettings;
   /** Defaults from invoice.eDocumentType or e-Fatura. */
   eDocumentType?: EDocumentType | MysoftOutgoingEDocumentType | string;
+  /** TEMELFATURA | TICARIFATURA | EARSIVFATURA … (Swagger InvoiceOutboxModel.profile) */
   profile?: string;
+  invoiceType?: string;
   /** true = only draft in Mysoft (not sent to GİB). */
   isSaveAsDraft?: boolean;
   connectorGuid?: string;
   prefix?: string;
+  /** Portal numaratör set kodu — doluysa prefix kullanılmaz. */
+  numeratorSetCode?: string;
+  /** Portal dizayn set kodu (e-fatura / e-arşiv XSLT seti). */
+  xsltSetCode?: string;
+  /** Portal’daki özel XSLT kodu; boşsa varsayılan veya GİB standart. */
+  xsltName?: string;
   tenantIdentifierNumber?: string;
+  pkAlias?: string;
+  gbAlias?: string;
 }
 
 function digits(value?: string): string {
@@ -113,13 +123,20 @@ export function buildMysoftInvoiceOutboxPayload(
       .toUpperCase() ||
     undefined;
 
+  // Shape mirrors Mysoft GET /api/InvoiceOutbox/createInvoiceOutboxTestJson
+  // (docs/mysoft/invoice-outbox-sablon.json) — production defaults: SATIS / TEMEL.
   const payload: Record<string, unknown> = {
+    isCalculateByApi: true,
     eDocumentType,
     profile,
-    invoiceType: "SATIS",
+    invoiceType: String(options.invoiceType || "SATIS").toUpperCase(),
     ettn: invoice.eDocumentEttn || undefined,
-    prefix: prefix || undefined,
+    prefix: options.numeratorSetCode ? undefined : prefix || undefined,
+    numeratorSetCode: options.numeratorSetCode?.trim() || undefined,
+    xsltSetCode: options.xsltSetCode?.trim() || undefined,
+    xsltName: options.xsltName?.trim() || undefined,
     // Leave docNo empty so Mysoft assigns from the numerator when possible.
+    docNo: "",
     docDate: toMysoftDateTime(invoice.issueDate),
     dueDate: invoice.dueDate
       ? toMysoftDateTime(invoice.dueDate)
@@ -129,8 +146,11 @@ export function buildMysoftInvoiceOutboxPayload(
     senderType: eDocumentType === "EARSIVFATURA" ? "ELEKTRONIK" : undefined,
     isSaveAsDraft: options.isSaveAsDraft === true,
     isAddPayableAmountString: true,
+    isManuelCalculation: false,
     referanceKey: invoice.id,
     tenantIdentifierNumber: tenant,
+    pkAlias: options.pkAlias?.trim() || undefined,
+    gbAlias: options.gbAlias?.trim() || undefined,
     notes: invoice.notes?.trim()
       ? [{ note: invoice.notes.trim() }]
       : undefined,

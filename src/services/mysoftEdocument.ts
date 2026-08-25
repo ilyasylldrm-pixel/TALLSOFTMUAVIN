@@ -43,6 +43,12 @@ export const MYSOFT_ENDPOINTS = {
   tenantList: "/api/Tenant/getTenant",
   tenantByIdentifier: "/api/Tenant/getTenantWithIdentifier",
   tenantInfo: "/api/Tenant/getTenantInfo",
+  /** Portal numerator prefixes (ABD, KON, …) for a customer VKN. */
+  tenantDocumentNumbers: "/api/Tenant/getDocumentNumberList",
+  /** Portal numerator set codes (often empty; prefix used instead). */
+  tenantNumeratorSets: "/api/Tenant/getNumaratorSetList",
+  /** Portal XSLT / fatura dizayn listesi (xsltName, isDefault, isApproved). */
+  tenantXslt: "/api/Tenant/getTenantXslt",
   /** Fallback directory: firms visible to the business-partner access key. */
   tenantUsageSummary: "/api/Tenant/getBusinessPartnerTenantDocumentUsageSummary",
   partnerCreditList: "/api/Tenant/getBusinessPartnerDocumentCreditList",
@@ -110,7 +116,14 @@ export const MYSOFT_DOCUMENT_OPERATIONS = {
   "invoice.incoming.earchive.acknowledge": { path: "/api/InvoiceInbox/earchiveInboxSavedByCustomer", method: "GET" },
   // Invoice outbox and GIB lifecycle operations.
   "invoice.outgoing.create": { path: "/api/InvoiceOutbox/invoiceOutbox", method: "POST" },
+  "invoice.outgoing.create.sample": {
+    path: "/api/InvoiceOutbox/createInvoiceOutboxTestJson",
+    method: "GET",
+  },
   "invoice.outgoing.create.ubl": { path: "/api/InvoiceOutbox/invoiceOutboxWithUblXml", method: "POST" },
+  "tenant.document-numbers": { path: "/api/Tenant/getDocumentNumberList", method: "GET" },
+  "tenant.numerator-sets": { path: "/api/Tenant/getNumaratorSetList", method: "GET" },
+  "tenant.xslt": { path: "/api/Tenant/getTenantXslt", method: "POST" },
   "invoice.outgoing.send-draft": { path: "/api/InvoiceOutbox/sendDraftInvoiceToGIB", method: "POST" },
   "invoice.outgoing.delete-draft": { path: "/api/InvoiceOutbox/deleteDraftInvoiceOutbox", method: "GET" },
   "invoice.outgoing.cancel-earchive": { path: "/api/InvoiceOutbox/cancelEArchiveInvoice", method: "GET" },
@@ -485,6 +498,21 @@ function appendQuery(url: URL, query?: MysoftRequestOptions["query"]): void {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function unwrapMysoftData(payload: unknown): unknown {
+  if (!isObject(payload)) return payload;
+  if ("data" in payload) return payload.data;
+  return payload;
+}
+
+function asObjectArray(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isObject);
+}
+
+function stringOrEmpty(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function positiveInt(value: unknown): number | undefined {
@@ -1078,6 +1106,178 @@ export class MysoftEdocumentClient {
     });
   }
 
+  /** Portal document-number / prefix list for a customer VKN. */
+  getDocumentNumberList(vknTckn: string): Promise<unknown> {
+    return this.request(MYSOFT_ENDPOINTS.tenantDocumentNumbers, {
+      method: "GET",
+      query: { vknTckn: vknTckn.trim() },
+    });
+  }
+
+  /** Portal numerator set list (often empty; firms usually use prefix only). */
+  getNumeratorSetList(vknTckn: string): Promise<unknown> {
+    return this.request(MYSOFT_ENDPOINTS.tenantNumeratorSets, {
+      method: "GET",
+      query: { vknTckn: vknTckn.trim() },
+    });
+  }
+
+  /**
+   * Portal XSLT designs for a customer.
+   * edocumentType: 1=e-Fatura, 2=e-Arşiv, 3=e-İrsaliye (Swagger ApiTenantXsltGetRequestModel).
+   */
+  getTenantXslt(options: {
+    vknTckn: string;
+    edocumentType?: number;
+    xsltName?: string;
+    isInternetSales?: boolean;
+  }): Promise<unknown> {
+    return this.request(MYSOFT_ENDPOINTS.tenantXslt, {
+      method: "POST",
+      body: {
+        vknTckn: options.vknTckn.trim(),
+        edocumentType: options.edocumentType,
+        xsltName: options.xsltName,
+        isInternetSales: options.isInternetSales,
+      },
+    });
+  }
+
+  /**
+   * Resolve default invoice design + numerator for a customer from Mysoft portal.
+   * Used when Muavin leaves xsltName / prefix / numeratorSetCode empty.
+   */
+  async resolveInvoiceDesignDefaults(options: {
+    vknTckn: string;
+    eDocumentType?: string;
+    isInternetSales?: boolean;
+  }): Promise<{
+    vknTckn: string;
+    eDocumentType: string;
+    edocumentTypeCode: number;
+    xsltName?: string;
+    prefix?: string;
+    numeratorSetCode?: string;
+    xsltDesigns: Array<Record<string, unknown>>;
+    prefixes: Array<Record<string, unknown>>;
+    numeratorSets: Array<Record<string, unknown>>;
+  }> {
+    const vkn = normalizeMysoftTenantIdentifier(options.vknTckn) || options.vknTckn.trim();
+    const eDocumentType = String(options.eDocumentType || "EFATURA")
+      .toUpperCase()
+      .replace(/[ _-]/g, "");
+    const isEarsiv = eDocumentType.includes("ARSIV");
+    const edocumentTypeCode = isEarsiv ? 2 : 1;
+    const isInternetSales = options.isInternetSales === true;
+
+    const [xsltRes, numRes, setRes] = await Promise.all([
+      this.getTenantXslt({
+        vknTckn: vkn,
+        edocumentType: edocumentTypeCode,
+        isInternetSales: isInternetSales || undefined,
+      }),
+      this.getDocumentNumberList(vkn),
+      this.getNumeratorSetList(vkn),
+    ]);
+
+    const xsltDesigns = asObjectArray(unwrapMysoftData(xsltRes));
+    const prefixes = asObjectArray(unwrapMysoftData(numRes));
+    const numeratorSets = asObjectArray(unwrapMysoftData(setRes));
+
+    const defaultXslt =
+      xsltDesigns.find((row) => row.isDefault === true && row.isApproved !== false) ||
+      xsltDesigns.find((row) => row.isDefault === true) ||
+      xsltDesigns.find((row) => row.isApproved === true) ||
+      xsltDesigns[0];
+
+    const typeCode = String(edocumentTypeCode);
+    const matchingPrefixes = prefixes.filter((row) => {
+      const rowType = String(row.edocumentType ?? "");
+      if (rowType && rowType !== typeCode) return false;
+      if (isInternetSales) return row.isInternetSales === true;
+      return row.isInternetSales !== true;
+    });
+    const defaultPrefix =
+      matchingPrefixes.find((row) => row.isDefault === true && row.isPassive !== true) ||
+      matchingPrefixes.find((row) => row.isPassive !== true) ||
+      matchingPrefixes[0];
+
+    const defaultSet =
+      numeratorSets.find((row) => typeof row.numeratorSetCode === "string" && row.numeratorSetCode.trim()) ||
+      numeratorSets[0];
+
+    return {
+      vknTckn: vkn,
+      eDocumentType: isEarsiv ? "EARSIVFATURA" : "EFATURA",
+      edocumentTypeCode,
+      xsltName:
+        typeof defaultXslt?.xsltName === "string" && defaultXslt.xsltName.trim()
+          ? defaultXslt.xsltName.trim()
+          : undefined,
+      prefix:
+        typeof defaultPrefix?.prefix === "string" && defaultPrefix.prefix.trim()
+          ? defaultPrefix.prefix.trim()
+          : undefined,
+      numeratorSetCode:
+        typeof defaultSet?.numeratorSetCode === "string" && defaultSet.numeratorSetCode.trim()
+          ? defaultSet.numeratorSetCode.trim()
+          : undefined,
+      xsltDesigns,
+      prefixes,
+      numeratorSets,
+    };
+  }
+
+  /**
+   * Fill empty design/numerator fields from the customer's Mysoft portal
+   * defaults before posting invoiceOutbox. Explicit payload values win.
+   */
+  private async enrichInvoiceOutboxDefaults(payload: unknown): Promise<unknown> {
+    if (!isObject(payload) || Array.isArray(payload)) return payload;
+    const body = { ...payload } as Record<string, unknown>;
+    const tenant =
+      typeof body.tenantIdentifierNumber === "string"
+        ? normalizeMysoftTenantIdentifier(body.tenantIdentifierNumber) ||
+          body.tenantIdentifierNumber.trim()
+        : "";
+    if (!tenant) return body;
+
+    const needsXslt = !stringOrEmpty(body.xsltName) && !stringOrEmpty(body.xsltSetCode);
+    const needsPrefix =
+      !stringOrEmpty(body.prefix) &&
+      !stringOrEmpty(body.numeratorSetCode) &&
+      !stringOrEmpty(body.docNo);
+    if (!needsXslt && !needsPrefix) return body;
+
+    try {
+      const defaults = await this.resolveInvoiceDesignDefaults({
+        vknTckn: tenant,
+        eDocumentType: typeof body.eDocumentType === "string" ? body.eDocumentType : "EFATURA",
+        isInternetSales:
+          typeof body.senderType === "string" &&
+          String(body.profile || "").toUpperCase().includes("INTERNET")
+            ? true
+            : undefined,
+      });
+      if (needsXslt && defaults.xsltName) {
+        body.xsltName = defaults.xsltName;
+        if (body.isSendWithGeneralXsltIfDefaultNotExists === undefined) {
+          body.isSendWithGeneralXsltIfDefaultNotExists = true;
+        }
+      }
+      if (needsPrefix) {
+        if (defaults.numeratorSetCode) {
+          body.numeratorSetCode = defaults.numeratorSetCode;
+        } else if (defaults.prefix) {
+          body.prefix = defaults.prefix;
+        }
+      }
+    } catch {
+      // Keep original payload; Mysoft will fall back to portal defaults / GİB XSLT.
+    }
+    return body;
+  }
+
   listOutgoing(request: MysoftListRequest = {}): Promise<unknown> {
     // GetInvoiceOutboxListRequestModel also has additionalProperties=false;
     // docNo/pkAlias/ETTN and numbered-paging fields belong to other models.
@@ -1224,17 +1424,19 @@ export class MysoftEdocumentClient {
     });
   }
 
-  createOutgoing(payload: unknown): Promise<unknown> {
+  async createOutgoing(payload: unknown): Promise<unknown> {
+    const body = await this.enrichInvoiceOutboxDefaults(this.submissionPayload(payload));
     return this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
       method: "POST",
-      body: this.submissionPayload(payload),
+      body,
     });
   }
 
-  createOutgoingWithUblXml(payload: unknown): Promise<unknown> {
+  async createOutgoingWithUblXml(payload: unknown): Promise<unknown> {
+    const body = await this.enrichInvoiceOutboxDefaults(this.submissionPayload(payload));
     return this.request(MYSOFT_ENDPOINTS.outgoingSubmitUbl, {
       method: "POST",
-      body: this.submissionPayload(payload),
+      body,
     });
   }
 

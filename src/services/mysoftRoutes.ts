@@ -331,6 +331,22 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
       return client.getTenantInfo(identifierNumber);
     }),
   );
+  /** Portal defaults: approved XSLT name + document-number prefix for e-fatura/e-arşiv. */
+  router.get(
+    "/tenants/:identifierNumber/invoice-design",
+    run((req) => {
+      const identifierNumber = textParam(req.params.identifierNumber);
+      if (!identifierNumber) throw new InvalidMysoftRequestError("identifierNumber is required");
+      const eDocumentType =
+        queryText(req, "eDocumentType") || queryText(req, "type") || "EFATURA";
+      const isInternetSales = queryText(req, "isInternetSales") === "true";
+      return client.resolveInvoiceDesignDefaults({
+        vknTckn: identifierNumber,
+        eDocumentType,
+        isInternetSales,
+      });
+    }),
+  );
 
   // Browser-facing compatibility surface.  The UI intentionally talks to a
   // single /e-documents resource while the server-side routes below retain a

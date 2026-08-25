@@ -68,6 +68,55 @@ alanlar portalda salt okunur görünür. Erişim anahtarı ve mükellef kapsamı
 URL kaydından ayrıdır; her mükellef için hesabınıza bağlılık ve ilgili erişim
 anahtarına yetki tanımı ayrıca kontrol edilmelidir.
 
+## Giden e-fatura kesme (şablon + süreç)
+
+Mysoft’ta “şablon” iki ayrı şeydir; İlyas’ın kastettiği API tarafı
+`InvoiceOutboxModel` JSON’udur. Görünüm (PDF/HTML) ise portal **XSLT / dizayn**.
+
+### Süreç
+
+1. OAuth: `POST /oauth/token` (`client_credentials`, Erişim Anahtarı).
+2. Müşteri VKN: `tenantIdentifierNumber` (iş ortağına bağlı e-belge müşterisi).
+3. Gövde: `GET /api/InvoiceOutbox/createInvoiceOutboxTestJson` → resmi örnek JSON
+   (repo: `docs/mysoft/invoice-outbox-sablon.json`, üretim için sadeleştirilmiş).
+4. Gönderim: `POST /api/InvoiceOutbox/invoiceOutbox` → GİB’e gider
+   (`isSaveAsDraft: true` ise sadece Mysoft taslağı).
+5. Alternatif: `invoiceOutboxWithUblXml` (UBL zip base64) veya portal taslak
+   (`Invoice/invoiceDraft…`) sonra imza/SMS.
+6. Sonuç: `invoiceETTN` + `docNo` (boş `docNo` + `prefix` / `numeratorSetCode`
+   → Mysoft 16 haneli numara).
+
+### Zorunlu / kritik alanlar
+
+| Alan | Anlam |
+| --- | --- |
+| `eDocumentType` | `EFATURA` / `EARSIVFATURA` |
+| `profile` | `TEMELFATURA` / `TICARIFATURA` / `EARSIVFATURA` … (alıcı mükellef ise e-arşiv dışı) |
+| `invoiceType` | Normal satış: `SATIS` |
+| `invoiceAccount` | Alıcı VKN, unvan, vergi dairesi, adres |
+| `invoiceDetail[]` | `productCode`, `productName`, `unitCode`, `qty`, `unitPriceTra`, `amtTra`, `vatRate` … |
+| `tenantIdentifierNumber` | Faturayı kesen müşteri VKN |
+| `xsltName` / `xsltSetCode` | Görsel şablon — boşsa sunucu portal varsayılanını (`getTenantXslt`) doldurur |
+| `numeratorSetCode` / `prefix` / `docNo` | Numara — set kodu çoğu firmada boş; `getDocumentNumberList` prefix kullanır |
+| `connectorGuid` | API’de listelenmez; iş ortaklığı yöneticisinden / `MYSOFT_CONNECTOR_GUID` |
+| `isCalculateByApi` | `true` → tutarları API hesaplar (Swagger: geliştirme aşamasında) |
+
+Muavin gelir faturası formu bu modeli `src/services/mysoftInvoicePayload.ts`
+ile üretir. Gönderimde (`POST /outgoing`) boş `xsltName` / `prefix` müşteri
+VKN’sine göre Mysoft portalından otomatik doldurulur:
+
+`GET /api/mysoft/tenants/{vkn}/invoice-design?eDocumentType=EFATURA`
+
+Canlı örnekler:
+
+| VKN | e-Fatura XSLT | prefix | e-Arşiv XSLT | prefix |
+| --- | --- | --- | --- | --- |
+| 37756832708 | `EFA2` | `ABD` | `EAR1` | `KON` |
+| 13819008730 | `efa1` | `KUT` | `ear` | `DEM` |
+| 36895866360 | `Standart E-Fatura Şablonu` | `ADM` | — | `CLK` |
+
+Bu firmalarda `numeratorSetCode` / `xsltSetCode` portalda tanımlı değil.
+
 ## Proxy routes
 
 All paths are under `/api/mysoft`:
