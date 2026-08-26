@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useDeferredValue } from "react";
 import { Contact, ContactType, LedgerEntry, Invoice, Transaction, Account, Cheque, PromissoryNote, CompanySettings, getContactAccountCode } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { EmailExportModal } from "./EmailExportModal";
-import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, generateAccountStatementAutoTablePDF, exportElementToPDFWithPrintStyling, LedgerSummaryData } from "../utils/exportUtils";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -997,7 +997,7 @@ export const Contacts: React.FC<ContactsProps> = ({
     const netBalance = totalDebit - totalCredit;
     const invoiceCount = currentLedgerEntries.filter((e) => e.documentType === "Fatura").length;
     const collectionCount = currentLedgerEntries.filter((e) => e.documentType === "Tahsilat").length;
-    const paymentCount = currentLedgerEntries.filter((e) => e.documentType === "Tediye" || e.documentType === "Ödeme").length;
+    const paymentCount = currentLedgerEntries.filter((e) => e.documentType === "Tediye").length;
     const lastMovementDate = currentLedgerEntries.length > 0 ? currentLedgerEntries[currentLedgerEntries.length - 1].date : null;
     return {
       totalDebit,
@@ -1046,22 +1046,24 @@ export const Contacts: React.FC<ContactsProps> = ({
     };
   };
 
-  // Direct PDF Export using exportElementToPDF
+  // Direct PDF Export using autoTable
   const handleExportLedgerPDFDirect = async () => {
     if (!selectedLedgerContact) return;
-    const element = document.getElementById("printable-ledger");
-    if (!element) {
-      alert("Yazdırılacak cari ekstre belgesi bulunamadı.");
-      return;
-    }
     try {
       setIsPdfGenerating(true);
+      const pdfData = generateAccountStatementAutoTablePDF({
+        companySettings,
+        contact: selectedLedgerContact,
+        entries: filteredLedgerEntries,
+        summary: ledgerSummary,
+      });
+      pdfData.pdf.save(pdfData.fileName);
+    } catch (err) {
+      console.error("Cari Ekstre PDF oluşturulurken hata:", err);
+      // Fallback to DOM print styling
       const safeName = (selectedLedgerContact.name || "Cari").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "_");
       const fileName = `Cari_Ekstre_${safeName}_${new Date().toISOString().split("T")[0]}.pdf`;
       await exportElementToPDF("printable-ledger", fileName, { orientation: "p", margin: 8, scale: 2 });
-    } catch (err) {
-      console.error("Cari Ekstre PDF oluşturulurken hata:", err);
-      alert("PDF belgesi oluşturulurken bir hata oluştu.");
     } finally {
       setIsPdfGenerating(false);
     }
@@ -1150,147 +1152,38 @@ export const Contacts: React.FC<ContactsProps> = ({
   const generateLedgerPDF = async (
     contact: Contact
   ): Promise<{ pdf: jsPDF; blob: Blob; fileName: string } | null> => {
-    const element = document.getElementById("printable-ledger");
-    if (!element) return null;
-
     try {
       setIsGeneratingPDF(true);
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: Math.max(element.scrollWidth, 1280),
-        windowHeight: Math.max(element.scrollHeight + 500, 2400),
-        onclone: (clonedDoc) => {
-          sanitizeOklchForHtml2Canvas(clonedDoc);
-          const clonedTarget = clonedDoc.getElementById("printable-ledger");
-          if (clonedTarget) {
-            let curr: HTMLElement | null = clonedTarget;
-            while (curr && curr !== clonedDoc.body) {
-              curr.style.overflow = "visible";
-              curr.style.maxHeight = "none";
-              curr.style.height = "auto";
-              curr.style.maxWidth = "none";
-              curr.style.position = "static";
-              curr.style.transform = "none";
-              curr = curr.parentElement;
-            }
-            clonedDoc.body.style.overflow = "visible";
-            clonedDoc.body.style.height = "auto";
-            clonedDoc.body.style.maxHeight = "none";
+      const entries = getLedgerEntries(contact.id);
+      const totalDebit = entries.reduce((acc, curr) => acc + curr.debit, 0);
+      const totalCredit = entries.reduce((acc, curr) => acc + curr.credit, 0);
+      const netBalance = totalDebit - totalCredit;
+      const invoiceCount = entries.filter((e) => e.documentType === "Fatura").length;
+      const collectionCount = entries.filter((e) => e.documentType === "Tahsilat").length;
+      const paymentCount = entries.filter((e) => e.documentType === "Tediye").length;
+      const lastMovementDate = entries.length > 0 ? entries[entries.length - 1].date : undefined;
 
-            clonedTarget.style.width = `${element.scrollWidth || 900}px`;
-            clonedTarget.style.maxWidth = `${element.scrollWidth || 900}px`;
-            clonedTarget.style.margin = "0 auto";
-            clonedTarget.style.boxShadow = "none";
-          }
-        },
+      const summary: LedgerSummaryData = {
+        totalDebit,
+        totalCredit,
+        netBalance,
+        invoiceCount,
+        collectionCount,
+        paymentCount,
+        totalMovements: entries.length,
+        lastMovementDate: lastMovementDate || undefined,
+      };
+
+      return generateAccountStatementAutoTablePDF({
+        companySettings,
+        contact,
+        entries,
+        summary,
       });
-
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
-      const imgWidth = pdfWidth - margin * 2;
-      const pageUsableHeightMm = pdfHeight - margin * 2;
-
-      const pxPerMm = canvas.width / imgWidth;
-      const targetPagePx = pageUsableHeightMm * pxPerMm;
-
-      const containerRect = element.getBoundingClientRect();
-      const scaleY = canvas.height / (containerRect.height || element.scrollHeight || 1);
-
-      // Collect elements that should not be split horizontally across pages (table rows and top-level cards/divs)
-      const rawElements = Array.from(
-        element.querySelectorAll("tr, #printable-ledger > div")
-      ) as HTMLElement[];
-
-      const breakElements = rawElements.filter(
-        (el) => el.tagName === "TR" || !el.querySelector("table, tr")
-      );
-
-      const breakPoints = breakElements
-        .map((el) => {
-          const r = el.getBoundingClientRect();
-          return {
-            top: Math.round((r.top - containerRect.top) * scaleY),
-            bottom: Math.round((r.bottom - containerRect.top) * scaleY),
-          };
-        })
-        .filter((bp) => bp.bottom > bp.top);
-
-      let yStart = 0;
-      let pageIndex = 0;
-
-      while (yStart < canvas.height - 5) {
-        let yNextCut = yStart + targetPagePx;
-
-        if (yNextCut < canvas.height) {
-          // Find any element that starts on this page after yStart, starts before yNextCut, and ends after yNextCut
-          const straddlingElements = breakPoints.filter(
-            (bp) => bp.top > yStart + 15 && bp.top < yNextCut && bp.bottom > yNextCut
-          );
-
-          if (straddlingElements.length > 0) {
-            // Cut right above the earliest straddling element so it moves intact to the next page
-            const minTop = Math.min(...straddlingElements.map((e) => e.top));
-            if (minTop > yStart + 30) {
-              yNextCut = minTop;
-            }
-          }
-        } else {
-          yNextCut = canvas.height;
-        }
-
-        const chunkHeight = yNextCut - yStart;
-        if (chunkHeight <= 0) break;
-
-        const subCanvas = document.createElement("canvas");
-        subCanvas.width = canvas.width;
-        subCanvas.height = chunkHeight;
-
-        const ctx = subCanvas.getContext("2d");
-        if (ctx) {
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, subCanvas.width, subCanvas.height);
-          ctx.drawImage(
-            canvas,
-            0,
-            yStart,
-            canvas.width,
-            chunkHeight,
-            0,
-            0,
-            canvas.width,
-            chunkHeight
-          );
-        }
-
-        const subImgData = subCanvas.toDataURL("image/png");
-        const subImgHeightMm = (chunkHeight * imgWidth) / canvas.width;
-
-        if (pageIndex > 0) {
-          pdf.addPage();
-        }
-
-        pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
-
-        yStart = yNextCut;
-        pageIndex++;
-      }
-
-      const safeName = (contact.name || "Cari").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ]/g, "_");
-      const fileName = `Cari_Ekstre_${safeName}.pdf`;
-      const blob = pdf.output("blob");
-
-      return { pdf, blob, fileName };
     } catch (err) {
       console.error("PDF oluşturulamadı:", err);
-      alert("PDF oluşturulurken bir hata oluştu. Lütfen tekrar deneyiniz.");
-      return null;
+      // Fallback to DOM print styling
+      return exportElementToPDFWithPrintStyling("printable-ledger", `Cari_Ekstre_${contact.name}.pdf`);
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -2087,27 +1980,6 @@ export const Contacts: React.FC<ContactsProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleExportLedgerPDFDirect}
-                  disabled={isPdfGenerating}
-                  className="bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-                  title="PDF Belgesi Olarak İndir"
-                >
-                  <FileCheck2 className="w-4 h-4 text-purple-200" />
-                  <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => exportLedgerExcel(selectedLedgerContact)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                  title="Türkçe Karakter Destekli Excel (.xlsx) İndir"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
-                  <span className="hidden sm:inline">Excel</span>
-                </button>
-
-                <button
-                  type="button"
                   onClick={() => handleOpenShareModal("whatsapp")}
                   className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                   title="WhatsApp Web veya Uygulaması İle Ekstre Paylaş"
@@ -2125,16 +1997,6 @@ export const Contacts: React.FC<ContactsProps> = ({
                   <Mail className="w-4 h-4 text-indigo-200" />
                   <span className="hidden sm:inline">E-Posta ile Gönder</span>
                 </button>
-
-                <ExportButtons
-                  getExportData={getLedgerExportData}
-                  recipientEmail={selectedLedgerContact.email}
-                  recipientName={selectedLedgerContact.name}
-                  contacts={contacts}
-                  companyName={companySettings?.companyName}
-                  size="sm"
-                  hideEmail={true}
-                />
 
                 <button
                   type="button"
@@ -2657,23 +2519,6 @@ export const Contacts: React.FC<ContactsProps> = ({
                 >
                   <Mail className="w-3.5 h-3.5" />
                   <span>E-Posta Gönder</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => exportLedgerExcel(selectedLedgerContact)}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl cursor-pointer transition-colors flex items-center gap-1.5"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                  <span>Excel İndir</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExportLedgerPDFDirect}
-                  disabled={isPdfGenerating}
-                  className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold px-4 py-1.5 rounded-xl cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <FileCheck2 className="w-3.5 h-3.5" />
-                  <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
                 </button>
                 <button
                   type="button"

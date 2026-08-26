@@ -1561,19 +1561,6 @@ export const Products: React.FC<ProductsProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleExportEkstrePDF}
-                  disabled={isPdfGenerating}
-                  className="bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-                  title="PDF Olarak İndir"
-                >
-                  <FileCheck2 className="w-4 h-4 text-purple-200" />
-                  <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
-                </button>
-
-                <ExportButtons getExportData={getEkstreExportData} size="sm" />
-
-                <button
-                  type="button"
                   onClick={() => setSelectedEkstreProduct(null)}
                   className="text-slate-400 hover:text-white p-1.5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
                 >

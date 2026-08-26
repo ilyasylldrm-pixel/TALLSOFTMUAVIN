@@ -425,210 +425,23 @@ export function exportToExcel({
 }
 
 /**
- * Generates jsPDF instance and Blob from ExportData with full Turkish character support via html2canvas
+ * Generates jsPDF instance and Blob from ExportData using fast, reliable jspdf-autotable vector generation
  */
-export async function generatePDFFromExportData({
-  filename,
-  title,
-  subtitle,
-  headers,
-  rows,
-}: ExportData): Promise<{ pdf: jsPDF; blob: Blob; fileName: string } | null> {
-  // Create a temporary container in DOM to render a clean printable HTML table (Landscape format width ~1150px)
-  const container = document.createElement("div");
-  container.style.position = "absolute";
-  container.style.left = "-9999px";
-  container.style.top = "-9999px";
-  container.style.width = "1150px";
-  container.style.backgroundColor = "#ffffff";
-  container.style.color = "#0f172a";
-  container.style.fontFamily = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-  container.style.padding = "32px";
-  container.style.boxSizing = "border-box";
-
-  const currentDate = new Date().toLocaleDateString("tr-TR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  // Build HTML table content
-  let rowsHtml = rows
-    .map((row, rIdx) => {
-      const bg = rIdx % 2 === 0 ? "#ffffff" : "#f8fafc";
-      const cells = row
-        .map((cell) => {
-          const val = cell === null || cell === undefined ? "" : String(cell);
-          const isNumericOrCurrency =
-            typeof cell === "number" ||
-            (!isNaN(Number(val)) && val.trim() !== "" && !val.includes(":")) ||
-            /^[\₺\$\€\£\d\s\.\,\-\%\+]+$/.test(val.trim());
-          const align = isNumericOrCurrency ? "right" : "left";
-          return `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: ${align}; word-break: break-word;">${val}</td>`;
-        })
-        .join("");
-      return `<tr style="background-color: ${bg};">${cells}</tr>`;
-    })
-    .join("");
-
-  const headersHtml = headers
-    .map((h, hIdx) => {
-      const sampleCell = rows[0]?.[hIdx];
-      const sampleVal = sampleCell === null || sampleCell === undefined ? "" : String(sampleCell);
-      const isNumericOrCurrency =
-        typeof sampleCell === "number" ||
-        /^[\₺\$\€\£\d\s\.\,\-\%\+]+$/.test(sampleVal.trim()) ||
-        /tutar|bakiye|toplam|fiyat|miktar|alacak|borç|maaş|maas|gelir|gider|kdv/i.test(h);
-      const align = isNumericOrCurrency ? "right" : "left";
-      return `<th style="padding: 10px; background-color: #4f46e5; color: #ffffff; font-size: 11px; font-weight: 700; text-align: ${align}; border-bottom: 2px solid #4338ca;">${h}</th>`;
-    })
-    .join("");
-
-  container.innerHTML = `
-    <div style="margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end;">
-      <div>
-        <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #1e1b4b; letter-spacing: -0.02em;">${title}</h1>
-        ${subtitle ? `<p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b; font-weight: 500;">${subtitle}</p>` : ""}
-      </div>
-      <div style="text-align: right; font-size: 10px; color: #94a3b8; font-weight: 600;">
-        <div>Rapor Tarihi</div>
-        <div style="color: #475569; font-weight: 700; margin-top: 2px;">${currentDate}</div>
-        <div style="color: #6366f1; font-weight: 700; margin-top: 2px;">Toplam ${rows.length} Kayıt</div>
-      </div>
-    </div>
-    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-      <thead>
-        <tr>${headersHtml}</tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
-    <div style="margin-top: 20px; text-align: right; font-size: 9px; color: #94a3b8; border-top: 1px dashed #cbd5e1; padding-top: 8px;">
-      Bu belge Ön Muhasebe & ERP Sistemi tarafından otomatik olarak üretilmiştir.
-    </div>
-  `;
-
-  document.body.appendChild(container);
-
+export async function generatePDFFromExportData(
+  data: ExportData
+): Promise<{ pdf: jsPDF; blob: Blob; fileName: string } | null> {
   try {
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: "#ffffff",
-      onclone: (clonedDoc) => {
-        sanitizeOklchForHtml2Canvas(clonedDoc);
-      },
-    });
-
-    const pdf = new jsPDF("l", "mm", "a4");
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const margin = 8;
-    const imgWidth = pdfWidth - margin * 2;
-    const pageUsableHeightMm = pdfHeight - margin * 2;
-
-    const pxPerMm = canvas.width / imgWidth;
-    const targetPagePx = pageUsableHeightMm * pxPerMm;
-
-    const containerRect = container.getBoundingClientRect();
-    const scaleY = canvas.height / (containerRect.height || 1);
-
-    const rawElements = Array.from(
-      container.querySelectorAll("tr, div")
-    ) as HTMLElement[];
-
-    const breakElements = rawElements.filter(
-      (el) => el.tagName === "TR" || !el.querySelector("table, tr")
-    );
-
-    const breakPoints = breakElements
-      .map((el) => {
-        const r = el.getBoundingClientRect();
-        return {
-          top: Math.round((r.top - containerRect.top) * scaleY),
-          bottom: Math.round((r.bottom - containerRect.top) * scaleY),
-        };
-      })
-      .filter((bp) => bp.bottom > bp.top);
-
-    let yStart = 0;
-    let pageIndex = 0;
-
-    while (yStart < canvas.height - 5) {
-      let yNextCut = yStart + targetPagePx;
-
-      if (yNextCut < canvas.height) {
-        const straddlingElements = breakPoints.filter(
-          (bp) => bp.top > yStart + 10 && bp.top < yNextCut && bp.bottom > yNextCut
-        );
-
-        if (straddlingElements.length > 0) {
-          const minTop = Math.min(...straddlingElements.map((e) => e.top));
-          if (minTop > yStart + 20) {
-            yNextCut = minTop;
-          }
-        }
-      } else {
-        yNextCut = canvas.height;
-      }
-
-      const chunkHeight = yNextCut - yStart;
-      if (chunkHeight <= 0) break;
-
-      const subCanvas = document.createElement("canvas");
-      subCanvas.width = canvas.width;
-      subCanvas.height = chunkHeight;
-
-      const ctx = subCanvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, subCanvas.width, subCanvas.height);
-        ctx.drawImage(
-          canvas,
-          0,
-          yStart,
-          canvas.width,
-          chunkHeight,
-          0,
-          0,
-          canvas.width,
-          chunkHeight
-        );
-      }
-
-      const subImgData = subCanvas.toDataURL("image/png");
-      const subImgHeightMm = (chunkHeight * imgWidth) / canvas.width;
-
-      if (pageIndex > 0) {
-        pdf.addPage();
-      }
-
-      pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
-
-      yStart = yNextCut;
-      pageIndex++;
-    }
-
-    const cleanFilename = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
-    const blob = pdf.output("blob");
-    return { pdf, blob, fileName: cleanFilename };
+    const { generateAutoTableFromExportData } = await import("./pdfService");
+    return generateAutoTableFromExportData(data);
   } catch (err) {
-    console.error("PDF oluşturma hatası:", err);
-    alert("PDF hazırlanırken bir hata oluştu. Lütfen tekrar deneyiniz.");
+    console.error("AutoTable PDF Export error:", err);
+    alert("PDF oluşturulurken bir hata oluştu.");
     return null;
-  } finally {
-    if (document.body.contains(container)) {
-      document.body.removeChild(container);
-    }
   }
 }
 
 /**
- * PDF (.pdf) Export with full Turkish character support via html2canvas
+ * PDF (.pdf) Export with full Turkish character support via jspdf-autotable
  */
 export async function exportToPDF(data: ExportData) {
   const result = await generatePDFFromExportData(data);
@@ -638,161 +451,21 @@ export async function exportToPDF(data: ExportData) {
 }
 
 /**
- * Direct DOM element to PDF exporter (Supports Portrait / Landscape A4 format for Invoices/Documents/Slips/Ledgers)
+ * Direct DOM element to PDF exporter with print-specific styling and element-aware page breaks
  */
 export async function exportElementToPDF(
   elementId: string,
   filename: string = "belge.pdf",
   options: { orientation?: "p" | "l"; margin?: number; scale?: number } = {}
 ): Promise<void> {
-  const element = document.getElementById(elementId);
-  if (!element) {
-    console.warn(`exportElementToPDF: Element #${elementId} bulunamadı.`);
-    alert("Yazdırılacak belge içeriği bulunamadı.");
-    return;
-  }
-
-  const { orientation = "p", margin = 8, scale = 2 } = options;
-
-  try {
-    const canvas = await html2canvas(element, {
-      scale: scale,
-      useCORS: true,
-      logging: false,
-      backgroundColor: "#ffffff",
-      scrollX: 0,
-      scrollY: 0,
-      windowWidth: Math.max(element.scrollWidth, 1280),
-      windowHeight: Math.max(element.scrollHeight + 500, 2400),
-      onclone: (clonedDoc) => {
-        sanitizeOklchForHtml2Canvas(clonedDoc);
-        const clonedTarget = clonedDoc.getElementById(elementId);
-        if (clonedTarget) {
-          // Unconstrain target element and all parent nodes
-          let curr: HTMLElement | null = clonedTarget;
-          while (curr && curr !== clonedDoc.body) {
-            curr.style.overflow = "visible";
-            curr.style.maxHeight = "none";
-            curr.style.height = "auto";
-            curr.style.maxWidth = "none";
-            curr.style.position = "static";
-            curr.style.transform = "none";
-            curr = curr.parentElement;
-          }
-          clonedDoc.body.style.overflow = "visible";
-          clonedDoc.body.style.height = "auto";
-          clonedDoc.body.style.maxHeight = "none";
-
-          clonedTarget.style.width = `${element.scrollWidth || 900}px`;
-          clonedTarget.style.maxWidth = `${element.scrollWidth || 900}px`;
-          clonedTarget.style.margin = "0 auto";
-          clonedTarget.style.boxShadow = "none";
-        }
-      },
-    });
-
-    const pdf = new jsPDF(orientation, "mm", "a4");
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-
-    const imgWidth = pdfWidth - margin * 2;
-    const pageUsableHeight = pdfHeight - margin * 2;
-    const totalImgHeightMm = (canvas.height * imgWidth) / canvas.width;
-
-    if (totalImgHeightMm <= pageUsableHeight) {
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, totalImgHeightMm);
-    } else {
-      // Clean element-aware multi-page splitting without distortion
-      const pxPerMm = canvas.width / imgWidth;
-      const targetPagePx = pageUsableHeight * pxPerMm;
-
-      const rawElements = Array.from(
-        element.querySelectorAll("tr, #printable-ledger > div, #printable-receipt > div, .printable-block")
-      ) as HTMLElement[];
-
-      const containerRect = element.getBoundingClientRect();
-      const scaleY = canvas.height / (containerRect.height || element.scrollHeight || 1);
-
-      const breakElements = rawElements.filter(
-        (el) => el.tagName === "TR" || !el.querySelector("table, tr")
-      );
-
-      const breakPoints = breakElements
-        .map((el) => {
-          const r = el.getBoundingClientRect();
-          return {
-            top: Math.round((r.top - containerRect.top) * scaleY),
-            bottom: Math.round((r.bottom - containerRect.top) * scaleY),
-          };
-        })
-        .filter((bp) => bp.bottom > bp.top);
-
-      let yStart = 0;
-      let pageIndex = 0;
-
-      while (yStart < canvas.height - 5) {
-        let yNextCut = yStart + targetPagePx;
-
-        if (yNextCut < canvas.height) {
-          const straddlingElements = breakPoints.filter(
-            (bp) => bp.top > yStart + 15 && bp.top < yNextCut && bp.bottom > yNextCut
-          );
-
-          if (straddlingElements.length > 0) {
-            const minTop = Math.min(...straddlingElements.map((e) => e.top));
-            if (minTop > yStart + 30) {
-              yNextCut = minTop;
-            }
-          }
-        } else {
-          yNextCut = canvas.height;
-        }
-
-        const chunkHeightPx = yNextCut - yStart;
-        if (chunkHeightPx <= 0) break;
-
-        const subCanvas = document.createElement("canvas");
-        subCanvas.width = canvas.width;
-        subCanvas.height = chunkHeightPx;
-
-        const ctx = subCanvas.getContext("2d");
-        if (ctx) {
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, subCanvas.width, subCanvas.height);
-          ctx.drawImage(
-            canvas,
-            0,
-            yStart,
-            canvas.width,
-            chunkHeightPx,
-            0,
-            0,
-            canvas.width,
-            chunkHeightPx
-          );
-        }
-
-        const subImgData = subCanvas.toDataURL("image/png");
-        const subImgHeightMm = (chunkHeightPx * imgWidth) / canvas.width;
-
-        if (pageIndex > 0) {
-          pdf.addPage();
-        }
-
-        pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
-
-        yStart = yNextCut;
-        pageIndex++;
-      }
-    }
-
-    const cleanFilename = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
-    pdf.save(cleanFilename);
-  } catch (err) {
-    console.error("DOM PDF Export hatası:", err);
-    alert("PDF indirilirken bir hata oluştu. Lütfen tekrar deneyin.");
+  const { exportElementToPDFWithPrintStyling } = await import("./pdfService");
+  const result = await exportElementToPDFWithPrintStyling(elementId, filename, options);
+  if (result) {
+    result.pdf.save(result.fileName);
   }
 }
 
+export * from "./pdfService";
 export { exportAssetCustodyToPDF, generateAssetCustodyHTML } from "./assetCustodyPdf";
+
 
