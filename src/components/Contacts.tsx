@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useDeferredValue } from "react";
 import { Contact, ContactType, LedgerEntry, Invoice, Transaction, Account, Cheque, PromissoryNote, CompanySettings, getContactAccountCode } from "../types";
 import { ExportButtons } from "./ExportButtons";
+import { EmailExportModal } from "./EmailExportModal";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF } from "../utils/exportUtils";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
@@ -1159,15 +1160,40 @@ export const Contacts: React.FC<ContactsProps> = ({
         useCORS: true,
         logging: false,
         backgroundColor: "#ffffff",
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: Math.max(element.scrollWidth, 1280),
+        windowHeight: Math.max(element.scrollHeight + 500, 2400),
         onclone: (clonedDoc) => {
           sanitizeOklchForHtml2Canvas(clonedDoc);
+          const clonedTarget = clonedDoc.getElementById("printable-ledger");
+          if (clonedTarget) {
+            let curr: HTMLElement | null = clonedTarget;
+            while (curr && curr !== clonedDoc.body) {
+              curr.style.overflow = "visible";
+              curr.style.maxHeight = "none";
+              curr.style.height = "auto";
+              curr.style.maxWidth = "none";
+              curr.style.position = "static";
+              curr.style.transform = "none";
+              curr = curr.parentElement;
+            }
+            clonedDoc.body.style.overflow = "visible";
+            clonedDoc.body.style.height = "auto";
+            clonedDoc.body.style.maxHeight = "none";
+
+            clonedTarget.style.width = `${element.scrollWidth || 900}px`;
+            clonedTarget.style.maxWidth = `${element.scrollWidth || 900}px`;
+            clonedTarget.style.margin = "0 auto";
+            clonedTarget.style.boxShadow = "none";
+          }
         },
       });
 
-      const pdf = new jsPDF("l", "mm", "a4");
+      const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
+      const margin = 8;
       const imgWidth = pdfWidth - margin * 2;
       const pageUsableHeightMm = pdfHeight - margin * 2;
 
@@ -1175,7 +1201,7 @@ export const Contacts: React.FC<ContactsProps> = ({
       const targetPagePx = pageUsableHeightMm * pxPerMm;
 
       const containerRect = element.getBoundingClientRect();
-      const scaleY = canvas.height / (containerRect.height || 1);
+      const scaleY = canvas.height / (containerRect.height || element.scrollHeight || 1);
 
       // Collect elements that should not be split horizontally across pages (table rows and top-level cards/divs)
       const rawElements = Array.from(
@@ -1205,13 +1231,13 @@ export const Contacts: React.FC<ContactsProps> = ({
         if (yNextCut < canvas.height) {
           // Find any element that starts on this page after yStart, starts before yNextCut, and ends after yNextCut
           const straddlingElements = breakPoints.filter(
-            (bp) => bp.top > yStart + 10 && bp.top < yNextCut && bp.bottom > yNextCut
+            (bp) => bp.top > yStart + 15 && bp.top < yNextCut && bp.bottom > yNextCut
           );
 
           if (straddlingElements.length > 0) {
             // Cut right above the earliest straddling element so it moves intact to the next page
             const minTop = Math.min(...straddlingElements.map((e) => e.top));
-            if (minTop > yStart + 20) {
+            if (minTop > yStart + 30) {
               yNextCut = minTop;
             }
           }
@@ -1541,7 +1567,12 @@ export const Contacts: React.FC<ContactsProps> = ({
               className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
             />
           </div>
-          <ExportButtons getExportData={getContactsExportData} size="sm" />
+          <ExportButtons
+            getExportData={getContactsExportData}
+            contacts={contacts}
+            companyName={companySettings?.companyName}
+            size="sm"
+          />
         </div>
       </div>
 
@@ -2085,7 +2116,25 @@ export const Contacts: React.FC<ContactsProps> = ({
                   <span className="hidden sm:inline">WhatsApp</span>
                 </button>
 
-                <ExportButtons getExportData={getLedgerExportData} size="sm" />
+                <button
+                  type="button"
+                  onClick={() => handleOpenShareModal("email")}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  title="Cari Hesabın Kayıtlı E-Posta Adresine PDF Gönder"
+                >
+                  <Mail className="w-4 h-4 text-indigo-200" />
+                  <span className="hidden sm:inline">E-Posta ile Gönder</span>
+                </button>
+
+                <ExportButtons
+                  getExportData={getLedgerExportData}
+                  recipientEmail={selectedLedgerContact.email}
+                  recipientName={selectedLedgerContact.name}
+                  contacts={contacts}
+                  companyName={companySettings?.companyName}
+                  size="sm"
+                  hideEmail={true}
+                />
 
                 <button
                   type="button"
@@ -2156,25 +2205,35 @@ export const Contacts: React.FC<ContactsProps> = ({
             <div className="p-3 sm:p-6 bg-slate-200/60 overflow-y-auto custom-scrollbar flex-1 flex justify-center">
               <div
                 id="printable-ledger"
-                className="bg-white text-slate-900 p-6 sm:p-8 rounded-2xl shadow-xl border border-purple-200 w-full max-w-4xl mx-auto space-y-5 font-sans text-xs sm:text-sm"
+                className="bg-white text-slate-900 p-6 sm:p-8 rounded-2xl shadow-xl border border-slate-200 w-full max-w-4xl mx-auto space-y-5 font-sans text-xs sm:text-sm"
+                style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
               >
                 {/* 3.1 Corporate Header */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b-2 border-purple-900">
+                <div
+                  className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b-2 border-slate-800"
+                  style={{ borderBottomColor: "#1e1b4b" }}
+                >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <div className="w-9 h-9 rounded-xl bg-purple-900 text-white flex items-center justify-center font-black text-sm shadow-md">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shadow-md"
+                        style={{ backgroundColor: "#1e1b4b", color: "#ffffff" }}
+                      >
                         <Building2 className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <h2 className="text-base sm:text-lg font-black tracking-tight text-purple-950 uppercase">
+                        <h2
+                          className="text-base sm:text-lg font-black tracking-tight uppercase"
+                          style={{ color: "#1e1b4b" }}
+                        >
                           {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN ÖN MUHASEBE VE CARİ YÖNETİM SİSTEMİ"}
                         </h2>
-                        <p className="text-[10px] sm:text-xs text-slate-500 font-semibold">
+                        <p className="text-[10px] sm:text-xs font-semibold" style={{ color: "#64748b" }}>
                           Resmi Cari Hesap, Muavin Defter ve Mutabakat Sistemi
                         </p>
                       </div>
                     </div>
-                    <div className="text-[11px] text-slate-600 pl-11 space-y-0.5">
+                    <div className="text-[11px] pl-11 space-y-0.5" style={{ color: "#475569" }}>
                       {companySettings?.address && <p>{companySettings.address}</p>}
                       <p>
                         {companySettings?.taxOffice && `${companySettings.taxOffice} V.D.`}
@@ -2184,28 +2243,37 @@ export const Contacts: React.FC<ContactsProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-left sm:text-right bg-purple-50/80 p-3 rounded-xl border border-purple-200 space-y-1 shrink-0 w-full sm:w-auto">
-                    <div className="inline-block bg-purple-900 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md tracking-wider">
+                  <div
+                    className="text-left sm:text-right p-3 rounded-xl border space-y-1 shrink-0 w-full sm:w-auto"
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                  >
+                    <div
+                      className="inline-block text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md tracking-wider"
+                      style={{ backgroundColor: "#1e1b4b" }}
+                    >
                       RESMİ CARİ HESAP EKSTRESİ
                     </div>
-                    <div className="text-xs font-bold text-slate-900">
-                      Hesap No: <span className="font-mono text-purple-950 font-black">{getContactAccountCode(selectedLedgerContact)}</span>
+                    <div className="text-xs font-bold" style={{ color: "#0f172a" }}>
+                      Hesap No: <span className="font-mono font-black" style={{ color: "#1e1b4b" }}>{getContactAccountCode(selectedLedgerContact)}</span>
                     </div>
-                    <div className="text-[11px] text-slate-600">
-                      Tarih: <span className="font-mono font-bold text-slate-900">{new Date().toLocaleDateString("tr-TR")}</span>
+                    <div className="text-[11px]" style={{ color: "#64748b" }}>
+                      Tarih: <span className="font-mono font-bold" style={{ color: "#0f172a" }}>{new Date().toLocaleDateString("tr-TR")}</span>
                     </div>
-                    <div className="text-[10px] text-purple-900 font-extrabold">
+                    <div className="text-[10px] font-extrabold" style={{ color: "#4338ca" }}>
                       Para Birimi: <span className="font-mono">{companySettings?.currency || "TRY"} (₺)</span>
                     </div>
                   </div>
                 </div>
 
                 {/* 3.2 Contact Title Banner */}
-                <div className="bg-gradient-to-r from-purple-900 via-purple-800 to-indigo-900 text-white p-3.5 rounded-xl text-center shadow-md">
+                <div
+                  className="text-white p-3.5 rounded-xl text-center shadow-md"
+                  style={{ backgroundColor: "#1e1b4b", color: "#ffffff" }}
+                >
                   <h1 className="text-sm sm:text-base font-black tracking-wide uppercase">
                     CARİ HESAP VE MUAVİN DEFTER HAREKET DÖKÜMÜ
                   </h1>
-                  <p className="text-[11px] text-purple-200 mt-0.5 font-medium">
+                  <p className="text-[11px] mt-0.5 font-medium" style={{ color: "#c7d2fe" }}>
                     {selectedLedgerContact.name} • VKN/TCKN: {selectedLedgerContact.taxNumber || "Tanımsız"} • Cari Türü:{" "}
                     {selectedLedgerContact.contactType === "customer"
                       ? "Müşteri (120)"
@@ -2218,94 +2286,113 @@ export const Contacts: React.FC<ContactsProps> = ({
                 {/* 3.3 Two-Column Details Card: Contact Info & Financial Status */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Left: Contact Card Details */}
-                  <div className="bg-slate-50/90 rounded-xl p-3.5 border border-purple-200/80 space-y-2">
-                    <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
-                        <Tag className="w-3.5 h-3.5 text-purple-700" />
+                  <div
+                    className="rounded-xl p-3.5 border space-y-2"
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                  >
+                    <div
+                      className="flex items-center justify-between border-b pb-1.5"
+                      style={{ borderBottomColor: "#e2e8f0" }}
+                    >
+                      <span
+                        className="text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5"
+                        style={{ color: "#1e1b4b" }}
+                      >
+                        <Tag className="w-3.5 h-3.5 text-indigo-700" />
                         Cari Kart & Kimlik Bilgileri
                       </span>
-                      <span className="bg-purple-100 text-purple-900 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
+                      <span
+                        className="text-[10px] font-mono font-bold px-2 py-0.5 rounded"
+                        style={{ backgroundColor: "#e0e7ff", color: "#312e81" }}
+                      >
                         Cari Kartı
                       </span>
                     </div>
                     <div className="space-y-1 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Cari Adı / Unvanı:</span>
-                        <span className="font-bold text-slate-900 text-right max-w-[200px] truncate">{selectedLedgerContact.name}</span>
+                        <span style={{ color: "#64748b" }} className="font-medium">Cari Adı / Unvanı:</span>
+                        <span className="font-bold text-right max-w-[200px] truncate" style={{ color: "#0f172a" }}>{selectedLedgerContact.name}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Ticari Unvan:</span>
-                        <span className="font-semibold text-slate-800 text-right max-w-[200px] truncate">{selectedLedgerContact.companyTitle || "-"}</span>
+                        <span style={{ color: "#64748b" }} className="font-medium">Ticari Unvan:</span>
+                        <span className="font-semibold text-right max-w-[200px] truncate" style={{ color: "#1e293b" }}>{selectedLedgerContact.companyTitle || "-"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Cari Hesap Kodu:</span>
-                        <span className="font-mono font-bold text-purple-950">{getContactAccountCode(selectedLedgerContact)}</span>
+                        <span style={{ color: "#64748b" }} className="font-medium">Cari Hesap Kodu:</span>
+                        <span className="font-mono font-bold" style={{ color: "#1e1b4b" }}>{getContactAccountCode(selectedLedgerContact)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">VKN / TCKN:</span>
-                        <span className="font-mono font-medium text-slate-700">{selectedLedgerContact.taxNumber || "-"}</span>
+                        <span style={{ color: "#64748b" }} className="font-medium">VKN / TCKN:</span>
+                        <span className="font-mono font-medium" style={{ color: "#334155" }}>{selectedLedgerContact.taxNumber || "-"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Vergi Dairesi:</span>
-                        <span className="font-semibold text-slate-900">{selectedLedgerContact.taxOffice || "-"}</span>
+                        <span style={{ color: "#64748b" }} className="font-medium">Vergi Dairesi:</span>
+                        <span className="font-semibold" style={{ color: "#0f172a" }}>{selectedLedgerContact.taxOffice || "-"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Telefon & E-Posta:</span>
-                        <span className="font-medium text-slate-700">{selectedLedgerContact.phone || "-"} • {selectedLedgerContact.email || "-"}</span>
+                        <span style={{ color: "#64748b" }} className="font-medium">Telefon & E-Posta:</span>
+                        <span className="font-medium" style={{ color: "#334155" }}>{selectedLedgerContact.phone || "-"} • {selectedLedgerContact.email || "-"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Adres / Şehir:</span>
-                        <span className="font-medium text-slate-700 text-right max-w-[220px] truncate">{selectedLedgerContact.address || "-"}, {selectedLedgerContact.city || "-"}</span>
+                        <span style={{ color: "#64748b" }} className="font-medium">Adres / Şehir:</span>
+                        <span className="font-medium text-right max-w-[220px] truncate" style={{ color: "#334155" }}>{selectedLedgerContact.address || "-"}, {selectedLedgerContact.city || "-"}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Right: Financial Status & Balance Overview */}
-                  <div className="bg-slate-50/90 rounded-xl p-3.5 border border-purple-200/80 space-y-2">
-                    <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
-                        <Landmark className="w-3.5 h-3.5 text-purple-700" />
+                  <div
+                    className="rounded-xl p-3.5 border space-y-2"
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                  >
+                    <div
+                      className="flex items-center justify-between border-b pb-1.5"
+                      style={{ borderBottomColor: "#e2e8f0" }}
+                    >
+                      <span
+                        className="text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5"
+                        style={{ color: "#1e1b4b" }}
+                      >
+                        <Landmark className="w-3.5 h-3.5 text-indigo-700" />
                         Finansal Durum & Bakiye Özeti
                       </span>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          ledgerSummary.netBalance > 0
-                            ? "bg-emerald-100 text-emerald-900"
-                            : ledgerSummary.netBalance < 0
-                            ? "bg-rose-100 text-rose-900"
-                            : "bg-slate-100 text-slate-800"
-                        }`}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded"
+                        style={{
+                          backgroundColor: ledgerSummary.netBalance > 0 ? "#d1fae5" : ledgerSummary.netBalance < 0 ? "#ffe4e6" : "#f1f5f9",
+                          color: ledgerSummary.netBalance > 0 ? "#065f46" : ledgerSummary.netBalance < 0 ? "#9f1239" : "#334155",
+                        }}
                       >
                         {ledgerSummary.netBalance > 0 ? "Alacaklıyız" : ledgerSummary.netBalance < 0 ? "Borçluyuz" : "Bakiye Sıfır"}
                       </span>
                     </div>
                     <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between items-center bg-purple-100/70 px-2.5 py-1.5 rounded-lg font-bold">
-                        <span className="text-purple-950">Güncel Net Cari Bakiye:</span>
+                      <div
+                        className="flex justify-between items-center px-2.5 py-1.5 rounded-lg font-bold"
+                        style={{ backgroundColor: "#e0e7ff" }}
+                      >
+                        <span style={{ color: "#1e1b4b" }}>Güncel Net Cari Bakiye:</span>
                         <span
-                          className={`font-mono text-sm sm:text-base font-black ${
-                            ledgerSummary.netBalance > 0
-                              ? "text-emerald-700"
-                              : ledgerSummary.netBalance < 0
-                              ? "text-rose-700"
-                              : "text-slate-700"
-                          }`}
+                          className="font-mono text-sm sm:text-base font-black"
+                          style={{
+                            color: ledgerSummary.netBalance > 0 ? "#047857" : ledgerSummary.netBalance < 0 ? "#be123c" : "#334155",
+                          }}
                         >
                           ₺{Math.abs(ledgerSummary.netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                       <div className="space-y-1 pt-0.5 text-[11px]">
                         <div className="flex justify-between items-center px-1">
-                          <span className="text-slate-500 font-medium">Toplam Borçlandırılan Tutar:</span>
-                          <span className="font-mono font-bold text-slate-800">₺{ledgerSummary.totalDebit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                          <span style={{ color: "#64748b" }} className="font-medium">Toplam Borçlandırılan Tutar:</span>
+                          <span className="font-mono font-bold" style={{ color: "#1e293b" }}>₺{ledgerSummary.totalDebit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between items-center px-1">
-                          <span className="text-slate-500 font-medium">Toplam Alacaklandırılan Tutar:</span>
-                          <span className="font-mono font-bold text-slate-800">₺{ledgerSummary.totalCredit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                          <span style={{ color: "#64748b" }} className="font-medium">Toplam Alacaklandırılan Tutar:</span>
+                          <span className="font-mono font-bold" style={{ color: "#1e293b" }}>₺{ledgerSummary.totalCredit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between items-center px-1">
-                          <span className="text-slate-500 font-medium">Son Hareket Tarihi:</span>
-                          <span className="font-mono font-semibold text-slate-800">{ledgerSummary.lastMovementDate ? formatDate(ledgerSummary.lastMovementDate) : "-"}</span>
+                          <span style={{ color: "#64748b" }} className="font-medium">Son Hareket Tarihi:</span>
+                          <span className="font-mono font-semibold" style={{ color: "#1e293b" }}>{ledgerSummary.lastMovementDate ? formatDate(ledgerSummary.lastMovementDate) : "-"}</span>
                         </div>
                       </div>
                     </div>
@@ -2315,40 +2402,45 @@ export const Contacts: React.FC<ContactsProps> = ({
                 {/* 3.4 Summary Analytics 4-Box Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {/* Toplam Borç */}
-                  <div className="bg-blue-50/80 border border-blue-200/80 rounded-xl p-3 text-center space-y-1">
-                    <span className="text-[10px] font-extrabold uppercase text-blue-900 block tracking-wide">
+                  <div
+                    className="rounded-xl p-3 text-center space-y-1 border"
+                    style={{ backgroundColor: "#eff6ff", borderColor: "#bfdbfe" }}
+                  >
+                    <span className="text-[10px] font-extrabold uppercase block tracking-wide" style={{ color: "#1e3a8a" }}>
                       Toplam Borç Hareketi
                     </span>
-                    <span className="text-sm sm:text-base font-black font-mono text-blue-950 block">
+                    <span className="text-sm sm:text-base font-black font-mono block" style={{ color: "#172554" }}>
                       ₺{ledgerSummary.totalDebit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                     </span>
-                    <span className="text-[10px] text-blue-700 font-semibold block">
+                    <span className="text-[10px] font-semibold block" style={{ color: "#2563eb" }}>
                       Satış & Faturalar
                     </span>
                   </div>
 
                   {/* Toplam Alacak */}
-                  <div className="bg-indigo-50/80 border border-indigo-200/80 rounded-xl p-3 text-center space-y-1">
-                    <span className="text-[10px] font-extrabold uppercase text-indigo-900 block tracking-wide">
+                  <div
+                    className="rounded-xl p-3 text-center space-y-1 border"
+                    style={{ backgroundColor: "#eef2ff", borderColor: "#c7d2fe" }}
+                  >
+                    <span className="text-[10px] font-extrabold uppercase block tracking-wide" style={{ color: "#312e81" }}>
                       Toplam Alacak Hareketi
                     </span>
-                    <span className="text-sm sm:text-base font-black font-mono text-indigo-950 block">
+                    <span className="text-sm sm:text-base font-black font-mono block" style={{ color: "#1e1b4b" }}>
                       ₺{ledgerSummary.totalCredit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                     </span>
-                    <span className="text-[10px] text-indigo-700 font-semibold block">
+                    <span className="text-[10px] font-semibold block" style={{ color: "#4338ca" }}>
                       Tahsilat & Ödemeler
                     </span>
                   </div>
 
                   {/* Net Bakiye */}
                   <div
-                    className={`border rounded-xl p-3 text-center space-y-1 ${
-                      ledgerSummary.netBalance > 0
-                        ? "bg-emerald-50/80 border-emerald-200/80 text-emerald-950"
-                        : ledgerSummary.netBalance < 0
-                        ? "bg-rose-50/80 border-rose-200/80 text-rose-950"
-                        : "bg-slate-50 border-slate-200 text-slate-900"
-                    }`}
+                    className="rounded-xl p-3 text-center space-y-1 border"
+                    style={{
+                      backgroundColor: ledgerSummary.netBalance > 0 ? "#ecfdf5" : ledgerSummary.netBalance < 0 ? "#fff1f2" : "#f8fafc",
+                      borderColor: ledgerSummary.netBalance > 0 ? "#a7f3d0" : ledgerSummary.netBalance < 0 ? "#fecdd3" : "#e2e8f0",
+                      color: ledgerSummary.netBalance > 0 ? "#064e3b" : ledgerSummary.netBalance < 0 ? "#881337" : "#0f172a",
+                    }}
                   >
                     <span className="text-[10px] font-extrabold uppercase block tracking-wide">
                       Net Cari Bakiye
@@ -2362,92 +2454,101 @@ export const Contacts: React.FC<ContactsProps> = ({
                   </div>
 
                   {/* Toplam İşlem / Evrak */}
-                  <div className="bg-purple-50/80 border border-purple-200/80 rounded-xl p-3 text-center space-y-1">
-                    <span className="text-[10px] font-extrabold uppercase text-purple-900 block tracking-wide">
+                  <div
+                    className="rounded-xl p-3 text-center space-y-1 border"
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                  >
+                    <span className="text-[10px] font-extrabold uppercase block tracking-wide" style={{ color: "#334155" }}>
                       Toplam Hareket Sayısı
                     </span>
-                    <span className="text-sm sm:text-base font-black font-mono text-purple-950 block">
+                    <span className="text-sm sm:text-base font-black font-mono block" style={{ color: "#0f172a" }}>
                       {ledgerSummary.totalMovements} Evrak
                     </span>
-                    <span className="text-[10px] text-purple-700 font-semibold block">
+                    <span className="text-[10px] font-semibold block" style={{ color: "#64748b" }}>
                       {ledgerSummary.invoiceCount} Fatura • {ledgerSummary.collectionCount + ledgerSummary.paymentCount} Finans
                     </span>
                   </div>
                 </div>
 
                 {/* 3.5 Movement Details Table */}
-                <div className="border border-purple-200/90 rounded-xl overflow-hidden shadow-xs">
-                  <div className="bg-purple-900 text-white px-3.5 py-2 flex items-center justify-between">
+                <div
+                  className="rounded-xl overflow-hidden shadow-xs border"
+                  style={{ borderColor: "#cbd5e1" }}
+                >
+                  <div
+                    className="text-white px-3.5 py-2 flex items-center justify-between"
+                    style={{ backgroundColor: "#1e1b4b", color: "#ffffff" }}
+                  >
                     <span className="font-extrabold text-xs uppercase tracking-wider flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-purple-200" />
+                      <FileText className="w-3.5 h-3.5 text-indigo-200" />
                       Cari Hareket & Muavin Kayıtları ({filteredLedgerEntries.length} Adet)
                     </span>
-                    <span className="text-[10px] text-purple-200 font-medium">
+                    <span className="text-[10px] text-indigo-200 font-medium">
                       Kronolojik İşlem Sırası
                     </span>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
+                    <table className="w-full text-left text-xs border-collapse" style={{ backgroundColor: "#ffffff" }}>
                       <thead>
-                        <tr className="bg-slate-100/90 text-purple-950 font-bold border-b border-purple-200/80 uppercase text-[10px] tracking-wider">
+                        <tr
+                          className="font-bold border-b uppercase text-[10px] tracking-wider"
+                          style={{ backgroundColor: "#f1f5f9", color: "#1e1b4b", borderBottomColor: "#cbd5e1" }}
+                        >
                           <th className="py-2.5 px-3">Tarih</th>
                           <th className="py-2.5 px-3 text-center">Belge Türü</th>
                           <th className="py-2.5 px-3 font-mono">Belge / Fatura No</th>
                           <th className="py-2.5 px-3">Açıklama</th>
                           <th className="py-2.5 px-3 text-right">Borç (₺)</th>
                           <th className="py-2.5 px-3 text-right">Alacak (₺)</th>
-                          <th className="py-2.5 px-3 text-right bg-purple-100/50">Yürüyen Bakiye (₺)</th>
+                          <th className="py-2.5 px-3 text-right" style={{ backgroundColor: "#e0e7ff" }}>Yürüyen Bakiye (₺)</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-purple-100/60">
+                      <tbody className="divide-y" style={{ borderColor: "#f1f5f9" }}>
                         {filteredLedgerEntries.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="text-center py-8 text-slate-400 bg-white">
+                            <td colSpan={7} className="text-center py-8 bg-white" style={{ color: "#94a3b8" }}>
                               Seçili filtrelere uygun cari hareket kaydı bulunamadı.
                             </td>
                           </tr>
                         ) : (
                           filteredLedgerEntries.map((m, idx) => (
-                            <tr key={m.id || idx} className="hover:bg-purple-50/40 transition-colors">
-                              <td className="py-2 px-3 font-mono text-slate-700 whitespace-nowrap">
+                            <tr
+                              key={m.id || idx}
+                              style={{ backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#ffffff" }}
+                              className="hover:bg-slate-50 transition-colors"
+                            >
+                              <td className="py-2 px-3 font-mono whitespace-nowrap" style={{ color: "#334155" }}>
                                 {formatDate(m.date)}
                               </td>
                               <td className="py-2 px-3 text-center whitespace-nowrap">
                                 <span
-                                  className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                    m.documentType === "Fatura"
-                                      ? "bg-blue-50 text-blue-800 border-blue-200"
-                                      : m.documentType === "Tahsilat"
-                                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                      : m.documentType === "Tediye" || m.documentType === "Ödeme"
-                                      ? "bg-amber-50 text-amber-800 border-amber-200"
-                                      : "bg-purple-50 text-purple-800 border-purple-200"
-                                  }`}
+                                  className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border"
+                                  style={{
+                                    backgroundColor: m.documentType === "Fatura" ? "#eff6ff" : m.documentType === "Tahsilat" ? "#ecfdf5" : m.documentType === "Tediye" || m.documentType === "Ödeme" ? "#fffbeb" : "#f5f3ff",
+                                    color: m.documentType === "Fatura" ? "#1e40af" : m.documentType === "Tahsilat" ? "#065f46" : m.documentType === "Tediye" || m.documentType === "Ödeme" ? "#92400e" : "#5b21b6",
+                                    borderColor: m.documentType === "Fatura" ? "#bfdbfe" : m.documentType === "Tahsilat" ? "#a7f3d0" : m.documentType === "Tediye" || m.documentType === "Ödeme" ? "#fde68a" : "#ddd6fe",
+                                  }}
                                 >
                                   {m.documentType}
                                 </span>
                               </td>
-                              <td className="py-2 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
+                              <td className="py-2 px-3 font-mono font-bold whitespace-nowrap" style={{ color: "#1e293b" }}>
                                 {m.documentNo || "-"}
                               </td>
-                              <td className="py-2 px-3 text-slate-700 max-w-[220px] truncate" title={m.description}>
+                              <td className="py-2 px-3 max-w-[220px] truncate" title={m.description} style={{ color: "#334155" }}>
                                 {m.description || "-"}
                               </td>
-                              <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                              <td className="py-2 px-3 text-right font-mono font-bold whitespace-nowrap" style={{ color: "#0f172a" }}>
                                 {m.debit > 0 ? `₺${m.debit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "-"}
                               </td>
-                              <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                              <td className="py-2 px-3 text-right font-mono font-bold whitespace-nowrap" style={{ color: "#0f172a" }}>
                                 {m.credit > 0 ? `₺${m.credit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "-"}
                               </td>
-                              <td className="py-2 px-3 text-right font-mono font-black whitespace-nowrap bg-purple-50/40">
+                              <td className="py-2 px-3 text-right font-mono font-black whitespace-nowrap" style={{ backgroundColor: "#f1f5f9" }}>
                                 <span
-                                  className={
-                                    m.runningBalance > 0
-                                      ? "text-emerald-700"
-                                      : m.runningBalance < 0
-                                      ? "text-rose-700"
-                                      : "text-slate-700"
-                                  }
+                                  style={{
+                                    color: m.runningBalance > 0 ? "#047857" : m.runningBalance < 0 ? "#be123c" : "#334155",
+                                  }}
                                 >
                                   ₺{Math.abs(m.runningBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                                 </span>
@@ -2458,7 +2559,10 @@ export const Contacts: React.FC<ContactsProps> = ({
                       </tbody>
                       {filteredLedgerEntries.length > 0 && (
                         <tfoot>
-                          <tr className="bg-purple-100/80 font-black text-purple-950 border-t-2 border-purple-300">
+                          <tr
+                            className="font-black border-t-2"
+                            style={{ backgroundColor: "#e0e7ff", color: "#1e1b4b", borderTopColor: "#6366f1" }}
+                          >
                             <td colSpan={4} className="py-2.5 px-3 uppercase text-[11px] tracking-wider">
                               Genel Toplam ({filteredLedgerEntries.length} Hareket)
                             </td>
@@ -2468,7 +2572,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                             <td className="py-2.5 px-3 text-right font-mono text-xs">
                               ₺{filteredLedgerEntries.reduce((acc, curr) => acc + curr.credit, 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-xs bg-purple-200/60 text-purple-950">
+                            <td className="py-2.5 px-3 text-right font-mono text-xs" style={{ backgroundColor: "#c7d2fe", color: "#1e1b4b" }}>
                               ₺{Math.abs(ledgerSummary.netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                             </td>
                           </tr>
@@ -2479,9 +2583,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                 </div>
 
                 {/* 3.6 Statutory Provisions / Legal Note */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5 text-[11px] text-slate-600">
-                  <div className="flex items-center gap-1.5 font-bold text-slate-800 uppercase text-[10px] tracking-wide">
-                    <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
+                <div
+                  className="rounded-xl p-3.5 space-y-1.5 text-[11px] border"
+                  style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0", color: "#475569" }}
+                >
+                  <div className="flex items-center gap-1.5 font-bold uppercase text-[10px] tracking-wide" style={{ color: "#1e293b" }}>
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />
                     <span>Yasal Hükümler, Tevsik ve İtiraz Şartları</span>
                   </div>
                   <p className="leading-relaxed">
@@ -2496,30 +2603,30 @@ export const Contacts: React.FC<ContactsProps> = ({
                 </div>
 
                 {/* 3.7 Official Signatures */}
-                <div className="grid grid-cols-2 gap-8 pt-4 border-t border-purple-200">
+                <div className="grid grid-cols-2 gap-8 pt-4 border-t" style={{ borderTopColor: "#e2e8f0" }}>
                   <div className="text-center space-y-8">
                     <div>
-                      <p className="font-black text-purple-950 text-xs uppercase tracking-wider">
+                      <p className="font-black text-xs uppercase tracking-wider" style={{ color: "#1e1b4b" }}>
                         DÜZENLEYEN / MALİ İŞLER & MUHASEBE
                       </p>
-                      <p className="text-[10px] text-slate-500 font-medium">Yetkili İmza / Firma Kaşesi</p>
+                      <p className="text-[10px] font-medium" style={{ color: "#64748b" }}>Yetkili İmza / Firma Kaşesi</p>
                     </div>
-                    <div className="h-10 border-b border-dashed border-slate-300 w-36 mx-auto"></div>
+                    <div className="h-10 border-b border-dashed w-36 mx-auto" style={{ borderBottomColor: "#cbd5e1" }}></div>
                   </div>
 
                   <div className="text-center space-y-8">
                     <div>
-                      <p className="font-black text-purple-950 text-xs uppercase tracking-wider">
+                      <p className="font-black text-xs uppercase tracking-wider" style={{ color: "#1e1b4b" }}>
                         CARİ HESAP SAHİBİ / YETKİLİ ONAYI
                       </p>
-                      <p className="text-[10px] text-slate-500 font-medium">Mutabakat İmzası / Mühür</p>
+                      <p className="text-[10px] font-medium" style={{ color: "#64748b" }}>Mutabakat İmzası / Mühür</p>
                     </div>
-                    <div className="h-10 border-b border-dashed border-slate-300 w-36 mx-auto"></div>
+                    <div className="h-10 border-b border-dashed w-36 mx-auto" style={{ borderBottomColor: "#cbd5e1" }}></div>
                   </div>
                 </div>
 
                 {/* 3.8 Footer Note */}
-                <div className="text-center text-[10px] text-slate-400 pt-2 border-t border-slate-100">
+                <div className="text-center text-[10px] pt-2 border-t" style={{ borderTopColor: "#f1f5f9", color: "#94a3b8" }}>
                   Bu cari hesap ekstresi elektronik ortamda oluşturulmuş olup resmi muhasebe kayıtlarının tevsik edici belgesidir. • Muavin Cari Hesap & Ön Muhasebe Yönetim Sistemi
                 </div>
               </div>
@@ -2542,6 +2649,14 @@ export const Contacts: React.FC<ContactsProps> = ({
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                   <span>WhatsApp Paylaş</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenShareModal("email")}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>E-Posta Gönder</span>
                 </button>
                 <button
                   type="button"
@@ -2728,6 +2843,42 @@ export const Contacts: React.FC<ContactsProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* EMAIL SHARE MODAL */}
+      {shareType === "email" && selectedLedgerContact && (
+        <EmailExportModal
+          isOpen={shareType === "email"}
+          onClose={() => setShareType(null)}
+          title={`Cari Hesap Ekstresi & Muavin Dökümü - ${selectedLedgerContact.name}`}
+          filename={`${selectedLedgerContact.name.replace(/\s+/g, "_")}_Cari_Ekstre_${new Date().getFullYear()}.pdf`}
+          defaultEmail={selectedLedgerContact.email || ""}
+          defaultRecipientName={selectedLedgerContact.name}
+          defaultSubject={`Cari Hesap Ekstresi - ${companySettings?.companyName || "Firma"} (${selectedLedgerContact.name})`}
+          companyName={companySettings?.companyName || "Firma"}
+          contacts={contacts}
+          getPdfBlob={async () => {
+            const res = await generateLedgerPDF(selectedLedgerContact);
+            return res ? { blob: res.blob, fileName: res.fileName, pdf: res.pdf } : null;
+          }}
+          documentSummary={[
+            { label: "Cari Hesap Kodu", value: getContactAccountCode(selectedLedgerContact) },
+            {
+              label: "Güncel Net Bakiye",
+              value: `${formatCurrency(Math.abs(selectedLedgerContact.balance), companySettings?.currency || "TRY")} (${
+                selectedLedgerContact.balance > 0
+                  ? "Alacaklıyız (Borçlu Cari)"
+                  : selectedLedgerContact.balance < 0
+                  ? "Borçluyuz (Alacaklı Cari)"
+                  : "Sıfır Bakiye"
+              })`,
+            },
+            {
+              label: "Toplam Kayıt",
+              value: `${getLedgerEntries(selectedLedgerContact.id).length} Hareket Kaydı`,
+            },
+          ]}
+        />
       )}
 
       {/* TAHSİLAT YAP / ÖDEME YAP MODAL */}

@@ -42,67 +42,223 @@ export function formatCurrency(amount: number | null | undefined, currency?: str
 }
 
 /**
- * Helper to replace oklch(...), oklab(...), and color-mix(...) color functions in CSS string with fallback hex color to prevent html2canvas errors
+ * Accurately converts OKLCH color to sRGB [r, g, b] (0-255)
  */
-export function replaceOklchInString(cssText: string, fallbackColor: string = "#4f46e5"): string {
+export function oklchToRgb(l: number, c: number, h: number): [number, number, number] {
+  const hRad = (h * Math.PI) / 180;
+  const a = c * Math.cos(hRad);
+  const b = c * Math.sin(hRad);
+
+  const l_ = l + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = l - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = l - 0.0894841775 * a - 1.2914855480 * b;
+
+  const l3 = l_ * l_ * l_;
+  const m3 = m_ * m_ * m_;
+  const s3 = s_ * s_ * s_;
+
+  const r = +4.0767439362 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
+  const g = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
+  const bl = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3;
+
+  const toSRGB = (x: number) => {
+    const clamped = Math.max(0, Math.min(1, x));
+    return clamped <= 0.0031308
+      ? 12.92 * clamped
+      : 1.055 * Math.pow(clamped, 1 / 2.4) - 0.055;
+  };
+
+  return [
+    Math.round(toSRGB(r) * 255),
+    Math.round(toSRGB(g) * 255),
+    Math.round(toSRGB(bl) * 255),
+  ];
+}
+
+/**
+ * Parses OKLCH color string (e.g. "oklch(0.977 0.014 308.299)" or "oklch(0.977 0.014 308.299 / 0.6)") into rgb/rgba
+ */
+export function parseOklchString(str: string): string | null {
+  const match = str.match(/oklch\(\s*([\d\.]+%?)\s+([\d\.]+%?)\s+([\d\.]+(?:deg|grad|rad|turn)?)\s*(?:\/\s*([\d\.]+%?))?\s*\)/i);
+  if (!match) return null;
+
+  let l = parseFloat(match[1]);
+  if (match[1].endsWith("%")) l = l / 100;
+
+  let c = parseFloat(match[2]);
+  if (match[2].endsWith("%")) c = (c / 100) * 0.4;
+
+  let h = parseFloat(match[3]);
+  if (match[3].endsWith("rad")) h = (h * 180) / Math.PI;
+  else if (match[3].endsWith("turn")) h = h * 360;
+
+  let alpha = 1;
+  if (match[4]) {
+    alpha = parseFloat(match[4]);
+    if (match[4].endsWith("%")) alpha = alpha / 100;
+  }
+
+  const [r, g, b] = oklchToRgb(l, c, h);
+  if (alpha >= 0.99) {
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${parseFloat(alpha.toFixed(3))})`;
+}
+
+let helperCanvas: HTMLCanvasElement | null = null;
+let helperCtx: CanvasRenderingContext2D | null = null;
+
+function getHelperCtx(): CanvasRenderingContext2D | null {
+  if (typeof document === "undefined") return null;
+  if (!helperCanvas) {
+    helperCanvas = document.createElement("canvas");
+    helperCanvas.width = 1;
+    helperCanvas.height = 1;
+    helperCtx = helperCanvas.getContext("2d", { willReadFrequently: true });
+  }
+  return helperCtx;
+}
+
+const colorCache = new Map<string, string>();
+
+/**
+ * Universal color resolver converting OKLCH, OKLAB, color-mix, CSS variables, and any CSS color into valid rgb/rgba
+ */
+export function convertCssColorToRgba(colorStr: string): string {
+  if (!colorStr) return "transparent";
+  const trimmed = colorStr.trim();
+  if (
+    !trimmed ||
+    trimmed === "transparent" ||
+    trimmed === "inherit" ||
+    trimmed === "initial" ||
+    trimmed === "currentColor"
+  ) {
+    return trimmed;
+  }
+
+  if (/^#([0-9a-fA-F]{3,8})$/.test(trimmed)) return trimmed;
+  if (/^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(\s*,\s*[\d\.]+\s*)?\)$/.test(trimmed)) return trimmed;
+
+  if (colorCache.has(trimmed)) {
+    return colorCache.get(trimmed)!;
+  }
+
+  // 1. Direct mathematical OKLCH parser
+  if (trimmed.startsWith("oklch(")) {
+    const direct = parseOklchString(trimmed);
+    if (direct) {
+      colorCache.set(trimmed, direct);
+      return direct;
+    }
+  }
+
+  // 2. Browser Canvas 2D rasterizer
+  const ctx = getHelperCtx();
+  if (ctx) {
+    try {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = "transparent";
+      ctx.fillStyle = trimmed;
+      ctx.fillRect(0, 0, 1, 1);
+      const data = ctx.getImageData(0, 0, 1, 1).data;
+      const a = data[3] / 255;
+      let result = "";
+      if (data[3] === 255) {
+        result = `rgb(${data[0]}, ${data[1]}, ${data[2]})`;
+      } else if (data[3] === 0) {
+        result = "rgba(0, 0, 0, 0)";
+      } else {
+        result = `rgba(${data[0]}, ${data[1]}, ${data[2]}, ${parseFloat(a.toFixed(3))})`;
+      }
+
+      if (result !== "rgba(0, 0, 0, 0)" || trimmed.toLowerCase().includes("transparent")) {
+        colorCache.set(trimmed, result);
+        return result;
+      }
+    } catch {
+      // Fallback below
+    }
+  }
+
+  return trimmed;
+}
+
+/**
+ * Replaces modern color functions (oklch, oklab, color-mix, lch, lab) in CSS string with resolved rgb/rgba
+ */
+export function replaceOklchInString(cssText: string): string {
   if (!cssText) return cssText;
 
   let text = cssText;
-  const colorFuncs = ["oklch(", "oklab(", "color-mix("];
+  const colorFuncs = ["color-mix(", "oklch(", "oklab(", "lch(", "lab("];
 
-  for (const funcName of colorFuncs) {
-    if (!text.includes(funcName)) continue;
+  let changed = true;
+  let iterations = 0;
+  while (changed && iterations < 5) {
+    changed = false;
+    iterations++;
 
-    let result = "";
-    let i = 0;
-    while (i < text.length) {
-      const funcIndex = text.indexOf(funcName, i);
-      if (funcIndex === -1) {
-        result += text.slice(i);
-        break;
+    for (const funcName of colorFuncs) {
+      let i = 0;
+      while (i < text.length) {
+        const funcIndex = text.indexOf(funcName, i);
+        if (funcIndex === -1) break;
+
+        let depth = 1;
+        let j = funcIndex + funcName.length;
+        while (j < text.length && depth > 0) {
+          if (text[j] === "(") depth++;
+          else if (text[j] === ")") depth--;
+          j++;
+        }
+
+        if (depth === 0) {
+          const fullFunc = text.slice(funcIndex, j);
+          const converted = convertCssColorToRgba(fullFunc);
+          if (converted && converted !== fullFunc) {
+            text = text.slice(0, funcIndex) + converted + text.slice(j);
+            i = funcIndex + converted.length;
+            changed = true;
+          } else {
+            i = j;
+          }
+        } else {
+          i = j;
+        }
       }
-
-      result += text.slice(i, funcIndex);
-      let depth = 1;
-      let j = funcIndex + funcName.length;
-      while (j < text.length && depth > 0) {
-        if (text[j] === "(") depth++;
-        else if (text[j] === ")") depth--;
-        j++;
-      }
-
-      result += fallbackColor;
-      i = j;
     }
-    text = result;
   }
 
   return text;
 }
 
 /**
- * Sanitizes all <style> elements and inline styles in cloned DOM document for html2canvas
+ * Sanitizes all <style> elements, stylesheets, inline styles, and element computed styles in cloned DOM document for html2canvas
  */
 export function sanitizeOklchForHtml2Canvas(clonedDoc: Document): void {
   try {
-    const hasUnsupportedColor = (str: string) =>
-      str.includes("oklch") || str.includes("oklab") || str.includes("color-mix");
+    const hasUnsupportedColor = (str?: string | null) =>
+      Boolean(str && (str.includes("oklch") || str.includes("oklab") || str.includes("color-mix") || str.includes("lch(") || str.includes("lab(")));
 
+    // 1. Sanitize all <style> tags
     const styleTags = clonedDoc.querySelectorAll("style");
     styleTags.forEach((styleEl) => {
       if (styleEl.textContent && hasUnsupportedColor(styleEl.textContent)) {
-        styleEl.textContent = replaceOklchInString(styleEl.textContent, "#6366f1");
+        styleEl.textContent = replaceOklchInString(styleEl.textContent);
       }
     });
 
+    // 2. Sanitize all style attributes
     const elementsWithStyle = clonedDoc.querySelectorAll("[style]");
     elementsWithStyle.forEach((el) => {
       const styleAttr = el.getAttribute("style");
       if (styleAttr && hasUnsupportedColor(styleAttr)) {
-        el.setAttribute("style", replaceOklchInString(styleAttr, "#6366f1"));
+        el.setAttribute("style", replaceOklchInString(styleAttr));
       }
     });
 
+    // 3. Sanitize stylesheets rules
     try {
       const styleSheets = Array.from(clonedDoc.styleSheets);
       styleSheets.forEach((sheet) => {
@@ -110,7 +266,7 @@ export function sanitizeOklchForHtml2Canvas(clonedDoc: Document): void {
           const rules = Array.from(sheet.cssRules || []);
           rules.forEach((rule, idx) => {
             if (rule.cssText && hasUnsupportedColor(rule.cssText)) {
-              const sanitizedRule = replaceOklchInString(rule.cssText, "#6366f1");
+              const sanitizedRule = replaceOklchInString(rule.cssText);
               try {
                 sheet.deleteRule(idx);
                 sheet.insertRule(sanitizedRule, idx);
@@ -126,8 +282,43 @@ export function sanitizeOklchForHtml2Canvas(clonedDoc: Document): void {
     } catch {
       // Ignore stylesheet iteration error
     }
+
+    // 4. Traverse all cloned elements and inline computed styles with clean RGB/RGBA
+    const allElements = Array.from(clonedDoc.querySelectorAll("*")) as HTMLElement[];
+    allElements.forEach((el) => {
+      try {
+        const computed = clonedDoc.defaultView?.getComputedStyle(el) || (typeof window !== "undefined" ? window.getComputedStyle(el) : null);
+        if (!computed) return;
+
+        // Resolve background color
+        const bg = computed.backgroundColor;
+        if (hasUnsupportedColor(bg)) {
+          el.style.backgroundColor = convertCssColorToRgba(bg);
+        }
+
+        // Resolve text color
+        const color = computed.color;
+        if (hasUnsupportedColor(color)) {
+          el.style.color = convertCssColorToRgba(color);
+        }
+
+        // Resolve border colors
+        const borderColor = computed.borderColor;
+        if (hasUnsupportedColor(borderColor)) {
+          el.style.borderColor = convertCssColorToRgba(borderColor);
+        }
+
+        // Resolve background images with gradients
+        const bgImg = computed.backgroundImage;
+        if (hasUnsupportedColor(bgImg)) {
+          el.style.backgroundImage = replaceOklchInString(bgImg);
+        }
+      } catch {
+        // Ignore single element computation error
+      }
+    });
   } catch (err) {
-    console.warn("oklch/oklab sanitization warning:", err);
+    console.warn("PDF color sanitization warning:", err);
   }
 }
 
@@ -234,15 +425,15 @@ export function exportToExcel({
 }
 
 /**
- * PDF (.pdf) Export with full Turkish character support via html2canvas
+ * Generates jsPDF instance and Blob from ExportData with full Turkish character support via html2canvas
  */
-export async function exportToPDF({
+export async function generatePDFFromExportData({
   filename,
   title,
   subtitle,
   headers,
   rows,
-}: ExportData) {
+}: ExportData): Promise<{ pdf: jsPDF; blob: Blob; fileName: string } | null> {
   // Create a temporary container in DOM to render a clean printable HTML table (Landscape format width ~1150px)
   const container = document.createElement("div");
   container.style.position = "absolute";
@@ -423,10 +614,12 @@ export async function exportToPDF({
     }
 
     const cleanFilename = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
-    pdf.save(cleanFilename);
+    const blob = pdf.output("blob");
+    return { pdf, blob, fileName: cleanFilename };
   } catch (err) {
     console.error("PDF oluşturma hatası:", err);
-    alert("PDF indirilirken bir hata oluştu. Lütfen tekrar deneyiniz.");
+    alert("PDF hazırlanırken bir hata oluştu. Lütfen tekrar deneyiniz.");
+    return null;
   } finally {
     if (document.body.contains(container)) {
       document.body.removeChild(container);
@@ -435,7 +628,17 @@ export async function exportToPDF({
 }
 
 /**
- * Direct DOM element to PDF exporter (Supports Portrait / Landscape A4 format for Invoices/Documents/Slips)
+ * PDF (.pdf) Export with full Turkish character support via html2canvas
+ */
+export async function exportToPDF(data: ExportData) {
+  const result = await generatePDFFromExportData(data);
+  if (result) {
+    result.pdf.save(result.fileName);
+  }
+}
+
+/**
+ * Direct DOM element to PDF exporter (Supports Portrait / Landscape A4 format for Invoices/Documents/Slips/Ledgers)
  */
 export async function exportElementToPDF(
   elementId: string,
@@ -449,7 +652,7 @@ export async function exportElementToPDF(
     return;
   }
 
-  const { orientation = "p", margin = 6, scale = 2 } = options;
+  const { orientation = "p", margin = 8, scale = 2 } = options;
 
   try {
     const canvas = await html2canvas(element, {
@@ -457,8 +660,34 @@ export async function exportElementToPDF(
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: Math.max(element.scrollWidth, 1280),
+      windowHeight: Math.max(element.scrollHeight + 500, 2400),
       onclone: (clonedDoc) => {
         sanitizeOklchForHtml2Canvas(clonedDoc);
+        const clonedTarget = clonedDoc.getElementById(elementId);
+        if (clonedTarget) {
+          // Unconstrain target element and all parent nodes
+          let curr: HTMLElement | null = clonedTarget;
+          while (curr && curr !== clonedDoc.body) {
+            curr.style.overflow = "visible";
+            curr.style.maxHeight = "none";
+            curr.style.height = "auto";
+            curr.style.maxWidth = "none";
+            curr.style.position = "static";
+            curr.style.transform = "none";
+            curr = curr.parentElement;
+          }
+          clonedDoc.body.style.overflow = "visible";
+          clonedDoc.body.style.height = "auto";
+          clonedDoc.body.style.maxHeight = "none";
+
+          clonedTarget.style.width = `${element.scrollWidth || 900}px`;
+          clonedTarget.style.maxWidth = `${element.scrollWidth || 900}px`;
+          clonedTarget.style.margin = "0 auto";
+          clonedTarget.style.boxShadow = "none";
+        }
       },
     });
 
@@ -468,20 +697,58 @@ export async function exportElementToPDF(
 
     const imgWidth = pdfWidth - margin * 2;
     const pageUsableHeight = pdfHeight - margin * 2;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const totalImgHeightMm = (canvas.height * imgWidth) / canvas.width;
 
-    if (imgHeight <= pageUsableHeight) {
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, imgHeight);
+    if (totalImgHeightMm <= pageUsableHeight) {
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, totalImgHeightMm);
     } else {
-      // Clean multi-page splitting without distortion
+      // Clean element-aware multi-page splitting without distortion
       const pxPerMm = canvas.width / imgWidth;
       const targetPagePx = pageUsableHeight * pxPerMm;
+
+      const rawElements = Array.from(
+        element.querySelectorAll("tr, #printable-ledger > div, #printable-receipt > div, .printable-block")
+      ) as HTMLElement[];
+
+      const containerRect = element.getBoundingClientRect();
+      const scaleY = canvas.height / (containerRect.height || element.scrollHeight || 1);
+
+      const breakElements = rawElements.filter(
+        (el) => el.tagName === "TR" || !el.querySelector("table, tr")
+      );
+
+      const breakPoints = breakElements
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            top: Math.round((r.top - containerRect.top) * scaleY),
+            bottom: Math.round((r.bottom - containerRect.top) * scaleY),
+          };
+        })
+        .filter((bp) => bp.bottom > bp.top);
 
       let yStart = 0;
       let pageIndex = 0;
 
       while (yStart < canvas.height - 5) {
-        const chunkHeightPx = Math.min(targetPagePx, canvas.height - yStart);
+        let yNextCut = yStart + targetPagePx;
+
+        if (yNextCut < canvas.height) {
+          const straddlingElements = breakPoints.filter(
+            (bp) => bp.top > yStart + 15 && bp.top < yNextCut && bp.bottom > yNextCut
+          );
+
+          if (straddlingElements.length > 0) {
+            const minTop = Math.min(...straddlingElements.map((e) => e.top));
+            if (minTop > yStart + 30) {
+              yNextCut = minTop;
+            }
+          }
+        } else {
+          yNextCut = canvas.height;
+        }
+
+        const chunkHeightPx = yNextCut - yStart;
         if (chunkHeightPx <= 0) break;
 
         const subCanvas = document.createElement("canvas");
@@ -514,7 +781,7 @@ export async function exportElementToPDF(
 
         pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
 
-        yStart += chunkHeightPx;
+        yStart = yNextCut;
         pageIndex++;
       }
     }

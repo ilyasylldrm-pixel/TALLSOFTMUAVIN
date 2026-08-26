@@ -4234,25 +4234,29 @@ export const Accounts: React.FC<AccountsProps> = ({
             <div className="p-4 sm:p-8 max-h-[80vh] overflow-y-auto custom-scrollbar bg-slate-200/60 flex justify-center">
               <div
                 id="printable-receipt"
-                className="bg-white text-slate-900 p-6 sm:p-8 rounded-2xl shadow-xl border border-purple-200 w-full max-w-2xl mx-auto space-y-5 font-sans text-xs sm:text-sm"
+                style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                className="bg-white text-slate-900 p-6 sm:p-8 rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl mx-auto space-y-5 font-sans text-xs sm:text-sm"
               >
                 {/* Corporate Header Section */}
-                <div className="border-b-2 border-purple-900 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="border-b-2 border-indigo-900 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-3">
                     {companySettings?.logoUrl ? (
                       <img
                         src={companySettings.logoUrl}
                         alt="Firma Logo"
-                        className="w-12 h-12 object-contain rounded-xl border border-purple-200 p-1 bg-white"
+                        className="w-12 h-12 object-contain rounded-xl border border-slate-200 p-1 bg-white"
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-purple-950 text-white flex items-center justify-center font-black text-xl shadow-md border border-purple-800 shrink-0">
-                        <Landmark className="w-6 h-6 text-purple-200" />
+                      <div
+                        style={{ backgroundColor: "#312e81", color: "#ffffff" }}
+                        className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shadow-xs border border-indigo-900 shrink-0"
+                      >
+                        <Landmark className="w-6 h-6 text-indigo-100" />
                       </div>
                     )}
                     <div className="space-y-0.5">
-                      <div className="font-extrabold text-sm sm:text-base text-purple-950 tracking-tight leading-tight">
+                      <div className="font-extrabold text-sm sm:text-base text-slate-950 tracking-tight leading-tight">
                         {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL FİNANS VE YÖNETİM HİZMETLERİ"}
                       </div>
                       <div className="text-[10px] text-slate-600 space-y-0.5">
@@ -4267,15 +4271,21 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-center bg-purple-50/90 p-3 rounded-2xl border border-purple-300 min-w-[200px] shrink-0">
-                    <span className="text-[10px] font-black text-purple-900 uppercase tracking-widest block">
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#cbd5e1" }}
+                    className="text-center p-3 rounded-2xl border min-w-[200px] shrink-0"
+                  >
+                    <span className="text-[10px] font-black text-indigo-950 uppercase tracking-widest block">
                       RESMİ FİNANS DEKONTU
                     </span>
-                    <div className="font-mono text-xs font-black text-purple-950 bg-white py-1 px-2 rounded-lg border border-purple-200 mt-1">
+                    <div
+                      style={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }}
+                      className="font-mono text-xs font-black py-1 px-2 rounded-lg border mt-1"
+                    >
                       {receiptData.documentNo}
                     </div>
-                    <div className="text-[10px] text-purple-700 font-bold mt-1 flex items-center justify-center gap-1">
-                      <Clock className="w-3 h-3 text-purple-600" />
+                    <div className="text-[10px] text-slate-600 font-bold mt-1 flex items-center justify-center gap-1">
+                      <Clock className="w-3 h-3 text-indigo-600" />
                       <span>{receiptData.date} {receiptData.time ? `• ${receiptData.time}` : ""}</span>
                     </div>
                   </div>
@@ -4283,11 +4293,14 @@ export const Accounts: React.FC<AccountsProps> = ({
 
                 {/* Centered Document Title Banner */}
                 <div className="text-center space-y-1">
-                  <div className="inline-block bg-purple-950 text-white px-6 sm:px-8 py-1.5 rounded-xl font-black text-xs sm:text-sm tracking-wider uppercase shadow-md border border-purple-800 text-center">
+                  <div
+                    style={{ backgroundColor: "#312e81", color: "#ffffff", borderColor: "#1e1b4b" }}
+                    className="inline-block px-6 sm:px-8 py-1.5 rounded-xl font-black text-xs sm:text-sm tracking-wider uppercase shadow-xs border text-center"
+                  >
                     {receiptData.documentTitle}
                   </div>
                   {receiptData.subTitle && (
-                    <div className="text-[11px] font-bold text-purple-800 tracking-wide text-center">
+                    <div className="text-[11px] font-bold text-slate-600 tracking-wide text-center">
                       {receiptData.subTitle}
                     </div>
                   )}
@@ -4296,13 +4309,19 @@ export const Accounts: React.FC<AccountsProps> = ({
                 {/* Parties Information (2 Columns) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   {/* Left: Organization / Account */}
-                  <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200 space-y-1">
-                    <div className="flex items-center justify-between border-b border-purple-200 pb-1">
-                      <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider flex items-center gap-1">
-                        <Building className="w-3.5 h-3.5 text-purple-700" />
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                    className="p-3 rounded-xl border space-y-1"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+                      <span className="text-[10px] font-black uppercase text-slate-900 tracking-wider flex items-center gap-1">
+                        <Building className="w-3.5 h-3.5 text-indigo-600" />
                         İŞLEMİ YAPAN HESAP / KURUM
                       </span>
-                      <span className="text-[9px] font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded-md">
+                      <span
+                        style={{ backgroundColor: "#e0e7ff", color: "#3730a3" }}
+                        className="text-[9px] font-bold px-2 py-0.5 rounded-md"
+                      >
                         Düzenleyen
                       </span>
                     </div>
@@ -4310,20 +4329,26 @@ export const Accounts: React.FC<AccountsProps> = ({
                       {companySettings?.companyTitle || companySettings?.companyName || "Şirket Merkezi"}
                     </div>
                     <div className="text-[11px] text-slate-700 space-y-0.5">
-                      <div><span className="font-bold text-purple-900">Hesap / Kasa:</span> {receiptData.accountName || "Ana Kasa"}</div>
-                      {receiptData.bankName && <div><span className="font-bold text-purple-900">Banka:</span> {receiptData.bankName}</div>}
-                      {receiptData.iban && <div><span className="font-bold text-purple-900">IBAN:</span> <span className="font-mono text-[10px] font-bold">{receiptData.iban}</span></div>}
+                      <div><span className="font-bold text-slate-900">Hesap / Kasa:</span> {receiptData.accountName || "Ana Kasa"}</div>
+                      {receiptData.bankName && <div><span className="font-bold text-slate-900">Banka:</span> {receiptData.bankName}</div>}
+                      {receiptData.iban && <div><span className="font-bold text-slate-900">IBAN:</span> <span className="font-mono text-[10px] font-bold">{receiptData.iban}</span></div>}
                     </div>
                   </div>
 
                   {/* Right: Contact / Counterparty */}
-                  <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200 space-y-1">
-                    <div className="flex items-center justify-between border-b border-purple-200 pb-1">
-                      <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider flex items-center gap-1">
-                        <Landmark className="w-3.5 h-3.5 text-purple-700" />
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                    className="p-3 rounded-xl border space-y-1"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+                      <span className="text-[10px] font-black uppercase text-slate-900 tracking-wider flex items-center gap-1">
+                        <Landmark className="w-3.5 h-3.5 text-indigo-600" />
                         MUHATAP / İLGİLİ CARİ BİLGİLERİ
                       </span>
-                      <span className="text-[9px] font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded-md">
+                      <span
+                        style={{ backgroundColor: "#e0e7ff", color: "#3730a3" }}
+                        className="text-[9px] font-bold px-2 py-0.5 rounded-md"
+                      >
                         Muhatap Taraf
                       </span>
                     </div>
@@ -4332,13 +4357,13 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </div>
                     <div className="text-[11px] text-slate-700 space-y-0.5">
                       {receiptData.contactTaxNumber && (
-                        <div><span className="font-bold text-purple-900">VKN/TCKN:</span> {receiptData.contactTaxNumber} {receiptData.contactTaxOffice ? `(${receiptData.contactTaxOffice} V.D.)` : ""}</div>
+                        <div><span className="font-bold text-slate-900">VKN/TCKN:</span> {receiptData.contactTaxNumber} {receiptData.contactTaxOffice ? `(${receiptData.contactTaxOffice} V.D.)` : ""}</div>
                       )}
                       {receiptData.contactPhone && (
-                        <div><span className="font-bold text-purple-900">İletişim:</span> {receiptData.contactPhone}</div>
+                        <div><span className="font-bold text-slate-900">İletişim:</span> {receiptData.contactPhone}</div>
                       )}
                       {receiptData.contactCity && (
-                        <div><span className="font-bold text-purple-900">Şehir:</span> {receiptData.contactCity}</div>
+                        <div><span className="font-bold text-slate-900">Şehir:</span> {receiptData.contactCity}</div>
                       )}
                       {!receiptData.contactTaxNumber && !receiptData.contactPhone && !receiptData.contactCity && (
                         <div className="text-slate-500 italic text-[10px]">Cari kartı doğrudan işlem veya kurum içi transfer kaydı</div>
@@ -4348,9 +4373,12 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </div>
 
                 {/* Amount Box */}
-                <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-purple-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div
+                  style={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#ffffff" }}
+                  className="rounded-2xl p-4 sm:p-5 shadow-md border flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
                   <div className="text-center sm:text-left">
-                    <span className="text-[10px] uppercase font-black text-purple-300 tracking-widest block mb-0.5">
+                    <span className="text-[10px] uppercase font-black text-slate-300 tracking-widest block mb-0.5">
                       İşlem Tutarı
                     </span>
                     <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-emerald-400">
@@ -4358,24 +4386,30 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-center bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/20">
-                    <span className="text-[10px] uppercase font-bold text-purple-200 tracking-wider block mb-0.5">
+                  <div
+                    style={{ backgroundColor: "#1e293b", borderColor: "#475569" }}
+                    className="text-center px-4 py-2.5 rounded-xl border"
+                  >
+                    <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider block mb-0.5">
                       Yazıyla Tutar
                     </span>
-                    <span className="text-xs font-extrabold text-amber-200 italic">
+                    <span className="text-xs font-extrabold text-amber-300 italic">
                       #{numberToTurkishWords(receiptData.amount, receiptData.currency)}#
                     </span>
                   </div>
                 </div>
 
-                {/* Detail Items Grid (Kutucuklar ve Ortalanmış Değerler) */}
+                {/* Detail Items Grid */}
                 <div className="space-y-2.5">
-                  <h4 className="font-extrabold text-xs text-purple-950 uppercase tracking-wider border-b border-purple-200 pb-1 flex items-center justify-between">
+                  <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-1 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-purple-800" />
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
                       İşlem Detay ve Kayıt Bilgileri
                     </span>
-                    <span className="text-[10px] text-purple-800 font-bold bg-purple-100 px-2.5 py-0.5 rounded-full border border-purple-200">
+                    <span
+                      style={{ backgroundColor: "#e0e7ff", color: "#3730a3", borderColor: "#c7d2fe" }}
+                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border"
+                    >
                       Onaylı Kayıt
                     </span>
                   </h4>
@@ -4384,9 +4418,10 @@ export const Accounts: React.FC<AccountsProps> = ({
                     {receiptData.details.map((dt, idx) => (
                       <div
                         key={idx}
-                        className="bg-purple-50/40 p-3 rounded-xl border border-purple-200/80 text-center flex flex-col items-center justify-center"
+                        style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                        className="p-3 rounded-xl border text-center flex flex-col items-center justify-center"
                       >
-                        <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wide">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                           {dt.label}
                         </span>
                         <span className="font-extrabold text-xs text-slate-900 mt-1 break-words text-center">
@@ -4398,9 +4433,12 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </div>
 
                 {/* Legal Provisions */}
-                <div className="bg-purple-50/40 p-3 rounded-xl border border-purple-200 text-[10px] text-slate-700 space-y-1 leading-relaxed">
-                  <div className="font-black text-purple-950 uppercase tracking-wider flex items-center gap-1.5 mb-1">
-                    <Stamp className="w-3.5 h-3.5 text-purple-800" />
+                <div
+                  style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0", color: "#334155" }}
+                  className="p-3 rounded-xl border text-[10px] space-y-1 leading-relaxed"
+                >
+                  <div className="font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                    <Stamp className="w-3.5 h-3.5 text-indigo-600" />
                     YASAL HÜKÜMLER VE TEYİT ŞARTLARI
                   </div>
                   <p>
@@ -4416,8 +4454,11 @@ export const Accounts: React.FC<AccountsProps> = ({
 
                 {/* Official Signatures / Stamps */}
                 <div className="pt-4 border-t border-slate-300 grid grid-cols-2 gap-6 text-center text-xs">
-                  <div className="space-y-6 bg-purple-50/30 p-3.5 rounded-xl border border-purple-200/80">
-                    <span className="font-extrabold text-purple-950 uppercase tracking-wider block">
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                    className="space-y-6 p-3.5 rounded-xl border"
+                  >
+                    <span className="font-extrabold text-slate-900 uppercase tracking-wider block">
                       Düzenleyen / Yetkili İmza
                     </span>
                     <div className="pt-2 text-[10px] text-slate-400 border-t border-dashed border-slate-300">
@@ -4425,8 +4466,11 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </div>
                   </div>
 
-                  <div className="space-y-6 bg-purple-50/30 p-3.5 rounded-xl border border-purple-200/80">
-                    <span className="font-extrabold text-purple-950 uppercase tracking-wider block">
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                    className="space-y-6 p-3.5 rounded-xl border"
+                  >
+                    <span className="font-extrabold text-slate-900 uppercase tracking-wider block">
                       Teslim Alan / İlgili Cari
                     </span>
                     <div className="pt-2 text-[10px] text-slate-400 border-t border-dashed border-slate-300">
