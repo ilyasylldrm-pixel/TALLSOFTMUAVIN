@@ -260,14 +260,14 @@ export function generateAssetCustodyHTML(
   const signerTitle = options.customSignerTitle || "İnsan Kaynakları & İdari İşler Yetkilisi";
 
   return `
-    <div style="width: 800px; padding: 36px 40px; background-color: #ffffff; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; box-sizing: border-box; line-height: 1.4;">
+    <div style="width: 800px; padding: 32px 36px; background-color: #ffffff; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; box-sizing: border-box; line-height: 1.4;">
       
       <!-- Antet ve Başlık -->
-      <div style="border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 14px;">
+      <div style="border-bottom: 2px solid #3b0764; padding-bottom: 12px; margin-bottom: 14px;">
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
-            <td style="vertical-align: top; width: 65%;">
-              <div style="font-size: 14px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -0.01em;">
+            <td style="vertical-align: top; width: 62%;">
+              <div style="font-size: 15px; font-weight: 900; color: #3b0764; text-transform: uppercase; letter-spacing: -0.01em;">
                 ${company.companyTitle || company.companyName}
               </div>
               <div style="font-size: 9.5px; color: #475569; margin-top: 3px;">
@@ -276,16 +276,17 @@ export function generateAssetCustodyHTML(
               <div style="font-size: 9.5px; color: #64748b; margin-top: 2px;">
                 Vergi Dairesi: <strong>${company.taxOffice || "-"}</strong> | VKN/TCKN: <strong>${company.taxNumber || "-"}</strong> ${companySettings?.mersisNo ? `| Mersis: <strong>${companySettings.mersisNo}</strong>` : ""}
               </div>
-              ${companySettings?.sgkCredentials?.workplaceRegistrationNo ? `<div style="font-size: 9px; color: #64748b;">SGK İşyeri Sicil No: <strong>${companySettings.sgkCredentials.workplaceRegistrationNo}</strong></div>` : ""}
+              ${companySettings?.sgkCredentials?.workplaceRegistrationNo ? `<div style="font-size: 9px; color: #64748b; margin-top: 2px;">SGK İşyeri Sicil No: <strong>${companySettings.sgkCredentials.workplaceRegistrationNo}</strong></div>` : ""}
             </td>
-            <td style="vertical-align: top; text-align: right; width: 35%;">
-              <div style="display: inline-block; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; font-family: monospace; font-size: 11px; font-weight: 800; color: #1e293b;">
-                ${protocolNo}
+            <td style="vertical-align: top; text-align: center; width: 38%;">
+              <div style="display: inline-block; background-color: #fdf4ff; border: 1.5px solid #d946ef; border-radius: 8px; padding: 6px 14px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: #701a75; letter-spacing: 0.05em;">PROTOKOL / BELGE NO</div>
+                <div style="font-family: monospace; font-size: 12px; font-weight: 900; color: #3b0764; margin-top: 2px;">${protocolNo}</div>
               </div>
-              <div style="font-size: 9.5px; color: #64748b; margin-top: 4px;">
+              <div style="font-size: 9.5px; color: #64748b; margin-top: 4px; text-align: center;">
                 Düzenleme Tarihi: <strong style="color: #0f172a;">${formattedToday}</strong>
               </div>
-              <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">
+              <div style="font-size: 9px; color: #94a3b8; margin-top: 2px; text-align: center;">
                 Zimmet No: #${asset.id.slice(0, 6).toUpperCase()}
               </div>
             </td>
@@ -294,68 +295,68 @@ export function generateAssetCustodyHTML(
 
         <!-- Belge Başlığı -->
         <div style="margin-top: 14px; text-align: center;">
-          <h2 style="margin: 0; font-size: 15px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; color: #0f172a; text-decoration: underline; text-underline-offset: 3px;">
+          <div style="display: inline-block; background-color: #3b0764; color: #ffffff; padding: 6px 20px; border-radius: 8px; font-size: 13px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; text-align: center;">
             ${isReturn ? "DEMİRBAŞ / EŞYA İADE VE TESLİM ALMA PROTOKOLÜ" : "DEMİRBAŞ / EŞYA ZİMMET TESLİM VE TESELLÜM TUTANAĞI"}
-          </h2>
-          <p style="margin: 3px 0 0 0; font-size: 9px; color: #64748b; font-weight: 600;">
+          </div>
+          <p style="margin: 4px 0 0 0; font-size: 9px; color: #64748b; font-weight: 600; text-align: center;">
             (4857 Sayılı İş Kanunu ve 6098 Sayılı Türk Borçlar Kanunu Hükümlerine Göre Karşılıklı Tanzim Edilmiştir)
           </p>
         </div>
       </div>
 
       <!-- Taraflar Bilgisi (İşveren ve Personel Birleştirilmiş Tablo) -->
-      <table style="width: 100%; border-collapse: separate; border-spacing: 8px 0; margin-bottom: 12px;">
+      <table style="width: 100%; border-collapse: separate; border-spacing: 10px 0; margin-bottom: 12px;">
         <tr>
           <!-- Teslim Eden / Alan İşveren -->
-          <td style="width: 50%; vertical-align: top; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px;">
-            <div style="font-size: 10px; font-weight: 800; color: #1e293b; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; margin-bottom: 5px; text-transform: uppercase;">
+          <td style="width: 50%; vertical-align: top; background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 10px 12px;">
+            <div style="font-size: 10px; font-weight: 900; color: #581c87; border-bottom: 1px solid #d8b4fe; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; text-align: center;">
               ${isReturn ? "🏢 TESLİM ALAN (İŞVEREN / YETKİLİ)" : "🏢 TESLİM EDEN (İŞVEREN / YETKİLİ)"}
             </div>
             <table style="width: 100%; font-size: 9.5px; border-collapse: collapse; color: #334155;">
               <tr>
-                <td style="padding: 2px 0; width: 38%; font-weight: 700; color: #64748b;">Kurum / Şirket:</td>
-                <td style="padding: 2px 0; font-weight: 700; color: #0f172a;">${company.companyTitle || company.companyName}</td>
+                <td style="padding: 2.5px 0; width: 38%; font-weight: 700; color: #64748b;">Kurum / Şirket:</td>
+                <td style="padding: 2.5px 0; font-weight: 700; color: #0f172a;">${company.companyTitle || company.companyName}</td>
               </tr>
               <tr>
-                <td style="padding: 2px 0; font-weight: 700; color: #64748b;">Şube / Lokasyon:</td>
-                <td style="padding: 2px 0;">${empBranch}</td>
+                <td style="padding: 2.5px 0; font-weight: 700; color: #64748b;">Şube / Lokasyon:</td>
+                <td style="padding: 2.5px 0;">${empBranch}</td>
               </tr>
               <tr>
-                <td style="padding: 2px 0; font-weight: 700; color: #64748b;">Yetkili / Görevli:</td>
-                <td style="padding: 2px 0;">${signerName}</td>
+                <td style="padding: 2.5px 0; font-weight: 700; color: #64748b;">Yetkili / Görevli:</td>
+                <td style="padding: 2.5px 0; font-weight: 700;">${signerName}</td>
               </tr>
               <tr>
-                <td style="padding: 2px 0; font-weight: 700; color: #64748b;">Yetkili Ünvanı:</td>
-                <td style="padding: 2px 0;">${signerTitle}</td>
+                <td style="padding: 2.5px 0; font-weight: 700; color: #64748b;">Yetkili Ünvanı:</td>
+                <td style="padding: 2.5px 0;">${signerTitle}</td>
               </tr>
             </table>
           </td>
 
           <!-- Teslim Alan / Eden Personel -->
-          <td style="width: 50%; vertical-align: top; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px;">
-            <div style="font-size: 10px; font-weight: 800; color: #1e293b; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; margin-bottom: 5px; text-transform: uppercase;">
+          <td style="width: 50%; vertical-align: top; background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 10px 12px;">
+            <div style="font-size: 10px; font-weight: 900; color: #581c87; border-bottom: 1px solid #d8b4fe; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; text-align: center;">
               ${isReturn ? "👤 TESLİM EDEN (PERSONEL)" : "👤 TESLİM ALAN (ZİMMETLİ PERSONEL)"}
             </div>
             <table style="width: 100%; font-size: 9.5px; border-collapse: collapse; color: #334155;">
               <tr>
-                <td style="padding: 2px 0; width: 38%; font-weight: 700; color: #64748b;">Adı Soyadı:</td>
-                <td style="padding: 2px 0; font-weight: 800; color: #0f172a;">${empName}</td>
+                <td style="padding: 2.5px 0; width: 38%; font-weight: 700; color: #64748b;">Adı Soyadı:</td>
+                <td style="padding: 2.5px 0; font-weight: 800; color: #0f172a;">${empName}</td>
               </tr>
               <tr>
-                <td style="padding: 2px 0; font-weight: 700; color: #64748b;">T.C. Kimlik No:</td>
-                <td style="padding: 2px 0; font-family: monospace; font-weight: 700;">${empTckn}</td>
+                <td style="padding: 2.5px 0; font-weight: 700; color: #64748b;">T.C. Kimlik No:</td>
+                <td style="padding: 2.5px 0; font-family: monospace; font-weight: 700; color: #3b0764;">${empTckn}</td>
               </tr>
               <tr>
-                <td style="padding: 2px 0; font-weight: 700; color: #64748b;">Görevi / Ünvanı:</td>
-                <td style="padding: 2px 0;">${empTitle}</td>
+                <td style="padding: 2.5px 0; font-weight: 700; color: #64748b;">Görevi / Ünvanı:</td>
+                <td style="padding: 2.5px 0;">${empTitle}</td>
               </tr>
               <tr>
-                <td style="padding: 2px 0; font-weight: 700; color: #64748b;">Departman:</td>
-                <td style="padding: 2px 0;">${empDept} ${empStartDate !== "-" ? `(Giriş: ${empStartDate})` : ""}</td>
+                <td style="padding: 2.5px 0; font-weight: 700; color: #64748b;">Departman:</td>
+                <td style="padding: 2.5px 0;">${empDept} ${empStartDate !== "-" ? `(Giriş: ${empStartDate})` : ""}</td>
               </tr>
               <tr>
-                <td style="padding: 2px 0; font-weight: 700; color: #64748b;">Telefon / E-posta:</td>
-                <td style="padding: 2px 0;">${empPhone} ${empEmail !== "-" ? `• ${empEmail}` : ""}</td>
+                <td style="padding: 2.5px 0; font-weight: 700; color: #64748b;">Telefon / E-posta:</td>
+                <td style="padding: 2.5px 0;">${empPhone} ${empEmail !== "-" ? `• ${empEmail}` : ""}</td>
               </tr>
             </table>
           </td>
@@ -363,18 +364,18 @@ export function generateAssetCustodyHTML(
       </table>
 
       <!-- Zimmet Konusu Demirbaş Bilgileri -->
-      <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; margin-bottom: 12px;">
-        <div style="background-color: #0f172a; color: #ffffff; font-size: 10px; font-weight: 800; padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;">
+      <div style="border: 1px solid #d8b4fe; border-radius: 10px; overflow: hidden; margin-bottom: 12px;">
+        <div style="background-color: #3b0764; color: #ffffff; font-size: 10px; font-weight: 800; padding: 7px 12px; display: flex; justify-content: space-between; align-items: center;">
           <span>📦 ZİMMET KONUSU DEMİRBAŞ & EKİPMAN DETAYLARI</span>
-          <span style="font-size: 9px; color: #94a3b8; text-transform: uppercase;">${getCategoryLabelTR(asset.category)}</span>
+          <span style="font-size: 9px; color: #e9d5ff; text-transform: uppercase; background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 4px;">${getCategoryLabelTR(asset.category)}</span>
         </div>
         
-        <div style="padding: 10px; background-color: #ffffff;">
+        <div style="padding: 10px 12px; background-color: #ffffff;">
           <table style="width: 100%; font-size: 10px; border-collapse: collapse;">
             <tr>
               <td style="padding: 3px 0; width: 33%;"><strong style="color: #64748b;">Demirbaş Tanımı:</strong> <strong style="color: #0f172a; font-size: 11px;">${asset.assetName}</strong></td>
               <td style="padding: 3px 0; width: 33%;"><strong style="color: #64748b;">Marka & Model:</strong> <strong>${asset.brand} - ${asset.model}</strong></td>
-              <td style="padding: 3px 0; width: 33%;"><strong style="color: #64748b;">Seri Numarası:</strong> <span style="font-family: monospace; font-weight: 700;">${asset.serialNumber || asset.inventoryNumber || "-"}</span></td>
+              <td style="padding: 3px 0; width: 33%;"><strong style="color: #64748b;">Seri Numarası:</strong> <span style="font-family: monospace; font-weight: 700; color: #3b0764;">${asset.serialNumber || asset.inventoryNumber || "-"}</span></td>
             </tr>
             <tr>
               <td style="padding: 3px 0;"><strong style="color: #64748b;">Barkod / Envanter No:</strong> <span style="font-family: monospace;">${asset.barcodeNumber || "-"}</span></td>
@@ -397,7 +398,7 @@ export function generateAssetCustodyHTML(
           <!-- Notlar & İade Açıklamaları -->
           ${
             isReturn && asset.returnNotes
-              ? `<div style="margin-top: 8px; background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 6px 8px; font-size: 9.5px; color: #92400e;">
+              ? `<div style="margin-top: 8px; background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 6px 10px; font-size: 9.5px; color: #92400e;">
                   <strong>İade ve Ekspertiz Teslim Alma Notu:</strong> <em>${asset.returnNotes}</em>
                   ${asset.returnReceivedBy ? `<span style="display: block; margin-top: 3px; font-size: 9px; color: #78350f;">Teslim Alan Yetkili: <strong>${asset.returnReceivedBy}</strong></span>` : ""}
                 </div>`
@@ -412,8 +413,8 @@ export function generateAssetCustodyHTML(
       </div>
 
       <!-- Yasal Taahhütname ve Şartlar (4857 Sayılı Kanun & TBK) -->
-      <div style="border: 1px solid #cbd5e1; background-color: #f8fafc; border-radius: 6px; padding: 8px 10px; margin-bottom: 14px; font-size: 8.5px; color: #334155; line-height: 1.35;">
-        <div style="font-weight: 800; color: #0f172a; margin-bottom: 4px; text-transform: uppercase; font-size: 9px;">
+      <div style="border: 1px solid #cbd5e1; background-color: #f8fafc; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; font-size: 8.5px; color: #334155; line-height: 1.35;">
+        <div style="font-weight: 800; color: #0f172a; margin-bottom: 4px; text-transform: uppercase; font-size: 9px; text-align: center;">
           ⚖️ ZİMMET ŞARTLARI, KULLANIM KURALLARI VE YASAL TAAHHÜTNAME
         </div>
         <ol style="margin: 0; padding-left: 14px;">
@@ -436,49 +437,49 @@ export function generateAssetCustodyHTML(
       <table style="width: 100%; border-collapse: separate; border-spacing: 12px 0;">
         <tr>
           <!-- Teslim Eden İmza Alanı -->
-          <td style="width: 50%; vertical-align: top; border: 1px solid #94a3b8; border-radius: 6px; padding: 10px; text-align: center; background-color: #ffffff;">
-            <div style="font-size: 10px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+          <td style="width: 50%; vertical-align: top; border: 1.5px solid #d8b4fe; border-radius: 10px; padding: 10px; text-align: center; background-color: #faf5ff;">
+            <div style="font-size: 10px; font-weight: 800; color: #3b0764; text-transform: uppercase; text-align: center;">
               ${isReturn ? "TESLİM ALAN (İŞVEREN / İK TEMSİLCİSİ)" : "TESLİM EDEN (İŞVEREN / İK TEMSİLCİSİ)"}
             </div>
-            <div style="font-size: 8.5px; color: #64748b; margin-top: 1px;">
+            <div style="font-size: 8.5px; color: #64748b; margin-top: 1px; text-align: center;">
               Kaşe ve Yetkili İmza
             </div>
             
-            <div style="height: 60px; margin: 8px 0; border-bottom: 1px dashed #cbd5e1; display: flex; align-items: flex-end; justify-content: center;">
+            <div style="height: 55px; margin: 6px 0; border-bottom: 1px dashed #cbd5e1; display: flex; align-items: flex-end; justify-content: center;">
               <!-- İmza Alanı Boşluğu -->
             </div>
 
-            <div style="font-size: 10px; font-weight: 700; color: #0f172a;">
+            <div style="font-size: 10px; font-weight: 800; color: #0f172a; text-align: center;">
               ${signerName}
             </div>
-            <div style="font-size: 8.5px; color: #64748b;">
+            <div style="font-size: 8.5px; color: #64748b; text-align: center;">
               ${signerTitle}
             </div>
-            <div style="font-size: 8.5px; color: #475569; margin-top: 2px;">
+            <div style="font-size: 8.5px; color: #475569; margin-top: 2px; text-align: center;">
               Tarih: <strong>${formattedToday}</strong>
             </div>
           </td>
 
           <!-- Teslim Alan İmza Alanı -->
-          <td style="width: 50%; vertical-align: top; border: 1px solid #94a3b8; border-radius: 6px; padding: 10px; text-align: center; background-color: #ffffff;">
-            <div style="font-size: 10px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+          <td style="width: 50%; vertical-align: top; border: 1.5px solid #d8b4fe; border-radius: 10px; padding: 10px; text-align: center; background-color: #faf5ff;">
+            <div style="font-size: 10px; font-weight: 800; color: #3b0764; text-transform: uppercase; text-align: center;">
               ${isReturn ? "TESLİM EDEN (PERSONEL)" : "TESLİM ALAN (ZİMMETLİ PERSONEL)"}
             </div>
-            <div style="font-size: 8.5px; color: #64748b; margin-top: 1px;">
+            <div style="font-size: 8.5px; color: #64748b; margin-top: 1px; text-align: center;">
               Okudum, Eksiksiz Teslim Aldım (Islak İmza)
             </div>
             
-            <div style="height: 60px; margin: 8px 0; border-bottom: 1px dashed #cbd5e1; display: flex; align-items: flex-end; justify-content: center;">
+            <div style="height: 55px; margin: 6px 0; border-bottom: 1px dashed #cbd5e1; display: flex; align-items: flex-end; justify-content: center;">
               <!-- İmza Alanı Boşluğu -->
             </div>
 
-            <div style="font-size: 10px; font-weight: 700; color: #0f172a;">
+            <div style="font-size: 10px; font-weight: 800; color: #0f172a; text-align: center;">
               ${empName}
             </div>
-            <div style="font-size: 8.5px; color: #64748b;">
+            <div style="font-size: 8.5px; color: #64748b; text-align: center;">
               T.C. No: ${empTckn} • ${empTitle}
             </div>
-            <div style="font-size: 8.5px; color: #475569; margin-top: 2px;">
+            <div style="font-size: 8.5px; color: #475569; margin-top: 2px; text-align: center;">
               Tarih: <strong>${formattedToday}</strong>
             </div>
           </td>
@@ -486,7 +487,7 @@ export function generateAssetCustodyHTML(
       </table>
 
       <!-- Alt Bilgi ve Nüsha Notu -->
-      <div style="margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 6px; text-align: center; font-size: 8px; color: #94a3b8;">
+      <div style="margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 6px; text-align: center; font-size: 8px; color: #94a3b8;">
         İşbu tutanak iki (2) asıl nüsha olarak tanzim edilmiş olup, bir nüshası personele verilmiş, diğer nüshası çalışanın özlük dosyasında saklanmaktadır. • Muavin ERP & İK Sistemi
       </div>
 
