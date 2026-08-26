@@ -23,6 +23,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Employee, CompanySettings, LeaveRequest, AdvanceRequest } from "../types";
+import { exportElementToPDF } from "../utils/exportUtils";
 
 export type HRFormType = "annual_leave" | "unpaid_leave" | "absence_report" | "paternity_leave" | "advance_request" | "expense_request";
 
@@ -424,10 +425,34 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
     ]);
   };
 
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPDF = async () => {
+    setIsDownloadingPDF(true);
+    try {
+      const sanitizedName = (formData.empFullName || "Personel").trim().replace(/\s+/g, "_");
+      const formNameMap: Record<string, string> = {
+        annual_leave: "Yillik_Ucretli_Izin_Formu",
+        unpaid_leave: "Ucretsiz_Izin_Talep_Formu",
+        absence_report: "Devamsizlik_Tutanagi",
+        paternity_leave: "Babalik_Izni_Formu",
+        advance_request: "Avans_Talep_Formu",
+        expense_request: "Masraf_Talep_Formu",
+      };
+      const prefix = formNameMap[selectedFormType] || "IK_Formu";
+      const fileName = `${prefix}_${sanitizedName}.pdf`;
+      await exportElementToPDF("hr-printable-paper", fileName);
+    } catch (err) {
+      console.error("İK Formu PDF İndirme Hatası:", err);
+    } finally {
+      setIsDownloadingPDF(false);
+    }
   };
 
   return (
@@ -456,13 +481,24 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handlePrint}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
+              type="button"
+              onClick={handleDownloadPDF}
+              disabled={isDownloadingPDF}
+              className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95 disabled:opacity-50"
             >
-              <Printer className="w-4 h-4" />
-              <span>Yazdır / PDF Olarak Kaydet</span>
+              <Download className="w-4 h-4 text-purple-200" />
+              <span>{isDownloadingPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
             </button>
             <button
+              type="button"
+              onClick={handlePrint}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Yazdır</span>
+            </button>
+            <button
+              type="button"
               onClick={onClose}
               className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
             >
@@ -1379,7 +1415,7 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
           <div className="lg:col-span-7 bg-slate-200/80 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex justify-center items-start print:p-0 print:bg-white print:overflow-visible print:w-full print:block">
             
             {/* A4 PAPER CONTAINER */}
-            <div className="bg-white text-black w-full max-w-[760px] min-h-[980px] p-8 sm:p-12 shadow-xl border border-slate-300 rounded-sm font-serif leading-relaxed text-sm print:shadow-none print:border-none print:p-8 print:max-w-none print:w-full">
+            <div id="hr-printable-paper" className="bg-white text-black w-full max-w-[760px] min-h-[980px] p-8 sm:p-12 shadow-xl border border-slate-300 rounded-sm font-serif leading-relaxed text-sm print:shadow-none print:border-none print:p-8 print:max-w-none print:w-full">
               
               {/* ========================================================================= */}
               {/* FORM 1: TUTANAKTIR (Mazeretsiz İşe Gelmeme / Devamsızlık Tutanağı) */}

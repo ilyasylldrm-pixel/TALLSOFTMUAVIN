@@ -40,7 +40,12 @@ import {
   PackageIcon,
   BarChart3,
   Settings,
-  HelpCircle
+  HelpCircle,
+  RotateCcw,
+  Undo2,
+  ArrowRight,
+  PlusCircle,
+  MinusCircle
 } from "lucide-react";
 import { UserProfile, BRAND_LOGOS } from "./AuthModal";
 import {
@@ -163,8 +168,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
   // Active Main View Tab: "matrix" (Yetkilendirme Matrisi) vs "list" (Detaylı Kullanıcı & Dosya Listesi)
   const [activeAdminTab, setActiveAdminTab] = useState<"matrix" | "list">("matrix");
 
-  // State for matrix saving feedback per user
+  // Draft / Pending unsaved permission changes in Matrix view: Record<userId, AppModuleKey[]>
+  const [draftPermissions, setDraftPermissions] = useState<Record<string, AppModuleKey[]>>({});
+
+  // Single User Save Confirmation Modal State
+  const [confirmSaveData, setConfirmSaveData] = useState<{
+    user: UserProfileData;
+    newModules: AppModuleKey[];
+    oldModules: AppModuleKey[];
+  } | null>(null);
+
+  // Batch Save Confirmation Modal State
+  const [confirmBatchSaveModalOpen, setConfirmBatchSaveModalOpen] = useState(false);
+
+  // Saving state & feedback
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [savedUserFeedback, setSavedUserFeedback] = useState<string | null>(null);
 
   // New User Creation Modal State
@@ -188,7 +207,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     allowedModulesCount: number;
   } | null>(null);
 
-  // User Permissions Editing Modal State (Full Details Modal)
+  // Detailed User Permissions Editing Modal State
   const [editingPermissionsUser, setEditingPermissionsUser] = useState<UserProfileData | null>(null);
   const [selectedModulesToEdit, setSelectedModulesToEdit] = useState<AppModuleKey[]>([]);
   const [savingPermissions, setSavingPermissions] = useState(false);
@@ -225,6 +244,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
 
       setUsers(mergedUsers);
       setAllFiles(filesData);
+      setDraftPermissions({});
     } catch (err) {
       console.error("Admin verileri yüklenirken hata oluştu:", err);
     } finally {
@@ -236,165 +256,201 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     return allFiles.filter((f) => f.userId === userId);
   };
 
-  // Check if a specific module is allowed for a user
-  const isModuleAllowed = (user: UserProfileData, moduleKey: AppModuleKey): boolean => {
-    if (
+  const isUserSysAdmin = (user: UserProfileData) => {
+    return (
       user.role?.includes("Admin") ||
       user.email === "ilyasyildirim@outlook.com.tr" ||
       user.email === "ilyasylldrm@gmail.com" ||
       user.userId === "nuT309AyQxQKddnAp1ZJjlSgBXt2"
-    ) {
-      return true; // Admin users have access to all modules
-    }
-    if (!user.allowedModules || user.allowedModules.length === 0) {
-      return true; // If undefined or empty, defaults to full access
-    }
-    return user.allowedModules.includes(moduleKey);
+    );
   };
 
-  // Toggle a single module permission directly from the Matrix Table
-  const handleToggleUserModule = async (user: UserProfileData, moduleKey: AppModuleKey) => {
-    const isSysAdmin =
-      user.role?.includes("Admin") ||
-      user.email === "ilyasyildirim@outlook.com.tr" ||
-      user.email === "ilyasylldrm@gmail.com" ||
-      user.userId === "nuT309AyQxQKddnAp1ZJjlSgBXt2";
+  // Get current effective modules (staged draft or saved original)
+  const getUserEffectiveModules = (user: UserProfileData): AppModuleKey[] => {
+    if (draftPermissions[user.userId] !== undefined) {
+      return draftPermissions[user.userId];
+    }
+    return user.allowedModules && user.allowedModules.length > 0
+      ? user.allowedModules
+      : ALL_APP_MODULES.map((m) => m.key);
+  };
 
-    if (isSysAdmin) {
+  // Get saved original modules
+  const getUserOriginalModules = (user: UserProfileData): AppModuleKey[] => {
+    return user.allowedModules && user.allowedModules.length > 0
+      ? user.allowedModules
+      : ALL_APP_MODULES.map((m) => m.key);
+  };
+
+  // Check if a specific module is checked for a user (includes draft state)
+  const isModuleChecked = (user: UserProfileData, moduleKey: AppModuleKey): boolean => {
+    if (isUserSysAdmin(user)) {
+      return true;
+    }
+    const currentModules = getUserEffectiveModules(user);
+    return currentModules.includes(moduleKey);
+  };
+
+  // Check if user has uncommitted / draft modifications
+  const hasUserDraftChanges = (user: UserProfileData): boolean => {
+    if (draftPermissions[user.userId] === undefined) return false;
+    const original = getUserOriginalModules(user).slice().sort();
+    const draft = draftPermissions[user.userId].slice().sort();
+    if (original.length !== draft.length) return true;
+    return original.some((val, idx) => val !== draft[idx]);
+  };
+
+  // Total users with pending draft modifications
+  const pendingUsersList = users.filter((u) => hasUserDraftChanges(u));
+  const pendingChangesCount = pendingUsersList.length;
+
+  // Toggle a single module permission in DRAFT mode (does NOT save immediately)
+  const handleToggleDraftModule = (user: UserProfileData, moduleKey: AppModuleKey) => {
+    if (isUserSysAdmin(user)) {
       alert("Sistem Yöneticisi (Admin) tüm modüllere daimi tam erişim yetkisine sahiptir.");
       return;
     }
 
-    // Determine current allowed modules
-    const currentAllowed: AppModuleKey[] =
-      user.allowedModules && user.allowedModules.length > 0
-        ? [...user.allowedModules]
-        : ALL_APP_MODULES.map((m) => m.key);
-
+    const currentAllowed = getUserEffectiveModules(user);
     let updatedAllowed: AppModuleKey[];
     if (currentAllowed.includes(moduleKey)) {
-      // Uncheck / Remove permission
       updatedAllowed = currentAllowed.filter((k) => k !== moduleKey);
-      // Ensure at least dashboard remains
       if (updatedAllowed.length === 0) {
         updatedAllowed = ["dashboard"];
       }
     } else {
-      // Check / Add permission
       updatedAllowed = [...currentAllowed, moduleKey];
     }
 
-    const updatedUser: UserProfileData = {
-      ...user,
-      allowedModules: updatedAllowed,
-      updatedAt: new Date().toISOString(),
-    };
+    setDraftPermissions((prev) => ({
+      ...prev,
+      [user.userId]: updatedAllowed,
+    }));
+  };
 
-    // Optimistic UI update
-    setUsers((prev) =>
-      prev.map((u) => (u.userId === user.userId ? updatedUser : u))
-    );
+  // Apply a preset to DRAFT state (does NOT save immediately)
+  const handleSetDraftPreset = (user: UserProfileData, keys: AppModuleKey[]) => {
+    if (isUserSysAdmin(user)) return;
+    setDraftPermissions((prev) => ({
+      ...prev,
+      [user.userId]: keys,
+    }));
+  };
 
-    // Save to Firestore
+  // Discard / Revert draft changes for a specific user
+  const handleCancelUserDraft = (userId: string) => {
+    setDraftPermissions((prev) => {
+      const next = { ...prev };
+      delete next[userId];
+      return next;
+    });
+  };
+
+  // Discard / Revert ALL draft changes
+  const handleCancelAllDrafts = () => {
+    setDraftPermissions({});
+  };
+
+  // Open confirmation modal for a specific user before saving
+  const handlePromptSaveUser = (user: UserProfileData) => {
+    const newModules = getUserEffectiveModules(user);
+    const oldModules = getUserOriginalModules(user);
+
+    setConfirmSaveData({
+      user,
+      newModules,
+      oldModules,
+    });
+  };
+
+  // Execute Save after user confirmation
+  const handleExecuteSaveUser = async () => {
+    if (!confirmSaveData) return;
+    const { user, newModules } = confirmSaveData;
+
     setSavingUserId(user.userId);
     try {
+      const updatedUser: UserProfileData = {
+        ...user,
+        allowedModules: newModules,
+        updatedAt: new Date().toISOString(),
+      };
+
       await saveUserProfile(updatedUser);
+
+      setUsers((prev) =>
+        prev.map((u) => (u.userId === user.userId ? updatedUser : u))
+      );
+
+      // Clear draft for this user
+      setDraftPermissions((prev) => {
+        const next = { ...prev };
+        delete next[user.userId];
+        return next;
+      });
+
       setSavedUserFeedback(user.userId);
       setTimeout(() => {
         setSavedUserFeedback(null);
-      }, 2000);
+      }, 2500);
 
-      // If updating the currently logged-in user, update session
+      // If current logged-in user, update local session
       if (currentUser.id === user.userId) {
-        currentUser.allowedModules = updatedAllowed;
+        currentUser.allowedModules = newModules;
         const stored = localStorage.getItem("muavin_active_user");
         if (stored) {
           const parsed = JSON.parse(stored);
-          parsed.allowedModules = updatedAllowed;
+          parsed.allowedModules = newModules;
           localStorage.setItem("muavin_active_user", JSON.stringify(parsed));
         }
       }
+
+      setConfirmSaveData(null);
     } catch (err) {
-      console.error("Error updating module permission:", err);
+      console.error("Error saving user permissions:", err);
       alert("İzin kaydedilirken bir hata oluştu.");
-      loadAdminData(); // revert
     } finally {
       setSavingUserId(null);
     }
   };
 
-  // Quick Preset: Grant all modules to user
-  const handleGrantAllModules = async (user: UserProfileData) => {
-    const allKeys = ALL_APP_MODULES.map((m) => m.key);
-    const updatedUser: UserProfileData = {
-      ...user,
-      allowedModules: allKeys,
-      updatedAt: new Date().toISOString(),
-    };
-
-    setUsers((prev) =>
-      prev.map((u) => (u.userId === user.userId ? updatedUser : u))
-    );
-
-    setSavingUserId(user.userId);
+  // Execute Batch Save for all modified users
+  const handleExecuteBatchSave = async () => {
+    setIsBatchSaving(true);
     try {
-      await saveUserProfile(updatedUser);
-      setSavedUserFeedback(user.userId);
-      setTimeout(() => setSavedUserFeedback(null), 2000);
+      for (const user of pendingUsersList) {
+        const newModules = getUserEffectiveModules(user);
+        const updatedUser: UserProfileData = {
+          ...user,
+          allowedModules: newModules,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await saveUserProfile(updatedUser);
+
+        setUsers((prev) =>
+          prev.map((u) => (u.userId === user.userId ? updatedUser : u))
+        );
+
+        if (currentUser.id === user.userId) {
+          currentUser.allowedModules = newModules;
+          const stored = localStorage.getItem("muavin_active_user");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            parsed.allowedModules = newModules;
+            localStorage.setItem("muavin_active_user", JSON.stringify(parsed));
+          }
+        }
+      }
+
+      setDraftPermissions({});
+      setConfirmBatchSaveModalOpen(false);
+      alert("Tüm kullanıcı yetki değişiklikleri başarıyla kaydedildi.");
     } catch (err) {
-      console.error("Error updating permissions:", err);
+      console.error("Batch save error:", err);
+      alert("Toplu kayıt sırasında bir hata oluştu.");
     } finally {
-      setSavingUserId(null);
-    }
-  };
-
-  // Quick Preset: Grant Standard Accounting Modules (Cari + Fatura + Kasa + İK + Dashboard)
-  const handleGrantStandardAccounting = async (user: UserProfileData) => {
-    const accountingKeys: AppModuleKey[] = ["dashboard", "contacts", "invoices", "accounts", "hr"];
-    const updatedUser: UserProfileData = {
-      ...user,
-      allowedModules: accountingKeys,
-      updatedAt: new Date().toISOString(),
-    };
-
-    setUsers((prev) =>
-      prev.map((u) => (u.userId === user.userId ? updatedUser : u))
-    );
-
-    setSavingUserId(user.userId);
-    try {
-      await saveUserProfile(updatedUser);
-      setSavedUserFeedback(user.userId);
-      setTimeout(() => setSavedUserFeedback(null), 2000);
-    } catch (err) {
-      console.error("Error updating permissions:", err);
-    } finally {
-      setSavingUserId(null);
-    }
-  };
-
-  // Quick Preset: Reset to dashboard only
-  const handleRestrictToDashboardOnly = async (user: UserProfileData) => {
-    const minKeys: AppModuleKey[] = ["dashboard"];
-    const updatedUser: UserProfileData = {
-      ...user,
-      allowedModules: minKeys,
-      updatedAt: new Date().toISOString(),
-    };
-
-    setUsers((prev) =>
-      prev.map((u) => (u.userId === user.userId ? updatedUser : u))
-    );
-
-    setSavingUserId(user.userId);
-    try {
-      await saveUserProfile(updatedUser);
-      setSavedUserFeedback(user.userId);
-      setTimeout(() => setSavedUserFeedback(null), 2000);
-    } catch (err) {
-      console.error("Error updating permissions:", err);
-    } finally {
-      setSavingUserId(null);
+      setIsBatchSaving(false);
     }
   };
 
@@ -427,6 +483,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     try {
       await deleteUserProfile(userToDelete.userId);
       setUsers((prev) => prev.filter((u) => u.userId !== userToDelete.userId));
+      handleCancelUserDraft(userToDelete.userId);
       alert("Kullanıcı kaydı başarıyla silindi.");
     } catch (err) {
       console.error("User deletion error:", err);
@@ -455,20 +512,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
       pass += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return pass;
-  };
-
-  const toggleModuleSelection = (key: AppModuleKey) => {
-    setNewUserAllowedModules((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-    );
-  };
-
-  const handleSelectAllModules = () => {
-    setNewUserAllowedModules(ALL_APP_MODULES.map((m) => m.key));
-  };
-
-  const handleDeselectAllModules = () => {
-    setNewUserAllowedModules(["dashboard"]);
   };
 
   const handleCreateUserSubmit = async (e: React.FormEvent) => {
@@ -524,17 +567,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
 
   const handleOpenEditPermissions = (user: UserProfileData) => {
     setEditingPermissionsUser(user);
-    setSelectedModulesToEdit(
-      user.allowedModules && user.allowedModules.length > 0
-        ? [...user.allowedModules]
-        : ALL_APP_MODULES.map((m) => m.key)
-    );
+    setSelectedModulesToEdit(getUserEffectiveModules(user));
   };
 
   const handleSaveEditedPermissions = async () => {
     if (!editingPermissionsUser) return;
     if (selectedModulesToEdit.length === 0) {
       alert("Kullanıcıya en az 1 modül yetkisi verilmelidir.");
+      return;
+    }
+
+    // Direct confirmation before applying from modal
+    if (!window.confirm(`${editingPermissionsUser.name} kullanıcısının modül erişim izinlerini güncellemek istediğinize emin misiniz?`)) {
       return;
     }
 
@@ -551,6 +595,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
       setUsers((prev) =>
         prev.map((u) => (u.userId === updatedUser.userId ? updatedUser : u))
       );
+
+      handleCancelUserDraft(updatedUser.userId);
 
       if (currentUser.id === updatedUser.userId) {
         currentUser.allowedModules = updatedUser.allowedModules;
@@ -610,7 +656,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
 
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen - Cari Hesaplar Tasarımı) */}
+      {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
         <div
@@ -628,8 +674,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               Sistem Yöneticisi Paneli
             </span>
             <span className="bg-purple-100/80 text-purple-900 border border-purple-200 text-[10px] font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1">
-              <CheckSquare className="w-3 h-3 text-purple-700" />
-              Checkbox Bazlı Modül Yetkilendirme Matrisi
+              <ShieldCheck className="w-3 h-3 text-purple-700" />
+              Güvenli Onaylı Yetkilendirme (Kaydet & İptal Korumalı)
             </span>
             <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-emerald-600" />
@@ -640,7 +686,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
             Kullanıcı Modül Yetkilendirme & Evrak Denetim Merkezi
           </h2>
           <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-            Kayıtlı kullanıcıları listeleyebilir; <strong>Cari, Fatura, Kasa, İK</strong> ve diğer tüm modüller için doğrudan checkbox işaretleyerek anlık yetkilendirme ve erişim kısıtlaması uygulayabilirsiniz.
+            Kullanıcı izinlerini checkbox kutucuklarıyla düzenleyebilir; yanlışlıkla yapılan değişiklikleri önlemek için <strong>Kaydet</strong> veya <strong>İptal</strong> butonlarıyla güvenle onaylayabilirsiniz.
           </p>
         </div>
 
@@ -663,6 +709,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
           </button>
         </div>
       </div>
+
+      {/* PENDING DRAFT NOTIFICATION & BATCH ACTIONS BANNER */}
+      {pendingChangesCount > 0 && (
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-amber-400/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in slide-in-from-top-2">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0 mt-0.5">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-black text-white">
+                  Kaydedilmemiş Yetki Değişiklikleri Mevcut ({pendingChangesCount} Kullanıcı)
+                </h3>
+                <span className="bg-white/20 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full">
+                  Taslak Aşamasında
+                </span>
+              </div>
+              <p className="text-xs text-amber-50 mt-1 leading-relaxed">
+                Yaptığınız değişiklikler henüz veritabanına uygulanmadı. Değişikliklerin geçerli olması için ilgili satırlardaki <strong>Kaydet</strong> butonunu kullanabilir veya tümünü topluca onaylayabilirsiniz.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-end md:self-center">
+            <button
+              onClick={handleCancelAllDrafts}
+              className="bg-white/15 hover:bg-white/25 text-white border border-white/40 font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Tümünü İptal Et</span>
+            </button>
+
+            <button
+              onClick={() => setConfirmBatchSaveModalOpen(true)}
+              className="bg-white text-orange-900 hover:bg-orange-50 font-black text-xs py-2 px-4 rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4 text-orange-600" />
+              <span>Tüm Değişiklikleri Kaydet ({pendingChangesCount})</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main View Switcher & Search Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -733,7 +821,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. CHECKBOX BAZLI MODÜL YETKİLENDİRME MATRİSİ (ANA İSTENEN TABLO) */}
+      {/* 1. CHECKBOX BAZLI MODÜL YETKİLENDİRME MATRİSİ (KAYDET & İPTAL KORUMALI) */}
       {/* ========================================================================= */}
       {activeAdminTab === "matrix" && (
         <div className="bg-white rounded-2xl border border-purple-200/80 p-3 sm:p-5 shadow-sm space-y-4">
@@ -748,7 +836,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                   Modül Erişim İzinleri Matrisi (Cari • Fatura • Kasa • İK • Stok • Sipariş)
                 </h3>
                 <p className="text-[11px] text-slate-500 font-medium">
-                  Kullanıcının satırındaki checkbox kutucuğunu işaretleyerek veya kaldırarak modül erişim yetkisini anında güncelleyebilirsiniz.
+                  Kutucukları işaretleyip kaldırabilirsiniz. Değişiklik yaptığınız satırda çıkan <strong>Kaydet</strong> butonu ile onaylayabilir veya <strong>İptal</strong> ile geri alabilirsiniz.
                 </p>
               </div>
             </div>
@@ -756,18 +844,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
             <div className="flex items-center gap-2 text-[11px] text-slate-500">
               <span className="flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                 <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
-                İşaretli = Modüle Erişim Açık
+                İşaretli = Erişim Açık
               </span>
               <span className="flex items-center gap-1 font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                 <Square className="w-3 h-3 text-slate-400" />
-                Boş = Kısıtlı / Kapalı
+                Boş = Kısıtlı
+              </span>
+              <span className="flex items-center gap-1 font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">
+                <AlertCircle className="w-3 h-3 text-amber-600" />
+                Sarı = Değişiklik Var
               </span>
             </div>
           </div>
 
           {/* Matrix Table */}
           <div className="overflow-x-auto custom-scrollbar w-full">
-            <table className="w-full text-left text-xs border-collapse min-w-[1050px]">
+            <table className="w-full text-left text-xs border-collapse min-w-[1150px]">
               <thead>
                 <tr className="bg-slate-50/90 text-purple-950 font-extrabold uppercase tracking-wider text-[10px] border-y border-purple-200/60">
                   <th className="py-3 px-3 w-56 sticky left-0 bg-slate-50/95 z-10 shadow-r border-r border-purple-100">
@@ -789,8 +881,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                       </th>
                     );
                   })}
-                  <th className="py-3 px-3 text-center min-w-[130px]">
-                    Hızlı İşlemler
+                  <th className="py-3 px-3 text-center min-w-[190px]">
+                    İzin Onay & Hızlı İşlemler
                   </th>
                 </tr>
               </thead>
@@ -810,22 +902,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                   </tr>
                 ) : (
                   filteredUsers.map((u) => {
-                    const isSysAdmin =
-                      u.role?.includes("Admin") ||
-                      u.email === "ilyasyildirim@outlook.com.tr" ||
-                      u.email === "ilyasylldrm@gmail.com" ||
-                      u.userId === "nuT309AyQxQKddnAp1ZJjlSgBXt2";
-
+                    const isSysAdmin = isUserSysAdmin(u);
                     const isSaving = savingUserId === u.userId;
                     const isJustSaved = savedUserFeedback === u.userId;
+                    const isDraftChanged = hasUserDraftChanges(u);
 
                     return (
                       <tr
                         key={u.userId}
-                        className="hover:bg-purple-50/30 transition-colors group"
+                        className={`transition-colors group ${
+                          isDraftChanged ? "bg-amber-50/50 hover:bg-amber-50/80" : "hover:bg-purple-50/30"
+                        }`}
                       >
                         {/* User Identity Column (Sticky Left) */}
-                        <td className="py-3 px-3 sticky left-0 bg-white group-hover:bg-purple-50/50 z-10 shadow-r border-r border-purple-100 transition-colors">
+                        <td
+                          className={`py-3 px-3 sticky left-0 z-10 shadow-r border-r border-purple-100 transition-colors ${
+                            isDraftChanged
+                              ? "bg-amber-50/90 group-hover:bg-amber-100/70"
+                              : "bg-white group-hover:bg-purple-50/50"
+                          }`}
+                        >
                           <div className="flex items-center gap-2.5">
                             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-100 to-indigo-100 text-purple-900 border border-purple-200 flex items-center justify-center font-black shrink-0 text-xs shadow-2xs">
                               {u.name ? u.name.charAt(0).toUpperCase() : "U"}
@@ -838,6 +934,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                                 {isSysAdmin && (
                                   <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[8px] font-black px-1.5 py-0.2 rounded shrink-0">
                                     Admin
+                                  </span>
+                                )}
+                                {isDraftChanged && (
+                                  <span className="bg-amber-500 text-white font-extrabold text-[8px] px-1.5 py-0.2 rounded animate-pulse shrink-0">
+                                    Değişiklik Var
                                   </span>
                                 )}
                               </div>
@@ -860,40 +961,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                           {isSaving && (
                             <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-purple-700 animate-pulse">
                               <RefreshCw className="w-3 h-3 animate-spin text-purple-600" />
-                              <span>Güncelleniyor...</span>
+                              <span>Kaydediliyor...</span>
                             </div>
                           )}
                         </td>
 
                         {/* Interactive Checkbox for each Core Module */}
                         {CORE_MATRIX_MODULES.map((mod) => {
-                          const allowed = isModuleAllowed(u, mod.key);
+                          const checked = isModuleChecked(u, mod.key);
+                          const originalAllowed = getUserOriginalModules(u).includes(mod.key);
+                          const isModuleModified = isDraftChanged && (checked !== originalAllowed);
 
                           return (
                             <td
                               key={mod.key}
-                              className="py-3 px-2 text-center border-r border-purple-100/60 align-middle"
+                              className={`py-3 px-2 text-center border-r border-purple-100/60 align-middle ${
+                                isModuleModified ? "bg-amber-100/50" : ""
+                              }`}
                             >
-                              <div className="flex items-center justify-center">
+                              <div className="flex items-center justify-center relative">
                                 {isSysAdmin ? (
                                   <div
                                     className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center cursor-default shadow-2xs"
-                                    title="Sistem Yöneticisi tam yetkilidir"
+                                    title="Sistem Yöneticisi daima tam yetkilidir"
                                   >
                                     <Check className="w-4 h-4 stroke-[3]" />
                                   </div>
                                 ) : (
                                   <button
                                     type="button"
-                                    onClick={() => handleToggleUserModule(u, mod.key)}
+                                    onClick={() => handleToggleDraftModule(u, mod.key)}
                                     className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-2xs border ${
-                                      allowed
+                                      checked
                                         ? "bg-purple-600 border-purple-600 text-white hover:bg-purple-700 active:scale-95"
                                         : "bg-white border-slate-300 text-transparent hover:border-purple-400 hover:bg-purple-50"
+                                    } ${
+                                      isModuleModified
+                                        ? "ring-2 ring-amber-500 ring-offset-1"
+                                        : ""
                                     }`}
-                                    title={`${u.name} için ${mod.label} yetkisini ${allowed ? "kaldır" : "ver"}`}
+                                    title={`${u.name} için ${mod.label} yetkisini ${checked ? "kaldır" : "ver"} (Kaydet butonuyla onaylanmalıdır)`}
                                   >
-                                    <Check className={`w-4 h-4 stroke-[3] ${allowed ? "block" : "hidden"}`} />
+                                    <Check className={`w-4 h-4 stroke-[3] ${checked ? "block" : "hidden"}`} />
                                   </button>
                                 )}
                               </div>
@@ -901,22 +1010,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                           );
                         })}
 
-                        {/* Row Quick Action Buttons */}
+                        {/* Row Confirmation & Action Controls */}
                         <td className="py-3 px-3 text-center align-middle">
-                          <div className="flex items-center justify-center gap-1.5">
-                            {!isSysAdmin && (
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            {!isSysAdmin && isDraftChanged ? (
+                              /* Active Pending State Controls: Explicit Kaydet & İptal */
+                              <div className="flex items-center gap-1.5 bg-amber-100/80 p-1 rounded-xl border border-amber-300 shadow-2xs animate-in zoom-in-95">
+                                <button
+                                  type="button"
+                                  onClick={() => handlePromptSaveUser(u)}
+                                  disabled={isSaving}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                                  title="Değişiklikleri Onayla ve Kaydet"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                  <span>Kaydet</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelUserDraft(u.userId)}
+                                  disabled={isSaving}
+                                  className="bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold px-2 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                                  title="Değişiklikleri İptal Et / Geri Al"
+                                >
+                                  <Undo2 className="w-3.5 h-3.5" />
+                                  <span>İptal</span>
+                                </button>
+                              </div>
+                            ) : !isSysAdmin ? (
+                              /* Standard Fast Preset Buttons */
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => handleGrantAllModules(u)}
+                                  onClick={() => handleSetDraftPreset(u, ALL_APP_MODULES.map((m) => m.key))}
                                   className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1 rounded-md text-[10px] font-bold cursor-pointer transition-all"
-                                  title="Tüm modül izinlerini aç"
+                                  title="Tüm modül izinlerini aç (Kaydet ile onaylayınız)"
                                 >
                                   Tümünü Aç
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleGrantStandardAccounting(u)}
+                                  onClick={() => handleSetDraftPreset(u, ["dashboard", "contacts", "invoices", "accounts", "hr"])}
                                   className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-1 rounded-md text-[10px] font-bold cursor-pointer transition-all"
                                   title="Standart Ön Muhasebe Yetkileri (Cari, Fatura, Kasa, İK)"
                                 >
@@ -924,18 +1058,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleRestrictToDashboardOnly(u)}
+                                  onClick={() => handleSetDraftPreset(u, ["dashboard"])}
                                   className="bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 px-1.5 py-1 rounded-md text-[10px] font-bold cursor-pointer transition-all"
-                                  title="Sadece Ana Sayfa İzni Bırak"
+                                  title="Sadece Ana Sayfa İzni Bırak (Kaydet ile onaylayınız)"
                                 >
                                   Sıfırla
                                 </button>
                               </>
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
+                                Tam Yetkili Admin
+                              </span>
                             )}
+
                             <button
                               type="button"
                               onClick={() => handleOpenEditPermissions(u)}
-                              className="p-1 text-indigo-700 hover:bg-indigo-50 rounded-md cursor-pointer transition-colors"
+                              className="p-1 text-indigo-700 hover:bg-indigo-50 rounded-md cursor-pointer transition-colors ml-0.5"
                               title="Tüm Modülleri Detaylı Düzenle"
                             >
                               <Sliders className="w-4 h-4" />
@@ -987,12 +1126,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                   filteredUsers.map((u) => {
                     const userFiles = getFilesForUser(u.userId);
                     const isCurrentAdmin = u.userId === currentUser.id;
-                    const isSysAdmin =
-                      u.role?.includes("Admin") ||
-                      u.email === "ilyasyildirim@outlook.com.tr" ||
-                      u.email === "ilyasylldrm@gmail.com";
-                    const allowedCount = u.allowedModules ? u.allowedModules.length : ALL_APP_MODULES.length;
-                    const isFullyOpen = !u.allowedModules || u.allowedModules.length === ALL_APP_MODULES.length;
+                    const isSysAdmin = isUserSysAdmin(u);
+                    const effectiveModules = getUserEffectiveModules(u);
+                    const allowedCount = effectiveModules.length;
+                    const isFullyOpen = allowedCount === ALL_APP_MODULES.length;
+                    const isDraftChanged = hasUserDraftChanges(u);
 
                     return (
                       <tr
@@ -1015,6 +1153,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                                 {u.createdByAdmin && (
                                   <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-bold px-1.5 py-0.2 rounded-md">
                                     Admin Açtı
+                                  </span>
+                                )}
+                                {isDraftChanged && (
+                                  <span className="bg-amber-500 text-white text-[8px] font-extrabold px-1.5 py-0.2 rounded animate-pulse">
+                                    Taslak Yetkiler
                                   </span>
                                 )}
                               </div>
@@ -1099,18 +1242,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                             <button
                               type="button"
                               onClick={() => setSelectedUser(u)}
-                              className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 p-1.5 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                              title="Yüklü Dosyaları İncele"
+                              className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 p-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                              title="Evrakları Görüntüle"
                             >
-                              <Eye className="w-3.5 h-3.5" />
+                              <Eye className="w-3.5 h-3.5 text-purple-700" />
                               <span className="hidden sm:inline">Evraklar</span>
                             </button>
 
-                            {!isCurrentAdmin && !isSysAdmin && (
+                            {!isCurrentAdmin && (
                               <button
                                 type="button"
                                 onClick={() => handleDeleteUser(u)}
-                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 p-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                                 title="Kullanıcıyı Sil"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1128,305 +1271,261 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
         </div>
       )}
 
-      {/* NEW USER CREATION MODAL */}
-      {isAddUserModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col my-auto max-h-[90vh]">
-            
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-4 sm:p-5 flex items-center justify-between border-b border-purple-800/40 shrink-0">
+      {/* ========================================================================= */}
+      {/* 3. MODAL: SINGLE USER PERMISSION SAVE CONFIRMATION (KAYDETME ONAY MODALI) */}
+      {/* ========================================================================= */}
+      {confirmSaveData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col animate-in zoom-in-95">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-950 text-white p-5 flex items-center justify-between border-b border-purple-800">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-600/30 text-purple-300 flex items-center justify-center font-black border border-purple-500/30">
-                  <UserPlus className="w-5 h-5 text-purple-300" />
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 flex items-center justify-center font-bold">
+                  <ShieldCheck className="w-6 h-6 text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-black text-white">Yeni Kullanıcı Aç & Modül Kısıtlaması Getir</h3>
-                  <p className="text-[11px] text-purple-200/80">Kullanıcının erişebileceği sayfaları ve giriş şifresini belirleyin.</p>
+                  <h3 className="text-sm font-black text-white">Yetki Güncelleme Onayı</h3>
+                  <p className="text-[11px] text-purple-200">
+                    Değişiklikleri uygulamadan önce lütfen kontrol ediniz
+                  </p>
                 </div>
               </div>
-
               <button
-                onClick={() => setIsAddUserModalOpen(false)}
-                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
+                onClick={() => setConfirmSaveData(null)}
+                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
-              {createdSuccessInfo ? (
-                <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-4 text-center">
-                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="text-base font-black text-emerald-950">Kullanıcı Başarıyla Oluşturuldu!</h4>
-                    <p className="text-xs text-emerald-800 mt-1">
-                      Kullanıcı aşağıdaki giriş bilgileriyle sisteme giriş yapabilir ve yalnızca tanımladığınız {createdSuccessInfo.allowedModulesCount} modülü kullanabilir.
-                    </p>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-xl border border-emerald-200 text-left space-y-2 max-w-md mx-auto">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-500 font-semibold">Ad Soyad:</span>
-                      <strong className="text-slate-900">{createdSuccessInfo.name}</strong>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-500 font-semibold">E-Posta:</span>
-                      <strong className="font-mono text-purple-900">{createdSuccessInfo.email}</strong>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-500 font-semibold">Giriş Şifresi:</span>
-                      <strong className="font-mono text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                        {createdSuccessInfo.passwordPlain}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex justify-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(
-                          `Muavin ERP Giriş Bilgileriniz:\nE-Posta: ${createdSuccessInfo.email}\nŞifre: ${createdSuccessInfo.passwordPlain}`
-                        );
-                        alert("Giriş bilgileri panoya kopyalandı.");
-                      }}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Copy className="w-4 h-4" />
-                      <span>Bilgileri Kopyala</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddUserModalOpen(false)}
-                      className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
-                    >
-                      Tamamla ve Kapat
-                    </button>
-                  </div>
+            {/* Body */}
+            <div className="p-6 space-y-4 bg-slate-50">
+              {/* User summary card */}
+              <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-2xs flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-900 font-black flex items-center justify-center text-sm border border-purple-200">
+                  {confirmSaveData.user.name.charAt(0).toUpperCase()}
                 </div>
-              ) : (
-                <form onSubmit={handleCreateUserSubmit} className="space-y-4">
-                  {createUserError && (
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span>{createUserError}</span>
-                    </div>
-                  )}
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs font-black text-slate-900">{confirmSaveData.user.name}</h4>
+                  <p className="text-[11px] text-purple-900 font-mono">{confirmSaveData.user.email}</p>
+                  <p className="text-[10px] text-slate-400">{confirmSaveData.user.role || confirmSaveData.user.companyName}</p>
+                </div>
+              </div>
 
-                  {/* Form Inputs Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Kullanıcı Adı Soyadı <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Örn: Ahmet Yılmaz"
-                        value={newUserName}
-                        onChange={(e) => setNewUserName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
-                      />
-                    </div>
+              {/* Added Modules */}
+              {(() => {
+                const added = confirmSaveData.newModules.filter(
+                  (k) => !confirmSaveData.oldModules.includes(k)
+                );
+                const removed = confirmSaveData.oldModules.filter(
+                  (k) => !confirmSaveData.newModules.includes(k)
+                );
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        E-Posta Adresi (Giriş ID) <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        placeholder="Örn: ahmet@sirket.com"
-                        value={newUserEmail}
-                        onChange={(e) => setNewUserEmail(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Kullanıcı Şifresi <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          required
-                          value={newUserPassword}
-                          onChange={(e) => setNewUserPassword(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-20 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all font-mono"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setNewUserPassword(generateRandomPassword())}
-                          className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-purple-100 hover:bg-purple-200 text-purple-800 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer"
-                        >
-                          Yeni Üret
-                        </button>
+                return (
+                  <div className="space-y-3">
+                    {added.length > 0 && (
+                      <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-xs font-black text-emerald-800">
+                          <PlusCircle className="w-4 h-4 text-emerald-600" />
+                          <span>Yeni Tanımlanan Yetkiler ({added.length})</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {added.map((key) => {
+                            const mod = ALL_APP_MODULES.find((m) => m.key === key);
+                            return (
+                              <span
+                                key={key}
+                                className="bg-white text-emerald-800 border border-emerald-300 font-extrabold text-[10px] px-2 py-0.5 rounded-md shadow-2xs"
+                              >
+                                + {mod ? mod.label : key}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Kullanıcı Rolü / Pozisyonu
-                      </label>
-                      <select
-                        value={newUserRole}
-                        onChange={(e) => setNewUserRole(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
-                      >
-                        <option value="Ön Muhasebe Görevlisi">Ön Muhasebe Görevlisi</option>
-                        <option value="Satış & Fatura Uzmanı">Satış & Fatura Uzmanı</option>
-                        <option value="Depo & Stok Sorumlusu">Depo & Stok Sorumlusu</option>
-                        <option value="Finans & Kasa Yetkilisi">Finans & Kasa Yetkilisi</option>
-                        <option value="İnsan Kaynakları Uzmanı">İnsan Kaynakları Uzmanı</option>
-                        <option value="Firma Yöneticisi">Firma Yöneticisi</option>
-                      </select>
-                    </div>
+                    {removed.length > 0 && (
+                      <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-xs font-black text-rose-800">
+                          <MinusCircle className="w-4 h-4 text-rose-600" />
+                          <span>Kaldırılan / Kısıtlanan Yetkiler ({removed.length})</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {removed.map((key) => {
+                            const mod = ALL_APP_MODULES.find((m) => m.key === key);
+                            return (
+                              <span
+                                key={key}
+                                className="bg-white text-rose-800 border border-rose-300 font-extrabold text-[10px] px-2 py-0.5 rounded-md shadow-2xs line-through"
+                              >
+                                - {mod ? mod.label : key}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Firma Ünvanı
-                      </label>
-                      <input
-                        type="text"
-                        value={newUserCompany}
-                        onChange={(e) => setNewUserCompany(e.target.value)}
-                        placeholder="Şirket Adı"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
-                      />
-                    </div>
+                    {added.length === 0 && removed.length === 0 && (
+                      <div className="p-3 bg-slate-100 rounded-xl text-center text-xs text-slate-500 font-medium">
+                        Herhangi bir yetki değişikliği tespit edilmedi.
+                      </div>
+                    )}
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Telefon Numarası
-                      </label>
-                      <input
-                        type="text"
-                        value={newUserPhone}
-                        onChange={(e) => setNewUserPhone(e.target.value)}
-                        placeholder="+90 (5XX) XXX XX XX"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
-                      />
+                    <div className="p-3 bg-white rounded-xl border border-slate-200">
+                      <div className="text-[11px] font-bold text-slate-700 mb-1">
+                        Güncelleme Sonrası Toplam İzin: {confirmSaveData.newModules.length} / {ALL_APP_MODULES.length} Modül
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        Kullanıcı sisteme giriş yaptığında menüde yalnızca izin verilen modüllere erişebilecektir.
+                      </p>
                     </div>
                   </div>
+                );
+              })()}
+            </div>
 
-                  {/* MODULE RESTRICTIONS SELECTOR */}
-                  <div className="pt-3 border-t border-slate-200">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
-                      <div>
-                        <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                          <Sliders className="w-3.5 h-3.5 text-purple-600" />
-                          <span>Modül Erişim Kısıtlamaları ({newUserAllowedModules.length}/{ALL_APP_MODULES.length})</span>
-                        </h4>
-                        <p className="text-[11px] text-slate-500">
-                          Kullanıcının sadece işaretlediğiniz modülleri görmesini sağlayın.
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={handleSelectAllModules}
-                          className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-2 py-1 rounded-md cursor-pointer"
-                        >
-                          Tümünü Seç
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleDeselectAllModules}
-                          className="text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-slate-100 px-2 py-1 rounded-md cursor-pointer"
-                        >
-                          Temizle
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Modules Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto custom-scrollbar p-1">
-                      {ALL_APP_MODULES.map((module) => {
-                        const isChecked = newUserAllowedModules.includes(module.key);
-                        return (
-                          <div
-                            key={module.key}
-                            onClick={() => toggleModuleSelection(module.key)}
-                            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
-                              isChecked
-                                ? "bg-purple-50/70 border-purple-300 shadow-2xs"
-                                : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
-                            }`}
-                          >
-                            <div
-                              className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center shrink-0 border ${
-                                isChecked
-                                  ? "bg-purple-600 border-purple-600 text-white"
-                                  : "border-slate-300 bg-white"
-                              }`}
-                            >
-                              {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-black text-slate-900">{module.label}</span>
-                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-white text-slate-500 border border-slate-200">
-                                  {module.category}
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-slate-500 truncate mt-0.5">{module.description}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Submit buttons */}
-                  <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddUserModalOpen(false)}
-                      className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-                    >
-                      İptal
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={creatingUser}
-                      className="px-5 py-2.5 text-xs font-extrabold bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {creatingUser ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <UserPlus className="w-4 h-4" />
-                      )}
-                      <span>Kullanıcıyı Oluştur & Yetkilendir</span>
-                    </button>
-                  </div>
-                </form>
-              )}
+            {/* Actions */}
+            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmSaveData(null)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                Vazgeç / Düzenlemeye Dön
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteSaveUser}
+                disabled={savingUserId !== null}
+                className="px-5 py-2.5 text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                {savingUserId !== null ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                <span>Onayla ve Yetkileri Kaydet</span>
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* EDIT PERMISSIONS MODAL */}
-      {editingPermissionsUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in overflow-y-auto">
-          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-indigo-200 overflow-hidden flex flex-col my-auto max-h-[90vh]">
-            
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-indigo-800/40 shrink-0">
+      {/* ========================================================================= */}
+      {/* 4. MODAL: BATCH SAVE CONFIRMATION (TOPLU KAYDETME ONAYI) */}
+      {/* ========================================================================= */}
+      {confirmBatchSaveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col animate-in zoom-in-95">
+            <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-orange-700 text-white p-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-600/30 text-indigo-300 flex items-center justify-center font-black border border-indigo-500/30">
-                  <Sliders className="w-5 h-5 text-indigo-300" />
+                <div className="w-10 h-10 rounded-2xl bg-white/20 text-white flex items-center justify-center font-bold">
+                  <AlertCircle className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-black text-white">
-                    {editingPermissionsUser.name} — Modül Yetkilerini Düzenle
-                  </h3>
-                  <p className="text-[11px] text-indigo-200/80">{editingPermissionsUser.email} • {editingPermissionsUser.role}</p>
+                  <h3 className="text-sm font-black text-white">Toplu Yetki Kaydı Onayı</h3>
+                  <p className="text-[11px] text-orange-100">
+                    {pendingChangesCount} kullanıcının yetki değişiklikleri kaydedilecek
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setConfirmBatchSaveModalOpen(false)}
+                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3 bg-slate-50 max-h-80 overflow-y-auto custom-scrollbar">
+              <p className="text-xs font-bold text-slate-700">
+                Aşağıdaki kullanıcıların modül erişim izinleri güncellenecektir:
+              </p>
+
+              <div className="space-y-2">
+                {pendingUsersList.map((user) => {
+                  const newMods = getUserEffectiveModules(user);
+                  const oldMods = getUserOriginalModules(user);
+                  const addedCount = newMods.filter((k) => !oldMods.includes(k)).length;
+                  const removedCount = oldMods.filter((k) => !newMods.includes(k)).length;
+
+                  return (
+                    <div
+                      key={user.userId}
+                      className="bg-white p-3 rounded-xl border border-purple-100 flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-extrabold text-slate-900">{user.name}</div>
+                        <div className="text-[10px] text-slate-500 font-mono">{user.email}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 text-[10px] font-bold">
+                        {addedCount > 0 && (
+                          <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
+                            +{addedCount} Modül
+                          </span>
+                        )}
+                        {removedCount > 0 && (
+                          <span className="bg-rose-50 text-rose-700 px-2 py-0.5 rounded border border-rose-200">
+                            -{removedCount} Modül
+                          </span>
+                        )}
+                        <span className="bg-purple-50 text-purple-800 px-2 py-0.5 rounded border border-purple-200">
+                          Toplam: {newMods.length}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmBatchSaveModalOpen(false)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBatchSave}
+                disabled={isBatchSaving}
+                className="px-5 py-2.5 text-xs font-black bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isBatchSaving ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                <span>Tümünü Onayla ve Kaydet</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. MODAL: DETAILED USER PERMISSIONS EDITING MODAL */}
+      {/* ========================================================================= */}
+      {editingPermissionsUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-5 flex items-center justify-between border-b border-purple-800/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600/30 text-indigo-300 flex items-center justify-center font-black border border-indigo-500/30">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black text-white">{editingPermissionsUser.name} — Modül İzinleri</h3>
+                    <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-indigo-400/30">
+                      Rol: {editingPermissionsUser.role || "Ön Muhasebe"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-purple-200/80">{editingPermissionsUser.email}</p>
                 </div>
               </div>
 
@@ -1438,12 +1537,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-700">
-                  Erişime Açık Modüller ({selectedModulesToEdit.length} / {ALL_APP_MODULES.length})
-                </span>
+            <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-slate-50">
+              <div className="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-200">
+                <div>
+                  <h4 className="text-xs font-black text-slate-800">Aktif İzin Verilen Modüller</h4>
+                  <p className="text-[10px] text-slate-500">
+                    Seçilen modüller kullanıcının sol menüsünde ve yetki alanında aktif olacaktır.
+                  </p>
+                </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -1451,6 +1552,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                     className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md hover:bg-indigo-100 cursor-pointer"
                   >
                     Tümünü Aç
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModulesToEdit(["dashboard", "contacts", "invoices", "accounts", "hr"])}
+                    className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md hover:bg-emerald-100 cursor-pointer"
+                  >
+                    Standart
                   </button>
                   <button
                     type="button"
@@ -1520,7 +1628,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                   ) : (
                     <CheckCircle2 className="w-4 h-4" />
                   )}
-                  <span>Yetki Değişikliklerini Kaydet</span>
+                  <span>Yetki Değişikliklerini Onayla & Kaydet</span>
                 </button>
               </div>
             </div>
@@ -1528,12 +1636,283 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
         </div>
       )}
 
-      {/* USER FILES INSPECTION MODAL */}
+      {/* ========================================================================= */}
+      {/* 6. MODAL: NEW USER CREATION */}
+      {/* ========================================================================= */}
+      {isAddUserModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-5 flex items-center justify-between border-b border-purple-800/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-600/30 text-purple-300 flex items-center justify-center font-black border border-purple-500/30">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Yeni Sistem Kullanıcısı Oluştur</h3>
+                  <p className="text-[11px] text-purple-200/80">Kullanıcı hesabı açın ve modül yetkilerini tanımlayın</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsAddUserModalOpen(false)}
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-slate-50">
+              {createdSuccessInfo ? (
+                <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-4 text-center animate-in zoom-in-95">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black text-emerald-900">Kullanıcı Başarıyla Oluşturuldu!</h4>
+                    <p className="text-xs text-emerald-700 mt-1">
+                      Kullanıcı sisteme aşağıdaki giriş bilgileriyle hemen giriş yapabilir.
+                    </p>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-emerald-200 text-left space-y-2 text-xs">
+                    <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                      <span className="text-slate-500">Ad Soyad:</span>
+                      <span className="font-extrabold text-slate-800">{createdSuccessInfo.name}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                      <span className="text-slate-500">E-Posta:</span>
+                      <span className="font-mono font-bold text-purple-900">{createdSuccessInfo.email}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                      <span className="text-slate-500">Geçici Şifre:</span>
+                      <span className="font-mono font-extrabold text-rose-600 bg-rose-50 px-2 py-0.5 rounded">
+                        {createdSuccessInfo.passwordPlain}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-slate-500">İzinli Modüller:</span>
+                      <span className="font-bold text-slate-800">{createdSuccessInfo.allowedModulesCount} Modül Açık</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex justify-center gap-3">
+                    <button
+                      onClick={() => setIsAddUserModalOpen(false)}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md cursor-pointer transition-all"
+                    >
+                      Tamam
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleCreateUserSubmit} className="space-y-4">
+                  {createUserError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{createUserError}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                        Kullanıcı Adı Soyadı <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newUserName}
+                        onChange={(e) => setNewUserName(e.target.value)}
+                        placeholder="Örn: Ahmet Yılmaz"
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                        E-Posta Adresi (Kullanıcı Adı) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        placeholder="Örn: ahmet@sirket.com"
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                        Giriş Şifresi <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          required
+                          value={newUserPassword}
+                          onChange={(e) => setNewUserPassword(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono pr-20 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setNewUserPassword(generateRandomPassword())}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-md"
+                        >
+                          Yeni Üret
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                        Sistem Rolü / Pozisyon
+                      </label>
+                      <select
+                        value={newUserRole}
+                        onChange={(e) => setNewUserRole(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      >
+                        <option value="Ön Muhasebe Görevlisi">Ön Muhasebe Görevlisi</option>
+                        <option value="Muhasebe Müdürü">Muhasebe Müdürü</option>
+                        <option value="Finans Sorumlusu">Finans Sorumlusu</option>
+                        <option value="Satış & Fatura Uzmanı">Satış & Fatura Uzmanı</option>
+                        <option value="İK & Bordro Yetkilisi">İK & Bordro Yetkilisi</option>
+                        <option value="Stok & Depo Sorumlusu">Stok & Depo Sorumlusu</option>
+                        <option value="Şirket Yöneticisi">Şirket Yöneticisi</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                        Firma / Şirket Adı
+                      </label>
+                      <input
+                        type="text"
+                        value={newUserCompany}
+                        onChange={(e) => setNewUserCompany(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                        İletişim Telefonu
+                      </label>
+                      <input
+                        type="text"
+                        value={newUserPhone}
+                        onChange={(e) => setNewUserPhone(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Module Permissions Checkbox Selector */}
+                  <div className="space-y-2 pt-2 border-t border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="text-xs font-black text-slate-800">
+                          Erişebileceği Modüller ({newUserAllowedModules.length}/{ALL_APP_MODULES.length})
+                        </label>
+                        <p className="text-[10px] text-slate-500">
+                          Kullanıcının sadece seçtiğiniz modülleri görmesini sağlayabilirsiniz.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setNewUserAllowedModules(ALL_APP_MODULES.map((m) => m.key))}
+                          className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md hover:bg-purple-100 cursor-pointer"
+                        >
+                          Tümünü Seç
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewUserAllowedModules(["dashboard"])}
+                          className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md hover:bg-slate-200 cursor-pointer"
+                        >
+                          Temizle
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar p-1">
+                      {ALL_APP_MODULES.map((module) => {
+                        const isChecked = newUserAllowedModules.includes(module.key);
+                        return (
+                          <div
+                            key={module.key}
+                            onClick={() =>
+                              setNewUserAllowedModules((prev) =>
+                                prev.includes(module.key)
+                                  ? prev.filter((k) => k !== module.key)
+                                  : [...prev, module.key]
+                              )
+                            }
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
+                              isChecked
+                                ? "bg-purple-50/70 border-purple-300"
+                                : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
+                            }`}
+                          >
+                            <div
+                              className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                isChecked
+                                  ? "bg-purple-600 border-purple-600 text-white"
+                                  : "border-slate-300 bg-white"
+                              }`}
+                            >
+                              {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <span className="text-xs font-bold text-slate-900 block truncate">
+                                {module.label}
+                              </span>
+                              <span className="text-[9px] text-slate-400 block truncate">
+                                {module.description}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddUserModalOpen(false)}
+                      className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                    >
+                      İptal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={creatingUser}
+                      className="px-5 py-2.5 text-xs font-extrabold bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {creatingUser ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <UserPlus className="w-4 h-4" />
+                      )}
+                      <span>Kullanıcıyı Oluştur ve Yetkilendir</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. MODAL: USER FILES INSPECTION */}
+      {/* ========================================================================= */}
       {selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[90vh]">
-            
-            {/* Modal Header */}
             <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-5 flex items-center justify-between border-b border-purple-800/40">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-purple-600/30 text-purple-300 flex items-center justify-center font-black border border-purple-500/30">
@@ -1558,7 +1937,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-slate-50">
               {(() => {
                 const userFiles = getFilesForUser(selectedUser.userId);
@@ -1658,7 +2036,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
         </div>
       )}
 
-      {/* FILE PREVIEW MODAL */}
+      {/* ========================================================================= */}
+      {/* 8. MODAL: FILE PREVIEW */}
+      {/* ========================================================================= */}
       {previewFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[85vh]">

@@ -435,18 +435,25 @@ export async function exportToPDF({
 }
 
 /**
- * Direct DOM element to PDF exporter (Portrait A4 format for Invoices/Documents)
+ * Direct DOM element to PDF exporter (Supports Portrait / Landscape A4 format for Invoices/Documents/Slips)
  */
-export async function exportElementToPDF(elementId: string, filename: string = "belge.pdf"): Promise<void> {
+export async function exportElementToPDF(
+  elementId: string,
+  filename: string = "belge.pdf",
+  options: { orientation?: "p" | "l"; margin?: number; scale?: number } = {}
+): Promise<void> {
   const element = document.getElementById(elementId);
   if (!element) {
     console.warn(`exportElementToPDF: Element #${elementId} bulunamadı.`);
+    alert("Yazdırılacak belge içeriği bulunamadı.");
     return;
   }
 
+  const { orientation = "p", margin = 6, scale = 2 } = options;
+
   try {
     const canvas = await html2canvas(element, {
-      scale: 2,
+      scale: scale,
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
@@ -455,28 +462,60 @@ export async function exportElementToPDF(elementId: string, filename: string = "
       },
     });
 
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF("p", "mm", "a4");
+    const pdf = new jsPDF(orientation, "mm", "a4");
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
 
-    const imgWidth = pdfWidth - 10; // 5mm margins
+    const imgWidth = pdfWidth - margin * 2;
+    const pageUsableHeight = pdfHeight - margin * 2;
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-    if (imgHeight <= pdfHeight - 10) {
-      pdf.addImage(imgData, "PNG", 5, 5, imgWidth, imgHeight);
+    if (imgHeight <= pageUsableHeight) {
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, imgHeight);
     } else {
-      let heightLeft = imgHeight;
-      let position = 5;
+      // Clean multi-page splitting without distortion
+      const pxPerMm = canvas.width / imgWidth;
+      const targetPagePx = pageUsableHeight * pxPerMm;
 
-      pdf.addImage(imgData, "PNG", 5, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
+      let yStart = 0;
+      let pageIndex = 0;
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 5, position, imgWidth, imgHeight);
-        heightLeft -= pdfHeight;
+      while (yStart < canvas.height - 5) {
+        const chunkHeightPx = Math.min(targetPagePx, canvas.height - yStart);
+        if (chunkHeightPx <= 0) break;
+
+        const subCanvas = document.createElement("canvas");
+        subCanvas.width = canvas.width;
+        subCanvas.height = chunkHeightPx;
+
+        const ctx = subCanvas.getContext("2d");
+        if (ctx) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, subCanvas.width, subCanvas.height);
+          ctx.drawImage(
+            canvas,
+            0,
+            yStart,
+            canvas.width,
+            chunkHeightPx,
+            0,
+            0,
+            canvas.width,
+            chunkHeightPx
+          );
+        }
+
+        const subImgData = subCanvas.toDataURL("image/png");
+        const subImgHeightMm = (chunkHeightPx * imgWidth) / canvas.width;
+
+        if (pageIndex > 0) {
+          pdf.addPage();
+        }
+
+        pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
+
+        yStart += chunkHeightPx;
+        pageIndex++;
       }
     }
 
@@ -487,4 +526,6 @@ export async function exportElementToPDF(elementId: string, filename: string = "
     alert("PDF indirilirken bir hata oluştu. Lütfen tekrar deneyin.");
   }
 }
+
+export { exportAssetCustodyToPDF, generateAssetCustodyHTML } from "./assetCustodyPdf";
 

@@ -52,6 +52,7 @@ import {
   AdvanceRequest,
   LegalDeduction,
   CostProject,
+  AssetCustody,
   MysoftEDocument,
   getContactAccountCode,
 } from "./types";
@@ -150,6 +151,7 @@ export default function App() {
   useEffect(() => { if (data.advanceRequests) saveStoredData("ADVANCE_REQUESTS", data.advanceRequests); }, [data.advanceRequests]);
   useEffect(() => { if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions); }, [data.legalDeductions]);
   useEffect(() => { if (data.costProjects) saveStoredData("COST_PROJECTS", data.costProjects); }, [data.costProjects]);
+  useEffect(() => { if (data.assetCustodies) saveStoredData("ASSET_CUSTODIES", data.assetCustodies); }, [data.assetCustodies]);
 
   // Handlers for Cost Projects
   const handleAddCostProject = (newProject: CostProject) => {
@@ -1383,6 +1385,37 @@ export default function App() {
     });
   };
 
+  // Handlers for Asset Custody (Zimmet & Demirbaş)
+  const handleAddAsset = (asset: AssetCustody) => {
+    setData((p) => {
+      const next = { ...p, assetCustodies: [asset, ...(p.assetCustodies || [])] };
+      saveStoredData("ASSET_CUSTODIES", next.assetCustodies);
+      return next;
+    });
+  };
+
+  const handleUpdateAsset = (asset: AssetCustody) => {
+    setData((p) => {
+      const next = {
+        ...p,
+        assetCustodies: (p.assetCustodies || []).map((a) => (a.id === asset.id ? asset : a)),
+      };
+      saveStoredData("ASSET_CUSTODIES", next.assetCustodies);
+      return next;
+    });
+  };
+
+  const handleDeleteAsset = (id: string) => {
+    setData((p) => {
+      const next = {
+        ...p,
+        assetCustodies: (p.assetCustodies || []).filter((a) => a.id !== id),
+      };
+      saveStoredData("ASSET_CUSTODIES", next.assetCustodies);
+      return next;
+    });
+  };
+
   const getPageTitle = (tab: NavItem) => {
     switch (tab) {
       case "dashboard":
@@ -1696,6 +1729,7 @@ export default function App() {
               leaveRequests={data.leaveRequests || []}
               advanceRequests={data.advanceRequests || []}
               legalDeductions={data.legalDeductions || []}
+              assetCustodies={data.assetCustodies || []}
               companySettings={data.settings}
               branches={data.branches || []}
               warehouses={data.warehouses || []}
@@ -1710,6 +1744,9 @@ export default function App() {
               onAddLegalDeduction={handleAddLegalDeduction}
               onUpdateLegalDeduction={handleUpdateLegalDeduction}
               onDeleteLegalDeduction={handleDeleteLegalDeduction}
+              onAddAsset={handleAddAsset}
+              onUpdateAsset={handleUpdateAsset}
+              onDeleteAsset={handleDeleteAsset}
             />
           )}
 

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import {
   XCircle,
   Printer,
+  Download,
   Calendar,
   User,
   Users,
@@ -14,6 +15,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Employee, CompanySettings, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction } from "../types";
+import { exportElementToPDF } from "../utils/exportUtils";
 
 export type PayrollPrintMode =
   | "single_monthly_slip"    // Seçilen Personel - Seçilen Ay Ücret Pusulası
@@ -357,9 +359,33 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
     return list;
   }, [sortedEmployees, selectedYear, payrollCustomizations, advanceRequests, leaveRequests, legalDeductions]);
 
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+
   // Print execution handler
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPDF = async () => {
+    setIsDownloadingPDF(true);
+    try {
+      let fileName = "Bordro_Raporu.pdf";
+      if (scope === "single" && currentEmp) {
+        const sanitizedName = currentEmp.fullName.trim().replace(/\s+/g, "_");
+        fileName = periodType === "month"
+          ? `Maas_Pusulasi_${sanitizedName}_${monthStr}.pdf`
+          : `Yillik_Bordro_Karti_${sanitizedName}_${selectedYear}.pdf`;
+      } else {
+        fileName = periodType === "month"
+          ? `Sirket_Bordro_Icmali_${monthStr}.pdf`
+          : `Yillik_Sirket_Bordro_Icmali_${selectedYear}.pdf`;
+      }
+      await exportElementToPDF("printable-payroll-area", fileName);
+    } catch (err) {
+      console.error("Bordro PDF İndirme Hatası:", err);
+    } finally {
+      setIsDownloadingPDF(false);
+    }
   };
 
   return (
@@ -389,12 +415,22 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={handleDownloadPDF}
+                disabled={isDownloadingPDF}
+                className="bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <Download className="w-4 h-4 text-purple-200" />
+                <span className="hidden sm:inline">{isDownloadingPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+                <span className="sm:hidden">PDF</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handlePrint}
-                className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
-                <span className="hidden sm:inline">Yazdır / PDF Olarak Kaydet</span>
-                <span className="sm:hidden">Yazdır</span>
+                <span>Yazdır</span>
               </button>
 
               <button
