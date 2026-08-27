@@ -15,6 +15,7 @@ import {
   Mail,
   FileText,
   FileSpreadsheet,
+  FileDown,
   ArrowUpRight,
   ArrowDownLeft,
   X,
@@ -1051,7 +1052,7 @@ export const Contacts: React.FC<ContactsProps> = ({
     if (!selectedLedgerContact) return;
     try {
       setIsPdfGenerating(true);
-      const pdfData = generateAccountStatementAutoTablePDF({
+      const pdfData = await generateAccountStatementAutoTablePDF({
         companySettings,
         contact: selectedLedgerContact,
         entries: filteredLedgerEntries,
@@ -1174,7 +1175,7 @@ export const Contacts: React.FC<ContactsProps> = ({
         lastMovementDate: lastMovementDate || undefined,
       };
 
-      return generateAccountStatementAutoTablePDF({
+      return await generateAccountStatementAutoTablePDF({
         companySettings,
         contact,
         entries,
@@ -1970,6 +1971,17 @@ export const Contacts: React.FC<ContactsProps> = ({
               <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap justify-end">
                 <button
                   type="button"
+                  onClick={handleExportLedgerPDFDirect}
+                  disabled={isPdfGenerating}
+                  className="bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  title="Resmi Cari Hesap Ekstresi ve Muavin Defterini PDF Olarak İndir"
+                >
+                  <FileDown className="w-4 h-4 text-purple-200" />
+                  <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => window.print()}
                   className="bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
                   title="Yazdır"
@@ -2504,6 +2516,16 @@ export const Contacts: React.FC<ContactsProps> = ({
               </span>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportLedgerPDFDirect}
+                  disabled={isPdfGenerating}
+                  className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold px-4 py-1.5 rounded-xl cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                  title="Cari Hesap Ekstresi ve Muavin Defterini PDF Olarak İndir"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => handleOpenShareModal("whatsapp")}

@@ -73,7 +73,7 @@ async function generateContentWithFallback(
   }
 ) {
   // Ordered by preference and resilience: primary model -> flash-lite -> flash-latest
-  const preferred = params.preferredModel || "gemini-3.7-flash";
+  const preferred = params.preferredModel || process.env.GEMINI_MODEL || "gemini-3.7-flash";
   const modelsToTry = [
     preferred,
     "gemini-3.1-flash-lite",
@@ -347,7 +347,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    // Support both root directory with /dist and running directly inside dist (IIS/Windows deployment)
+    const distPath = (typeof __dirname !== "undefined" && path.basename(__dirname) === "dist")
+      ? __dirname
+      : path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
