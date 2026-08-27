@@ -32,6 +32,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Truck,
+  MessageSquare,
   X,
 } from "lucide-react";
 import { CompanySettings } from "../types";
@@ -71,6 +72,7 @@ export type NavItem =
   | "company_warehouses"
   | "company_e_services"
   | "e_services"
+  | "whatsapp"
   | "settings"
   | "admin";
 
@@ -128,6 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "files" as NavItem, label: "Bulut Dosya Deposu", icon: HardDrive },
     { id: "reports" as NavItem, label: "Vergilendirme", icon: BarChart3 },
     { id: "ai" as NavItem, label: "AI Muavin Asistanı", icon: Sparkles, badge: "Canlı" },
+    { id: "whatsapp" as NavItem, label: "WhatsApp Merkezi", icon: MessageSquare, badge: "Canlı" },
     { id: "settings" as NavItem, label: "Sistem Ayarları", icon: Settings },
   ];
 

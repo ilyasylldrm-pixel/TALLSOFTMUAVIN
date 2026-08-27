@@ -22,6 +22,7 @@ const EDocuments = lazy(() => import("./components/EDocuments"));
 const HRManagement = lazy(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement })));
 const FileManager = lazy(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
+const WhatsAppCenter = lazy(() => import("./components/WhatsAppCenter").then((m) => ({ default: m.WhatsAppCenter })));
 
 import {
   getStoredData,
@@ -1835,6 +1836,10 @@ export default function App() {
               warehouses={data.warehouses || []}
               onSaveSettings={handleSaveSettings}
             />
+          )}
+
+          {currentTab === "whatsapp" && (
+            <WhatsAppCenter settings={data.settings} />
           )}
 
           {currentTab === "settings" && (

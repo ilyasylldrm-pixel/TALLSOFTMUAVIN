@@ -3,6 +3,9 @@ import path from "path";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { getMysoftRouter } from "./src/services/mysoftRoutes.ts";
+import { getWhatsAppRouter } from "./src/services/whatsappRoutes.ts";
+import { whatsAppService } from "./src/services/whatsappService.ts";
+import fs from "fs";
 
 // Cloud Run / IIS: cwd and sibling files. Avoid import.meta.url so the CJS
  // bundle (dist/server.cjs) starts cleanly.
@@ -24,8 +27,9 @@ loadServerEnv();
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "25mb" }));
 app.use("/api/mysoft", getMysoftRouter());
+app.use("/api/whatsapp", getWhatsAppRouter());
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;
@@ -356,6 +360,19 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Muavin Muhasebe sunucusu çalışıyor: http://0.0.0.0:${PORT}`);
+
+    // WhatsApp otomatik yeniden bağlanma kontrolü
+    try {
+      const sessionPath = path.join(process.cwd(), "data", "whatsapp_sessions", "creds.json");
+      if (fs.existsSync(sessionPath)) {
+        console.log("Mevcut WhatsApp oturumu tespit edildi, bağlantı başlatılıyor...");
+        whatsAppService.init(true).catch((err) => {
+          console.warn("WhatsApp başlangıç bağlantı uyarısı:", err?.message);
+        });
+      }
+    } catch (waErr) {
+      console.warn("WhatsApp servisi başlatma kontrolü pas geçildi:", waErr);
+    }
   });
 }
 

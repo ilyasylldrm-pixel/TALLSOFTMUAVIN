@@ -15,6 +15,11 @@ import {
   CompanySettings,
 } from "../types";
 import {
+  fetchWhatsAppStatus,
+  sendWhatsAppTextApi,
+  WhatsAppClientStatus,
+} from "../services/whatsappClient";
+import {
   Wallet,
   Building,
   Plus,
@@ -546,7 +551,9 @@ export const Accounts: React.FC<AccountsProps> = ({
     textPayload: "",
   });
 
-  const [shareWaMode, setShareWaMode] = useState<"auto" | "app" | "web">("auto");
+  const [shareWaMode, setShareWaMode] = useState<"direct" | "auto" | "app" | "web">("direct");
+  const [waConnectionStatus, setWaConnectionStatus] = useState<WhatsAppClientStatus | null>(null);
+  const [isSendingWa, setIsSendingWa] = useState(false);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
   const [shareActiveTab, setShareActiveTab] = useState<"whatsapp" | "email" | "copy" | "print">("whatsapp");
 
@@ -602,6 +609,64 @@ export const Accounts: React.FC<AccountsProps> = ({
     });
     setShareActiveTab("whatsapp");
     setCopiedSuccess(false);
+
+    fetchWhatsAppStatus()
+      .then((st) => {
+        setWaConnectionStatus(st);
+        if (st.status === "connected") {
+          setShareWaMode("direct");
+        } else {
+          setShareWaMode("web");
+        }
+      })
+      .catch(() => {
+        setShareWaMode("web");
+      });
+  };
+
+  const handleSendDirectWhatsApp = async () => {
+    if (!shareConfig.recipientPhone.trim()) {
+      alert("Lütfen WhatsApp paylaşımı için geçerli bir telefon numarası girin.");
+      return;
+    }
+
+    if (shareWaMode === "direct") {
+      setIsSendingWa(true);
+      try {
+        const res = await sendWhatsAppTextApi(
+          shareConfig.recipientPhone,
+          shareConfig.textPayload,
+          shareConfig.title
+        );
+        if (res.success) {
+          alert("✅ Bilgilendirme mesajı WhatsApp üzerinden doğrudan başarıyla iletildi!");
+          setShareConfig((prev) => ({ ...prev, isOpen: false }));
+        } else {
+          alert(`WhatsApp doğrudan gönderim hatası: ${res.error || "Bilinmeyen hata"}\n\nDilerseniz 'WhatsApp Web Linki' seçeneğini deneyebilirsiniz.`);
+        }
+      } catch (err: any) {
+        alert("Hata: " + err.message);
+      } finally {
+        setIsSendingWa(false);
+      }
+      return;
+    }
+
+    // Web / App fallback
+    let cleanPhone = shareConfig.recipientPhone.replace(/[^0-9]/g, "");
+    if (cleanPhone.startsWith("0")) {
+      cleanPhone = "90" + cleanPhone.substring(1);
+    } else if (cleanPhone.length === 10 && (cleanPhone.startsWith("5") || cleanPhone.startsWith("8"))) {
+      cleanPhone = "90" + cleanPhone;
+    }
+
+    let waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(shareConfig.textPayload)}`;
+    if (shareWaMode === "auto" || shareWaMode === "app") {
+      waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(shareConfig.textPayload)}`;
+    }
+
+    window.open(waUrl, "_blank");
+    setShareConfig((prev) => ({ ...prev, isOpen: false }));
   };
 
   // New Transaction State
@@ -4502,6 +4567,141 @@ export const Accounts: React.FC<AccountsProps> = ({
         selectedBankAccountId={selectedBankAccountId}
         onAddTransaction={onAddTransaction}
       />
+
+      {/* MODAL: UNIVERSAL FINANCE & TRANSACTION SHARE */}
+      {shareConfig.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 animate-fadeIn">
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 my-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-700">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">{shareConfig.title}</h3>
+                  {shareConfig.subtitle && (
+                    <p className="text-xs text-slate-500 font-medium">{shareConfig.subtitle}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Inputs & Modes */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  WhatsApp Telefon Numarası
+                </label>
+                <input
+                  type="text"
+                  value={shareConfig.recipientPhone}
+                  onChange={(e) =>
+                    setShareConfig((prev) => ({ ...prev, recipientPhone: e.target.value }))
+                  }
+                  placeholder="Örn: 0532 123 45 67 veya 905321234567"
+                  className="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Gönderim Kanalı
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShareWaMode("direct")}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
+                      shareWaMode === "direct"
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-emerald-800">⚡ WhatsApp API</span>
+                      {waConnectionStatus?.status === "connected" ? (
+                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-bold">
+                          Bağlı
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[9px] font-bold">
+                          QR Gerekli
+                        </span>
+                      )}
+                    </div>
+                    <span className="block text-[10px] font-normal text-slate-500 mt-1">
+                      Doğrudan mesaj iletir
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShareWaMode("web")}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
+                      shareWaMode === "web"
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    🌐 WhatsApp Web
+                    <span className="block text-[10px] font-normal text-slate-500 mt-1">
+                      Web sohbet penceresini aç
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Message Payload Preview */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  İleti Metni
+                </label>
+                <textarea
+                  rows={5}
+                  value={shareConfig.textPayload}
+                  onChange={(e) =>
+                    setShareConfig((prev) => ({ ...prev, textPayload: e.target.value }))
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleSendDirectWhatsApp}
+                disabled={isSendingWa}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-md shadow-emerald-600/20"
+              >
+                <Send className="w-4 h-4" />
+                <span>
+                  {isSendingWa
+                    ? "İletiliyor..."
+                    : shareWaMode === "direct"
+                    ? "🟢 WhatsApp ile Doğrudan Gönder"
+                    : "WhatsApp Web'de Aç"}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

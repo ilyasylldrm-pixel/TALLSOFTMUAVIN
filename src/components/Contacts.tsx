@@ -60,6 +60,11 @@ import {
   getNeighborhoodsForDistrict,
   getTaxOfficesForProvince,
 } from "../data/locationAndTaxData";
+import {
+  fetchWhatsAppStatus,
+  sendWhatsAppDocumentApi,
+  WhatsAppClientStatus,
+} from "../services/whatsappClient";
 import { AddressSelector } from "./AddressSelector";
 import { saveUserFile, uploadFileToStorage, deleteUserFile, UserProfileData } from "../lib/firebase";
 
@@ -118,7 +123,8 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   // Share Modal State (WhatsApp & Email)
   const [shareType, setShareType] = useState<"whatsapp" | "email" | null>(null);
-  const [whatsappMode, setWhatsappMode] = useState<"web" | "native" | "auto">("web");
+  const [whatsappMode, setWhatsappMode] = useState<"direct" | "web" | "native" | "auto">("direct");
+  const [waConnectionStatus, setWaConnectionStatus] = useState<WhatsAppClientStatus | null>(null);
   const [cloudStatusText, setCloudStatusText] = useState<string>("");
   const [sharePhone, setSharePhone] = useState<string>("");
   const [shareEmail, setShareEmail] = useState<string>("");
@@ -696,17 +702,31 @@ export const Contacts: React.FC<ContactsProps> = ({
     });
   };
 
-  const handleOpenShareModal = (type: "whatsapp" | "email") => {
+  const handleOpenShareModal = async (type: "whatsapp" | "email") => {
     if (!selectedLedgerContact) return;
 
     setShareType(type);
-    setSharePhone(selectedLedgerContact.phone || "");
+    setSharePhone(selectedLedgerContact.phone || selectedLedgerContact.mobile || "");
     setShareEmail(selectedLedgerContact.email || "");
 
     const compName = companySettings?.companyName || "Firma";
     const subjectText = `Cari Hesap Ekstresi - ${compName} (${selectedLedgerContact.name})`;
     setShareSubject(subjectText);
     setCloudStatusText("");
+
+    if (type === "whatsapp") {
+      try {
+        const waStatus = await fetchWhatsAppStatus();
+        setWaConnectionStatus(waStatus);
+        if (waStatus.status === "connected") {
+          setWhatsappMode("direct");
+        } else {
+          setWhatsappMode("web");
+        }
+      } catch {
+        setWhatsappMode("web");
+      }
+    }
   };
 
   const handleSendWhatsApp = async () => {
@@ -732,9 +752,9 @@ export const Contacts: React.FC<ContactsProps> = ({
 
     try {
       setIsGeneratingPDF(true);
-      setCloudStatusText("1/3: PDF Cari Ekstre belgesi hazırlanıyor ve cihazınıza indiriliyor...");
 
       // 1. Generate the PDF Ekstre file
+      setCloudStatusText("1/2: PDF Cari Ekstre belgesi hazırlanıyor...");
       const pdfResult = await generateLedgerPDF(selectedLedgerContact);
 
       if (!pdfResult) {
@@ -744,7 +764,62 @@ export const Contacts: React.FC<ContactsProps> = ({
         return;
       }
 
-      // Create File object
+      // Format message text for WhatsApp
+      const compName = companySettings?.companyName || "Firma";
+      const contactName = selectedLedgerContact.name;
+      const accountCode = getContactAccountCode(selectedLedgerContact);
+      const balanceVal = selectedLedgerContact.balance;
+      const balanceStr = formatCurrency(Math.abs(balanceVal), companySettings?.currency || "TRY");
+      const balanceStatusStr =
+        balanceVal > 0 ? "Alacaklıyız (Borçlu Cari)" : balanceVal < 0 ? "Borçluyuz (Alacaklı Cari)" : "Sıfır Bakiye";
+
+      const entries = getLedgerEntries(selectedLedgerContact.id);
+      let movementSummary = "";
+      if (entries.length > 0) {
+        const lastEntries = entries.slice(-5);
+        movementSummary = "\n\n📋 *Son Cari Hareketleri:*\n" + lastEntries.map(e => 
+          `• ${formatDate(e.date)} | ${e.documentType} (${e.documentNo}): ${e.debit > 0 ? '+' : '-'}${formatCurrency(e.debit || e.credit, companySettings?.currency || "TRY")}`
+        ).join("\n");
+      }
+
+      const messageText = `Sayın *${contactName}* (${accountCode}),\n\n*${compName}* firmamıza ait Cari Hesap Ekstreniz tanzim edilmiştir.\n\n📊 *Güncel Net Bakiye:* ${balanceStr} (${balanceStatusStr})${movementSummary}\n\n📄 *Ekstre PDF Dosyası:* "${pdfResult.fileName}" ekte yer almaktadır.\nİyi çalışmalar dileriz.`;
+
+      // If Direct Baileys WhatsApp Mode
+      if (whatsappMode === "direct") {
+        setCloudStatusText("2/2: WhatsApp API üzerinden doğrudan PDF iletiliyor...");
+
+        // Convert Blob to Base64
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(pdfResult.blob);
+        });
+
+        const sendRes = await sendWhatsAppDocumentApi({
+          phone: cleanPhone,
+          fileBase64: base64Data,
+          fileName: pdfResult.fileName,
+          mimeType: "application/pdf",
+          caption: messageText,
+          contactName: selectedLedgerContact.name,
+        });
+
+        if (sendRes.success) {
+          setIsGeneratingPDF(false);
+          setCloudStatusText("");
+          setShareType(null);
+          alert(`✅ PDF Cari Ekstre belgesi ("${pdfResult.fileName}") ve bilgilendirme mesajı ${selectedLedgerContact.name} (+${cleanPhone}) WhatsApp hattına doğrudan başarıyla iletildi!`);
+          return;
+        } else {
+          setIsGeneratingPDF(false);
+          setCloudStatusText("");
+          alert(`WhatsApp doğrudan gönderim hatası: ${sendRes.error || "Bilinmeyen hata"}\n\nDilerseniz 'WhatsApp Web' sekmesini seçerek manuel gönderebilirsiniz.`);
+          return;
+        }
+      }
+
+      // Create File object for Web/Native fallbacks
       const pdfFile = new File([pdfResult.blob], pdfResult.fileName, {
         type: "application/pdf",
       });
@@ -793,30 +868,11 @@ export const Contacts: React.FC<ContactsProps> = ({
       }
 
       setCloudStatusText("3/3: WhatsApp Web başlatılıyor...");
-
-      // Format message text for WhatsApp
-      const compName = companySettings?.companyName || "Firma";
-      const contactName = selectedLedgerContact.name;
-      const accountCode = getContactAccountCode(selectedLedgerContact);
-      const balanceVal = selectedLedgerContact.balance;
-      const balanceStr = formatCurrency(Math.abs(balanceVal), companySettings?.currency || "TRY");
-      const balanceStatusStr =
-        balanceVal > 0 ? "Alacaklıyız (Borçlu Cari)" : balanceVal < 0 ? "Borçluyuz (Alacaklı Cari)" : "Sıfır Bakiye";
-
-      const entries = getLedgerEntries(selectedLedgerContact.id);
-      let movementSummary = "";
-      if (entries.length > 0) {
-        const lastEntries = entries.slice(-5);
-        movementSummary = "\n\n📋 *Son Cari Hareketleri:*\n" + lastEntries.map(e => 
-          `• ${formatDate(e.date)} | ${e.documentType} (${e.documentNo}): ${e.debit > 0 ? '+' : '-'}${formatCurrency(e.debit || e.credit, companySettings?.currency || "TRY")}`
-        ).join("\n");
-      }
-
-      const messageText = `Sayın *${contactName}* (${accountCode}),\n\n*${compName}* firmamıza ait Cari Hesap Ekstreniz tanzim edilmiştir.\n\n📊 *Güncel Net Bakiye:* ${balanceStr} (${balanceStatusStr})${movementSummary}${cloudLinkStr}\n\n📄 *Ekstre PDF Dosyası:* "${pdfResult.fileName}" cihazınıza indirilmiştir.\nİyi çalışmalar dileriz.`;
+      const webMessageText = `${messageText}${cloudLinkStr}`;
 
       // Copy text to clipboard as convenience
       try {
-        await navigator.clipboard.writeText(messageText);
+        await navigator.clipboard.writeText(webMessageText);
       } catch {
         // ignore clipboard fail
       }
@@ -827,7 +883,7 @@ export const Contacts: React.FC<ContactsProps> = ({
           try {
             await navigator.share({
               title: `Cari Ekstre - ${contactName}`,
-              text: messageText,
+              text: webMessageText,
               files: [pdfFile],
             });
             setIsGeneratingPDF(false);
@@ -843,9 +899,9 @@ export const Contacts: React.FC<ContactsProps> = ({
       }
 
       // Determine WhatsApp URL format based on selected mode
-      let waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(messageText)}`;
+      let waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(webMessageText)}`;
       if (whatsappMode === "auto") {
-        waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(messageText)}`;
+        waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(webMessageText)}`;
       }
 
       // Open WhatsApp in new tab or app protocol
@@ -2582,46 +2638,76 @@ export const Contacts: React.FC<ContactsProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Gönderim Kanalı & Paylaşım Yöntemi
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setWhatsappMode("direct")}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer relative ${
+                      whatsappMode === "direct"
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 font-extrabold text-emerald-800">
+                        ⚡ WhatsApp API (Doğrudan)
+                      </span>
+                      {waConnectionStatus?.status === "connected" ? (
+                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-bold">
+                          Bağlı
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[9px] font-bold">
+                          QR Gerekli
+                        </span>
+                      )}
+                    </div>
+                    <span className="block text-[10px] font-normal text-slate-500 mt-1">
+                      Sekme açmadan doğrudan PDF eki ve mesaj iletir
+                    </span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => setWhatsappMode("web")}
                     className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
                       whatsappMode === "web"
-                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-1 ring-emerald-500 shadow-2xs"
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
-                    🌐 WhatsApp Web
-                    <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
-                      PDF bilgisayara iner + Sohbet açılır
+                    🌐 WhatsApp Web Linki
+                    <span className="block text-[10px] font-normal text-slate-500 mt-1">
+                      PDF iner + WhatsApp Web sekmesi açılır
                     </span>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setWhatsappMode("native")}
                     className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
                       whatsappMode === "native"
-                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-1 ring-emerald-500 shadow-2xs"
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     📱 Sistem / Mobil Paylaşım
-                    <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
-                      Sistem menüsünden PDF dosyası eklenir
+                    <span className="block text-[10px] font-normal text-slate-500 mt-1">
+                      İşletim sistemi menüsünden aktar
                     </span>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setWhatsappMode("auto")}
                     className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
                       whatsappMode === "auto"
-                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-1 ring-emerald-500 shadow-2xs"
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
-                    💬 Otomatik / Uygulama
-                    <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
+                    💬 WhatsApp Uygulaması
+                    <span className="block text-[10px] font-normal text-slate-500 mt-1">
                       Cihazdaki varsayılan WhatsApp app
                     </span>
                   </button>
@@ -2633,7 +2719,9 @@ export const Contacts: React.FC<ContactsProps> = ({
                 <div className="font-bold flex items-center gap-1.5 text-emerald-800">
                   <Paperclip className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>
-                    {whatsappMode === "native"
+                    {whatsappMode === "direct"
+                      ? "⚡ Doğrudan Baileys WhatsApp API İletimi (Önerilen)"
+                      : whatsappMode === "native"
                       ? "Mobil & Sistem Paylaşım Desteği (Native Web Share)"
                       : whatsappMode === "web"
                       ? "WhatsApp Web & 10 Dakikalık Geçici Bulut Linki"
@@ -2641,11 +2729,13 @@ export const Contacts: React.FC<ContactsProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-emerald-700 leading-relaxed">
-                  {whatsappMode === "native"
-                    ? "Sistem Paylaşımı seçildiğinde, PDF belgesi işletim sisteminin yerel paylaşım menüsü (Android/iOS/Masaüstü) üzerinden doğrudan WhatsApp'a dosya eki olarak aktarılır. PDF dosyası Bulut Depo'ya yüklenip mesaja indirme linki eklenir ve 10 dakika sonra Bulut Depo'dan otomatik silinir."
+                  {whatsappMode === "direct"
+                    ? "Sistem PDF Cari Ekstre belgesini otomatik oluşturur ve WhatsApp API üzerinden müşterinizin telefonuna doğrudan dosya ve özet mesaj olarak fırlatır. Ekstra sekme açılmaz, dosya sürüklemeniz gerekmez."
+                    : whatsappMode === "native"
+                    ? "Sistem Paylaşımı seçildiğinde, PDF belgesi işletim sisteminin yerel paylaşım menüsü (Android/iOS/Masaüstü) üzerinden doğrudan WhatsApp'a aktarılır."
                     : whatsappMode === "web"
-                    ? "Gönder düğmesine basıldığında PDF Cari Ekstre belgesi Bulut Evrak Deposuna kaydedilir ve mesaja 10 dakika geçerli indirme linki eklenir. Dosya 10 dakika sonra buluttan otomatik olarak silinecektir. Ayrıca PDF cihazınıza indirilir ve WhatsApp Web sohbeti açılır."
-                    : "Gönder düğmesine basıldığında WhatsApp uygulaması başlatılacaktır. PDF belgesi Bulut Depo'ya yüklenmiş, 10 dakikalık indirme linki mesaja eklenmiş ve 10 dakika sonra otomatik silinmek üzere zamanlanmıştır."}
+                    ? "Gönder düğmesine basıldığında PDF Cari Ekstre belgesi bilgisayarınıza indirilir ve WhatsApp Web sekmesi başlatılır."
+                    : "Gönder düğmesine basıldığında cihazdaki yerel WhatsApp uygulaması başlatılır."}
                 </p>
               </div>
 
@@ -2654,8 +2744,8 @@ export const Contacts: React.FC<ContactsProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Gönderilecek Mesaj Taslağı
                 </label>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 font-mono whitespace-pre-wrap max-h-36 overflow-y-auto custom-scrollbar">
-                  {`Sayın *${selectedLedgerContact.name}* (${getContactAccountCode(selectedLedgerContact)}),\n\n*${companySettings?.companyName || "Firma"}* firmamıza ait Cari Hesap Ekstreniz tanzim edilmiştir.\n\n📊 *Güncel Net Bakiye:* ${formatCurrency(Math.abs(selectedLedgerContact.balance), companySettings?.currency || "TRY")} (${selectedLedgerContact.balance > 0 ? "Alacaklıyız" : selectedLedgerContact.balance < 0 ? "Borçluyuz" : "Sıfır Bakiye"})\n\n🔗 *PDF Ekstre Bulut İndirme Linki (10 Dakika Geçerli):*\n[https://firebasestorage.googleapis.com/.../Cari_Ekstre.pdf]\n\n📄 *Ekstre PDF Dosyası:* "${selectedLedgerContact.name}_Cari_Ekstre.pdf" (10 dakika sonra buluttan otomatik silinir).`}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto custom-scrollbar">
+                  {`Sayın *${selectedLedgerContact.name}* (${getContactAccountCode(selectedLedgerContact)}),\n\n*${companySettings?.companyName || "Firma"}* firmamıza ait Cari Hesap Ekstreniz tanzim edilmiştir.\n\n📊 *Güncel Net Bakiye:* ${formatCurrency(Math.abs(selectedLedgerContact.balance), companySettings?.currency || "TRY")} (${selectedLedgerContact.balance > 0 ? "Alacaklıyız" : selectedLedgerContact.balance < 0 ? "Borçluyuz" : "Sıfır Bakiye"})\n\n📄 *Ekstre PDF Dosyası:* "${selectedLedgerContact.name}_Cari_Ekstre.pdf" ekte yer almaktadır.`}
                 </div>
               </div>
 
@@ -2680,10 +2770,16 @@ export const Contacts: React.FC<ContactsProps> = ({
                 type="button"
                 onClick={handleSendWhatsApp}
                 disabled={isGeneratingPDF}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-md"
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-md shadow-emerald-600/20"
               >
-                <MessageSquare className="w-4 h-4" />
-                <span>{isGeneratingPDF ? "Hazırlanıyor..." : "WhatsApp Web'de Aç ve Gönder"}</span>
+                <Send className="w-4 h-4" />
+                <span>
+                  {isGeneratingPDF
+                    ? "İletiliyor..."
+                    : whatsappMode === "direct"
+                    ? "🟢 WhatsApp ile Doğrudan Gönder (PDF Ekli)"
+                    : "WhatsApp'ta Aç ve Gönder"}
+                </span>
               </button>
             </div>
           </div>
