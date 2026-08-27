@@ -28,9 +28,6 @@ loadServerEnv();
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-<<<<<<< HEAD
-app.use(express.json({ limit: "25mb" }));
-=======
 // High Performance Middleware Stack (Gzip/Deflate compression for all JSON and static assets)
 app.use(
   compression({
@@ -50,8 +47,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: "15mb" }));
->>>>>>> 2cc0cc5f11e06f2296776d1eb40cc86e50c542d0
+app.use(express.json({ limit: "25mb" }));
 app.use("/api/mysoft", getMysoftRouter());
 app.use("/api/whatsapp", getWhatsAppRouter());
 
