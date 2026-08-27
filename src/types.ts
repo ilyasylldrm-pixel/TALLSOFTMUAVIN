@@ -786,4 +786,150 @@ export interface ExtractedDocumentData {
   isTransferredToAccounting?: boolean; // Ön muhasebeye aktarıldı mı?
 }
 
+// Modül Yetkilendirme ve İzin Tanımları
+export type AppModuleKey =
+  | "dashboard"
+  | "company"
+  | "e_services"
+  | "invoices"
+  | "orders_module"
+  | "contacts"
+  | "accounts"
+  | "products"
+  | "products_costs"
+  | "hr"
+  | "files"
+  | "reports"
+  | "ai"
+  | "settings";
+
+export interface AppModuleDefinition {
+  key: AppModuleKey;
+  label: string;
+  description: string;
+  category: "Genel" | "Ticari" | "Finans" | "Yönetim";
+}
+
+export type AssetCategory =
+  | "vehicle"
+  | "computer"
+  | "phone"
+  | "tablet"
+  | "peripheral"
+  | "office"
+  | "tool"
+  | "other";
+
+export type AssetStatus = "active" | "returned" | "maintenance" | "damaged" | "scrapped";
+
+export type AssetCondition = "new" | "excellent" | "good" | "fair" | "damaged";
+
+export interface VehicleDetails {
+  plateNumber: string; // Plaka ör: 34 ABC 789
+  chassisNumber?: string; // Şasi No
+  engineNumber?: string; // Motor No
+  fuelType?: "Benzin" | "Dizel" | "Hibrit" | "Elektrik" | "LPG" | string;
+  currentKm: number; // Teslim KM
+  returnKm?: number; // İade KM
+  insuranceExpiryDate?: string; // Zorunlu Trafik Sigortası Bitiş Tarihi
+  kaskoExpiryDate?: string; // Kasko Poliçe Bitiş Tarihi
+  inspectionExpiryDate?: string; // TÜVTÜRK Muayene Bitiş Tarihi
+  fuelCardNumber?: string; // Taşıt Tanıma / Yakıt Kartı No
+  hgsNumber?: string; // HGS / OGS Etiket No
+  hasSpareKey?: boolean; // Yedek Anahtar Var mı?
+  hasLicenseCard?: boolean; // Ruhsat / Tescil Belgesi Teslim Edildi mi?
+  hasTrafficSet?: boolean; // Yangın Tüpü / Trafik Seti / Stepne Var mı?
+}
+
+export interface ComputerDetails {
+  computerType: "laptop" | "desktop" | "workstation" | "all_in_one" | "server";
+  processor: string; // İşlemci (ör: Apple M3 Pro, Intel Core i7 14700, AMD Ryzen 7)
+  ram: string; // Bellek (ör: 16 GB, 32 GB, 64 GB)
+  storage: string; // Disk/SSD (ör: 512 GB NVMe SSD, 1 TB SSD)
+  operatingSystem: string; // İşletim Sistemi (ör: macOS Sonoma, Windows 11 Pro, Ubuntu Linux)
+  macAddress?: string;
+  screenSize?: string; // ör: 14", 16", 27"
+  includesCharger?: boolean; // Orijinal Şarj Cihazı / Adaptör
+  includesBag?: boolean; // Taşıma Çantası
+  includesMouse?: boolean; // Mouse / Klavye
+  includesLock?: boolean; // Güvenlik Kilidi
+}
+
+export interface PhoneDetails {
+  imei1: string; // 15 haneli IMEI 1
+  imei2?: string; // IMEI 2
+  phoneNumber?: string; // Tahsis Edilen Kurumsal Hat No (ör: 0532 123 45 67)
+  simCardNumber?: string; // SIM Kart Seri No
+  storageCapacity?: string; // Depolama (ör: 128 GB, 256 GB, 512 GB)
+  color?: string; // Cihaz Rengi
+  includesCharger?: boolean; // Şarj Başlığı ve Kablo
+  includesHeadphones?: boolean; // Kulaklık
+  includesCaseScreenProtector?: boolean; // Kılıf ve Ekran Koruyucu
+}
+
+export interface TabletDetails {
+  tabletType?: string; // ör: iPad Pro, iPad Air, Galaxy Tab S9, Surface Pro
+  screenSize?: string; // ör: 11", 12.9", 10.9"
+  imei?: string; // Varsa Hücresel IMEI
+  hasCellular?: boolean; // Wi-Fi + SIM (Hücresel) mi?
+  storageCapacity?: string; // 128 GB, 256 GB vb.
+  includesStylus?: boolean; // Apple Pencil / Stylus Kalem
+  includesKeyboardCase?: boolean; // Magic Keyboard / Klavyeli Kılıf
+  includesCharger?: boolean; // Şarj Aleti
+}
+
+export interface AssetCustody {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeDepartment?: string;
+  employeeTitle?: string;
+  category: AssetCategory;
+  assetName: string; // ör: "2024 Renault Megane Touch", "MacBook Pro 16\" M3 Max", "iPhone 15 Pro 256GB"
+  brand: string; // Marka (Renault, Apple, Dell, Lenovo, Samsung, HP)
+  model: string; // Model (Megane 1.3 TCe, MacBook Pro, ThinkPad T14, Galaxy S24)
+  serialNumber?: string;
+  barcodeNumber?: string; // Demirbaş Zimmet No (ör: ZIM-2026-0042)
+  inventoryNumber?: string;
+  assignedDate: string; // Zimmet Teslim Tarihi
+  returnDate?: string; // İade / Teslim Alma Tarihi
+  returnNotes?: string; // İade Açıklaması / Teslim Alma Notu
+  returnReceivedBy?: string; // İadeyi Teslim Alan Yetkili
+  returnedAccessoriesList?: string[]; // İade Edilen Aksesuarlar
+  status: AssetStatus; // "active" | "returned" | "maintenance" | "damaged" | "scrapped"
+  conditionOnDelivery: AssetCondition; // "new" | "excellent" | "good" | "fair" | "damaged"
+  conditionOnReturn?: string;
+  approximateValue?: number; // Piyasa / Rayiç Değeri (₺)
+  currency?: string;
+  notes?: string;
+  vehicleDetails?: VehicleDetails;
+  computerDetails?: ComputerDetails;
+  phoneDetails?: PhoneDetails;
+  tabletDetails?: TabletDetails;
+  accessoriesList?: string[];
+  createdAt: string;
+  branchId?: string;
+  branchName?: string;
+  warehouseId?: string;
+  warehouseName?: string;
+}
+
+export const ALL_APP_MODULES: AppModuleDefinition[] = [
+  { key: "dashboard", label: "Ana Sayfa / Özet", description: "Genel finansal durum ve grafikler", category: "Genel" },
+  { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi", category: "Yönetim" },
+  { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
+  { key: "invoices", label: "E-Belgeler & Faturalar", description: "Satış/Alış faturaları, e-Arşiv ve irsaliyeler", category: "Ticari" },
+  { key: "orders_module", label: "Sipariş & Proforma", description: "Müşteri siparişleri ve proforma teklifler", category: "Ticari" },
+  { key: "contacts", label: "Cari Hesaplar", description: "Müşteri ve tedarikçi cari kartları, ekstreler", category: "Ticari" },
+  { key: "accounts", label: "Finans Yönetimi", description: "Kasa, banka, çek, senet ve virman işlemleri", category: "Finans" },
+  { key: "products", label: "Stok & Ürünler", description: "Ürün kartları, barkod ve stok hareketleri", category: "Ticari" },
+  { key: "products_costs", label: "Maliyet Analizi", description: "Proje ve hammadde maliyet hesaplama", category: "Finans" },
+  { key: "hr", label: "İnsan Kaynakları & Zimmet", description: "Personel kartları, bordro, izin, avans ve araç/cihaz zimmet takibi", category: "Yönetim" },
+  { key: "files", label: "Bulut Dosya Deposu", description: "Kullanıcı ve firma evrak arşivi", category: "Genel" },
+  { key: "reports", label: "Vergilendirme & Raporlar", description: "KDV, Muhtasar, Geçici Vergi ve mizan raporları", category: "Finans" },
+  { key: "ai", label: "AI Muavin Asistanı", description: "Yapay zeka akıllı muhasebe asistanı", category: "Genel" },
+  { key: "settings", label: "Sistem Ayarları", description: "Uygulama ayarları, yedekleme ve genel tercihler", category: "Yönetim" },
+];
+
+
 

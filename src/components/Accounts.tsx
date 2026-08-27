@@ -3,7 +3,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { ExportButtons } from "./ExportButtons";
 import { BankStatementImportModal } from "./BankStatementImportModal";
-import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF } from "../utils/exportUtils";
 import {
   Account,
   Transaction,
@@ -12,6 +12,7 @@ import {
   ChequeStatus,
   PromissoryNote,
   PromissoryNoteStatus,
+  CompanySettings,
 } from "../types";
 import {
   Wallet,
@@ -118,6 +119,11 @@ export interface ReceiptData {
   bankName?: string;
   iban?: string;
   contactName?: string;
+  contactTaxNumber?: string;
+  contactTaxOffice?: string;
+  contactPhone?: string;
+  contactAddress?: string;
+  contactCity?: string;
   amount: number;
   currency: string;
   type?: string;
@@ -180,6 +186,7 @@ interface AccountsProps {
   contacts?: Contact[];
   cheques?: Cheque[];
   promissoryNotes?: PromissoryNote[];
+  companySettings?: CompanySettings;
   activeFinanceSubTab?: FinanceSubModule;
   globalSearchTerm?: string;
   onSelectFinanceSubTab?: (subTab: FinanceSubModule) => void;
@@ -223,6 +230,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   contacts = [],
   cheques = [],
   promissoryNotes = [],
+  companySettings,
   activeFinanceSubTab,
   globalSearchTerm = "",
   onSelectFinanceSubTab,
@@ -286,6 +294,16 @@ export const Accounts: React.FC<AccountsProps> = ({
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
 
+  // Helper to find contact by ID or Name
+  const findContactInfo = (contactId?: string, contactName?: string) => {
+    if (!contactId && !contactName) return undefined;
+    return contacts.find(
+      (c) =>
+        (contactId && c.id === contactId) ||
+        (contactName && (c.name?.trim().toLowerCase() === contactName.trim().toLowerCase() || c.companyTitle?.trim().toLowerCase() === contactName.trim().toLowerCase()))
+    );
+  };
+
   // Dekont Handlers for all 5 Finance Sub-Modules
   const handleShowAccountReceipt = (acc: Account) => {
     const isKasa = acc.type === "cash";
@@ -320,6 +338,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   const handleShowTransactionReceipt = (tx: Transaction) => {
     const isIncome = tx.type === "income" || tx.type === "collection";
     const isKasa = activeSubModule === "kasa";
+    const matchedContact = findContactInfo(tx.contactId, tx.contactName);
     
     let docTitle = "";
     if (isKasa) {
@@ -338,7 +357,12 @@ export const Accounts: React.FC<AccountsProps> = ({
       time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
       moduleType: isKasa ? "kasa" : "banka",
       accountName: tx.accountName,
-      contactName: tx.contactName,
+      contactName: tx.contactName || (matchedContact ? matchedContact.companyTitle || matchedContact.name : undefined),
+      contactTaxNumber: matchedContact?.taxNumber,
+      contactTaxOffice: matchedContact?.taxOffice,
+      contactPhone: matchedContact?.phone,
+      contactAddress: matchedContact?.address,
+      contactCity: matchedContact?.city,
       amount: tx.amount,
       currency: tx.currency || "TRY",
       type: tx.type,
@@ -358,6 +382,7 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   const handleShowChequeReceipt = (c: Cheque) => {
     const isReceived = c.type === "received";
+    const matchedContact = findContactInfo(c.contactId, c.contactName);
     const docTitle = isReceived
       ? "MÜŞTERİ ÇEKİ ALINDI BORDRO DEKONTU"
       : "FİRMA / BORÇ ÇEKİ DÜZENLEME DEKONTU";
@@ -379,7 +404,13 @@ export const Accounts: React.FC<AccountsProps> = ({
       time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
       moduleType: "cek",
       accountName: c.bankName,
-      contactName: c.contactName,
+      bankName: c.bankName,
+      contactName: c.contactName || (matchedContact ? matchedContact.companyTitle || matchedContact.name : undefined),
+      contactTaxNumber: matchedContact?.taxNumber,
+      contactTaxOffice: matchedContact?.taxOffice,
+      contactPhone: matchedContact?.phone,
+      contactAddress: matchedContact?.address,
+      contactCity: matchedContact?.city,
       amount: c.amount,
       currency: c.currency || "TRY",
       statusText: statusMap[c.status] || c.status,
@@ -401,6 +432,7 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   const handleShowNoteReceipt = (n: PromissoryNote) => {
     const isReceived = n.type === "received";
+    const matchedContact = findContactInfo(n.contactId, n.contactName);
     const docTitle = isReceived
       ? "MÜŞTERİ SENETİ ALINDI BORDRO DEKONTU"
       : "FİRMA / BORÇ SENETİ DÜZENLEME DEKONTU";
@@ -421,7 +453,12 @@ export const Accounts: React.FC<AccountsProps> = ({
       date: formatDate(n.issueDate || new Date()),
       time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
       moduleType: "senet",
-      contactName: n.contactName,
+      contactName: n.contactName || (matchedContact ? matchedContact.companyTitle || matchedContact.name : undefined),
+      contactTaxNumber: matchedContact?.taxNumber,
+      contactTaxOffice: matchedContact?.taxOffice,
+      contactPhone: matchedContact?.phone,
+      contactAddress: matchedContact?.address,
+      contactCity: matchedContact?.city,
       amount: n.amount,
       currency: n.currency || "TRY",
       statusText: statusMap[n.status] || n.status,
@@ -441,6 +478,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   };
 
   const handleShowVirmanReceipt = (tx: Transaction) => {
+    const matchedContact = findContactInfo(tx.contactId, tx.contactName);
     setReceiptData({
       documentTitle: "VİRMAN TRANSFER DEKONTU",
       subTitle: "Hesaplar Arası & Cari Virman Transfer Belgesi",
@@ -449,7 +487,12 @@ export const Accounts: React.FC<AccountsProps> = ({
       time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
       moduleType: "virman",
       accountName: tx.accountName,
-      contactName: tx.contactName || tx.category,
+      contactName: tx.contactName || tx.category || (matchedContact ? matchedContact.companyTitle || matchedContact.name : undefined),
+      contactTaxNumber: matchedContact?.taxNumber,
+      contactTaxOffice: matchedContact?.taxOffice,
+      contactPhone: matchedContact?.phone,
+      contactAddress: matchedContact?.address,
+      contactCity: matchedContact?.city,
       amount: tx.amount,
       currency: tx.currency || "TRY",
       type: "transfer",
@@ -468,36 +511,16 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   const handleExportReceiptPDF = async () => {
     const element = document.getElementById("printable-receipt");
-    if (!element) return;
+    if (!element) {
+      alert("Yazdırılacak dekont içeriği bulunamadı.");
+      return;
+    }
     try {
       setIsPdfGenerating(true);
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        onclone: (clonedDoc) => {
-          sanitizeOklchForHtml2Canvas(clonedDoc);
-        },
-      });
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const imgWidth = pdfWidth - margin * 2;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      pdf.addImage(imgData, "PNG", margin, margin, imgWidth, Math.min(imgHeight, pdfHeight - margin * 2));
-      
-      const blob = pdf.output("blob");
-      const blobUrl = URL.createObjectURL(blob);
-      const windowRef = window.open(blobUrl, "_blank");
-      if (!windowRef) {
-        pdf.save(`${receiptData?.documentNo || "Dekont"}.pdf`);
-      }
+      const fileName = `Dekont_${receiptData?.documentNo || "Finans_Dekontu"}.pdf`;
+      await exportElementToPDF("printable-receipt", fileName, { orientation: "p", margin: 8, scale: 2 });
     } catch (err) {
-      console.error("PDF oluşturulurken hata:", err);
+      console.error("Dekont PDF oluşturulurken hata:", err);
       alert("PDF belgesi oluşturulurken bir hata oluştu.");
     } finally {
       setIsPdfGenerating(false);
@@ -4162,15 +4185,15 @@ export const Accounts: React.FC<AccountsProps> = ({
             {/* Modal Header Controls (Not Printed) */}
             <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between no-print">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-indigo-600 rounded-xl">
+                <div className="p-2 bg-purple-700 rounded-xl">
                   <FileText className="w-5 h-5 text-white" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm sm:text-base text-white leading-tight">
-                    İşlem Dekontu / Finans Makbuzu
+                    Resmi Finans Dekontu & Makbuzu
                   </h3>
                   <p className="text-[11px] font-medium text-slate-300">
-                    {receiptData.documentNo} - {receiptData.date}
+                    {receiptData.documentNo} • {receiptData.date}
                   </p>
                 </div>
               </div>
@@ -4190,10 +4213,10 @@ export const Accounts: React.FC<AccountsProps> = ({
                   type="button"
                   onClick={handleExportReceiptPDF}
                   disabled={isPdfGenerating}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  className="bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
                   title="PDF Olarak İndir / Göster"
                 >
-                  <FileCheck2 className="w-4 h-4 text-indigo-200" />
+                  <FileCheck2 className="w-4 h-4 text-purple-200" />
                   <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
                 </button>
 
@@ -4208,45 +4231,154 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
 
             {/* Printable Receipt Canvas Paper */}
-            <div className="p-4 sm:p-8 max-h-[80vh] overflow-y-auto custom-scrollbar bg-slate-200/60">
+            <div className="p-4 sm:p-8 max-h-[80vh] overflow-y-auto custom-scrollbar bg-slate-200/60 flex justify-center">
               <div
                 id="printable-receipt"
-                className="bg-white text-slate-900 p-6 sm:p-10 rounded-2xl shadow-md border border-slate-200 max-w-2xl mx-auto space-y-6 font-sans text-xs sm:text-sm"
+                style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                className="bg-white text-slate-900 p-6 sm:p-8 rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl mx-auto space-y-5 font-sans text-xs sm:text-sm"
               >
-                {/* Receipt Header Banner */}
-                <div className="border-b-2 border-slate-900 pb-5 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-indigo-900 font-black tracking-tight text-lg">
-                      <Landmark className="w-6 h-6 text-indigo-700" />
-                      <span>MUAVİN FİNANS VE YÖNETİM</span>
-                    </div>
-                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-                      Kurumsal Müşteri Finans Servisi
-                    </p>
-                  </div>
-
-                  <div className="text-left sm:text-right bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <div className="font-extrabold text-xs text-slate-900 tracking-wider uppercase">
-                      {receiptData.documentTitle}
-                    </div>
-                    {receiptData.subTitle && (
-                      <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
-                        {receiptData.subTitle}
+                {/* Corporate Header Section */}
+                <div className="border-b-2 border-indigo-900 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    {companySettings?.logoUrl ? (
+                      <img
+                        src={companySettings.logoUrl}
+                        alt="Firma Logo"
+                        className="w-12 h-12 object-contain rounded-xl border border-slate-200 p-1 bg-white"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div
+                        style={{ backgroundColor: "#312e81", color: "#ffffff" }}
+                        className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shadow-xs border border-indigo-900 shrink-0"
+                      >
+                        <Landmark className="w-6 h-6 text-indigo-100" />
                       </div>
                     )}
-                    <div className="font-mono text-xs font-bold text-indigo-900 mt-1">
-                      Belge No: <span className="text-slate-900">{receiptData.documentNo}</span>
+                    <div className="space-y-0.5">
+                      <div className="font-extrabold text-sm sm:text-base text-slate-950 tracking-tight leading-tight">
+                        {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL FİNANS VE YÖNETİM HİZMETLERİ"}
+                      </div>
+                      <div className="text-[10px] text-slate-600 space-y-0.5">
+                        <div>{companySettings?.address || "Merkez Mah. Büyükdere Cad. No:142 Şişli / İstanbul"}</div>
+                        <div>
+                          Vergi Dairesi: {companySettings?.taxOffice || "Boğaziçi"} • VKN/TCKN: {companySettings?.taxNumber || "1234567890"}
+                        </div>
+                        <div>
+                          Tel: {companySettings?.phone || "0850 123 45 67"} • E-posta: {companySettings?.email || "finans@muavin.com"}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-[11px] text-slate-600 font-medium">
-                      Düzenleme: {receiptData.date} {receiptData.time || ""}
+                  </div>
+
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#cbd5e1" }}
+                    className="text-center p-3 rounded-2xl border min-w-[200px] shrink-0"
+                  >
+                    <span className="text-[10px] font-black text-indigo-950 uppercase tracking-widest block">
+                      RESMİ FİNANS DEKONTU
+                    </span>
+                    <div
+                      style={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }}
+                      className="font-mono text-xs font-black py-1 px-2 rounded-lg border mt-1"
+                    >
+                      {receiptData.documentNo}
+                    </div>
+                    <div className="text-[10px] text-slate-600 font-bold mt-1 flex items-center justify-center gap-1">
+                      <Clock className="w-3 h-3 text-indigo-600" />
+                      <span>{receiptData.date} {receiptData.time ? `• ${receiptData.time}` : ""}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Centered Document Title Banner */}
+                <div className="text-center space-y-1">
+                  <div
+                    style={{ backgroundColor: "#312e81", color: "#ffffff", borderColor: "#1e1b4b" }}
+                    className="inline-block px-6 sm:px-8 py-1.5 rounded-xl font-black text-xs sm:text-sm tracking-wider uppercase shadow-xs border text-center"
+                  >
+                    {receiptData.documentTitle}
+                  </div>
+                  {receiptData.subTitle && (
+                    <div className="text-[11px] font-bold text-slate-600 tracking-wide text-center">
+                      {receiptData.subTitle}
+                    </div>
+                  )}
+                </div>
+
+                {/* Parties Information (2 Columns) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  {/* Left: Organization / Account */}
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                    className="p-3 rounded-xl border space-y-1"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+                      <span className="text-[10px] font-black uppercase text-slate-900 tracking-wider flex items-center gap-1">
+                        <Building className="w-3.5 h-3.5 text-indigo-600" />
+                        İŞLEMİ YAPAN HESAP / KURUM
+                      </span>
+                      <span
+                        style={{ backgroundColor: "#e0e7ff", color: "#3730a3" }}
+                        className="text-[9px] font-bold px-2 py-0.5 rounded-md"
+                      >
+                        Düzenleyen
+                      </span>
+                    </div>
+                    <div className="text-xs font-black text-slate-900 truncate">
+                      {companySettings?.companyTitle || companySettings?.companyName || "Şirket Merkezi"}
+                    </div>
+                    <div className="text-[11px] text-slate-700 space-y-0.5">
+                      <div><span className="font-bold text-slate-900">Hesap / Kasa:</span> {receiptData.accountName || "Ana Kasa"}</div>
+                      {receiptData.bankName && <div><span className="font-bold text-slate-900">Banka:</span> {receiptData.bankName}</div>}
+                      {receiptData.iban && <div><span className="font-bold text-slate-900">IBAN:</span> <span className="font-mono text-[10px] font-bold">{receiptData.iban}</span></div>}
+                    </div>
+                  </div>
+
+                  {/* Right: Contact / Counterparty */}
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                    className="p-3 rounded-xl border space-y-1"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+                      <span className="text-[10px] font-black uppercase text-slate-900 tracking-wider flex items-center gap-1">
+                        <Landmark className="w-3.5 h-3.5 text-indigo-600" />
+                        MUHATAP / İLGİLİ CARİ BİLGİLERİ
+                      </span>
+                      <span
+                        style={{ backgroundColor: "#e0e7ff", color: "#3730a3" }}
+                        className="text-[9px] font-bold px-2 py-0.5 rounded-md"
+                      >
+                        Muhatap Taraf
+                      </span>
+                    </div>
+                    <div className="text-xs font-black text-slate-900 truncate">
+                      {receiptData.contactName || "Genel Muhasebe / Doğrudan İşlem"}
+                    </div>
+                    <div className="text-[11px] text-slate-700 space-y-0.5">
+                      {receiptData.contactTaxNumber && (
+                        <div><span className="font-bold text-slate-900">VKN/TCKN:</span> {receiptData.contactTaxNumber} {receiptData.contactTaxOffice ? `(${receiptData.contactTaxOffice} V.D.)` : ""}</div>
+                      )}
+                      {receiptData.contactPhone && (
+                        <div><span className="font-bold text-slate-900">İletişim:</span> {receiptData.contactPhone}</div>
+                      )}
+                      {receiptData.contactCity && (
+                        <div><span className="font-bold text-slate-900">Şehir:</span> {receiptData.contactCity}</div>
+                      )}
+                      {!receiptData.contactTaxNumber && !receiptData.contactPhone && !receiptData.contactCity && (
+                        <div className="text-slate-500 italic text-[10px]">Cari kartı doğrudan işlem veya kurum içi transfer kaydı</div>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Amount Box */}
-                <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 shadow-inner border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-widest block mb-0.5">
+                <div
+                  style={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#ffffff" }}
+                  className="rounded-2xl p-4 sm:p-5 shadow-md border flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div className="text-center sm:text-left">
+                    <span className="text-[10px] uppercase font-black text-slate-300 tracking-widest block mb-0.5">
                       İşlem Tutarı
                     </span>
                     <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-emerald-400">
@@ -4254,21 +4386,30 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-left sm:text-right bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/10">
-                    <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider block">
+                  <div
+                    style={{ backgroundColor: "#1e293b", borderColor: "#475569" }}
+                    className="text-center px-4 py-2.5 rounded-xl border"
+                  >
+                    <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider block mb-0.5">
                       Yazıyla Tutar
                     </span>
-                    <span className="text-xs font-bold text-amber-200 italic">
+                    <span className="text-xs font-extrabold text-amber-300 italic">
                       #{numberToTurkishWords(receiptData.amount, receiptData.currency)}#
                     </span>
                   </div>
                 </div>
 
                 {/* Detail Items Grid */}
-                <div className="space-y-3">
-                  <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-1.5 flex items-center justify-between">
-                    <span>İşlem Detay Bilgileri</span>
-                    <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                <div className="space-y-2.5">
+                  <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                      İşlem Detay ve Kayıt Bilgileri
+                    </span>
+                    <span
+                      style={{ backgroundColor: "#e0e7ff", color: "#3730a3", borderColor: "#c7d2fe" }}
+                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border"
+                    >
                       Onaylı Kayıt
                     </span>
                   </h4>
@@ -4277,12 +4418,13 @@ export const Accounts: React.FC<AccountsProps> = ({
                     {receiptData.details.map((dt, idx) => (
                       <div
                         key={idx}
-                        className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 flex flex-col justify-center"
+                        style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                        className="p-3 rounded-xl border text-center flex flex-col items-center justify-center"
                       >
                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                           {dt.label}
                         </span>
-                        <span className="font-extrabold text-xs text-slate-900 mt-0.5 break-words">
+                        <span className="font-extrabold text-xs text-slate-900 mt-1 break-words text-center">
                           {dt.value || "-"}
                         </span>
                       </div>
@@ -4290,10 +4432,33 @@ export const Accounts: React.FC<AccountsProps> = ({
                   </div>
                 </div>
 
+                {/* Legal Provisions */}
+                <div
+                  style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0", color: "#334155" }}
+                  className="p-3 rounded-xl border text-[10px] space-y-1 leading-relaxed"
+                >
+                  <div className="font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                    <Stamp className="w-3.5 h-3.5 text-indigo-600" />
+                    YASAL HÜKÜMLER VE TEYİT ŞARTLARI
+                  </div>
+                  <p>
+                    1. İşbu dekont, 213 Sayılı Vergi Usul Kanunu ve 6102 Sayılı Türk Ticaret Kanunu hükümleri uyarınca işletme resmi muhasebe kayıtlarının tevsik edici belgesi hükmündedir.
+                  </p>
+                  <p>
+                    2. Banka hesap transferlerinde bankaların resmi veri tabanı logları ve dekont referans kodları esastır; nakit işlemlerde kasa mutabakatı aranır.
+                  </p>
+                  <p>
+                    3. Kıymetli evraklarda (çek/senet) kambiyo hukuku ve teslim-tesellüm ciro silsilesi hükümleri geçerlidir.
+                  </p>
+                </div>
+
                 {/* Official Signatures / Stamps */}
-                <div className="pt-6 border-t border-slate-300 grid grid-cols-2 gap-6 text-center text-xs">
-                  <div className="space-y-8 bg-slate-50/80 p-3 rounded-xl border border-slate-200">
-                    <span className="font-extrabold text-slate-800 uppercase tracking-wider block">
+                <div className="pt-4 border-t border-slate-300 grid grid-cols-2 gap-6 text-center text-xs">
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                    className="space-y-6 p-3.5 rounded-xl border"
+                  >
+                    <span className="font-extrabold text-slate-900 uppercase tracking-wider block">
                       Düzenleyen / Yetkili İmza
                     </span>
                     <div className="pt-2 text-[10px] text-slate-400 border-t border-dashed border-slate-300">
@@ -4301,8 +4466,11 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </div>
                   </div>
 
-                  <div className="space-y-8 bg-slate-50/80 p-3 rounded-xl border border-slate-200">
-                    <span className="font-extrabold text-slate-800 uppercase tracking-wider block">
+                  <div
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                    className="space-y-6 p-3.5 rounded-xl border"
+                  >
+                    <span className="font-extrabold text-slate-900 uppercase tracking-wider block">
                       Teslim Alan / İlgili Cari
                     </span>
                     <div className="pt-2 text-[10px] text-slate-400 border-t border-dashed border-slate-300">
@@ -4315,7 +4483,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                 <div className="text-[10px] text-center text-slate-400 pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                   <span>
-                    Bu belge Muavin Finans Yönetimi tarafından elektronik ortamda üretilmiştir. Islak imza olmaksızın resmi kayıt niteliği taşır.
+                    Bu dekont elektronik ortamda üretilmiş olup ilgili muhasebe ve cari kayıtların resmi tevsik edici belgesidir. • Muavin Finans & Muhasebe Yönetimi
                   </span>
                 </div>
               </div>

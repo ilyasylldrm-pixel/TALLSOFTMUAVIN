@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Quote, QuoteStatus, Contact, Product, Invoice, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
 import {
   FileSpreadsheet,
   Plus,
@@ -15,10 +15,12 @@ import {
   PlusCircle,
   FileText,
   Printer,
+  Download,
   Building2,
   ShoppingCart,
   Calendar,
   Filter,
+  Check,
 } from "lucide-react";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { Logo } from "./Logo";
@@ -92,7 +94,21 @@ export const Quotes: React.FC<QuotesProps> = ({
   const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [printingQuote, setPrintingQuote] = useState<Quote | null>(null);
+  const [isDownloadingQuotePDF, setIsDownloadingQuotePDF] = useState(false);
   const [formType, setFormType] = useState<"proforma" | "quote">("proforma");
+
+  const handleDownloadQuotePDF = async () => {
+    if (!printingQuote) return;
+    setIsDownloadingQuotePDF(true);
+    try {
+      const fileName = `${printingQuote.quoteNumber}_Proforma_Fatura.pdf`;
+      await exportElementToPDF("printable-quote", fileName);
+    } catch (err) {
+      console.error("Proforma PDF İndirme Hatası:", err);
+    } finally {
+      setIsDownloadingQuotePDF(false);
+    }
+  };
 
   // Form State
   const [contactId, setContactId] = useState(contacts[0]?.id || "");
@@ -846,15 +862,26 @@ export const Quotes: React.FC<QuotesProps> = ({
 
               <div className="flex items-center gap-2.5 shrink-0">
                 <button
-                  onClick={() => window.print()}
-                  className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+                  type="button"
+                  onClick={handleDownloadQuotePDF}
+                  disabled={isDownloadingQuotePDF}
+                  className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
                 >
-                  <Printer className="w-4 h-4 text-purple-200" />
-                  <span>Yazdır / PDF İndir</span>
+                  <Download className="w-4 h-4 text-purple-200" />
+                  <span>{isDownloadingQuotePDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
                 </button>
                 <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+                >
+                  <Printer className="w-4 h-4 text-slate-300" />
+                  <span className="hidden sm:inline">Yazdır</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setPrintingQuote(null)}
-                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                   title="Pencereyi Kapat"
                 >
                   <X className="w-4 h-4 text-rose-300" />

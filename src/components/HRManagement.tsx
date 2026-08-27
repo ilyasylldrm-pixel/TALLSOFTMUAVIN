@@ -51,19 +51,22 @@ import {
   ChevronLeft,
   Scale,
   ArrowUpDown,
+  Laptop,
 } from "lucide-react";
-import { Employee, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction, CompanySettings, Branch, Warehouse, CostProject } from "../types";
+import { Employee, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction, CompanySettings, Branch, Warehouse, CostProject, AssetCustody } from "../types";
 import { sgkOccupations } from "../data/sgkOccupations";
 import { sgkTerminationReasons } from "../data/sgkTerminationReasons";
 import { HRDocumentFormsModal, HRFormType } from "./HRDocumentFormsModal";
 import { SeveranceNoticeCalculator } from "./SeveranceNoticeCalculator";
 import { PayrollPrintModal } from "./PayrollPrintModal";
+import { AssetCustodyManagement } from "./AssetCustodyManagement";
 
 interface HRManagementProps {
   employees: Employee[];
   leaveRequests: LeaveRequest[];
   advanceRequests: AdvanceRequest[];
   legalDeductions?: LegalDeduction[];
+  assetCustodies?: AssetCustody[];
   companySettings: CompanySettings;
   branches?: Branch[];
   warehouses?: Warehouse[];
@@ -78,6 +81,9 @@ interface HRManagementProps {
   onAddLegalDeduction?: (deduction: LegalDeduction) => void;
   onUpdateLegalDeduction?: (deduction: LegalDeduction) => void;
   onDeleteLegalDeduction?: (id: string) => void;
+  onAddAsset?: (asset: AssetCustody) => void;
+  onUpdateAsset?: (asset: AssetCustody) => void;
+  onDeleteAsset?: (assetId: string) => void;
 }
 
 export const HRManagement: React.FC<HRManagementProps> = ({
@@ -85,6 +91,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   leaveRequests,
   advanceRequests,
   legalDeductions = [],
+  assetCustodies = [],
   companySettings,
   branches = [],
   warehouses = [],
@@ -99,8 +106,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   onAddLegalDeduction,
   onUpdateLegalDeduction,
   onDeleteLegalDeduction,
+  onAddAsset = () => {},
+  onUpdateAsset = () => {},
+  onDeleteAsset = () => {},
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<"employees" | "payroll" | "leaves" | "advances" | "sgk" | "severance">("employees");
+  const [activeSubTab, setActiveSubTab] = useState<"employees" | "payroll" | "leaves" | "advances" | "sgk" | "severance" | "zimmet">("employees");
   const [advanceInnerTab, setAdvanceInnerTab] = useState<"requests" | "legal_deductions">("requests");
 
   // Para Birimi Formatlayıcı (Lira ve Kuruş: ₺12.500,00)
@@ -1376,6 +1386,23 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               activeSubTab === "severance" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-900"
             }`}>
               Hesaplama
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab("zimmet")}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
+              activeSubTab === "zimmet"
+                ? "bg-purple-700 text-white shadow-xs"
+                : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+            }`}
+          >
+            <Laptop className="w-4 h-4 text-purple-300" />
+            <span>Zimmet & Demirbaş Takibi</span>
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+              activeSubTab === "zimmet" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-900"
+            }`}>
+              {assetCustodies.length}
             </span>
           </button>
         </div>
@@ -3100,6 +3127,20 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           employees={employees}
           leaveRequests={leaveRequests}
           companySettings={companySettings}
+        />
+      )}
+
+      {/* SUB-TAB 7: ZİMMET & DEMİRBAŞ TAKİBİ (ARAÇ, BİLGİSAYAR, TELEFON, TABLET VB.) */}
+      {activeSubTab === "zimmet" && (
+        <AssetCustodyManagement
+          assets={assetCustodies}
+          employees={employees}
+          companySettings={companySettings}
+          branches={branches}
+          warehouses={warehouses}
+          onAddAsset={onAddAsset}
+          onUpdateAsset={onUpdateAsset}
+          onDeleteAsset={onDeleteAsset}
         />
       )}
 

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Waybill, WaybillItem, WaybillType, WaybillStatus, Contact, Product, Warehouse, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
 import {
   Truck,
   Plus,
@@ -28,9 +28,12 @@ import {
   DollarSign,
   FileSpreadsheet,
   Printer,
+  Download,
   Navigation,
   User,
 } from "lucide-react";
+import { Logo } from "./Logo";
+import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 
 const TURKISH_MONTHS = [
   { id: 1, name: "Ocak" },
@@ -116,7 +119,21 @@ export const Waybills: React.FC<WaybillsProps> = ({
   const [editingWaybillId, setEditingWaybillId] = useState<string | null>(null);
   const [editingWaybillNumber, setEditingWaybillNumber] = useState<string | null>(null);
   const [selectedWaybillForView, setSelectedWaybillForView] = useState<Waybill | null>(null);
+  const [isDownloadingWaybillPDF, setIsDownloadingWaybillPDF] = useState(false);
   const [convertConfirmWaybill, setConvertConfirmWaybill] = useState<Waybill | null>(null);
+
+  const handleDownloadWaybillPDF = async () => {
+    if (!selectedWaybillForView) return;
+    setIsDownloadingWaybillPDF(true);
+    try {
+      const fileName = `${selectedWaybillForView.waybillNumber}_Irsaliye_Belgesi.pdf`;
+      await exportElementToPDF("printable-waybill-sheet", fileName);
+    } catch (err) {
+      console.error("İrsaliye PDF İndirme Hatası:", err);
+    } finally {
+      setIsDownloadingWaybillPDF(false);
+    }
+  };
 
   // New Waybill Form State
   const [waybillType, setWaybillType] = useState<WaybillType>("dispatch");
@@ -1472,132 +1489,220 @@ export const Waybills: React.FC<WaybillsProps> = ({
 
       {/* VIEW / PRINT WAYBILL DOCUMENT PREVIEW MODAL */}
       {selectedWaybillForView && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8 p-6 space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-xl text-blue-700">
-                  <Truck className="w-6 h-6" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">{selectedWaybillForView.waybillNumber}</h2>
-                  <p className="text-xs text-slate-500 font-medium">
-                    {selectedWaybillForView.type === "receipt" ? "Resmi Alış İrsaliyesi Belge Detayı" : "Resmi Sevk İrsaliyesi Belge Detayı"}
-                  </p>
-                </div>
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in">
+          <div className="bg-white border border-purple-200 text-slate-900 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto print:max-h-none print:shadow-none print:m-0 print:w-full print:max-w-none print:border-none print:bg-white print:text-black">
+            {/* Top Control Bar (Sticky at Top - Hidden on print) */}
+            <div className="sticky top-0 bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-3.5 sm:px-6 flex items-center justify-between z-20 border-b border-purple-800/40 shadow-sm shrink-0 print:hidden">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-xs font-extrabold px-3 py-1 rounded-lg uppercase tracking-wide border shrink-0 bg-purple-500/20 text-purple-200 border-purple-400/30">
+                  {selectedWaybillForView.type === "receipt" ? "Alış İrsaliyesi" : "Sevk İrsaliyesi"}
+                </span>
+                <span className="text-xs text-purple-200/90 font-mono font-bold truncate">
+                  Belge No: {selectedWaybillForView.waybillNumber}
+                </span>
               </div>
-              <div className="flex items-center gap-2">
+
+              <div className="flex items-center gap-2.5 shrink-0">
                 <button
+                  type="button"
                   onClick={() => {
                     const wb = selectedWaybillForView;
                     setSelectedWaybillForView(null);
                     handleOpenEditWaybillModal(wb);
                   }}
-                  className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                   title="İrsaliyeyi Düzenle"
                 >
-                  <Edit2 className="w-3.5 h-3.5 text-amber-700" />
-                  <span>Düzenle</span>
+                  <Edit2 className="w-3.5 h-3.5 text-amber-300" />
+                  <span className="hidden sm:inline">Düzenle</span>
                 </button>
+
                 <button
+                  type="button"
+                  onClick={handleDownloadWaybillPDF}
+                  disabled={isDownloadingWaybillPDF}
+                  className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4 text-purple-200" />
+                  <span>{isDownloadingWaybillPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Yazdır</span>
+                  <Printer className="w-4 h-4 text-slate-300" />
+                  <span className="hidden sm:inline">Yazdır</span>
                 </button>
+
                 <button
+                  type="button"
                   onClick={() => setSelectedWaybillForView(null)}
-                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                  title="Pencereyi Kapat"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4 text-rose-300" />
+                  <span>Kapat</span>
                 </button>
               </div>
             </div>
 
-            {/* Printable Waybill Document Body */}
-            <div className="border border-slate-200 rounded-2xl p-6 bg-slate-50/50 space-y-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base">{companySettings?.companyName || "Muavin Bilişim A.Ş."}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{companySettings?.address || "Mecidiyeköy, İstanbul"}</p>
-                  <p className="text-xs text-slate-500">VKN: {companySettings?.taxNumber || "8470291038"}</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-extrabold text-blue-700">{selectedWaybillForView.waybillNumber}</div>
-                  <div className="text-xs text-slate-500">Düzenlenme: {selectedWaybillForView.waybillDate}</div>
-                  <div className="text-xs text-slate-500">Fiili Sevk: {selectedWaybillForView.dispatchDate || "-"}</div>
-                </div>
-              </div>
-
-              {/* Driver & Vehicle Box */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cari Firma Bilgileri</div>
-                  <div className="text-sm font-bold text-slate-900">{selectedWaybillForView.contactName}</div>
-                  {selectedWaybillForView.taxNumber && (
-                    <div className="text-xs text-slate-600">VKN/TCKN: {selectedWaybillForView.taxNumber}</div>
-                  )}
-                  {selectedWaybillForView.deliveryAddress && (
-                    <div className="text-xs text-slate-600">Teslimat Adresi: {selectedWaybillForView.deliveryAddress}</div>
-                  )}
-                </div>
-
-                <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1">
-                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Lojistik & Sürücü Bilgileri</div>
-                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Araç Plakası: {selectedWaybillForView.vehiclePlate || "Belirtilmedi"}</span>
+            {/* Scrollable Printable Document Sheet */}
+            <div className="p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:overflow-visible custom-scrollbar">
+              <div id="printable-waybill-sheet" className="bg-white text-slate-900 p-6 sm:p-8 border border-purple-100 rounded-xl space-y-6 print:border-none print:p-0">
+                {/* Header Banner */}
+                <div className="flex items-start justify-between border-b-2 border-purple-950 pb-6">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Logo size="md" />
+                    </div>
+                    <h1 className="text-base font-black text-slate-900">
+                      {companySettings?.companyTitle || companySettings?.companyName || "Örnek Bilişim ve Danışmanlık A.Ş."}
+                    </h1>
+                    <p className="text-xs text-slate-600 max-w-sm">
+                      {companySettings?.address || "Büyükdere Cad. No:195 Levent, Beşiktaş / İstanbul"}
+                    </p>
+                    <p className="text-xs text-slate-500 font-mono">
+                      VD: {companySettings?.taxOffice || "Boğaziçi"} - VKN: {companySettings?.taxNumber || "9876543210"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Tel: {companySettings?.phone || "0850 123 45 67"} | E-posta: {companySettings?.email || "info@sirket.com"}
+                    </p>
                   </div>
-                  <div className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Sürücü: {selectedWaybillForView.driverName || "Belirtilmedi"}</span>
-                  </div>
-                  {selectedWaybillForView.driverTckn && (
-                    <div className="text-[11px] text-slate-500">Sürücü TC: {selectedWaybillForView.driverTckn}</div>
-                  )}
-                </div>
-              </div>
 
-              {/* Items Table */}
-              <div className="overflow-x-auto custom-scrollbar w-full rounded-xl border border-slate-200">
-                <table className="w-full text-left text-xs border-collapse min-w-[600px]">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                      <th className="p-2">Açıklama / Ürün</th>
-                      <th className="p-2 text-center">Miktar</th>
-                      <th className="p-2 text-right">Birim Fiyat</th>
-                      <th className="p-2 text-right">KDV</th>
-                      <th className="p-2 text-right">Toplam</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedWaybillForView.items.map((item, i) => (
-                      <tr key={i}>
-                        <td className="p-2 font-medium text-slate-800">{item.description}</td>
-                        <td className="p-2 text-center font-bold">{item.quantity} {item.unit}</td>
-                        <td className="p-2 text-right">₺{(item.unitPrice || 0).toLocaleString("tr-TR")}</td>
-                        <td className="p-2 text-right">%{item.vatRate}</td>
-                        <td className="p-2 text-right font-bold">₺{(item.totalWithVat || 0).toLocaleString("tr-TR")}</td>
+                  <div className="text-right space-y-2">
+                    <div className="inline-block bg-purple-950 text-white px-4 py-2 rounded-lg font-black text-sm uppercase tracking-wider">
+                      {selectedWaybillForView.type === "receipt" ? "SEVK ALIM İRSALİYESİ" : "RESMİ SEVK İRSALİYESİ"}
+                    </div>
+                    <div className="text-xs text-slate-600 font-mono space-y-1">
+                      <div><span className="font-bold text-slate-800">İrsaliye No:</span> {selectedWaybillForView.waybillNumber}</div>
+                      <div><span className="font-bold text-slate-800">Düzenlenme:</span> {formatDate(selectedWaybillForView.waybillDate)}</div>
+                      <div><span className="font-bold text-slate-800">Fiili Sevk:</span> {formatDate(selectedWaybillForView.dispatchDate || selectedWaybillForView.waybillDate)} {selectedWaybillForView.dispatchTime ? `(${selectedWaybillForView.dispatchTime})` : ""}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Customer Info & Driver / Vehicle Box */}
+                <div className="bg-purple-50/40 border border-purple-100 rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
+                      Cari / Alıcı Bilgileri
+                    </span>
+                    <div className="text-sm font-black text-slate-900">{selectedWaybillForView.contactName}</div>
+                    <div className="text-xs text-slate-600">
+                      {selectedWaybillForView.deliveryAddress || contacts.find((c) => c.id === selectedWaybillForView.contactId)?.address || "Adres Belirtilmemiş"}
+                    </div>
+                    <div className="text-xs text-slate-500 font-mono">
+                      VKN/TCKN: {selectedWaybillForView.taxNumber || contacts.find((c) => c.id === selectedWaybillForView.contactId)?.taxNumber || "-"}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 md:border-l md:border-purple-200/60 md:pl-4">
+                    <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
+                      Lojistik, Araç & Sürücü Bilgileri
+                    </span>
+                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5 text-purple-700" />
+                      <span>Araç Plakası: <span className="font-mono">{selectedWaybillForView.vehiclePlate || "Belirtilmedi"}</span></span>
+                    </div>
+                    <div className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Sürücü Adı: {selectedWaybillForView.driverName || "Belirtilmedi"}</span>
+                    </div>
+                    {selectedWaybillForView.driverTckn && (
+                      <div className="text-xs text-slate-600 font-mono">Sürücü TCKN: {selectedWaybillForView.driverTckn}</div>
+                    )}
+                    {selectedWaybillForView.warehouseName && (
+                      <div className="text-xs text-slate-700">Çıkış Deposu: {selectedWaybillForView.warehouseName}</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div className="border border-purple-200/80 rounded-xl overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead>
+                      <tr className="bg-purple-950 text-white font-extrabold uppercase text-[10px]">
+                        <th className="py-2.5 px-3 w-10 text-center">#</th>
+                        <th className="py-2.5 px-3">Ürün / Malzeme Açıklaması</th>
+                        <th className="py-2.5 px-3 text-center w-16">Miktar</th>
+                        <th className="py-2.5 px-3 text-center w-16">Birim</th>
+                        <th className="py-2.5 px-3 text-right w-28">Birim Fiyat</th>
+                        <th className="py-2.5 px-3 text-center w-16">KDV</th>
+                        <th className="py-2.5 px-3 text-right w-28">Toplam</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex justify-between items-end pt-4 border-t border-slate-200">
-                <div className="text-xs text-slate-500 max-w-sm">
-                  <strong>Notlar:</strong> {selectedWaybillForView.notes || "Mal teslimatı sırasında eksiksiz ve hasarsız teslim alınmıştır."}
+                    </thead>
+                    <tbody className="divide-y divide-purple-100">
+                      {selectedWaybillForView.items.map((item, index) => (
+                        <tr key={item.id || index} className="even:bg-purple-50/20">
+                          <td className="py-2.5 px-3 text-center font-bold text-slate-400">{index + 1}</td>
+                          <td className="py-2.5 px-3 font-semibold text-slate-900">{item.description}</td>
+                          <td className="py-2.5 px-3 text-center font-bold">{item.quantity}</td>
+                          <td className="py-2.5 px-3 text-center text-slate-600">{item.unit || "Adet"}</td>
+                          <td className="py-2.5 px-3 text-right font-mono">
+                            ₺{(item.unitPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono text-slate-600">%{item.vatRate}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                            ₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="text-right space-y-1">
-                  <div className="text-xs text-slate-500">
-                    Ara Toplam: ₺{selectedWaybillForView.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+
+                {/* Calculations & Written Amount */}
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-2">
+                  <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-100 w-full sm:w-auto flex-1 space-y-1">
+                    <div className="text-[10px] font-extrabold uppercase text-purple-950">Yazı ile Tutar:</div>
+                    <div className="text-xs font-bold italic text-slate-800">
+                      # {numberToTurkishWords(selectedWaybillForView.grandTotal)} #
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-500">
-                    KDV: ₺{selectedWaybillForView.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+
+                  <div className="w-full sm:w-72 bg-purple-50/80 p-4 rounded-xl border border-purple-200 space-y-2 text-xs shadow-2xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Ara Toplam (KDV Hariç):</span>
+                      <span className="font-bold text-slate-900">
+                        ₺{selectedWaybillForView.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Toplam KDV:</span>
+                      <span className="font-bold text-slate-900">
+                        ₺{selectedWaybillForView.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm font-black text-purple-950 pt-2 border-t border-purple-300">
+                      <span>GENEL TOPLAM:</span>
+                      <span>₺{selectedWaybillForView.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                    </div>
                   </div>
-                  <div className="text-base font-bold text-slate-900">
-                    Genel Toplam: ₺{selectedWaybillForView.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+
+                {/* Notes Section */}
+                <div className="border border-purple-100 bg-purple-50/20 p-3 rounded-xl space-y-1">
+                  <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
+                    İrsaliye Notları & Yasal Bildirim
+                  </span>
+                  <p className="text-xs text-slate-700 whitespace-pre-wrap">
+                    {selectedWaybillForView.notes || "Mal teslimatı sırasında eksiksiz, sağlam ve hasarsız teslim alınmıştır."}
+                  </p>
+                </div>
+
+                {/* Signatures */}
+                <div className="grid grid-cols-2 gap-8 pt-8 border-t border-purple-100 text-center text-xs">
+                  <div className="space-y-12">
+                    <div className="font-bold text-slate-900">Teslim Eden / Şoför / Kaşe</div>
+                    <div className="border-b border-dashed border-slate-300 mx-8"></div>
+                    <div className="text-[10px] text-slate-400">İmza / Tarih / Kaşe</div>
+                  </div>
+                  <div className="space-y-12">
+                    <div className="font-bold text-slate-900">Teslim Alan / Müşteri Yetkilisi</div>
+                    <div className="border-b border-dashed border-slate-300 mx-8"></div>
+                    <div className="text-[10px] text-slate-400">İmza / Kaşe / Teslim Alma Saati</div>
                   </div>
                 </div>
               </div>

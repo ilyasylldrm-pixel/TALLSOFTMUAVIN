@@ -52,6 +52,7 @@ import {
   AdvanceRequest,
   LegalDeduction,
   CostProject,
+  AssetCustody,
   MysoftEDocument,
   getContactAccountCode,
 } from "./types";
@@ -104,7 +105,16 @@ export default function App() {
 
   // Auto switch admin to admin tab on login
   useEffect(() => {
-    if (currentUser && (currentUser.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" || currentUser.id === "usr_admin_001" || currentUser.role?.includes("Admin"))) {
+    const userEmail = currentUser?.email?.toLowerCase().trim() || "";
+    const isSysAdmin =
+      currentUser?.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" ||
+      currentUser?.id === "usr_admin_001" ||
+      currentUser?.role?.includes("Admin") ||
+      userEmail === "ilyasyildirim@outlook.com.tr" ||
+      userEmail === "ilyasylldrm@gmail.com" ||
+      userEmail.includes("admin");
+
+    if (currentUser && isSysAdmin) {
       setCurrentTab("admin");
     }
   }, [currentUser]);
@@ -141,6 +151,7 @@ export default function App() {
   useEffect(() => { if (data.advanceRequests) saveStoredData("ADVANCE_REQUESTS", data.advanceRequests); }, [data.advanceRequests]);
   useEffect(() => { if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions); }, [data.legalDeductions]);
   useEffect(() => { if (data.costProjects) saveStoredData("COST_PROJECTS", data.costProjects); }, [data.costProjects]);
+  useEffect(() => { if (data.assetCustodies) saveStoredData("ASSET_CUSTODIES", data.assetCustodies); }, [data.assetCustodies]);
 
   // Handlers for Cost Projects
   const handleAddCostProject = (newProject: CostProject) => {
@@ -1374,6 +1385,37 @@ export default function App() {
     });
   };
 
+  // Handlers for Asset Custody (Zimmet & Demirbaş)
+  const handleAddAsset = (asset: AssetCustody) => {
+    setData((p) => {
+      const next = { ...p, assetCustodies: [asset, ...(p.assetCustodies || [])] };
+      saveStoredData("ASSET_CUSTODIES", next.assetCustodies);
+      return next;
+    });
+  };
+
+  const handleUpdateAsset = (asset: AssetCustody) => {
+    setData((p) => {
+      const next = {
+        ...p,
+        assetCustodies: (p.assetCustodies || []).map((a) => (a.id === asset.id ? asset : a)),
+      };
+      saveStoredData("ASSET_CUSTODIES", next.assetCustodies);
+      return next;
+    });
+  };
+
+  const handleDeleteAsset = (id: string) => {
+    setData((p) => {
+      const next = {
+        ...p,
+        assetCustodies: (p.assetCustodies || []).filter((a) => a.id !== id),
+      };
+      saveStoredData("ASSET_CUSTODIES", next.assetCustodies);
+      return next;
+    });
+  };
+
   const getPageTitle = (tab: NavItem) => {
     switch (tab) {
       case "dashboard":
@@ -1574,6 +1616,7 @@ export default function App() {
               contacts={data.contacts}
               cheques={data.cheques || []}
               promissoryNotes={data.promissoryNotes || []}
+              companySettings={data.companySettings || data.settings}
               activeFinanceSubTab={financeSubTab}
               globalSearchTerm={searchTerm}
               onSelectFinanceSubTab={setFinanceSubTab}
@@ -1630,6 +1673,7 @@ export default function App() {
               costProjects={data.costProjects || []}
               employees={data.employees || []}
               transactions={data.transactions || []}
+              companySettings={data.companySettings || data.settings}
               globalSearchTerm={searchTerm}
               activeSubTab={currentTab === "products_costs" ? "costs" : "list"}
               onSelectSubTab={(sub) => setCurrentTab(sub === "costs" ? "products_costs" : "products_list")}
@@ -1687,6 +1731,7 @@ export default function App() {
               leaveRequests={data.leaveRequests || []}
               advanceRequests={data.advanceRequests || []}
               legalDeductions={data.legalDeductions || []}
+              assetCustodies={data.assetCustodies || []}
               companySettings={data.settings}
               branches={data.branches || []}
               warehouses={data.warehouses || []}
@@ -1701,6 +1746,9 @@ export default function App() {
               onAddLegalDeduction={handleAddLegalDeduction}
               onUpdateLegalDeduction={handleUpdateLegalDeduction}
               onDeleteLegalDeduction={handleDeleteLegalDeduction}
+              onAddAsset={handleAddAsset}
+              onUpdateAsset={handleUpdateAsset}
+              onDeleteAsset={handleDeleteAsset}
             />
           )}
 

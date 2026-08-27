@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useDeferredValue } from "react";
 import { Contact, ContactType, LedgerEntry, Invoice, Transaction, Account, Cheque, PromissoryNote, CompanySettings, getContactAccountCode } from "../types";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas } from "../utils/exportUtils";
+import { EmailExportModal } from "./EmailExportModal";
+import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, generateAccountStatementAutoTablePDF, exportElementToPDFWithPrintStyling, LedgerSummaryData } from "../utils/exportUtils";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -45,6 +46,12 @@ import {
   Globe,
   UploadCloud,
   RefreshCw,
+  FileCheck2,
+  ShieldCheck,
+  Clock,
+  Tag,
+  Landmark,
+  TrendingUp,
 } from "lucide-react";
 import {
   ALL_81_PROVINCES,
@@ -105,6 +112,9 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   // Selected contact for Ledger / Muavin statement modal
   const [selectedLedgerContact, setSelectedLedgerContact] = useState<Contact | null>(null);
+  const [ekstreTab, setEkstreTab] = useState<"all" | "invoices" | "collections" | "payments">("all");
+  const [ekstreSearch, setEkstreSearch] = useState<string>("");
+  const [isPdfGenerating, setIsPdfGenerating] = useState<boolean>(false);
 
   // Share Modal State (WhatsApp & Email)
   const [shareType, setShareType] = useState<"whatsapp" | "email" | null>(null);
@@ -951,6 +961,114 @@ export const Contacts: React.FC<ContactsProps> = ({
     };
   };
 
+  // Memoized current ledger entries for the active contact
+  const currentLedgerEntries = useMemo(() => {
+    if (!selectedLedgerContact) return [];
+    return getLedgerEntries(selectedLedgerContact.id);
+  }, [selectedLedgerContact, invoices, transactions, cheques, promissoryNotes]);
+
+  // Filtered entries by tab and search
+  const filteredLedgerEntries = useMemo(() => {
+    let list = currentLedgerEntries;
+    if (ekstreTab === "invoices") {
+      list = list.filter((e) => e.documentType === "Fatura");
+    } else if (ekstreTab === "collections") {
+      list = list.filter((e) => e.documentType === "Tahsilat");
+    } else if (ekstreTab === "payments") {
+      list = list.filter((e) => e.documentType === "Tediye" || e.documentType === "Ödeme");
+    }
+
+    if (ekstreSearch.trim()) {
+      const q = ekstreSearch.toLowerCase();
+      list = list.filter(
+        (e) =>
+          e.documentNo.toLowerCase().includes(q) ||
+          e.description.toLowerCase().includes(q) ||
+          e.documentType.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [currentLedgerEntries, ekstreTab, ekstreSearch]);
+
+  // Comprehensive financial summary
+  const ledgerSummary = useMemo(() => {
+    const totalDebit = currentLedgerEntries.reduce((acc, curr) => acc + curr.debit, 0);
+    const totalCredit = currentLedgerEntries.reduce((acc, curr) => acc + curr.credit, 0);
+    const netBalance = totalDebit - totalCredit;
+    const invoiceCount = currentLedgerEntries.filter((e) => e.documentType === "Fatura").length;
+    const collectionCount = currentLedgerEntries.filter((e) => e.documentType === "Tahsilat").length;
+    const paymentCount = currentLedgerEntries.filter((e) => e.documentType === "Tediye").length;
+    const lastMovementDate = currentLedgerEntries.length > 0 ? currentLedgerEntries[currentLedgerEntries.length - 1].date : null;
+    return {
+      totalDebit,
+      totalCredit,
+      netBalance,
+      invoiceCount,
+      collectionCount,
+      paymentCount,
+      totalMovements: currentLedgerEntries.length,
+      lastMovementDate,
+    };
+  }, [currentLedgerEntries]);
+
+  // ExportData structure for ExportButtons
+  const getLedgerExportData = (): ExportData => {
+    if (!selectedLedgerContact) {
+      return { filename: "Cari_Ekstre", title: "CARİ EKSTRE", headers: [], rows: [] };
+    }
+    const currencyStr = companySettings?.currency || "TRY";
+    const headers = [
+      "Tarih",
+      "Belge Türü",
+      "Evrak / Belge No",
+      "Açıklama",
+      "Borç Tutarı (₺)",
+      "Alacak Tutarı (₺)",
+      "Yürüyen Bakiye (₺)",
+    ];
+    const rows = filteredLedgerEntries.map((e) => [
+      formatDate(e.date),
+      e.documentType,
+      e.documentNo,
+      e.description,
+      e.debit > 0 ? formatCurrency(e.debit, currencyStr) : "-",
+      e.credit > 0 ? formatCurrency(e.credit, currencyStr) : "-",
+      formatCurrency(e.runningBalance || 0, currencyStr),
+    ]);
+    const safeName = (selectedLedgerContact.name || "Cari").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "_");
+    const accountCode = getContactAccountCode(selectedLedgerContact);
+    return {
+      filename: `Cari_Ekstre_${safeName}_${new Date().toISOString().split("T")[0]}`,
+      title: `RESMİ CARİ HESAP EKSTRESİ: ${selectedLedgerContact.name}`,
+      subtitle: `Hesap No: ${accountCode} | VKN/TCKN: ${selectedLedgerContact.taxNumber || "-"} | Net Bakiye: ${formatCurrency(Math.abs(selectedLedgerContact.balance), currencyStr)} (${selectedLedgerContact.balance > 0 ? "Alacaklıyız" : selectedLedgerContact.balance < 0 ? "Borçluyuz" : "Sıfır"})`,
+      headers,
+      rows,
+    };
+  };
+
+  // Direct PDF Export using autoTable
+  const handleExportLedgerPDFDirect = async () => {
+    if (!selectedLedgerContact) return;
+    try {
+      setIsPdfGenerating(true);
+      const pdfData = generateAccountStatementAutoTablePDF({
+        companySettings,
+        contact: selectedLedgerContact,
+        entries: filteredLedgerEntries,
+        summary: ledgerSummary,
+      });
+      pdfData.pdf.save(pdfData.fileName);
+    } catch (err) {
+      console.error("Cari Ekstre PDF oluşturulurken hata:", err);
+      // Fallback to DOM print styling
+      const safeName = (selectedLedgerContact.name || "Cari").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "_");
+      const fileName = `Cari_Ekstre_${safeName}_${new Date().toISOString().split("T")[0]}.pdf`;
+      await exportElementToPDF("printable-ledger", fileName, { orientation: "p", margin: 8, scale: 2 });
+    } finally {
+      setIsPdfGenerating(false);
+    }
+  };
+
   // Excel (.xlsx) Export with Turkish Character & Formatting Support
   const exportLedgerExcel = (contact: Contact) => {
     const entries = getLedgerEntries(contact.id);
@@ -1034,122 +1152,38 @@ export const Contacts: React.FC<ContactsProps> = ({
   const generateLedgerPDF = async (
     contact: Contact
   ): Promise<{ pdf: jsPDF; blob: Blob; fileName: string } | null> => {
-    const element = document.getElementById("printable-ledger");
-    if (!element) return null;
-
     try {
       setIsGeneratingPDF(true);
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-        onclone: (clonedDoc) => {
-          sanitizeOklchForHtml2Canvas(clonedDoc);
-        },
+      const entries = getLedgerEntries(contact.id);
+      const totalDebit = entries.reduce((acc, curr) => acc + curr.debit, 0);
+      const totalCredit = entries.reduce((acc, curr) => acc + curr.credit, 0);
+      const netBalance = totalDebit - totalCredit;
+      const invoiceCount = entries.filter((e) => e.documentType === "Fatura").length;
+      const collectionCount = entries.filter((e) => e.documentType === "Tahsilat").length;
+      const paymentCount = entries.filter((e) => e.documentType === "Tediye").length;
+      const lastMovementDate = entries.length > 0 ? entries[entries.length - 1].date : undefined;
+
+      const summary: LedgerSummaryData = {
+        totalDebit,
+        totalCredit,
+        netBalance,
+        invoiceCount,
+        collectionCount,
+        paymentCount,
+        totalMovements: entries.length,
+        lastMovementDate: lastMovementDate || undefined,
+      };
+
+      return generateAccountStatementAutoTablePDF({
+        companySettings,
+        contact,
+        entries,
+        summary,
       });
-
-      const pdf = new jsPDF("l", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const imgWidth = pdfWidth - margin * 2;
-      const pageUsableHeightMm = pdfHeight - margin * 2;
-
-      const pxPerMm = canvas.width / imgWidth;
-      const targetPagePx = pageUsableHeightMm * pxPerMm;
-
-      const containerRect = element.getBoundingClientRect();
-      const scaleY = canvas.height / (containerRect.height || 1);
-
-      // Collect elements that should not be split horizontally across pages (table rows and top-level cards/divs)
-      const rawElements = Array.from(
-        element.querySelectorAll("tr, #printable-ledger > div")
-      ) as HTMLElement[];
-
-      const breakElements = rawElements.filter(
-        (el) => el.tagName === "TR" || !el.querySelector("table, tr")
-      );
-
-      const breakPoints = breakElements
-        .map((el) => {
-          const r = el.getBoundingClientRect();
-          return {
-            top: Math.round((r.top - containerRect.top) * scaleY),
-            bottom: Math.round((r.bottom - containerRect.top) * scaleY),
-          };
-        })
-        .filter((bp) => bp.bottom > bp.top);
-
-      let yStart = 0;
-      let pageIndex = 0;
-
-      while (yStart < canvas.height - 5) {
-        let yNextCut = yStart + targetPagePx;
-
-        if (yNextCut < canvas.height) {
-          // Find any element that starts on this page after yStart, starts before yNextCut, and ends after yNextCut
-          const straddlingElements = breakPoints.filter(
-            (bp) => bp.top > yStart + 10 && bp.top < yNextCut && bp.bottom > yNextCut
-          );
-
-          if (straddlingElements.length > 0) {
-            // Cut right above the earliest straddling element so it moves intact to the next page
-            const minTop = Math.min(...straddlingElements.map((e) => e.top));
-            if (minTop > yStart + 20) {
-              yNextCut = minTop;
-            }
-          }
-        } else {
-          yNextCut = canvas.height;
-        }
-
-        const chunkHeight = yNextCut - yStart;
-        if (chunkHeight <= 0) break;
-
-        const subCanvas = document.createElement("canvas");
-        subCanvas.width = canvas.width;
-        subCanvas.height = chunkHeight;
-
-        const ctx = subCanvas.getContext("2d");
-        if (ctx) {
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, subCanvas.width, subCanvas.height);
-          ctx.drawImage(
-            canvas,
-            0,
-            yStart,
-            canvas.width,
-            chunkHeight,
-            0,
-            0,
-            canvas.width,
-            chunkHeight
-          );
-        }
-
-        const subImgData = subCanvas.toDataURL("image/png");
-        const subImgHeightMm = (chunkHeight * imgWidth) / canvas.width;
-
-        if (pageIndex > 0) {
-          pdf.addPage();
-        }
-
-        pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
-
-        yStart = yNextCut;
-        pageIndex++;
-      }
-
-      const safeName = (contact.name || "Cari").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ]/g, "_");
-      const fileName = `Cari_Ekstre_${safeName}.pdf`;
-      const blob = pdf.output("blob");
-
-      return { pdf, blob, fileName };
     } catch (err) {
       console.error("PDF oluşturulamadı:", err);
-      alert("PDF oluşturulurken bir hata oluştu. Lütfen tekrar deneyiniz.");
-      return null;
+      // Fallback to DOM print styling
+      return exportElementToPDFWithPrintStyling("printable-ledger", `Cari_Ekstre_${contact.name}.pdf`);
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -1182,18 +1216,18 @@ export const Contacts: React.FC<ContactsProps> = ({
     const compPhone = companySettings?.phone ? `Tel: ${companySettings.phone}` : "";
 
     const rowsHtml = entries.length === 0
-      ? `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #64748b;">Kayıtlı hareket bulunmuyor.</td></tr>`
+      ? `<tr><td colspan="7" style="text-align:center; padding: 24px; color: #64748b; font-size: 12px;">Kayıtlı cari hareket bulunmuyor.</td></tr>`
       : entries
           .map(
-            (e) => `
-        <tr style="border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; break-inside: avoid;">
-          <td style="padding: 8px 10px; font-size: 11px;">${formatDate(e.date)}</td>
-          <td style="padding: 8px 10px; font-size: 11px; font-weight: bold;">${e.documentType}</td>
-          <td style="padding: 8px 10px; font-size: 11px; font-family: monospace;">${e.documentNo}</td>
-          <td style="padding: 8px 10px; font-size: 11px;">${e.description}</td>
-          <td style="padding: 8px 10px; font-size: 11px; text-align: right; font-weight: bold;">${e.debit > 0 ? "₺" + e.debit.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "-"}</td>
-          <td style="padding: 8px 10px; font-size: 11px; text-align: right; font-weight: bold;">${e.credit > 0 ? "₺" + e.credit.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "-"}</td>
-          <td style="padding: 8px 10px; font-size: 11px; text-align: right; font-weight: 800; color: ${e.runningBalance > 0 ? "#059669" : e.runningBalance < 0 ? "#dc2626" : "#475569"};">₺${Math.abs(e.runningBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</td>
+            (e, idx) => `
+        <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#faf5ff'}; border-bottom: 1px solid #e9d5ff; page-break-inside: avoid; break-inside: avoid;">
+          <td style="padding: 9px 12px; font-size: 11px; text-align: center; color: #475569;">${formatDate(e.date)}</td>
+          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-weight: bold; color: #581c87;"><span style="display:inline-block; padding: 2px 8px; border-radius: 6px; background: #f3e8ff; border: 1px solid #d8b4fe;">${e.documentType}</span></td>
+          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-family: monospace; font-weight: 600; color: #334155;">${e.documentNo}</td>
+          <td style="padding: 9px 12px; font-size: 11px; color: #1e293b;">${e.description}</td>
+          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-weight: bold; font-family: monospace; color: #0f172a;">${e.debit > 0 ? "₺" + e.debit.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "—"}</td>
+          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-weight: bold; font-family: monospace; color: #0f172a;">${e.credit > 0 ? "₺" + e.credit.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "—"}</td>
+          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-weight: 800; font-family: monospace; color: ${e.runningBalance > 0 ? "#047857" : e.runningBalance < 0 ? "#b91c1c" : "#475569"};">₺${Math.abs(e.runningBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</td>
         </tr>
       `
           )
@@ -1204,19 +1238,28 @@ export const Contacts: React.FC<ContactsProps> = ({
       <html lang="tr">
       <head>
         <meta charset="UTF-8">
-        <title>Cari Ekstre - ${contact.name}</title>
+        <title>Cari Hesap Ekstresi - ${contact.name}</title>
         <style>
-          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #0f172a; margin: 0; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 20px; page-break-inside: avoid; break-inside: avoid; }
-          .company-name { font-size: 18px; font-weight: bold; text-transform: uppercase; color: #0f172a; }
-          .title { font-size: 20px; font-weight: 900; text-align: right; color: #1e293b; }
-          .info-grid { display: flex; justify-content: space-between; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; font-size: 12px; page-break-inside: avoid; break-inside: avoid; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th { background: #f1f5f9; text-align: left; padding: 10px; font-size: 11px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; color: #475569; }
+          @page { size: landscape; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; padding: 24px; color: #0f172a; margin: 0; background: #ffffff; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #581c87; padding-bottom: 16px; margin-bottom: 20px; page-break-inside: avoid; break-inside: avoid; }
+          .company-name { font-size: 20px; font-weight: 900; text-transform: uppercase; color: #581c87; letter-spacing: -0.5px; }
+          .title-block { text-align: right; }
+          .title { font-size: 20px; font-weight: 900; color: #1e1b4b; letter-spacing: 0.5px; text-transform: uppercase; }
+          .info-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 1fr; gap: 16px; background: #faf5ff; padding: 16px; border-radius: 12px; border: 1.5px solid #e9d5ff; margin-bottom: 20px; font-size: 12px; page-break-inside: avoid; break-inside: avoid; }
+          .info-box { display: flex; flex-direction: column; justify-content: center; }
+          .balance-box { background: #ffffff; border: 1.5px solid #d8b4fe; border-radius: 10px; padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1.5px solid #d8b4fe; border-radius: 8px; overflow: hidden; }
+          th { background: #581c87; color: #ffffff; text-align: center; padding: 10px 12px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border-right: 1px solid #7e22ce; }
+          th:last-child { border-right: none; }
           tr { page-break-inside: avoid !important; break-inside: avoid !important; }
           thead { display: table-header-group; }
-          .summary { display: flex; justify-content: flex-end; gap: 20px; margin-top: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid #e2e8f0; page-break-inside: avoid; break-inside: avoid; }
-          @page { size: landscape; margin: 10mm; }
+          .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; page-break-inside: avoid; break-inside: avoid; }
+          .stat-box { background: #faf5ff; border: 1.5px solid #e9d5ff; border-radius: 10px; padding: 12px; text-align: center; }
+          .stat-box.highlight { background: #f3e8ff; border-color: #c084fc; }
+          .stat-label { font-size: 10px; font-weight: 800; color: #6b21a8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+          .stat-val { font-size: 16px; font-weight: 900; font-family: monospace; }
           @media print {
             body { padding: 0; }
             tr { page-break-inside: avoid !important; break-inside: avoid !important; }
@@ -1227,45 +1270,47 @@ export const Contacts: React.FC<ContactsProps> = ({
         <div class="header">
           <div>
             <div class="company-name">${compTitle}</div>
-            <div style="font-size:11px; color:#64748b;">${compSub}</div>
+            <div style="font-size:11px; color:#64748b; margin-top:2px;">${compSub}</div>
             <div style="font-size:11px; color:#64748b;">${compTax} ${compPhone}</div>
           </div>
-          <div>
+          <div class="title-block">
             <div class="title">CARİ HESAP EKSTRESİ</div>
-            <div style="font-size:11px; text-align:right; color:#64748b;">Tarih: ${new Date().toLocaleDateString("tr-TR")}</div>
+            <div style="font-size:11px; font-weight:600; color:#6b21a8; margin-top:3px;">Düzenleme Tarihi: ${new Date().toLocaleDateString("tr-TR")}</div>
           </div>
         </div>
 
         <div class="info-grid">
-          <div>
-            <strong>HESAP NO:</strong> <span style="font-family:monospace; font-weight:bold; color:#581c87;">${getContactAccountCode(contact)}</span><br>
-            <strong>CARİ UNVANI:</strong> ${contact.name}<br>
-            <span style="color:#64748b;">${contact.companyTitle || ""}</span><br>
-            <strong>VKN/TCKN:</strong> ${contact.taxNumber || "-"} (${contact.taxOffice || "-"})
+          <div class="info-box">
+            <div style="margin-bottom: 4px;"><strong>HESAP NO:</strong> <span style="font-family:monospace; font-weight:bold; color:#581c87; background:#ede9fe; padding:2px 6px; border-radius:4px;">${getContactAccountCode(contact)}</span></div>
+            <div style="margin-bottom: 2px;"><strong>CARİ UNVANI:</strong> <span style="font-weight:700; color:#0f172a;">${contact.name}</span></div>
+            <div style="color:#64748b; font-size:11px;">${contact.companyTitle || ""}</div>
+            <div style="margin-top: 4px;"><strong>VKN / TCKN:</strong> ${contact.taxNumber || "-"} (${contact.taxOffice || "-"})</div>
           </div>
-          <div>
-            <strong>İLETİŞİM:</strong> ${contact.phone || "-"} | ${contact.email || "-"}<br>
-            <strong>ADRES:</strong> ${contact.address || "-"}, ${contact.city || "-"}
+          <div class="info-box">
+            <div style="margin-bottom: 4px;"><strong>İLETİŞİM:</strong> ${contact.phone || "-"} &bull; ${contact.email || "-"}</div>
+            <div><strong>ADRES:</strong> ${contact.address || "-"}, ${contact.city || "-"}</div>
           </div>
-          <div style="text-align:right;">
-            <strong style="color:#64748b;">NET CARİ BAKİYE:</strong><br>
-            <span style="font-size:18px; font-weight:bold; color: ${netBalance > 0 ? "#059669" : netBalance < 0 ? "#dc2626" : "#475569"};">
+          <div class="balance-box">
+            <div style="font-size:10px; font-weight:800; color:#6b21a8; text-transform:uppercase; letter-spacing:0.5px;">GÜNCEL NET BAKİYE</div>
+            <div style="font-size:20px; font-weight:900; font-family:monospace; margin: 4px 0; color: ${netBalance > 0 ? "#047857" : netBalance < 0 ? "#b91c1c" : "#475569"};">
               ₺${Math.abs(netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-            </span><br>
-            <span style="font-size:10px; color:#64748b;">(${netBalance > 0 ? "Alacaklıyız" : netBalance < 0 ? "Borçluyuz" : "Sıfır Bakiye"})</span>
+            </div>
+            <div style="font-size:11px; font-weight:bold; color:${netBalance > 0 ? "#047857" : netBalance < 0 ? "#b91c1c" : "#64748b"};">
+              ${netBalance > 0 ? "● Alacaklıyız" : netBalance < 0 ? "● Borçluyuz" : "● Bakiye Sıfır"}
+            </div>
           </div>
         </div>
 
         <table>
           <thead>
             <tr>
-              <th>Tarih</th>
-              <th>Belge Tipi</th>
-              <th>Belge No</th>
+              <th style="width: 100px;">Tarih</th>
+              <th style="width: 130px;">Belge Tipi</th>
+              <th style="width: 140px;">Belge No</th>
               <th>Açıklama</th>
-              <th style="text-align:right;">Borç (₺)</th>
-              <th style="text-align:right;">Alacak (₺)</th>
-              <th style="text-align:right;">Bakiye (₺)</th>
+              <th style="width: 130px;">Borç (₺)</th>
+              <th style="width: 130px;">Alacak (₺)</th>
+              <th style="width: 140px;">Bakiye (₺)</th>
             </tr>
           </thead>
           <tbody>
@@ -1273,10 +1318,19 @@ export const Contacts: React.FC<ContactsProps> = ({
           </tbody>
         </table>
 
-        <div class="summary">
-          <div>Toplam Borç: <span style="color:#0f172a;">₺${totalDebit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span></div>
-          <div>Toplam Alacak: <span style="color:#0f172a;">₺${totalCredit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span></div>
-          <div>Net Bakiye: <span style="color: ${netBalance > 0 ? "#059669" : netBalance < 0 ? "#dc2626" : "#475569"};">₺${Math.abs(netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span></div>
+        <div class="summary-grid">
+          <div class="stat-box">
+            <div class="stat-label">Toplam Borç Tutarı</div>
+            <div class="stat-val" style="color:#0f172a;">₺${totalDebit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Toplam Alacak Tutarı</div>
+            <div class="stat-val" style="color:#0f172a;">₺${totalCredit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div class="stat-box highlight">
+            <div class="stat-label">Net Cari Bakiye</div>
+            <div class="stat-val" style="color: ${netBalance > 0 ? "#047857" : netBalance < 0 ? "#b91c1c" : "#475569"};">₺${Math.abs(netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</div>
+          </div>
         </div>
 
         <script>
@@ -1406,7 +1460,12 @@ export const Contacts: React.FC<ContactsProps> = ({
               className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
             />
           </div>
-          <ExportButtons getExportData={getContactsExportData} size="sm" />
+          <ExportButtons
+            getExportData={getContactsExportData}
+            contacts={contacts}
+            companyName={companySettings?.companyName}
+            size="sm"
+          />
         </div>
       </div>
 
@@ -1883,250 +1942,592 @@ export const Contacts: React.FC<ContactsProps> = ({
         );
       })()}
 
-      {/* MODAL: Cari Muavin Defteri / Ekstre Dökümü */}
+      {/* MODAL: Cari Muavin Defteri / Ekstre Dökümü (Kurumsal Resmi Tasarım & PDF/Excel Aktar) */}
       {selectedLedgerContact && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
-            {/* Header - Fixed on top */}
-            <div className="p-3 sm:p-5 border-b border-slate-200 bg-white shrink-0 flex flex-col sm:flex-row items-start justify-between gap-3 z-20">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-extrabold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded">
-                    Muavin Defteri & Ekstre
-                  </span>
-                  <span className="text-xs text-slate-500">Cari Hareket Raporu</span>
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-purple-300/80 max-w-5xl w-full max-h-[95vh] flex flex-col my-auto overflow-hidden animate-scaleUp">
+            {/* 1. Modal Top Bar - Dark Corporate & Actions (no-print) */}
+            <div className="bg-slate-900 text-white px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 shrink-0 no-print">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-purple-700 text-white flex items-center justify-center font-extrabold shrink-0 shadow-md">
+                  <Building2 className="w-5 h-5 text-white" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-black text-slate-900 mt-1">
-                  {selectedLedgerContact.name}
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-950 border border-purple-300 shadow-2xs">
-                    Hesap No: {getContactAccountCode(selectedLedgerContact)}
-                  </span>
-                  <span>
-                    {selectedLedgerContact.companyTitle} | VKN: {selectedLedgerContact.taxNumber || "-"} ({selectedLedgerContact.taxOffice || "-"})
-                  </span>
-                </p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-extrabold text-white truncate">
+                      Resmi Cari Hesap Ekstresi & Muavin Dökümü
+                    </h3>
+                    <span className="bg-purple-800/90 text-purple-200 font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-md border border-purple-600/60">
+                      Hesap No: {getContactAccountCode(selectedLedgerContact)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 truncate">
+                    {selectedLedgerContact.name} {selectedLedgerContact.companyTitle ? `(${selectedLedgerContact.companyTitle})` : ""} • VKN/TCKN: {selectedLedgerContact.taxNumber || "-"}
+                  </p>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap justify-end">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Yazdır"
+                >
+                  <Printer className="w-4 h-4 text-slate-200" />
+                  <span className="hidden sm:inline">Yazdır</span>
+                </button>
 
                 <button
-                  onClick={() => exportLedgerExcel(selectedLedgerContact)}
-                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Türkçe Karakter Destekli Excel (.xlsx) İndir"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  <span>Excel</span>
-                </button>
-                <button
-                  onClick={() => exportLedgerPDF(selectedLedgerContact)}
-                  disabled={isGeneratingPDF}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  title="PDF Belgesi Olarak İndir"
-                >
-                  <FileText className="w-4 h-4 text-rose-600" />
-                  <span>{isGeneratingPDF ? "Hazırlanıyor..." : "PDF"}</span>
-                </button>
-                <button
+                  type="button"
                   onClick={() => handleOpenShareModal("whatsapp")}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                   title="WhatsApp Web veya Uygulaması İle Ekstre Paylaş"
                 >
-                  <MessageSquare className="w-4 h-4 text-white" />
-                  <span>WhatsApp Paylaş</span>
+                  <MessageSquare className="w-4 h-4 text-emerald-200" />
+                  <span className="hidden sm:inline">WhatsApp</span>
                 </button>
+
                 <button
-                  onClick={() => handlePrintLedger(selectedLedgerContact)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Cari Ekstre Raporunu Yazdır"
+                  type="button"
+                  onClick={() => handleOpenShareModal("email")}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  title="Cari Hesabın Kayıtlı E-Posta Adresine PDF Gönder"
                 >
-                  <Printer className="w-4 h-4 text-slate-600" />
-                  <span>Yazdır</span>
+                  <Mail className="w-4 h-4 text-indigo-200" />
+                  <span className="hidden sm:inline">E-Posta ile Gönder</span>
                 </button>
+
                 <button
+                  type="button"
                   onClick={() => setSelectedLedgerContact(null)}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer ml-1"
+                  className="text-slate-400 hover:text-white p-1.5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors ml-1"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Scrollable Printable Content Area */}
-            <div className="p-3 sm:p-5 overflow-y-auto space-y-5 flex-1">
-              <div id="printable-ledger" className="space-y-4 sm:space-y-5 p-3 sm:p-4 rounded-xl" style={{ backgroundColor: "#ffffff", color: "#0f172a" }}>
-              {/* Company Info Header for PDF/Print/Screen */}
-              <div className="border-b-2 pb-4 mb-4" style={{ borderColor: "#0f172a" }}>
-                <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
-                  <div>
-                    <h2 className="text-base font-black uppercase tracking-tight" style={{ color: "#0f172a" }}>
-                      {companySettings?.companyName || "FİRMA ADI"}
-                    </h2>
-                    <p className="text-xs font-medium" style={{ color: "#475569" }}>{companySettings?.companyTitle}</p>
-                    <p className="text-xs" style={{ color: "#64748b" }}>
-                      VKN/TCKN: {companySettings?.taxNumber || "-"} ({companySettings?.taxOffice || "-"}) | Tel: {companySettings?.phone || "-"}
-                    </p>
+            {/* 2. Interactive Control Bar (no-print) */}
+            <div className="bg-purple-50/80 border-b border-purple-200/80 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0 no-print">
+              {/* Movement Filter Tabs */}
+              <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-purple-200 shadow-2xs flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setEkstreTab("all")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-md cursor-pointer transition-all ${
+                    ekstreTab === "all" ? "bg-purple-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Tüm Hareketler ({currentLedgerEntries.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEkstreTab("invoices")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-md cursor-pointer transition-all ${
+                    ekstreTab === "invoices" ? "bg-blue-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Faturalar ({ledgerSummary.invoiceCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEkstreTab("collections")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-md cursor-pointer transition-all ${
+                    ekstreTab === "collections" ? "bg-emerald-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Tahsilatlar ({ledgerSummary.collectionCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEkstreTab("payments")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-md cursor-pointer transition-all ${
+                    ekstreTab === "payments" ? "bg-amber-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Ödemeler / Tediyeler ({ledgerSummary.paymentCount})
+                </button>
+              </div>
+
+              {/* Search input */}
+              <div className="relative w-48 sm:w-64">
+                <Search className="w-3.5 h-3.5 text-purple-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Evrak No veya Açıklama Ara..."
+                  value={ekstreSearch}
+                  onChange={(e) => setEkstreSearch(e.target.value)}
+                  className="w-full bg-white border border-purple-200 text-slate-900 text-xs rounded-lg pl-8 pr-2 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                />
+              </div>
+            </div>
+
+            {/* 3. Printable Statement Canvas Container */}
+            <div className="p-3 sm:p-6 bg-slate-200/60 overflow-y-auto custom-scrollbar flex-1 flex justify-center">
+              <div
+                id="printable-ledger"
+                className="bg-white text-slate-900 p-6 sm:p-8 rounded-2xl shadow-xl border border-slate-200 w-full max-w-4xl mx-auto space-y-5 font-sans text-xs sm:text-sm"
+                style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+              >
+                {/* 3.1 Corporate Header */}
+                <div
+                  className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b-2 border-slate-800"
+                  style={{ borderBottomColor: "#1e1b4b" }}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shadow-md"
+                        style={{ backgroundColor: "#1e1b4b", color: "#ffffff" }}
+                      >
+                        <Building2 className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <h2
+                          className="text-base sm:text-lg font-black tracking-tight uppercase"
+                          style={{ color: "#1e1b4b" }}
+                        >
+                          {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN ÖN MUHASEBE VE CARİ YÖNETİM SİSTEMİ"}
+                        </h2>
+                        <p className="text-[10px] sm:text-xs font-semibold" style={{ color: "#64748b" }}>
+                          Resmi Cari Hesap, Muavin Defter ve Mutabakat Sistemi
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-[11px] pl-11 space-y-0.5" style={{ color: "#475569" }}>
+                      {companySettings?.address && <p>{companySettings.address}</p>}
+                      <p>
+                        {companySettings?.taxOffice && `${companySettings.taxOffice} V.D.`}
+                        {companySettings?.taxNumber && ` • VKN/TCKN: ${companySettings.taxNumber}`}
+                        {companySettings?.phone && ` • Tel: ${companySettings.phone}`}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-left sm:text-right">
-                    <h1 className="text-base sm:text-lg font-black uppercase tracking-tight" style={{ color: "#0f172a" }}>
-                      CARİ HESAP EKSTRESİ
-                    </h1>
-                    <p className="text-xs font-semibold" style={{ color: "#64748b" }}>Tarih: {new Date().toLocaleDateString("tr-TR")}</p>
+
+                  <div
+                    className="text-left sm:text-right p-3 rounded-xl border space-y-1 shrink-0 w-full sm:w-auto"
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                  >
+                    <div
+                      className="inline-block text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md tracking-wider"
+                      style={{ backgroundColor: "#1e1b4b" }}
+                    >
+                      RESMİ CARİ HESAP EKSTRESİ
+                    </div>
+                    <div className="text-xs font-bold" style={{ color: "#0f172a" }}>
+                      Hesap No: <span className="font-mono font-black" style={{ color: "#1e1b4b" }}>{getContactAccountCode(selectedLedgerContact)}</span>
+                    </div>
+                    <div className="text-[11px]" style={{ color: "#64748b" }}>
+                      Tarih: <span className="font-mono font-bold" style={{ color: "#0f172a" }}>{new Date().toLocaleDateString("tr-TR")}</span>
+                    </div>
+                    <div className="text-[10px] font-extrabold" style={{ color: "#4338ca" }}>
+                      Para Birimi: <span className="font-mono">{companySettings?.currency || "TRY"} (₺)</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Current Balance Summary Box */}
-              <div className="rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
-              <div>
-                <span className="text-[10px] font-bold uppercase block" style={{ color: "#64748b" }}>
-                  Cari Telefon / E-posta
-                </span>
-                <span className="text-xs font-semibold" style={{ color: "#1e293b" }}>
-                  {selectedLedgerContact.phone || "-"} | {selectedLedgerContact.email || "-"}
-                </span>
-              </div>
+                {/* 3.2 Contact Title Banner */}
+                <div
+                  className="text-white p-3.5 rounded-xl text-center shadow-md"
+                  style={{ backgroundColor: "#1e1b4b", color: "#ffffff" }}
+                >
+                  <h1 className="text-sm sm:text-base font-black tracking-wide uppercase">
+                    CARİ HESAP VE MUAVİN DEFTER HAREKET DÖKÜMÜ
+                  </h1>
+                  <p className="text-[11px] mt-0.5 font-medium" style={{ color: "#c7d2fe" }}>
+                    {selectedLedgerContact.name} • VKN/TCKN: {selectedLedgerContact.taxNumber || "Tanımsız"} • Cari Türü:{" "}
+                    {selectedLedgerContact.contactType === "customer"
+                      ? "Müşteri (120)"
+                      : selectedLedgerContact.contactType === "vendor"
+                      ? "Tedarikçi (320)"
+                      : "Müşteri & Tedarikçi"}
+                  </p>
+                </div>
 
-              <div>
-                <span className="text-[10px] font-bold uppercase block" style={{ color: "#64748b" }}>
-                  Şehir / Adres
-                </span>
-                <span className="text-xs font-semibold" style={{ color: "#1e293b" }}>
-                  {selectedLedgerContact.address || "-"}, {selectedLedgerContact.city}
-                </span>
-              </div>
-
-              <div className="sm:text-right">
-                <span className="text-[10px] font-bold uppercase block" style={{ color: "#64748b" }}>
-                  Net Cari Bakiye
-                </span>
-                {(() => {
-                  const entries = getLedgerEntries(selectedLedgerContact.id);
-                  const netBal = entries.length > 0 ? entries[entries.length - 1].runningBalance : selectedLedgerContact.balance;
-                  return (
-                    <span
-                      className="text-base sm:text-lg font-black"
-                      style={{
-                        color: netBal > 0
-                          ? "#059669"
-                          : netBal < 0
-                          ? "#dc2626"
-                          : "#64748b"
-                      }}
+                {/* 3.3 Two-Column Details Card: Contact Info & Financial Status */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Left: Contact Card Details */}
+                  <div
+                    className="rounded-xl p-3.5 border space-y-2"
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                  >
+                    <div
+                      className="flex items-center justify-between border-b pb-1.5"
+                      style={{ borderBottomColor: "#e2e8f0" }}
                     >
-                      ₺{Math.abs(netBal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}{" "}
-                      <span className="text-xs font-normal" style={{ color: "#64748b" }}>
-                        ({netBal > 0 ? "Alacaklıyız" : netBal < 0 ? "Borçluyuz" : "Sıfır"})
+                      <span
+                        className="text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5"
+                        style={{ color: "#1e1b4b" }}
+                      >
+                        <Tag className="w-3.5 h-3.5 text-indigo-700" />
+                        Cari Kart & Kimlik Bilgileri
                       </span>
-                    </span>
-                  );
-                })()}
-              </div>
-            </div>
+                      <span
+                        className="text-[10px] font-mono font-bold px-2 py-0.5 rounded"
+                        style={{ backgroundColor: "#e0e7ff", color: "#312e81" }}
+                      >
+                        Cari Kartı
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span style={{ color: "#64748b" }} className="font-medium">Cari Adı / Unvanı:</span>
+                        <span className="font-bold text-right max-w-[200px] truncate" style={{ color: "#0f172a" }}>{selectedLedgerContact.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span style={{ color: "#64748b" }} className="font-medium">Ticari Unvan:</span>
+                        <span className="font-semibold text-right max-w-[200px] truncate" style={{ color: "#1e293b" }}>{selectedLedgerContact.companyTitle || "-"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span style={{ color: "#64748b" }} className="font-medium">Cari Hesap Kodu:</span>
+                        <span className="font-mono font-bold" style={{ color: "#1e1b4b" }}>{getContactAccountCode(selectedLedgerContact)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span style={{ color: "#64748b" }} className="font-medium">VKN / TCKN:</span>
+                        <span className="font-mono font-medium" style={{ color: "#334155" }}>{selectedLedgerContact.taxNumber || "-"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span style={{ color: "#64748b" }} className="font-medium">Vergi Dairesi:</span>
+                        <span className="font-semibold" style={{ color: "#0f172a" }}>{selectedLedgerContact.taxOffice || "-"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span style={{ color: "#64748b" }} className="font-medium">Telefon & E-Posta:</span>
+                        <span className="font-medium" style={{ color: "#334155" }}>{selectedLedgerContact.phone || "-"} • {selectedLedgerContact.email || "-"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span style={{ color: "#64748b" }} className="font-medium">Adres / Şehir:</span>
+                        <span className="font-medium text-right max-w-[220px] truncate" style={{ color: "#334155" }}>{selectedLedgerContact.address || "-"}, {selectedLedgerContact.city || "-"}</span>
+                      </div>
+                    </div>
+                  </div>
 
-            {/* Ledger Table */}
-            <div className="rounded-xl overflow-x-auto custom-scrollbar w-full" style={{ border: "1px solid #e2e8f0" }}>
-              <table className="w-full text-left text-xs min-w-[680px]" style={{ backgroundColor: "#ffffff" }}>
-                <thead>
-                  <tr className="font-bold uppercase tracking-wider" style={{ backgroundColor: "#f1f5f9", borderBottom: "1px solid #cbd5e1", color: "#475569" }}>
-                    <th className="py-2.5 px-3">Tarih</th>
-                    <th className="py-2.5 px-3">Belge Tipi</th>
-                    <th className="py-2.5 px-3">Belge No</th>
-                    <th className="py-2.5 px-3">Açıklama</th>
-                    <th className="py-2.5 px-3 text-right">Borç (₺)</th>
-                    <th className="py-2.5 px-3 text-right">Alacak (₺)</th>
-                    <th className="py-2.5 px-3 text-right">Bakiye (₺)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {getLedgerEntries(selectedLedgerContact.id).length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="text-center py-6" style={{ color: "#94a3b8" }}>
-                        Bu cari hesaba ait henüz fatura veya ödeme hareketi kayıtlı değil.
-                      </td>
-                    </tr>
-                  ) : (
-                    getLedgerEntries(selectedLedgerContact.id).map((entry) => (
-                      <tr key={entry.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                        <td className="py-2.5 px-3 font-medium whitespace-nowrap" style={{ color: "#64748b" }}>
-                          {formatDate(entry.date)}
-                        </td>
-                        <td className="py-2.5 px-3 font-bold">
-                          <span
-                            className="px-2 py-0.5 rounded text-[10px] font-bold inline-block"
-                            style={{
-                              backgroundColor:
-                                entry.documentType === "Fatura"
-                                  ? "#eff6ff"
-                                  : entry.documentType === "Tahsilat"
-                                  ? "#ecfdf5"
-                                  : "#fffbeb",
-                              color:
-                                entry.documentType === "Fatura"
-                                  ? "#1d4ed8"
-                                  : entry.documentType === "Tahsilat"
-                                  ? "#047857"
-                                  : "#b45309",
-                              border:
-                                entry.documentType === "Fatura"
-                                  ? "1px solid #bfdbfe"
-                                  : entry.documentType === "Tahsilat"
-                                  ? "1px solid #a7f3d0"
-                                  : "1px solid #fde68a",
-                            }}
-                          >
-                            {entry.documentType}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 font-mono font-semibold" style={{ color: "#334155" }}>
-                          {entry.documentNo}
-                        </td>
-                        <td className="py-2.5 px-3 font-medium" style={{ color: "#0f172a" }}>
-                          {entry.description}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-bold" style={{ color: "#0f172a" }}>
-                          {entry.debit > 0
-                            ? `₺${entry.debit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
-                            : "-"}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-bold" style={{ color: "#0f172a" }}>
-                          {entry.credit > 0
-                            ? `₺${entry.credit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
-                            : "-"}
-                        </td>
-                        <td
-                          className="py-2.5 px-3 text-right font-black"
+                  {/* Right: Financial Status & Balance Overview */}
+                  <div
+                    className="rounded-xl p-3.5 border space-y-2"
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                  >
+                    <div
+                      className="flex items-center justify-between border-b pb-1.5"
+                      style={{ borderBottomColor: "#e2e8f0" }}
+                    >
+                      <span
+                        className="text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5"
+                        style={{ color: "#1e1b4b" }}
+                      >
+                        <Landmark className="w-3.5 h-3.5 text-indigo-700" />
+                        Finansal Durum & Bakiye Özeti
+                      </span>
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded"
+                        style={{
+                          backgroundColor: ledgerSummary.netBalance > 0 ? "#d1fae5" : ledgerSummary.netBalance < 0 ? "#ffe4e6" : "#f1f5f9",
+                          color: ledgerSummary.netBalance > 0 ? "#065f46" : ledgerSummary.netBalance < 0 ? "#9f1239" : "#334155",
+                        }}
+                      >
+                        {ledgerSummary.netBalance > 0 ? "Alacaklıyız" : ledgerSummary.netBalance < 0 ? "Borçluyuz" : "Bakiye Sıfır"}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 text-xs">
+                      <div
+                        className="flex justify-between items-center px-2.5 py-1.5 rounded-lg font-bold"
+                        style={{ backgroundColor: "#e0e7ff" }}
+                      >
+                        <span style={{ color: "#1e1b4b" }}>Güncel Net Cari Bakiye:</span>
+                        <span
+                          className="font-mono text-sm sm:text-base font-black"
                           style={{
-                            color:
-                              entry.runningBalance > 0
-                                ? "#059669"
-                                : entry.runningBalance < 0
-                                ? "#dc2626"
-                                : "#64748b"
+                            color: ledgerSummary.netBalance > 0 ? "#047857" : ledgerSummary.netBalance < 0 ? "#be123c" : "#334155",
                           }}
                         >
-                          ₺{Math.abs(entry.runningBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            </div>
+                          ₺{Math.abs(ledgerSummary.netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="space-y-1 pt-0.5 text-[11px]">
+                        <div className="flex justify-between items-center px-1">
+                          <span style={{ color: "#64748b" }} className="font-medium">Toplam Borçlandırılan Tutar:</span>
+                          <span className="font-mono font-bold" style={{ color: "#1e293b" }}>₺{ledgerSummary.totalDebit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between items-center px-1">
+                          <span style={{ color: "#64748b" }} className="font-medium">Toplam Alacaklandırılan Tutar:</span>
+                          <span className="font-mono font-bold" style={{ color: "#1e293b" }}>₺{ledgerSummary.totalCredit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between items-center px-1">
+                          <span style={{ color: "#64748b" }} className="font-medium">Son Hareket Tarihi:</span>
+                          <span className="font-mono font-semibold" style={{ color: "#1e293b" }}>{ledgerSummary.lastMovementDate ? formatDate(ledgerSummary.lastMovementDate) : "-"}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3.4 Summary Analytics 4-Box Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {/* Toplam Borç */}
+                  <div
+                    className="rounded-xl p-3 text-center space-y-1 border"
+                    style={{ backgroundColor: "#eff6ff", borderColor: "#bfdbfe" }}
+                  >
+                    <span className="text-[10px] font-extrabold uppercase block tracking-wide" style={{ color: "#1e3a8a" }}>
+                      Toplam Borç Hareketi
+                    </span>
+                    <span className="text-sm sm:text-base font-black font-mono block" style={{ color: "#172554" }}>
+                      ₺{ledgerSummary.totalDebit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] font-semibold block" style={{ color: "#2563eb" }}>
+                      Satış & Faturalar
+                    </span>
+                  </div>
+
+                  {/* Toplam Alacak */}
+                  <div
+                    className="rounded-xl p-3 text-center space-y-1 border"
+                    style={{ backgroundColor: "#eef2ff", borderColor: "#c7d2fe" }}
+                  >
+                    <span className="text-[10px] font-extrabold uppercase block tracking-wide" style={{ color: "#312e81" }}>
+                      Toplam Alacak Hareketi
+                    </span>
+                    <span className="text-sm sm:text-base font-black font-mono block" style={{ color: "#1e1b4b" }}>
+                      ₺{ledgerSummary.totalCredit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] font-semibold block" style={{ color: "#4338ca" }}>
+                      Tahsilat & Ödemeler
+                    </span>
+                  </div>
+
+                  {/* Net Bakiye */}
+                  <div
+                    className="rounded-xl p-3 text-center space-y-1 border"
+                    style={{
+                      backgroundColor: ledgerSummary.netBalance > 0 ? "#ecfdf5" : ledgerSummary.netBalance < 0 ? "#fff1f2" : "#f8fafc",
+                      borderColor: ledgerSummary.netBalance > 0 ? "#a7f3d0" : ledgerSummary.netBalance < 0 ? "#fecdd3" : "#e2e8f0",
+                      color: ledgerSummary.netBalance > 0 ? "#064e3b" : ledgerSummary.netBalance < 0 ? "#881337" : "#0f172a",
+                    }}
+                  >
+                    <span className="text-[10px] font-extrabold uppercase block tracking-wide">
+                      Net Cari Bakiye
+                    </span>
+                    <span className="text-sm sm:text-base font-black font-mono block">
+                      ₺{Math.abs(ledgerSummary.netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] font-bold block">
+                      {ledgerSummary.netBalance > 0 ? "● Alacaklıyız" : ledgerSummary.netBalance < 0 ? "● Borçluyuz" : "● Bakiye Sıfır"}
+                    </span>
+                  </div>
+
+                  {/* Toplam İşlem / Evrak */}
+                  <div
+                    className="rounded-xl p-3 text-center space-y-1 border"
+                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
+                  >
+                    <span className="text-[10px] font-extrabold uppercase block tracking-wide" style={{ color: "#334155" }}>
+                      Toplam Hareket Sayısı
+                    </span>
+                    <span className="text-sm sm:text-base font-black font-mono block" style={{ color: "#0f172a" }}>
+                      {ledgerSummary.totalMovements} Evrak
+                    </span>
+                    <span className="text-[10px] font-semibold block" style={{ color: "#64748b" }}>
+                      {ledgerSummary.invoiceCount} Fatura • {ledgerSummary.collectionCount + ledgerSummary.paymentCount} Finans
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3.5 Movement Details Table */}
+                <div
+                  className="rounded-xl overflow-hidden shadow-xs border"
+                  style={{ borderColor: "#cbd5e1" }}
+                >
+                  <div
+                    className="text-white px-3.5 py-2 flex items-center justify-between"
+                    style={{ backgroundColor: "#1e1b4b", color: "#ffffff" }}
+                  >
+                    <span className="font-extrabold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-indigo-200" />
+                      Cari Hareket & Muavin Kayıtları ({filteredLedgerEntries.length} Adet)
+                    </span>
+                    <span className="text-[10px] text-indigo-200 font-medium">
+                      Kronolojik İşlem Sırası
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse" style={{ backgroundColor: "#ffffff" }}>
+                      <thead>
+                        <tr
+                          className="font-bold border-b uppercase text-[10px] tracking-wider"
+                          style={{ backgroundColor: "#f1f5f9", color: "#1e1b4b", borderBottomColor: "#cbd5e1" }}
+                        >
+                          <th className="py-2.5 px-3">Tarih</th>
+                          <th className="py-2.5 px-3 text-center">Belge Türü</th>
+                          <th className="py-2.5 px-3 font-mono">Belge / Fatura No</th>
+                          <th className="py-2.5 px-3">Açıklama</th>
+                          <th className="py-2.5 px-3 text-right">Borç (₺)</th>
+                          <th className="py-2.5 px-3 text-right">Alacak (₺)</th>
+                          <th className="py-2.5 px-3 text-right" style={{ backgroundColor: "#e0e7ff" }}>Yürüyen Bakiye (₺)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y" style={{ borderColor: "#f1f5f9" }}>
+                        {filteredLedgerEntries.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="text-center py-8 bg-white" style={{ color: "#94a3b8" }}>
+                              Seçili filtrelere uygun cari hareket kaydı bulunamadı.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredLedgerEntries.map((m, idx) => (
+                            <tr
+                              key={m.id || idx}
+                              style={{ backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#ffffff" }}
+                              className="hover:bg-slate-50 transition-colors"
+                            >
+                              <td className="py-2 px-3 font-mono whitespace-nowrap" style={{ color: "#334155" }}>
+                                {formatDate(m.date)}
+                              </td>
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <span
+                                  className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border"
+                                  style={{
+                                    backgroundColor: m.documentType === "Fatura" ? "#eff6ff" : m.documentType === "Tahsilat" ? "#ecfdf5" : m.documentType === "Tediye" || m.documentType === "Ödeme" ? "#fffbeb" : "#f5f3ff",
+                                    color: m.documentType === "Fatura" ? "#1e40af" : m.documentType === "Tahsilat" ? "#065f46" : m.documentType === "Tediye" || m.documentType === "Ödeme" ? "#92400e" : "#5b21b6",
+                                    borderColor: m.documentType === "Fatura" ? "#bfdbfe" : m.documentType === "Tahsilat" ? "#a7f3d0" : m.documentType === "Tediye" || m.documentType === "Ödeme" ? "#fde68a" : "#ddd6fe",
+                                  }}
+                                >
+                                  {m.documentType}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 font-mono font-bold whitespace-nowrap" style={{ color: "#1e293b" }}>
+                                {m.documentNo || "-"}
+                              </td>
+                              <td className="py-2 px-3 max-w-[220px] truncate" title={m.description} style={{ color: "#334155" }}>
+                                {m.description || "-"}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono font-bold whitespace-nowrap" style={{ color: "#0f172a" }}>
+                                {m.debit > 0 ? `₺${m.debit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "-"}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono font-bold whitespace-nowrap" style={{ color: "#0f172a" }}>
+                                {m.credit > 0 ? `₺${m.credit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "-"}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono font-black whitespace-nowrap" style={{ backgroundColor: "#f1f5f9" }}>
+                                <span
+                                  style={{
+                                    color: m.runningBalance > 0 ? "#047857" : m.runningBalance < 0 ? "#be123c" : "#334155",
+                                  }}
+                                >
+                                  ₺{Math.abs(m.runningBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      {filteredLedgerEntries.length > 0 && (
+                        <tfoot>
+                          <tr
+                            className="font-black border-t-2"
+                            style={{ backgroundColor: "#e0e7ff", color: "#1e1b4b", borderTopColor: "#6366f1" }}
+                          >
+                            <td colSpan={4} className="py-2.5 px-3 uppercase text-[11px] tracking-wider">
+                              Genel Toplam ({filteredLedgerEntries.length} Hareket)
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs">
+                              ₺{filteredLedgerEntries.reduce((acc, curr) => acc + curr.debit, 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs">
+                              ₺{filteredLedgerEntries.reduce((acc, curr) => acc + curr.credit, 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs" style={{ backgroundColor: "#c7d2fe", color: "#1e1b4b" }}>
+                              ₺{Math.abs(ledgerSummary.netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+
+                {/* 3.6 Statutory Provisions / Legal Note */}
+                <div
+                  className="rounded-xl p-3.5 space-y-1.5 text-[11px] border"
+                  style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0", color: "#475569" }}
+                >
+                  <div className="flex items-center gap-1.5 font-bold uppercase text-[10px] tracking-wide" style={{ color: "#1e293b" }}>
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />
+                    <span>Yasal Hükümler, Tevsik ve İtiraz Şartları</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    <strong>1.</strong> İşbu cari hesap ekstresi, 6102 Sayılı Türk Ticaret Kanunu (TTK M.83-94) cari hesap sözleşmesi hükümleri ve 213 Sayılı Vergi Usul Kanunu (VUK M.227) uyarınca düzenlenmiş resmi tevsik belgesidir.
+                  </p>
+                  <p className="leading-relaxed">
+                    <strong>2.</strong> TTK M.94 gereğince işbu ekstrenin tebliğinden itibaren <strong>bir (1) ay</strong> içerisinde noter, taahhütlü mektup, telgraf veya KEP ile itiraz edilmeyen cari hesap bakiyesi ve hareketler kesinleşmiş ve mutabık kabul edilir.
+                  </p>
+                  <p className="leading-relaxed">
+                    <strong>3.</strong> İrsaliyeli ve e-arşiv/e-fatura tevsik belgeleri yasal defter ve beyannamelerle tam uyumludur.
+                  </p>
+                </div>
+
+                {/* 3.7 Official Signatures */}
+                <div className="grid grid-cols-2 gap-8 pt-4 border-t" style={{ borderTopColor: "#e2e8f0" }}>
+                  <div className="text-center space-y-8">
+                    <div>
+                      <p className="font-black text-xs uppercase tracking-wider" style={{ color: "#1e1b4b" }}>
+                        DÜZENLEYEN / MALİ İŞLER & MUHASEBE
+                      </p>
+                      <p className="text-[10px] font-medium" style={{ color: "#64748b" }}>Yetkili İmza / Firma Kaşesi</p>
+                    </div>
+                    <div className="h-10 border-b border-dashed w-36 mx-auto" style={{ borderBottomColor: "#cbd5e1" }}></div>
+                  </div>
+
+                  <div className="text-center space-y-8">
+                    <div>
+                      <p className="font-black text-xs uppercase tracking-wider" style={{ color: "#1e1b4b" }}>
+                        CARİ HESAP SAHİBİ / YETKİLİ ONAYI
+                      </p>
+                      <p className="text-[10px] font-medium" style={{ color: "#64748b" }}>Mutabakat İmzası / Mühür</p>
+                    </div>
+                    <div className="h-10 border-b border-dashed w-36 mx-auto" style={{ borderBottomColor: "#cbd5e1" }}></div>
+                  </div>
+                </div>
+
+                {/* 3.8 Footer Note */}
+                <div className="text-center text-[10px] pt-2 border-t" style={{ borderTopColor: "#f1f5f9", color: "#94a3b8" }}>
+                  Bu cari hesap ekstresi elektronik ortamda oluşturulmuş olup resmi muhasebe kayıtlarının tevsik edici belgesidir. • Muavin Cari Hesap & Ön Muhasebe Yönetim Sistemi
+                </div>
+              </div>
             </div>
 
-            <div className="p-4 px-6 border-t border-slate-200 bg-slate-50/80 shrink-0 flex items-center justify-between z-20">
-              <span className="text-xs text-slate-500 font-medium">
-                Toplama esas kayıt sayısı: <strong className="text-slate-800">{getLedgerEntries(selectedLedgerContact.id).length}</strong>
+            {/* 4. Modal Bottom Bar (no-print) */}
+            <div className="p-3 sm:p-4 px-6 border-t border-purple-200 bg-purple-50/60 shrink-0 flex flex-wrap items-center justify-between gap-3 z-20 no-print">
+              <span className="text-xs text-purple-950 font-bold">
+                Toplam Kayıt: <strong className="font-mono">{filteredLedgerEntries.length}</strong> / {currentLedgerEntries.length} Hareket • Net Bakiye:{" "}
+                <strong className={ledgerSummary.netBalance > 0 ? "text-emerald-700" : ledgerSummary.netBalance < 0 ? "text-rose-700" : "text-slate-800"}>
+                  ₺{Math.abs(ledgerSummary.netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </strong>
               </span>
-              <button
-                onClick={() => setSelectedLedgerContact(null)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2 rounded-xl cursor-pointer transition-colors"
-              >
-                Kapat
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenShareModal("whatsapp")}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl cursor-pointer transition-colors flex items-center gap-1.5"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>WhatsApp Paylaş</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenShareModal("email")}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>E-Posta Gönder</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLedgerContact(null)}
+                  className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-4 py-1.5 rounded-xl cursor-pointer transition-colors"
+                >
+                  Kapat
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2287,6 +2688,42 @@ export const Contacts: React.FC<ContactsProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* EMAIL SHARE MODAL */}
+      {shareType === "email" && selectedLedgerContact && (
+        <EmailExportModal
+          isOpen={shareType === "email"}
+          onClose={() => setShareType(null)}
+          title={`Cari Hesap Ekstresi & Muavin Dökümü - ${selectedLedgerContact.name}`}
+          filename={`${selectedLedgerContact.name.replace(/\s+/g, "_")}_Cari_Ekstre_${new Date().getFullYear()}.pdf`}
+          defaultEmail={selectedLedgerContact.email || ""}
+          defaultRecipientName={selectedLedgerContact.name}
+          defaultSubject={`Cari Hesap Ekstresi - ${companySettings?.companyName || "Firma"} (${selectedLedgerContact.name})`}
+          companyName={companySettings?.companyName || "Firma"}
+          contacts={contacts}
+          getPdfBlob={async () => {
+            const res = await generateLedgerPDF(selectedLedgerContact);
+            return res ? { blob: res.blob, fileName: res.fileName, pdf: res.pdf } : null;
+          }}
+          documentSummary={[
+            { label: "Cari Hesap Kodu", value: getContactAccountCode(selectedLedgerContact) },
+            {
+              label: "Güncel Net Bakiye",
+              value: `${formatCurrency(Math.abs(selectedLedgerContact.balance), companySettings?.currency || "TRY")} (${
+                selectedLedgerContact.balance > 0
+                  ? "Alacaklıyız (Borçlu Cari)"
+                  : selectedLedgerContact.balance < 0
+                  ? "Borçluyuz (Alacaklı Cari)"
+                  : "Sıfır Bakiye"
+              })`,
+            },
+            {
+              label: "Toplam Kayıt",
+              value: `${getLedgerEntries(selectedLedgerContact.id).length} Hareket Kaydı`,
+            },
+          ]}
+        />
       )}
 
       {/* TAHSİLAT YAP / ÖDEME YAP MODAL */}

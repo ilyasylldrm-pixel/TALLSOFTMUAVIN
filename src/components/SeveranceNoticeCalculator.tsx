@@ -4,6 +4,7 @@ import {
   Calendar,
   DollarSign,
   Printer,
+  Download,
   FileText,
   User,
   Building2,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import { Employee, CompanySettings, LeaveRequest } from "../types";
 import { sgkTerminationReasons } from "../data/sgkTerminationReasons";
+import { exportElementToPDF } from "../utils/exportUtils";
 
 interface SeveranceNoticeCalculatorProps {
   employees: Employee[];
@@ -80,6 +82,20 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
 
   // Printable Document Modal
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    setIsDownloadingPDF(true);
+    try {
+      const sanitizedName = (selectedEmp?.fullName || "Personel").trim().replace(/\s+/g, "_");
+      const fileName = `Kidem_Ihbar_Bordrosu_${sanitizedName}.pdf`;
+      await exportElementToPDF("severance-printable-sheet", fileName);
+    } catch (err) {
+      console.error("Tazminat Bordrosu PDF İndirme Hatası:", err);
+    } finally {
+      setIsDownloadingPDF(false);
+    }
+  };
 
   // Personel seçimi değiştiğinde form alanlarını güncelle
   const handleEmployeeChange = (empId: string) => {
@@ -798,10 +814,20 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="bg-purple-700 hover:bg-purple-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  onClick={handleDownloadPDF}
+                  disabled={isDownloadingPDF}
+                  className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50"
                 >
-                  <Printer className="w-4 h-4" /> Yazdır / PDF Kaydet
+                  <Download className="w-4 h-4 text-purple-200" />
+                  <span>{isDownloadingPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Yazdır</span>
                 </button>
                 <button
                   type="button"
@@ -814,7 +840,7 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
             </div>
 
             {/* A4 FORMATINDA RESMİ BELGE GÖRÜNÜMÜ */}
-            <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-6 text-slate-900 font-sans text-xs">
+            <div id="severance-printable-sheet" className="p-6 bg-white border border-slate-200 rounded-2xl space-y-6 text-slate-900 font-sans text-xs">
               {/* Belge Üst Başlığı */}
               <div className="text-center border-b-2 border-slate-800 pb-4 space-y-1">
                 <h2 className="font-black text-base text-slate-950 uppercase tracking-wide">

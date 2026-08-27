@@ -1214,6 +1214,8 @@ export const Reports: React.FC<ReportsProps> = ({
                         [provisionalTaxTitle, formatCurrency(provisionalTaxBase, "TRY"), "-", formatCurrency(provisionalTaxPayable, "TRY")],
                       ],
                     })}
+                    contacts={contacts}
+                    companyName={companySettings.companyName}
                     size="sm"
                   />
                 </div>
@@ -2232,6 +2234,8 @@ export const Reports: React.FC<ReportsProps> = ({
                     formatCurrency(item.runningBalance, item.currency),
                   ]),
                 })}
+                contacts={contacts}
+                companyName={companySettings.companyName}
                 size="sm"
               />
             </div>
