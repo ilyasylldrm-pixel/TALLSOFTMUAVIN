@@ -522,9 +522,12 @@ export async function exportAssetCustodyToPDF(
   container.innerHTML = generateAssetCustodyHTML(asset, employee, companySettings, options);
   document.body.appendChild(container);
 
+  // Yield to browser UI tick
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
   try {
     const canvas = await html2canvas(container, {
-      scale: 2,
+      scale: 1.6,
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
@@ -541,21 +544,22 @@ export async function exportAssetCustodyToPDF(
     const imgWidth = pdfWidth - margin * 2;
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
+    const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
     if (imgHeight <= pdfHeight - margin * 2) {
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, imgHeight);
+      pdf.addImage(imgData, "JPEG", margin, margin, imgWidth, imgHeight);
     } else {
       // Multi-page splitting if content exceeds A4 height
       let heightLeft = imgHeight;
       let position = margin;
-      const imgData = canvas.toDataURL("image/png");
 
-      pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
+      pdf.addImage(imgData, "JPEG", margin, position, imgWidth, imgHeight);
       heightLeft -= pdfHeight;
 
       while (heightLeft >= 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
+        pdf.addImage(imgData, "JPEG", margin, position, imgWidth, imgHeight);
         heightLeft -= pdfHeight;
       }
     }

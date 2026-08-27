@@ -39,6 +39,120 @@ export interface AccountStatementPDFOptions {
 // --- Turkish Unicode Font Loader for jsPDF ---
 let cachedRobotoRegularBase64: string | null = null;
 let cachedRobotoBoldBase64: string | null = null;
+let fontPreloadPromise: Promise<void> | null = null;
+
+/**
+ * Ultra-fast chunked ArrayBuffer to Base64 encoder (32KB blocks)
+ */
+function fastArrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  const CHUNK_SIZE = 0x8000; // 32KB
+  for (let i = 0; i < len; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, len));
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Fetch font with strict timeout to prevent any network hang
+ */
+async function fetchFontWithTimeout(url: string, timeoutMs: number = 1800): Promise<string | null> {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(url, {
+      mode: "cors",
+      signal: controller?.signal,
+      cache: "force-cache",
+    });
+    if (res.ok) {
+      const buffer = await res.arrayBuffer();
+      return fastArrayBufferToBase64(buffer);
+    }
+  } catch (_) {
+    // Network timeout or blocked CDN - fallback safely
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+  return null;
+}
+
+/**
+ * Pre-warms the Turkish font in the background without blocking the UI
+ */
+export function preloadTurkishFont(): Promise<void> {
+  if (fontPreloadPromise) return fontPreloadPromise;
+
+  fontPreloadPromise = (async () => {
+    try {
+      // 1. Check browser storage first (instant 0ms)
+      if (typeof window !== "undefined") {
+        try {
+          cachedRobotoRegularBase64 =
+            window.localStorage?.getItem("muavin_font_roboto_reg_v2") ||
+            window.sessionStorage?.getItem("muavin_font_roboto_reg_v2");
+          cachedRobotoBoldBase64 =
+            window.localStorage?.getItem("muavin_font_roboto_bold_v2") ||
+            window.sessionStorage?.getItem("muavin_font_roboto_bold_v2");
+        } catch (_) {}
+      }
+
+      // 2. Fetch regular font if not in cache
+      if (!cachedRobotoRegularBase64 && typeof fetch !== "undefined") {
+        const regularUrls = [
+          "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf",
+          "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.ttf",
+        ];
+        for (const url of regularUrls) {
+          const base64 = await fetchFontWithTimeout(url, 1500);
+          if (base64) {
+            cachedRobotoRegularBase64 = base64;
+            if (typeof window !== "undefined") {
+              try {
+                window.localStorage?.setItem("muavin_font_roboto_reg_v2", base64);
+              } catch (_) {}
+            }
+            break;
+          }
+        }
+      }
+
+      // 3. Fetch bold font if not in cache
+      if (!cachedRobotoBoldBase64 && typeof fetch !== "undefined") {
+        const boldUrls = [
+          "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf",
+          "https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmEU9fBBc4AMP6lQ.ttf",
+        ];
+        for (const url of boldUrls) {
+          const base64 = await fetchFontWithTimeout(url, 1500);
+          if (base64) {
+            cachedRobotoBoldBase64 = base64;
+            if (typeof window !== "undefined") {
+              try {
+                window.localStorage?.setItem("muavin_font_roboto_bold_v2", base64);
+              } catch (_) {}
+            }
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+  })();
+
+  return fontPreloadPromise;
+}
+
+// Automatically initiate background preloading on module load
+if (typeof window !== "undefined") {
+  if ("requestIdleCallback" in window) {
+    (window as any).requestIdleCallback(() => void preloadTurkishFont());
+  } else {
+    setTimeout(() => void preloadTurkishFont(), 50);
+  }
+}
 
 /**
  * Loads and registers full UTF-8 Unicode fonts (Roboto Regular & Bold) into jsPDF instance.
@@ -46,73 +160,14 @@ let cachedRobotoBoldBase64: string | null = null;
  */
 export async function loadTurkishFontIntoPDF(doc: jsPDF): Promise<boolean> {
   try {
-    // 1. Try reading from memory cache or browser session storage
-    if (!cachedRobotoRegularBase64 && typeof window !== "undefined") {
-      try {
-        cachedRobotoRegularBase64 = window.sessionStorage.getItem("muavin_font_roboto_reg");
-        cachedRobotoBoldBase64 = window.sessionStorage.getItem("muavin_font_roboto_bold");
-      } catch (_) {}
+    if (!cachedRobotoRegularBase64) {
+      // Wait at most 800ms for preloader, otherwise fallback cleanly to avoid freeze
+      await Promise.race([
+        preloadTurkishFont(),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
     }
 
-    // 2. Fetch Regular font if not cached
-    if (!cachedRobotoRegularBase64 && typeof fetch !== "undefined") {
-      const regUrls = [
-        "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf",
-        "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.ttf",
-      ];
-      for (const url of regUrls) {
-        try {
-          const res = await fetch(url, { mode: "cors" });
-          if (res.ok) {
-            const buffer = await res.arrayBuffer();
-            let binary = "";
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-              binary += String.fromCharCode(bytes[i]);
-            }
-            cachedRobotoRegularBase64 = btoa(binary);
-            if (typeof window !== "undefined") {
-              try {
-                window.sessionStorage.setItem("muavin_font_roboto_reg", cachedRobotoRegularBase64);
-              } catch (_) {}
-            }
-            break;
-          }
-        } catch (_) {}
-      }
-    }
-
-    // 3. Fetch Bold / Medium font if not cached
-    if (!cachedRobotoBoldBase64 && typeof fetch !== "undefined") {
-      const boldUrls = [
-        "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf",
-        "https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmEU9fBBc4AMP6lQ.ttf",
-      ];
-      for (const url of boldUrls) {
-        try {
-          const res = await fetch(url, { mode: "cors" });
-          if (res.ok) {
-            const buffer = await res.arrayBuffer();
-            let binary = "";
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-              binary += String.fromCharCode(bytes[i]);
-            }
-            cachedRobotoBoldBase64 = btoa(binary);
-            if (typeof window !== "undefined") {
-              try {
-                window.sessionStorage.setItem("muavin_font_roboto_bold", cachedRobotoBoldBase64);
-              } catch (_) {}
-            }
-            break;
-          }
-        } catch (_) {}
-      }
-    }
-
-    // 4. Register fonts into the jsPDF instance VFS
     if (cachedRobotoRegularBase64) {
       doc.addFileToVFS("Roboto-Regular.ttf", cachedRobotoRegularBase64);
       doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
@@ -735,6 +790,7 @@ export async function generateAutoTableFromExportData({
 
 /**
  * Enhanced DOM-to-PDF export service using html2canvas with print-specific styling and element-aware page breaks
+ * Optimized for lightning-fast execution and zero UI lag
  */
 export async function exportElementToPDFWithPrintStyling(
   elementId: string,
@@ -748,39 +804,42 @@ export async function exportElementToPDFWithPrintStyling(
     return null;
   }
 
-  const { orientation = "p", margin = 8, scale = 2 } = options;
+  // Yield to the browser to ensure UI loading indicators and spinners render smoothly
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  const { orientation = "p", margin = 8 } = options;
+  const targetScale = typeof options.scale === "number" ? options.scale : 1.6;
 
   try {
+    const elWidth = element.scrollWidth || element.clientWidth || 920;
+    const elHeight = element.scrollHeight || element.clientHeight || 1200;
+
     const canvas = await html2canvas(element, {
-      scale: scale,
+      scale: targetScale,
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
       scrollX: 0,
       scrollY: 0,
-      windowWidth: Math.max(element.scrollWidth, 1280),
-      windowHeight: Math.max(element.scrollHeight + 600, 2600),
+      windowWidth: Math.max(elWidth, 960),
+      windowHeight: Math.max(elHeight + 100, 1100),
       onclone: (clonedDoc) => {
         sanitizeOklchForHtml2Canvas(clonedDoc);
         const clonedTarget = clonedDoc.getElementById(elementId);
         if (clonedTarget) {
-          // Unconstrain target element and all parent nodes
           let curr: HTMLElement | null = clonedTarget;
           while (curr && curr !== clonedDoc.body) {
             curr.style.overflow = "visible";
             curr.style.maxHeight = "none";
             curr.style.height = "auto";
             curr.style.maxWidth = "none";
-            curr.style.position = "static";
-            curr.style.transform = "none";
             curr = curr.parentElement;
           }
           clonedDoc.body.style.overflow = "visible";
           clonedDoc.body.style.height = "auto";
-          clonedDoc.body.style.maxHeight = "none";
 
-          clonedTarget.style.width = `${element.scrollWidth || 920}px`;
-          clonedTarget.style.maxWidth = `${element.scrollWidth || 920}px`;
+          clonedTarget.style.width = `${elWidth}px`;
+          clonedTarget.style.maxWidth = `${elWidth}px`;
           clonedTarget.style.margin = "0 auto";
           clonedTarget.style.boxShadow = "none";
           clonedTarget.style.border = "none";
@@ -796,8 +855,10 @@ export async function exportElementToPDFWithPrintStyling(
     const pageUsableHeight = pdfHeight - margin * 2;
     const totalImgHeightMm = (canvas.height * imgWidth) / canvas.width;
 
-    if (totalImgHeightMm <= pageUsableHeight) {
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, totalImgHeightMm);
+    if (totalImgHeightMm <= pageUsableHeight + 1) {
+      // Single Page Fast Path
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      pdf.addImage(imgData, "JPEG", margin, margin, imgWidth, totalImgHeightMm);
     } else {
       // Element-aware page break calculation
       const pxPerMm = canvas.width / imgWidth;
@@ -869,14 +930,14 @@ export async function exportElementToPDFWithPrintStyling(
           );
         }
 
-        const subImgData = subCanvas.toDataURL("image/png");
+        const subImgData = subCanvas.toDataURL("image/jpeg", 0.95);
         const subImgHeightMm = (chunkHeightPx * imgWidth) / canvas.width;
 
         if (pageIndex > 0) {
           pdf.addPage();
         }
 
-        pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
+        pdf.addImage(subImgData, "JPEG", margin, margin, imgWidth, subImgHeightMm);
 
         yStart = yNextCut;
         pageIndex++;
