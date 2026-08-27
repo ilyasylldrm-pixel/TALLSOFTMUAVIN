@@ -1,11 +1,12 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import compression from "compression";
 import { GoogleGenAI } from "@google/genai";
 import { getMysoftRouter } from "./src/services/mysoftRoutes.ts";
 
 // Cloud Run / IIS: cwd and sibling files. Avoid import.meta.url so the CJS
- // bundle (dist/server.cjs) starts cleanly.
+// bundle (dist/server.cjs) starts cleanly.
 function loadServerEnv() {
   const cwd = process.cwd();
   for (const candidate of [
@@ -24,7 +25,26 @@ loadServerEnv();
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-app.use(express.json({ limit: "10mb" }));
+// High Performance Middleware Stack (Gzip/Deflate compression for all JSON and static assets)
+app.use(
+  compression({
+    level: 6,
+    threshold: 1024, // Only compress responses over 1KB
+    filter: (req, res) => {
+      if (req.headers["x-no-compression"]) return false;
+      return compression.filter(req, res);
+    },
+  })
+);
+
+// Optimize global headers for latency & caching
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Vary", "Accept-Encoding");
+  next();
+});
+
+app.use(express.json({ limit: "15mb" }));
 app.use("/api/mysoft", getMysoftRouter());
 
 // Initialize Gemini client lazily
@@ -43,9 +63,58 @@ function getGenAI(): GoogleGenAI | null {
   return genAI;
 }
 
-// Health check endpoint
+// Health check endpoint with Google Cloud & system telemetry
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", appName: "Muavin - Ön Muhasebe Programı" });
+  const memUsage = process.memoryUsage();
+  res.json({
+    status: "ok",
+    appName: "Muavin - Ön Muhasebe Programı",
+    uptimeSeconds: Math.floor(process.uptime()),
+    memory: {
+      rssMB: Math.round(memUsage.rss / 1024 / 1024),
+      heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+      heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+    },
+    tier: "Orta Ölçek / Çok Şubeli (High Performance)",
+  });
+});
+
+// Cloud Server Specs & Recommended Performance Telemetry Endpoint
+app.get("/api/system/specs", (req, res) => {
+  const mem = process.memoryUsage();
+  res.json({
+    profile: "Orta Ölçek / Çok Şubeli",
+    recommendedHardware: {
+      vCPU: "4 vCPU (High Single-Core Frequency)",
+      ram: "8 GB RAM (DDR5 / High-speed ECC)",
+      storage: "100 GB NVMe SSD (Min. 3000+ IOPS)",
+      network: "1 Gbps Port, Google Cloud Europe-west3 (Frankfurt) or Istanbul edge",
+    },
+    googleCloudProfiles: {
+      cloudRun: {
+        cpu: "4 vCPU",
+        memory: "8 GiB",
+        concurrency: 80,
+        minInstances: 1, // Warm start for instant response without cold-start delay
+        maxInstances: 10,
+        timeout: "300s",
+        executionEnvironment: "gen2",
+      },
+      computeEngine: {
+        machineType: "c3-standard-4 (Intel 4th Gen Xeon) or e2-standard-4",
+        os: "Ubuntu 24.04 LTS / Debian 12",
+        processManager: "PM2 Cluster Mode (-i max)",
+      },
+    },
+    activeProcess: {
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
+      rssMB: Math.round(mem.rss / 1024 / 1024),
+      uptimeSeconds: Math.floor(process.uptime()),
+    },
+  });
 });
 
 // Database health check endpoint
@@ -351,15 +420,33 @@ async function startServer() {
     const distPath = (typeof __dirname !== "undefined" && path.basename(__dirname) === "dist")
       ? __dirname
       : path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+
+    // Optimized static assets caching: 1 year for immutable hashed bundles, revalidate for index.html
+    app.use(
+      express.static(distPath, {
+        maxAge: "1y",
+        immutable: true,
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith(".html")) {
+            res.setHeader("Cache-Control", "no-cache, must-revalidate");
+          }
+        },
+      })
+    );
+
     app.get("*", (req, res) => {
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Muavin Muhasebe sunucusu çalışıyor: http://0.0.0.0:${PORT}`);
   });
+
+  // Google Cloud Run / Load Balancer Keep-Alive Timeout Optimization (prevents 502 Bad Gateway)
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
 }
 
 startServer().catch((error) => {
