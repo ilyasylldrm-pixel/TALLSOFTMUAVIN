@@ -791,6 +791,8 @@ export type AppModuleKey =
   | "dashboard"
   | "company"
   | "production"
+  | "auto_service"
+  | "it_service"
   | "e_services"
   | "invoices"
   | "orders_module"
@@ -1232,6 +1234,8 @@ export interface MesTerminalLog {
 export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "dashboard", label: "Ana Sayfa / Özet", description: "Genel finansal durum ve grafikler", category: "Genel" },
   { key: "production", label: "Üretim & MES / MRP", description: "İş emirleri, ürün reçeteleri (BOM), rotalar ve saha kontrolü", category: "Üretim" },
+  { key: "auto_service", label: "Oto Servis & Araç Bakım", description: "Araç kabul, iş emri, arıza teşhisi ve AI asistanları", category: "Ticari" },
+  { key: "it_service", label: "Bilişim & BT Teknik Servis", description: "Cihaz kabul, parça/yazılım onarım ve AI destek rehberleri", category: "Ticari" },
   { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi", category: "Yönetim" },
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
   { key: "invoices", label: "E-Belgeler & Faturalar", description: "Satış/Alış faturaları, e-Arşiv ve irsaliyeler", category: "Ticari" },
@@ -1246,6 +1250,262 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "ai", label: "AI Muavin Asistanı", description: "Yapay zeka akıllı muhasebe asistanı", category: "Genel" },
   { key: "settings", label: "Sistem Ayarları", description: "Uygulama ayarları, yedekleme ve genel tercihler", category: "Yönetim" },
 ];
+
+// ==========================================
+// 🚗 OTOMOTİV & ARAÇ BAKIM SERVİS MODÜLÜ TİPLERİ
+// ==========================================
+
+export type AutoServiceStatus =
+  | "reception" // Servis Kabul / Giriş
+  | "diagnosis" // Teşhis & Ekspertiz
+  | "quote_pending" // Müşteri Onayı Bekliyor
+  | "parts_pending" // Parça Temininde
+  | "in_progress" // Onarımda / Liftte
+  | "testing" // Test Sürüşü & Kalite / Yıkama
+  | "ready" // Teslimata Hazır
+  | "completed" // Teslim Edildi & Faturalandı
+  | "cancelled"; // İptal Edildi
+
+export interface AutoPartItem {
+  id: string;
+  partCode?: string;
+  partName: string;
+  partType: "original" | "oem" | "aftermarket" | "refurbished"; // Orijinal, OEM, Muadil, Revizyonlu
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  vatRate: number; // 0, 10, 20
+  total: number;
+  warrantyMonths?: number;
+}
+
+export interface AutoLaborItem {
+  id: string;
+  operationName: string; // ör: "Ön Fren Balata Değişimi", "Periyodik Bakım İşçiliği", "Rot Ayarı"
+  technicianName?: string;
+  hours: number;
+  hourlyRate: number;
+  vatRate: number;
+  total: number;
+}
+
+export interface AutoAiOutputs {
+  // 1. Müşteri Şikayetini Profesyonel İş Emrine Dönüştürme
+  workOrderSummary?: {
+    rawComplaint: string;
+    mainSummary: string; // Ana Şikayet Özeti
+    possibleSource: string; // Olası Kaynak / Sistem (Motor, Süspansiyon, Fren vb.)
+    safetyRisk: "Düşük" | "Orta" | "Kritik" | string; // Sürüş Güvenliği Riski
+    technicianFirstCheck: string; // Teknisyen İçin İlk Kontrol Önerisi
+    generatedAt?: string;
+  };
+  // 2. Teknik Arıza Raporunu Müşteri Diline Çevirme (Güven Oluşturma)
+  customerExplanation?: {
+    rawTechReport: string;
+    explanation: string;
+    whyChange: string;
+    risksIfNotChanged: string;
+    generatedAt?: string;
+  };
+  // 3. Fiyat Teklifi ve Onay Mesajı (WhatsApp/SMS)
+  quoteMessage?: {
+    messageText: string;
+    channel: "whatsapp" | "sms";
+    generatedAt?: string;
+  };
+  // 4. Periyodik Bakım Sonrası Ekstra İhtiyaç Hatırlatma Asistanı
+  extraReminder?: {
+    extraIssues: string;
+    callScript: string;
+    messageDraft: string;
+    generatedAt?: string;
+  };
+}
+
+export interface AutoServiceRecord {
+  id: string;
+  serviceNo: string; // ör: "SRV-2026-0084"
+  plateNumber: string; // Plaka ör: "34 ABC 789"
+  brand: string; // Marka: Renault, BMW, Ford, Volkswagen vb.
+  model: string; // Model: Megane, 320i, Focus, Passat
+  modelYear: number; // Yıl: 2021
+  fuelType?: "Benzin" | "Dizel" | "Hibrit" | "Elektrik" | "LPG" | string;
+  engineCapacity?: string; // ör: "1.5 dCi", "2.0 TDI"
+  chassisNumber?: string; // Şasi No / VIN (17 hane)
+  currentKm: number; // Araç KM
+  contactId?: string; // İlgili Müşteri / Cari Kart ID
+  contactName: string; // Araç Sahibi / Firma
+  contactPhone: string;
+  contactEmail?: string;
+  serviceType: "periodic_maintenance" | "mechanical_repair" | "body_paint" | "electrical" | "heavy_maintenance" | "tire_brake" | "diagnostic";
+  entryDate: string; // Kabul Tarihi (YYYY-MM-DD)
+  entryTime?: string; // Kabul Saati (HH:mm)
+  estimatedDeliveryDate?: string;
+  actualDeliveryDate?: string;
+  status: AutoServiceStatus;
+  
+  // Şikayet & Teşhis
+  customerComplaint: string; // Müşteri Açıklaması / Beyanı
+  workshopDiagnosis?: string; // Teknisyen / Usta Arıza Teşhis Raporu
+  assignedTechnician?: string; // Atanan Baş Teknisyen
+  fuelLevel?: "E" | "1/4" | "1/2" | "3/4" | "F"; // Depo Yakıt Seviyesi
+  valuableItemsInCar?: string; // Araçta Bırakılan Değerli Eşya
+  
+  // Maliyet & Kalemler
+  parts: AutoPartItem[];
+  labors: AutoLaborItem[];
+  partsTotal: number;
+  laborTotal: number;
+  totalVat: number;
+  grandTotal: number;
+  discountAmount?: number;
+  isApprovedByCustomer: boolean;
+  approvalMethod?: "whatsapp" | "sms" | "phone_call" | "in_person" | "email";
+  approvalDate?: string;
+  
+  // AI Yardımcı Çıktıları
+  aiOutputs?: AutoAiOutputs;
+  
+  invoiceId?: string; // Bağlı Fatura ID (Faturalandırıldıysa)
+  invoiceNumber?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// ==========================================
+// 💻 BİLİŞİM & BİLGİSAYAR / BT TEKNİK SERVİS MODÜLÜ TİPLERİ
+// ==========================================
+
+export type ItDeviceType =
+  | "laptop"
+  | "desktop"
+  | "macbook"
+  | "imac"
+  | "server"
+  | "workstation"
+  | "tablet"
+  | "smartphone"
+  | "printer"
+  | "network_device"
+  | "storage_nas"
+  | "other";
+
+export type ItServiceStatus =
+  | "reception" // Cihaz Kabul
+  | "diagnosing" // Arıza Teşhisi / Ön Değerlendirme
+  | "quote_pending" // Maliyet Onayı Bekliyor
+  | "parts_ordered" // Parça / Donanım Bekleniyor
+  | "repairing" // Onarımda / Kurulumda / Montajda
+  | "testing" // Kararlılık & Donanım Testinde (Stres Testi, MemTest vb.)
+  | "ready" // Hazır / Teslime Hazır
+  | "delivered" // Teslim Edildi & Garantilendi
+  | "cancelled"; // İptal / İade
+
+export interface ItPartItem {
+  id: string;
+  partCode?: string;
+  partName: string; // ör: "Kingston 1TB NVMe M.2 SSD", "Corsair 16GB DDR5 5600MHz", "MacBook Pro Retina Ekran Paneli"
+  category: "ssd_hdd" | "ram" | "motherboard" | "screen" | "battery" | "cooling_fan" | "gpu" | "power_supply" | "software_license" | "other";
+  quantity: number;
+  unitPrice: number;
+  vatRate: number;
+  total: number;
+  warrantyMonths?: number;
+}
+
+export interface ItLaborItem {
+  id: string;
+  operationName: string; // ör: "İşletim Sistemi Kurulumu & Sürücü Yapılandırması", "Termal Macun Yenileme & Fan Bakımı", "BGA Çip Onarımı / Reballing", "Veri Kurtarma"
+  technicianName?: string;
+  hours: number;
+  hourlyRate: number;
+  vatRate: number;
+  total: number;
+}
+
+export interface ItAiOutputs {
+  // 1. BT / Donanım Arıza Ön Değerlendirme Raporu
+  preEvaluation?: {
+    customerNotice: string;
+    faultSummary: string; // Arıza Özeti
+    possibleCauses: string; // Olası Nedenler (Donanımsal / Yazılımsal)
+    dataSecurityRisk: "Düşük" | "Orta" | "Kritik" | string; // Veri Güvenliği Riski
+    estimatedStepsAndDuration: string; // Tahmini Çözüm Adımları ve Süresi
+    generatedAt?: string;
+  };
+  // 2. Adım Adım Sorun Giderme (Troubleshooting) Rehberi
+  troubleshootingGuide?: {
+    deviceInfo: string;
+    issue: string;
+    guideText: string;
+    generatedAt?: string;
+  };
+  // 3. Donanım/Yazılım Onarım Maliyet Onay Metni
+  costApprovalMessage?: {
+    messageText: string;
+    dataBackupNoteIncluded: boolean;
+    generatedAt?: string;
+  };
+  // 4. Teknik Terimleri İçermeyen Müşteri Bilgilendirme E-postası
+  customerEmail?: {
+    rawTechReport: string;
+    subject: string;
+    emailBody: string;
+    twoTips: string[];
+    generatedAt?: string;
+  };
+}
+
+export interface ItServiceRecord {
+  id: string;
+  serviceNo: string; // ör: "IT-2026-0042"
+  deviceType: ItDeviceType;
+  brand: string; // Asus, Dell, Lenovo, Apple, HP, MSI, Acer, Cisco vb.
+  model: string; // ZenBook 14, MacBook Pro M2, ThinkPad T14, PowerEdge R740
+  serialNumber?: string; // Cihaz Seri No / Service Tag
+  devicePasswordPin?: string; // Windows / BIOS / Kullanıcı Şifresi (Varsa)
+  hasChargerIncluded: boolean; // Adaptör / Şarj Cihazı Alındı mı?
+  accessoriesIncluded?: string; // Çanta, Fare, Harici Disk vb.
+  
+  dataBackupStatus: "backup_taken" | "not_needed" | "critical_risk_approved" | "recovery_requested"; // Veri Durumu
+  dataBackupNotes?: string;
+  
+  contactId?: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail?: string;
+  
+  entryDate: string;
+  estimatedCompletionDate?: string;
+  actualCompletionDate?: string;
+  status: ItServiceStatus;
+  
+  // Şikayet & Teşhis
+  customerProblemDescription: string; // Müşteri Bildirimi
+  technicianReport?: string; // Teknisyen Arıza Tespiti & Analizi
+  assignedTechnician?: string;
+  
+  // Maliyet & Kalemler
+  parts: ItPartItem[];
+  labors: ItLaborItem[];
+  partsTotal: number;
+  laborTotal: number;
+  totalVat: number;
+  grandTotal: number;
+  discountAmount?: number;
+  isApprovedByCustomer: boolean;
+  approvalDate?: string;
+  
+  // AI Destek Çıktıları
+  aiOutputs?: ItAiOutputs;
+  
+  invoiceId?: string;
+  invoiceNumber?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
 
 
 

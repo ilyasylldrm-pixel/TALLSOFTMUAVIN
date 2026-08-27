@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder } from "./types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord } from "./types";
 import { generateMonthlyIntegratedData } from "./utils/generateMonthlyDemoData";
 
 const generatedData = generateMonthlyIntegratedData();
@@ -2534,6 +2534,209 @@ export const initialSubcontractOrders: SubcontractOrder[] = [
     notes: "RAL 9005 Mat Siyah Toz Boya işlemi yapıldı.",
     createdAt: "2026-08-26",
   },
+];
+
+export const initialAutoServices: AutoServiceRecord[] = [
+  {
+    id: "auto_srv_01",
+    serviceNo: "SRV-2026-0101",
+    plateNumber: "34 KRM 782",
+    brand: "Volkswagen",
+    model: "Passat 2.0 TDI",
+    modelYear: 2021,
+    fuelType: "Dizel",
+    engineCapacity: "2.0 TDI (150 HP)",
+    chassisNumber: "WVWZZZ3CZME102938",
+    currentKm: 87450,
+    contactId: "1",
+    contactName: "Kerem Yılmaz (Yılmaz Lojistik)",
+    contactPhone: "+90 532 555 12 34",
+    contactEmail: "kerem@yilmazlojistik.com",
+    serviceType: "periodic_maintenance",
+    entryDate: "2026-08-26",
+    entryTime: "09:30",
+    estimatedDeliveryDate: "2026-08-27",
+    status: "in_progress",
+    customerComplaint: "Sabahları ilk çalıştırmada motordan hafif tiz bir ses geliyor ve kasislerden geçerken ön taraftan lokurtu sesi duyuluyor. 90.000 bakımı yaklaştı yağ ve filtreler de değişsin.",
+    workshopDiagnosis: "Ön amortisör takozları ve z-rotlar aşınmış (boşluk var). Alternatör gergi bilyasında hafif rezonans sesi mevcut. Motor yağı ve filtre seti periyodik değişimi gerekiyor. Ön balatalar %20 seviyesinde.",
+    assignedTechnician: "Murat Usta (Mekanik Şefi)",
+    fuelLevel: "3/4",
+    valuableItemsInCar: "Güneş gözlüğü ve araç içi kamera",
+    parts: [
+      { id: "p1", partName: "Castrol Edge 5W-30 Tam Sentetik Yağ (5 Litre)", partType: "original", quantity: 1, unit: "Kutu", unitPrice: 1850, vatRate: 20, total: 1850, warrantyMonths: 12 },
+      { id: "p2", partName: "Mann Filter 4'lü Periyodik Filtre Seti (Yağ, Hava, Polen, Yakıt)", partType: "oem", quantity: 1, unit: "Set", unitPrice: 2400, vatRate: 20, total: 2400, warrantyMonths: 12 },
+      { id: "p3", partName: "Lemförder Ön Z-Rot Takımı (Sağ/Sol)", partType: "original", quantity: 2, unit: "Adet", unitPrice: 650, vatRate: 20, total: 1300, warrantyMonths: 12 },
+      { id: "p4", partName: "Ön Amortisör Üst Takozları", partType: "oem", quantity: 2, unit: "Adet", unitPrice: 850, vatRate: 20, total: 1700, warrantyMonths: 12 }
+    ],
+    labors: [
+      { id: "l1", operationName: "90.000 KM Periyodik Bakım İşçiliği", technicianName: "Murat Usta", hours: 1.5, hourlyRate: 800, vatRate: 20, total: 1200 },
+      { id: "l2", operationName: "Ön Takım Z-Rot ve Takoz Değişimi & Kontrol", technicianName: "Murat Usta", hours: 1.0, hourlyRate: 800, vatRate: 20, total: 800 }
+    ],
+    partsTotal: 7250,
+    laborTotal: 2000,
+    totalVat: 1850,
+    grandTotal: 11100,
+    isApprovedByCustomer: true,
+    approvalMethod: "whatsapp",
+    approvalDate: "2026-08-26 11:15",
+    aiOutputs: {
+      workOrderSummary: {
+        rawComplaint: "Sabahları ilk çalıştırmada motordan hafif tiz bir ses geliyor ve kasislerden geçerken ön taraftan lokurtu sesi duyuluyor. 90.000 bakımı yaklaştı yağ ve filtreler de değişsin.",
+        mainSummary: "Soğuk marşta kayış/bilya bölgesi rezonans sesi; kasis geçişlerinde ön süspansiyon takoz/z-rot vuruntusu; 90.000 km periyodik servis.",
+        possibleSource: "Ön Süspansiyon / Yürür Aksam & V-Kayış / Gergi Sistemi",
+        safetyRisk: "Orta",
+        technicianFirstCheck: "Ön amortisör kule bilyaları, viraj rotları boşluk testi; V-kayışı gergi rulmanı stetoskop kontrolü."
+      },
+      quoteMessage: {
+        channel: "whatsapp",
+        messageText: "Sayın Kerem Bey, 34 KRM 782 plakalı Volkswagen Passat aracınızın 90.000 km periyodik bakımı ve ön takım onarımı için dökümümüz hazırdır:\n\n• Castrol Edge 5W-30 Yağ & 4'lü Mann Filtre Seti: 4.250 TL\n• Orijinal Lemförder Z-Rot & Amortisör Takozları: 3.000 TL\n• Bakım ve Yürür Aksam İşçiliği: 2.000 TL\n• KDV Dahil Toplam: 11.100 TL\n\nTüm parçalarımız faturalı garantili olup 1 yıl servis garantimiz altındadır. Onayınız halinde bugün saat 17:00'de aracınızı teslim edebiliriz."
+      }
+    },
+    notes: "Müşteri teslimatta araç yıkama rica etti.",
+    createdAt: "2026-08-26",
+  },
+  {
+    id: "auto_srv_02",
+    serviceNo: "SRV-2026-0102",
+    plateNumber: "06 BJK 1903",
+    brand: "BMW",
+    model: "320i Sedan M Sport",
+    modelYear: 2022,
+    fuelType: "Benzin",
+    engineCapacity: "1.6 Turbo (170 HP)",
+    chassisNumber: "WBA5R11090FM93821",
+    currentKm: 42300,
+    contactId: "2",
+    contactName: "Bora Aksoy (Aksoy Mimarlık)",
+    contactPhone: "+90 533 111 22 33",
+    contactEmail: "bora@aksoymimarlik.com",
+    serviceType: "tire_brake",
+    entryDate: "2026-08-27",
+    entryTime: "10:15",
+    estimatedDeliveryDate: "2026-08-27",
+    status: "quote_pending",
+    customerComplaint: "Yüksek hızda frene basınca direksiyonda titreme oluyor ve ekranda fren balata uyarısı yandı.",
+    workshopDiagnosis: "Ön fren disklerinde salgı/eğilme oluşmuş (termal deformasyon). Ön ve arka fren balataları aşınma sensörü sınırına inmiş. Ön disklerin ve ön/arka balataların sensörleriyle birlikte değişimi şart.",
+    assignedTechnician: "Caner Usta",
+    fuelLevel: "1/2",
+    valuableItemsInCar: "Ruhsat torpidoda",
+    parts: [
+      { id: "p21", partName: "Brembo Hava Kanallı Ön Fren Diski Takımı", partType: "original", quantity: 1, unit: "Takım", unitPrice: 7800, vatRate: 20, total: 7800, warrantyMonths: 24 },
+      { id: "p22", partName: "Brembo Ön Fren Balatası & İkaz Sensörü", partType: "original", quantity: 1, unit: "Takım", unitPrice: 3200, vatRate: 20, total: 3200, warrantyMonths: 12 },
+      { id: "p23", partName: "Brembo Arka Fren Balatası & İkaz Sensörü", partType: "original", quantity: 1, unit: "Takım", unitPrice: 2400, vatRate: 20, total: 2400, warrantyMonths: 12 },
+      { id: "p24", partName: "Dot 4 Fren Hidrolik Sıvısı (1L)", partType: "original", quantity: 1, unit: "Adet", unitPrice: 450, vatRate: 20, total: 450, warrantyMonths: 12 }
+    ],
+    labors: [
+      { id: "l21", operationName: "Ön Disk & 4 Teker Balata Değişimi, Fren Hidroliği Havası Alma", technicianName: "Caner Usta", hours: 2.0, hourlyRate: 900, vatRate: 20, total: 1800 }
+    ],
+    partsTotal: 13850,
+    laborTotal: 1800,
+    totalVat: 3130,
+    grandTotal: 18780,
+    isApprovedByCustomer: false,
+    aiOutputs: {
+      customerExplanation: {
+        rawTechReport: "Ön fren disklerinde salgı/eğilme oluşmuş (termal deformasyon). Ön ve arka fren balataları aşınma sensörü sınırına inmiş.",
+        explanation: "Aracınızdaki fren diskleri yüksek ısı nedeniyle milimetrik düzeyde eğrilmiş durumda. Bu yüzden frene bastığınızda diskler balataya eşit temas etmeyerek direksiyona titreme olarak yansıyor. Aynı zamanda balatalarınızın kullanım ömrü bitmek üzere olduğu için araç göstergenizde güvenlik uyarısı vermektedir.",
+        whyChange: "Yeni balataların eğri diske takılması halinde yeni balatalar da hemen bozulacak ve fren mesafeniz uzayacaktır.",
+        risksIfNotChanged: "Frenleme anında aracın savrulması, fren mesafesinin uzaması ve ani duruşlarda güvenlik riski doğurur."
+      }
+    },
+    notes: "Müşteriden WhatsApp onayı bekleniyor.",
+    createdAt: "2026-08-27",
+  }
+];
+
+export const initialItServices: ItServiceRecord[] = [
+  {
+    id: "it_srv_01",
+    serviceNo: "IT-2026-0081",
+    deviceType: "laptop",
+    brand: "Apple",
+    model: "MacBook Pro 16\" M1 Pro (16GB / 512GB)",
+    serialNumber: "C02G410KMD6T",
+    devicePasswordPin: "5849",
+    hasChargerIncluded: true,
+    accessoriesIncluded: "Orijinal 140W USB-C Adaptör ve MagSafe Kablosu",
+    dataBackupStatus: "backup_taken",
+    contactId: "3",
+    contactName: "Selin Gökmen (Nova Yazılım A.Ş.)",
+    contactPhone: "+90 542 987 65 43",
+    contactEmail: "selin@novayazilim.com",
+    entryDate: "2026-08-26",
+    estimatedCompletionDate: "2026-08-27",
+    status: "testing",
+    customerProblemDescription: "Cihaz şarjdayken aşırı ısınıyor, fanlar sürekli son hızda dönüyor ve ağır programlarda ekran aniden kararıp cihaz kendini yeniden başlatıyor (Kernel Panic).",
+    technicianReport: "Cihazın hava tahliye kanalları yoğun toz tıkalı. Soğutucu blok üzerindeki termal macun tamamen kurumuş ve taşlaşmış. Yapılan Apple Donanım Testinde donanımsal RAM/SSD hatası görülmedi; sorun aşırı termal ısınma (Thermal Throttling / Crash).",
+    assignedTechnician: "Emre Tekin (Apple Sertifikalı Teknisyen)",
+    parts: [
+      { id: "it_p1", partName: "Thermal Grizzly Kryonaut Yüksek Performanslı Termal Macun & Termal Pad Değişimi", category: "cooling_fan", quantity: 1, unitPrice: 950, vatRate: 20, total: 950, warrantyMonths: 6 },
+      { id: "it_p2", partName: "MacBook Pro Çift Fan Rulman Yağlama & Temizlik Kiti", category: "cooling_fan", quantity: 1, unitPrice: 450, vatRate: 20, total: 450, warrantyMonths: 6 }
+    ],
+    labors: [
+      { id: "it_l1", operationName: "Anakart Ultrasonik Temizlik, Soğutma Bloğu Revizyonu ve Donanım Stres Testi", technicianName: "Emre Tekin", hours: 2.0, hourlyRate: 750, vatRate: 20, total: 1500 }
+    ],
+    partsTotal: 1400,
+    laborTotal: 1500,
+    totalVat: 580,
+    grandTotal: 3480,
+    isApprovedByCustomer: true,
+    approvalDate: "2026-08-26 14:00",
+    aiOutputs: {
+      preEvaluation: {
+        customerNotice: "Cihaz şarjdayken aşırı ısınıyor, fanlar sürekli son hızda dönüyor ve ağır programlarda ekran aniden kararıp cihaz kendini yeniden başlatıyor.",
+        faultSummary: "İşlemci ve GPU üzerinde aşırı sıcaklık yükselmesi sebebiyle donanım koruma mekanizmasının tetiklenmesi (Thermal Panic / Kernel Crash).",
+        possibleCauses: "Fan ve hava kanallarının tozla tıkanması, kurumuş termal iletken macun, nadiren güç entegresi / PMIC aşırı akım ısınması.",
+        dataSecurityRisk: "Düşük (Veriler NVMe üzerinde güvendedir, ancak aniden kapanmalar dosya sistemi bozulmasına yol açabilir).",
+        estimatedStepsAndDuration: "Fan ve soğutma bloğu sökümü, termal macun yenileme, Cinebench & FurMark stres testleri (Ortalama 3-4 saat)."
+      }
+    },
+    notes: "Stres testleri 45 dakikadır devam ediyor, sıcaklık stabil 68°C.",
+    createdAt: "2026-08-26",
+  },
+  {
+    id: "it_srv_02",
+    serviceNo: "IT-2026-0082",
+    deviceType: "desktop",
+    brand: "Dell",
+    model: "OptiPlex 7090 Tower",
+    serialNumber: "SERVTAG-892FKL3",
+    devicePasswordPin: "dell2026",
+    hasChargerIncluded: false,
+    accessoriesIncluded: "Yalnızca Kasa (Güç kablosu yok)",
+    dataBackupStatus: "critical_risk_approved",
+    contactId: "4",
+    contactName: "Turgut Alp (Alp Hukuk Bürosu)",
+    contactPhone: "+90 530 444 88 99",
+    contactEmail: "turgut@alphukuk.com",
+    entryDate: "2026-08-27",
+    estimatedCompletionDate: "2026-08-28",
+    status: "quote_pending",
+    customerProblemDescription: "Bilgisayar Windows açılış logosunda donuyor veya Mavi Ekran (UNMOUNTABLE_BOOT_VOLUME) veriyor. İçindeki dava dosyaları ve UYAP evrakları çok acil lazım.",
+    technicianReport: "Mevcut 1TB Mekanik HDD üzerinde yoğun Bad Sector (bozuk sektör) oluşmuş. Disk okuma hızı 1 MB/s altına düşüyor. Ham disk imajı (RAW Clone) alınarak veriler %98 başarıyla kurtarıldı. Sisteme yeni nesil Kingston NVMe SSD takılması ve Windows 11 Pro temiz kurulumu önerildi.",
+    assignedTechnician: "Oğuz Yılmaz (Veri Kurtarma Uzmanı)",
+    parts: [
+      { id: "it_p21", partName: "Kingston KC3000 1TB PCIe 4.0 NVMe M.2 SSD (7000MB/s Okuma)", category: "ssd_hdd", quantity: 1, unitPrice: 3600, vatRate: 20, total: 3600, warrantyMonths: 60 },
+      { id: "it_p22", partName: "Orijinal Microsoft Windows 11 Pro Dijital Lisans", category: "software_license", quantity: 1, unitPrice: 1200, vatRate: 20, total: 1200, warrantyMonths: 24 }
+    ],
+    labors: [
+      { id: "it_l21", operationName: "Profesyonel Bozuk Sektörlü Disk İmaj Alma & Veri Kurtarma Operasyonu", technicianName: "Oğuz Yılmaz", hours: 3.0, hourlyRate: 900, vatRate: 20, total: 2700 },
+      { id: "it_l22", operationName: "SSD Montajı, Windows 11 Pro Kurulumu, Sürücü Yapılandırması ve Veri Aktarımı", technicianName: "Oğuz Yılmaz", hours: 1.5, hourlyRate: 600, vatRate: 20, total: 900 }
+    ],
+    partsTotal: 4800,
+    laborTotal: 3600,
+    totalVat: 1680,
+    grandTotal: 10080,
+    isApprovedByCustomer: false,
+    aiOutputs: {
+      costApprovalMessage: {
+        messageText: "Sayın Turgut Bey (Alp Hukuk Bürosu), Dell OptiPlex bilgisayarınızdaki arıza tespiti ve kurtarma çalışması tamamlanmıştır:\n\n• Bozuk sektörlü eski diskinizden dava ve arşiv dosyalarınız %98 oranında kurtarılmış ve yedeklenmiştir.\n• Sisteme 5 yıl garantili yüksek hızlı 1TB Kingston NVMe SSD montajı ve orijinal Windows 11 Pro kurulumu yapılacaktır.\n• Parça ve Veri Kurtarma/Kurulum Toplam Maliyeti KDV Dahil 10.080 TL'dir.\n\nOnayınız akabinde dosyalarınız yeni diske aktarılıp bilgisayarınız yarın kullanıma hazır teslim edilecektir.",
+        dataBackupNoteIncluded: true
+      }
+    },
+    notes: "UYAP ve e-İmza sertifikaları da kurulacak.",
+    createdAt: "2026-08-27",
+  }
 ];
 
 

@@ -22,6 +22,7 @@ import {
   Gauge,
   Plus,
   CalendarRange,
+  BarChart3,
 } from "lucide-react";
 
 interface ProductionOverviewProps {
@@ -35,6 +36,7 @@ interface ProductionOverviewProps {
   onOpenWorkstationTab: () => void;
   onOpenSubcontractTab: () => void;
   onOpenCalendarTab?: () => void;
+  onOpenCapacityD3Tab?: () => void;
   onOpenMesTerminal: (workOrderId?: string) => void;
   onOpenMrpModal: () => void;
 }
@@ -50,6 +52,7 @@ export const ProductionOverview: React.FC<ProductionOverviewProps> = ({
   onOpenWorkstationTab,
   onOpenSubcontractTab,
   onOpenCalendarTab,
+  onOpenCapacityD3Tab,
   onOpenMesTerminal,
   onOpenMrpModal,
 }) => {
@@ -186,35 +189,73 @@ export const ProductionOverview: React.FC<ProductionOverviewProps> = ({
         </div>
       </div>
 
-      {/* Production Planning & Gantt Calendar Banner */}
-      <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-purple-800/60">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-[#8252F6] text-white flex items-center justify-center shadow-lg shadow-purple-600/30 shrink-0">
-            <CalendarRange className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] bg-purple-500/30 text-purple-200 px-2 py-0.5 rounded font-mono font-bold uppercase tracking-wider">
-                CANLI ÜRETİM ÇİZELGESİ
-              </span>
-              <span className="text-xs text-purple-300 font-medium">Gantt & Makine Yük Planı</span>
+      {/* Production Planning & D3 Capacity Analytics Quick Action Banners */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Production Planning & Gantt Calendar Banner */}
+        <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg flex flex-col justify-between gap-4 border border-purple-800/60">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-[#8252F6] text-white flex items-center justify-center shadow-lg shadow-purple-600/30 shrink-0">
+              <CalendarRange className="w-5 h-5 text-white" />
             </div>
-            <h3 className="text-sm sm:text-base font-extrabold text-white mt-0.5">
-              İş Emirleri & Tezgâh Kapasite Takvimi
-            </h3>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Tüm aktif iş emirlerini tezgah kullanım süreleri, OEE verimlilikleri ve darboğaz uyarılarıyla zaman çizelgesinde inceleyin.
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-purple-500/30 text-purple-200 px-2 py-0.5 rounded font-mono font-bold uppercase tracking-wider">
+                  CANLI ÇİZELGE
+                </span>
+                <span className="text-xs text-purple-300 font-medium">Gantt & Makine Yük Planı</span>
+              </div>
+              <h3 className="text-sm sm:text-base font-extrabold text-white mt-1">
+                İş Emirleri & Tezgâh Takvimi
+              </h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Aktif iş emirlerini tezgah kullanım süreleri ve darboğaz uyarılarıyla zaman çizelgesinde inceleyin.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end">
+            <button
+              onClick={onOpenCalendarTab || onOpenWorkOrderTab}
+              className="bg-[#8252F6] hover:bg-[#7140e8] text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-purple-600/30 cursor-pointer transition-all active:scale-95 w-full sm:w-auto"
+            >
+              <span>Planlama Takvimini Aç</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        <button
-          onClick={onOpenCalendarTab || onOpenWorkOrderTab}
-          className="bg-[#8252F6] hover:bg-[#7140e8] text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-purple-600/30 cursor-pointer transition-all shrink-0 active:scale-95"
-        >
-          <span>Planlama Takvimini Aç</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
+        {/* D3 Capacity & OEE Visual Analytics Banner */}
+        <div className="bg-gradient-to-r from-slate-900 via-purple-950 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 shadow-lg flex flex-col justify-between gap-4 border border-purple-800/60">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-fuchsia-600 to-purple-600 text-white flex items-center justify-center shadow-lg shadow-fuchsia-600/30 shrink-0">
+              <BarChart3 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-fuchsia-500/30 text-fuchsia-200 px-2 py-0.5 rounded font-mono font-bold uppercase tracking-wider">
+                  D3.JS ANALİTİK
+                </span>
+                <span className="text-xs text-fuchsia-300 font-medium">Günlük / Haftalık Verimlilik</span>
+              </div>
+              <h3 className="text-sm sm:text-base font-extrabold text-white mt-1">
+                Makine Kapasite & OEE Grafikleri
+              </h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Tezgâh doluluk oranları, OEE verimlilik çemberleri, ısı haritası ve yük trendlerini D3 görselleştirmesiyle analiz edin.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end">
+            <button
+              onClick={onOpenCapacityD3Tab || onOpenWorkstationTab}
+              className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-fuchsia-600/30 cursor-pointer transition-all active:scale-95 w-full sm:w-auto"
+            >
+              <span>D3 Grafikleri & OEE Analizini Aç</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Main Grid: Active Work Orders Live Stream & Workstation Real-time Status */}

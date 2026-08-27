@@ -205,6 +205,236 @@ async function generateContentWithFallback(
   throw lastError;
 }
 
+// AI Auto Service endpoint: Otomotiv & Araç Bakım Servis AI Asistanları
+app.post("/api/gemini/auto-service-ai", async (req, res) => {
+  try {
+    const aiClient = getGenAI();
+    if (!aiClient) {
+      return res.status(500).json({
+        error: "GEMINI_API_KEY tanımlanmamış. AI özellikleri için API anahtarı gereklidir.",
+      });
+    }
+
+    const { action, vehicleInfo, customerComplaint, techReport, partsLaborsText, extraIssues, totalAmount, channel } = req.body;
+
+    let systemInstruction = "Sen otomotiv ve araç bakım servisleri alanında uzmanlaşmış kıdemli bir yapay zeka servis danışmanı ve atölye şefisin.";
+    let promptContent = "";
+
+    if (action === "complaint_to_work_order") {
+      systemInstruction = `Sen kıdemli bir oto servis danışmanısın. Müşterinin araçla ilgili ilettiği karmaşık veya teknik olmayan şikayeti alıp, atölye ekibinin net olarak anlayabileceği profesyonel bir iş emri notuna dönüştürürsün.
+Yanıtını kesinlikle aşağıdaki JSON şemasına uygun olarak üret:
+{
+  "mainSummary": "Net ve teknik ana şikayet tanımı",
+  "possibleSource": "Motor, Süspansiyon, Fren, Elektrik/Elektronik, Şanzıman veya ilgili sistem",
+  "safetyRisk": "Düşük" veya "Orta" veya "Kritik",
+  "technicianFirstCheck": "Teknisyen için ilk kontrol ve test önerisi",
+  "formattedText": "Ana Şikayet Özeti: ...\\nOlası Kaynak / Sistem: ...\\nSürüş Güvenliği Riski: ...\\nTeknisyen İçin İlk Kontrol Önerisi: ..."
+}`;
+      promptContent = `Araç Bilgisi: ${vehicleInfo || "Belirtilmemiş"}\nMüşteri Açıklaması / Şikayeti: ${customerComplaint || ""}`;
+    } else if (action === "tech_report_to_customer") {
+      systemInstruction = `Ustaların yazdığı karmaşık teknik arıza tespit raporunu, teknik terimlerden arındırarak araç sahibinin kolayca anlayabileceği, şeffaf, kibar ve güven veren bir dille yeniden yazarsın. Parçanın neden değişmesi gerektiğini ve değiştirilmezse ileride doğurabileceği güvenlik veya ek masraf risklerini açıklarsın.
+Yanıtını aşağıdaki JSON formatında ver:
+{
+  "explanation": "Müşterinin kolayca anlayacağı sade ve güven veren açıklama metni",
+  "whyChange": "Parçanın veya işlemin neden zorunlu olduğuna dair sade gerekçe",
+  "risksIfNotChanged": "İhmal edilirse oluşabilecek güvenlik ve yüksek maliyet riskleri",
+  "formattedText": "..."
+}`;
+      promptContent = `Araç Bilgisi: ${vehicleInfo || "Araç"}\nTeknik Rapor / Arıza Kodları: ${techReport || ""}`;
+    } else if (action === "quote_approval_message") {
+      systemInstruction = `Parça değişimi ve işçilik maliyetlerini içeren otomotiv servis teklifini, müşteriye WhatsApp veya SMS üzerinden gönderilmek üzere hazırlarsın. Dil kibar, şeffaf, güven veren ve onay almaya yönelik ikna edici olmalı. Parçaların orijinal/muadil durumunu ve işçilik garantisini de metne dahil edersin.
+Yanıtını aşağıdaki JSON formatında ver:
+{
+  "messageText": "WhatsApp / SMS için hazır mesaj metni",
+  "channel": "${channel || "whatsapp"}"
+}`;
+      promptContent = `Araç Bilgisi: ${vehicleInfo || "Araç"}\nYapılacak İşlemler ve Fiyatlar: ${partsLaborsText || ""}\nToplam Tutar: ${totalAmount || ""}`;
+    } else if (action === "extra_maintenance_reminder") {
+      systemInstruction = `Sen başarılı bir otomotiv satış ve servis danışmanısın. Periyodik bakıma gelen aracın kontrollerinde tespit edilen ek ihtiyaçları müşteriyi aradığımızda 'sadece ürün satmaya çalışıyorlar' algısı yaratmadan, tamamen sürüş güvenliği odaklı ve nazik bir şekilde açıklayan profesyonel telefon konuşma metni ve mesaj taslağı hazırlarsın.
+Yanıtını aşağıdaki JSON formatında ver:
+{
+  "callScript": "Müşteri temsilcisi veya servis danışmanı için telefon konuşma akışı",
+  "messageDraft": "Görüşme sonrası veya doğrudan gönderilebilecek nazik bilgilendirme mesajı",
+  "keyPoints": ["Sürüş güvenliği vurgusu", "İlerideki masrafı önleme", "Şeffaf bilgilendirme"]
+}`;
+      promptContent = `Araç Modeli / Bilgisi: ${vehicleInfo || "Araç"}\nTespit Edilen Ekstra İhtiyaçlar: ${extraIssues || ""}`;
+    }
+
+    try {
+      const { response } = await generateContentWithFallback(aiClient, {
+        preferredModel: "gemini-3.7-flash",
+        contents: [{ text: promptContent }],
+        systemInstruction,
+        temperature: 0.3,
+        responseMimeType: "application/json",
+      });
+
+      const responseText = response.text || "{}";
+      let parsed = {};
+      try {
+        parsed = JSON.parse(responseText);
+      } catch (pErr) {
+        parsed = { rawText: responseText };
+      }
+
+      res.json({ success: true, data: parsed });
+    } catch (aiErr: any) {
+      console.warn("Auto Service AI fallback devrede:", aiErr?.message);
+      // Fallback heuristics
+      let fallbackData: any = {};
+      if (action === "complaint_to_work_order") {
+        fallbackData = {
+          mainSummary: `Araçta bildirilen şikayet: ${customerComplaint || "Genel ses ve performans kontrolü"}`,
+          possibleSource: "Mekanik / Yürür Aksam veya Motor",
+          safetyRisk: "Orta",
+          technicianFirstCheck: "Lift kontrolü, tekerlek/aks ve alt takım gözle muayenesi, arıza tespit cihazı OBD taraması.",
+          formattedText: `Ana Şikayet Özeti: ${customerComplaint}\nOlası Kaynak / Sistem: Mekanik / Yürür Aksam\nSürüş Güvenliği Riski: Orta\nTeknisyen İçin İlk Kontrol Önerisi: Lift muayenesi ve OBD hata kodu taraması.`
+        };
+      } else if (action === "tech_report_to_customer") {
+        fallbackData = {
+          explanation: `Yapılan detaylı kontrollerde araçtaki parçaların aşındığı ve performansını kaybettiği tespit edilmiştir. Güvenliğiniz için yenilenmesi önerilmektedir.`,
+          whyChange: "Mevcut parça ömrünü tamamlamış olup sürüş güvenliğini ve yakıt verimliliğini olumsuz etkilemektedir.",
+          risksIfNotChanged: "İşlem geciktirilirse diğer mekanik aksamlara zarar vererek daha yüksek onarım masraflarına yol açabilir.",
+          formattedText: `Sayın Müşterimiz, aracınızda yapılan incelemede ${techReport || "belirtilen parçaların"} değişimi gerekmektedir. Güvenli sürüşünüz için onayınızı rica ederiz.`
+        };
+      } else if (action === "quote_approval_message") {
+        fallbackData = {
+          messageText: `Sayın Müşterimiz, ${vehicleInfo || "aracınız"} için hazırlanan servis bakım ve onarım dökümü aşağıdadır:\n\n${partsLaborsText || "Bakım ve onarım işlemleri"}\n\nToplam Tutar: ${totalAmount || "Detaylı teklifte"}\n\nİşlemlerimizde orijinal/OEM garantili parçalar kullanılmakta olup işçiliğimiz garantilidir. Onayınız halinde işlemler başlatılacaktır. Teşekkür ederiz.`,
+          channel: channel || "whatsapp"
+        };
+      } else {
+        fallbackData = {
+          callScript: `Merhaba [Müşteri Adı], aracınızın periyodik bakım kontrolleri sırasında güvenliğinizi doğrudan etkileyen ${extraIssues || "bazı parçaların"} aşındığını gözlemledik. Sizi bilgilendirmek ve onayınızı almak istedik.`,
+          messageDraft: `Sayın Müşterimiz, aracınızın bakım kontrollerinde ${extraIssues || "önemli bir aşınma"} tespit edilmiştir. Güvenliğiniz için işlem detaylarını görüşmek isteriz.`
+        };
+      }
+      res.json({ success: true, data: fallbackData });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Oto servis AI servisinde hata oluştu." });
+  }
+});
+
+// AI IT / Computer Service endpoint: Bilişim & Donanım Teknik Servis AI Asistanları
+app.post("/api/gemini/it-service-ai", async (req, res) => {
+  try {
+    const aiClient = getGenAI();
+    if (!aiClient) {
+      return res.status(500).json({
+        error: "GEMINI_API_KEY tanımlanmamış. AI özellikleri için API anahtarı gereklidir.",
+      });
+    }
+
+    const { action, deviceInfo, customerNotice, techReport, issueDescription, operationsAndCost, totalCost } = req.body;
+
+    let systemInstruction = "Sen kurumsal ve bireysel BT (IT) destek, donanım mimarisi ve teknik servis alanında uzman kıdemli bir IT yöneticisi ve baş teknisyensin.";
+    let promptContent = "";
+
+    if (action === "pre_evaluation_report") {
+      systemInstruction = `Sen uzman bir BT (IT) destek ve teknik servis yöneticisisin. Müşterinin bildirdiği bilgisayar/donanım arızasını analiz et. Teknik ekibe ve müşteriye sunulabilecek bir ön değerlendirme raporu hazırla.
+Yanıtını aşağıdaki JSON şemasına uygun ver:
+{
+  "faultSummary": "Sorunun teknik ve net tanımı",
+  "possibleCauses": "Donanımsal veya yazılımsal ihtimaller (Disk, RAM, Anakart, İşletim Sistemi vb.)",
+  "dataSecurityRisk": "Düşük" veya "Orta" veya "Kritik" (Verilerin tehlikede olup olmadığı / Disk arızası riski vb.)",
+  "estimatedStepsAndDuration": "Tahmini çözüm adımları ve tahmini onarım süresi",
+  "formattedText": "Arıza Özeti: ...\\nOlası Nedenler: ...\\nVeri Güvenliği Riski: ...\\nTahmini Çözüm Adımları ve Süresi: ..."
+}`;
+      promptContent = `Cihaz Bilgisi: ${deviceInfo || "Bilgisayar / Donanım"}\nMüşteri Bildirimi: ${customerNotice || ""}`;
+    } else if (action === "troubleshooting_guide") {
+      systemInstruction = `Elimizdeki cihaz ve arıza için servisteki teknisyenin izlemesi gereken adım adım, mantıksal sıralı bir sorun giderme (troubleshooting) rehberi hazırla. En basit/hızlı çözümlerden (yeniden başlatma, sürücü kontrolü vb.) donanımsal müdahaleye doğru ilerle.
+Yanıtını aşağıdaki JSON şemasına uygun ver:
+{
+  "guideSteps": [
+    { "stepNumber": 1, "title": "...", "description": "...", "level": "Yazılımsal / Basit Kontrol" },
+    { "stepNumber": 2, "title": "...", "description": "...", "level": "Sürücü / BIOS / Test" },
+    { "stepNumber": 3, "title": "...", "description": "...", "level": "Donanımsal Ölçüm & Müdahale" }
+  ],
+  "formattedText": "1. Adım: ...\\n2. Adım: ...\\n3. Adım: ..."
+}`;
+      promptContent = `Cihaz / Marka / Model: ${deviceInfo || "Cihaz"}\nYaşanan Sorun: ${issueDescription || ""}`;
+    } else if (action === "repair_cost_approval") {
+      systemInstruction = `Bir bilgisayar teknik servisi için, müşterinin onayını almak üzere hazırlanmış bir fiyat teklifi mesajı yaz.
+Metin şeffaf, veri yedekleme durumunu belirten ve onay alındıktan sonra işleme başlanacağını vurgulayan bir yapıda olsun.
+Yanıtını aşağıdaki JSON şemasına uygun ver:
+{
+  "messageText": "WhatsApp / SMS / E-posta için onay teklif metni",
+  "dataBackupNote": "Verilerinizin güvenliği ve yedekleme durumu hakkında bilgi notu"
+}`;
+      promptContent = `Cihaz: ${deviceInfo || "Bilgisayar"}\nYapılacak İşlem / Parça Değişimi: ${operationsAndCost || ""}\nToplam Tutar: ${totalCost || ""}`;
+    } else if (action === "customer_info_email") {
+      systemInstruction = `Teknik servis onarım raporunu, bilişimden anlamayan bir müşterinin kolayca anlayabileceği, profesyonel, kibar ve net bir e-posta diline çevir. Bilgisayarın neden arızalandığını, hangi işlemlerin yapıldığını ve gelecekte benzer bir sorun yaşamamak için dikkat etmesi gereken 2 ipucunu ekle.
+Yanıtını aşağıdaki JSON şemasına uygun ver:
+{
+  "subject": "E-posta Konu Başlığı",
+  "emailBody": "E-posta gövde metni (Hitap, yapılan işlemler, cihazın durumu, kapanış)",
+  "twoTips": ["Gelecekte benzer sorunu önleyecek 1. ipucu", "2. ipucu"],
+  "formattedText": "..."
+}`;
+      promptContent = `Cihaz: ${deviceInfo || "Bilgisayar"}\nTeknik Rapor: ${techReport || ""}`;
+    }
+
+    try {
+      const { response } = await generateContentWithFallback(aiClient, {
+        preferredModel: "gemini-3.7-flash",
+        contents: [{ text: promptContent }],
+        systemInstruction,
+        temperature: 0.3,
+        responseMimeType: "application/json",
+      });
+
+      const responseText = response.text || "{}";
+      let parsed = {};
+      try {
+        parsed = JSON.parse(responseText);
+      } catch (pErr) {
+        parsed = { rawText: responseText };
+      }
+
+      res.json({ success: true, data: parsed });
+    } catch (aiErr: any) {
+      console.warn("IT Service AI fallback devrede:", aiErr?.message);
+      let fallbackData: any = {};
+      if (action === "pre_evaluation_report") {
+        fallbackData = {
+          faultSummary: `Bildirilen arıza: ${customerNotice || "Donanım / Yazılım arızası"}`,
+          possibleCauses: "İşletim sistemi bozulması, sürücü çakışması, aşırı ısınma veya depolama birimi yıpranması.",
+          dataSecurityRisk: "Orta",
+          estimatedStepsAndDuration: "Donanım teşhis testleri (1-2 saat), onarım ve kararlılık doğrulaması (24 saat).",
+          formattedText: `Arıza Özeti: ${customerNotice}\nOlası Nedenler: İşletim sistemi veya donanım yıpranması\nVeri Güvenliği Riski: Orta\nTahmini Süre: 1-2 iş günü`
+        };
+      } else if (action === "troubleshooting_guide") {
+        fallbackData = {
+          guideSteps: [
+            { stepNumber: 1, title: "Güvenli Mod & Yeniden Başlatma", description: "Cihazı harici çevre birimlerinden arındırarak başlatın.", level: "Temel Kontrol" },
+            { stepNumber: 2, title: "Donanım Tanılama & Sıcaklık", description: "BIOS veya donanım test aracını (MemTest/CrystalDiskInfo) çalıştırın.", level: "Tanılama" },
+            { stepNumber: 3, title: "Parça Değişim & Onarım", description: "Şüpheli donanım bileşenini test donanımıyla izole edin.", level: "Donanım" }
+          ],
+          formattedText: "1. Temel Kontrol ve Güç Döngüsü\n2. Sürücü ve Donanım Teşhis Testleri\n3. Donanım Değişimi ve Termal Bakım"
+        };
+      } else if (action === "repair_cost_approval") {
+        fallbackData = {
+          messageText: `Sayın Müşterimiz, ${deviceInfo || "cihazınız"} için teknik inceleme tamamlanmıştır.\n\nYapılacak İşlemler: ${operationsAndCost || "Gerekli onarım ve donanım değişimi"}\nToplam Maliyet: ${totalCost || "Teklifte belirtilen tutar"}\n\nVerilerinizin güvenliği önceliğimizdir. İşleme başlamak için onayınızı rica ederiz.`,
+          dataBackupNote: "Verileriniz yedeklenmiş veya koruma altına alınmıştır."
+        };
+      } else {
+        fallbackData = {
+          subject: `${deviceInfo || "Cihazınızın"} Servis Bakım ve Onarımı Tamamlandı`,
+          emailBody: `Sayın Müşterimiz,\n\nCihazınızda yapılan detaylı kontroller neticesinde gerekli bakım ve onarımlar başarıyla gerçekleştirilmiştir. Cihazınız tüm kararlılık testlerinden başarıyla geçmiştir.\n\nCihazınızı servisimizden teslim alabilirsiniz.`,
+          twoTips: [
+            "Cihazınızın havalandırma deliklerini kapatmayacak düz yüzeylerde kullanmaya özen gösteriniz.",
+            "Önemli verilerinizi düzenli olarak harici bir diske veya buluta yedekleyiniz."
+          ],
+          formattedText: "Cihazınızın bakımı tamamlandı."
+        };
+      }
+      res.json({ success: true, data: fallbackData });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "IT servis AI servisinde hata oluştu." });
+  }
+});
+
 // AI Assistant endpoint: Finansal Tavsiye & Doğal Dil Komut İşleme
 app.post("/api/gemini/assistant", async (req, res) => {
   try {

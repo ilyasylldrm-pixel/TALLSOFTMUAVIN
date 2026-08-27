@@ -23,6 +23,8 @@ const HRManagement = lazy(() => import("./components/HRManagement").then((m) => 
 const FileManager = lazy(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
 const ProductionModule = lazy(() => import("./components/Production/ProductionModule").then((m) => ({ default: m.ProductionModule })));
+const AutoServiceModule = lazy(() => import("./components/AutoService/AutoServiceModule").then((m) => ({ default: m.AutoServiceModule })));
+const ITServiceModule = lazy(() => import("./components/ITService/ITServiceModule").then((m) => ({ default: m.ITServiceModule })));
 
 import {
   getStoredData,
@@ -63,6 +65,8 @@ import {
   WorkOrder,
   SubcontractOrder,
   MrpRecommendation,
+  AutoServiceRecord,
+  ItServiceRecord,
 } from "./types";
 
 import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X } from "lucide-react";
@@ -165,6 +169,17 @@ export default function App() {
   useEffect(() => { if (data.workstations) saveStoredData("WORKSTATIONS", data.workstations); }, [data.workstations]);
   useEffect(() => { if (data.workOrders) saveStoredData("WORK_ORDERS", data.workOrders); }, [data.workOrders]);
   useEffect(() => { if (data.subcontractOrders) saveStoredData("SUBCONTRACT_ORDERS", data.subcontractOrders); }, [data.subcontractOrders]);
+  useEffect(() => { if (data.autoServices) saveStoredData("AUTO_SERVICES", data.autoServices); }, [data.autoServices]);
+  useEffect(() => { if (data.itServices) saveStoredData("IT_SERVICES", data.itServices); }, [data.itServices]);
+
+  // Auto & IT Service Handlers
+  const handleUpdateAutoServices = (services: AutoServiceRecord[]) => {
+    setData((prev) => ({ ...prev, autoServices: services }));
+  };
+
+  const handleUpdateItServices = (services: ItServiceRecord[]) => {
+    setData((prev) => ({ ...prev, itServices: services }));
+  };
 
   // Production Module Handlers
   const handleSaveBom = (bom: BillOfMaterials) => {
@@ -1740,6 +1755,12 @@ export default function App() {
         return "Stoklar & Depolar";
       case "products_costs":
         return "Maliyetler & Kar Analizi";
+      case "production_subcontract":
+        return "Fason Üretim Takibi";
+      case "auto_service":
+        return "Oto Servis & Araç Bakım";
+      case "it_service":
+        return "Bilişim & BT Teknik Servis";
       case "hr":
         return "İnsan Kaynakları";
       case "reports":
@@ -2043,6 +2064,22 @@ export default function App() {
                 data.settings.tenantIdentifierNumber || readStoredMysoftTenantVkn()
               }
               globalSearchTerm={searchTerm}
+            />
+          )}
+
+          {currentTab === "auto_service" && (
+            <AutoServiceModule
+              autoServices={data.autoServices || []}
+              onUpdateAutoServices={handleUpdateAutoServices}
+              contacts={data.contacts}
+            />
+          )}
+
+          {currentTab === "it_service" && (
+            <ITServiceModule
+              itServices={data.itServices || []}
+              onUpdateItServices={handleUpdateItServices}
+              contacts={data.contacts}
             />
           )}
 

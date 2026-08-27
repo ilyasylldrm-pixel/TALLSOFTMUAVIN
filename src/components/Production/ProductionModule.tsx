@@ -21,6 +21,7 @@ import { SubcontractManagement } from "./SubcontractManagement";
 import { MrpEngineModal } from "./MrpEngineModal";
 import { MesOperatorTerminal } from "./MesOperatorTerminal";
 import { ProductionGanttCalendar } from "./ProductionGanttCalendar";
+import { MachineCapacityD3Analytics } from "./MachineCapacityD3Analytics";
 import {
   LayoutDashboard,
   Boxes,
@@ -32,10 +33,12 @@ import {
   Play,
   Factory,
   CalendarRange,
+  BarChart3,
 } from "lucide-react";
 
 export type ProductionSubTab =
   | "overview"
+  | "capacity_d3"
   | "calendar"
   | "boms"
   | "routings"
@@ -105,6 +108,11 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({
 
   const subTabs = [
     { id: "overview" as const, label: "Üretim Özeti & KPI", icon: LayoutDashboard },
+    {
+      id: "capacity_d3" as const,
+      label: "Kapasite & OEE Grafikleri (D3)",
+      icon: BarChart3,
+    },
     {
       id: "calendar" as const,
       label: "Planlama & Gantt Takvimi",
@@ -252,8 +260,21 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({
           onOpenWorkstationTab={() => setActiveSubTab("workstations")}
           onOpenSubcontractTab={() => setActiveSubTab("subcontract")}
           onOpenCalendarTab={() => setActiveSubTab("calendar")}
+          onOpenCapacityD3Tab={() => setActiveSubTab("capacity_d3")}
           onOpenMesTerminal={handleOpenMesTerminal}
           onOpenMrpModal={() => setIsMrpOpen(true)}
+        />
+      )}
+
+      {activeSubTab === "capacity_d3" && (
+        <MachineCapacityD3Analytics
+          workOrders={workOrders}
+          workstations={workstations}
+          boms={boms}
+          routings={routings}
+          onOpenWorkOrderTab={() => setActiveSubTab("work_orders")}
+          onOpenWorkstationTab={() => setActiveSubTab("workstations")}
+          onOpenMesTerminal={handleOpenMesTerminal}
         />
       )}
 

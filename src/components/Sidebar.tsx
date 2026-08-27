@@ -36,6 +36,8 @@ import {
   Factory,
   Cpu,
   Layers,
+  Wrench,
+  Laptop,
 } from "lucide-react";
 import { CompanySettings } from "../types";
 import { Logo } from "./Logo";
@@ -70,6 +72,8 @@ export type NavItem =
   | "production_workstations"
   | "production_work_orders"
   | "production_subcontract"
+  | "auto_service"
+  | "it_service"
   | "hr"
   | "files"
   | "reports"
@@ -131,6 +135,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "invoices" as NavItem, label: "E-Belgeler", icon: FileText, hasSubItems: true },
     { id: "orders_module" as NavItem, label: "Sipariş & Proforma", icon: ShoppingCart, hasSubItems: true },
     { id: "production" as NavItem, label: "Üretim & MRP", icon: Factory, hasSubItems: true, badge: "MES" },
+    { id: "auto_service" as NavItem, label: "Oto Servis & Araç Bakım", icon: Wrench, badge: "Oto" },
+    { id: "it_service" as NavItem, label: "Bilişim & BT Teknik Servis", icon: Laptop, badge: "BT" },
     { id: "contacts" as NavItem, label: "Cari Hesaplar", icon: Users },
     { id: "accounts" as NavItem, label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
     { id: "products" as NavItem, label: "Stoklar", icon: PackageIcon },
