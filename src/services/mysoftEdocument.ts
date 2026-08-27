@@ -361,6 +361,8 @@ export interface MysoftDocumentOperationRequest {
   query?: Record<string, string | number | boolean | null | undefined>;
   body?: unknown;
   tenantIdentifierNumber?: string;
+  /** Return raw bytes for draft PDF/HTML zip responses. */
+  raw?: boolean;
 }
 
 export interface MysoftSendDraftRequest {
@@ -883,6 +885,7 @@ export class MysoftEdocumentClient {
       return this.request<T>(definition.path, {
         method: "GET",
         query: { ...options.query, tenantIdentifierNumber },
+        raw: options.raw,
       });
     }
     const body = isObject(options.body) && !Array.isArray(options.body)
@@ -890,7 +893,11 @@ export class MysoftEdocumentClient {
       : options.body === undefined
         ? { tenantIdentifierNumber }
         : options.body;
-    return this.request<T>(definition.path, { method: "POST", body });
+    return this.request<T>(definition.path, {
+      method: "POST",
+      body,
+      raw: options.raw,
+    });
   }
 
   /** Apply server-side defaults to outgoing invoice payloads without
@@ -1430,6 +1437,24 @@ export class MysoftEdocumentClient {
       method: "POST",
       body,
     });
+  }
+
+  /** Normalize outgoing invoice JSON (tenant, xslt, prefix defaults). */
+  async prepareInvoiceOutboxPayload(payload: unknown): Promise<unknown> {
+    return this.enrichInvoiceOutboxDefaults(this.submissionPayload(payload));
+  }
+
+  /**
+   * Mysoft portal taslak önizleme (HTML veya PDF zip). Gönderim yapmaz.
+   */
+  async getInvoiceOutboxDraftPreview(
+    payload: unknown,
+    format: "html" | "pdf" = "html",
+  ): Promise<unknown> {
+    const body = await this.prepareInvoiceOutboxPayload(payload);
+    const operation =
+      format === "pdf" ? "invoice.outgoing.draft.pdf" : "invoice.outgoing.draft.html";
+    return this.requestDocumentOperation(operation, { body, raw: true });
   }
 
   getIncomingModel(invoiceETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {

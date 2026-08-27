@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   Invoice,
   InvoiceItem,
@@ -14,6 +14,7 @@ import {
 } from "../types";
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
+import { InvoiceCreatePreviewPanel } from "./InvoiceCreatePreviewPanel";
 import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerModal";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
@@ -440,6 +441,60 @@ export const Invoices: React.FC<InvoicesProps> = ({
       notes: finalNotes,
     };
   };
+
+  const buildMysoftPreviewPayload = useCallback((): Record<string, unknown> | null => {
+    const contact = contacts.find((c) => c.id === contactId);
+    if (!contact) return null;
+    const { subtotal, totalVat, grandTotal, computedItems } = calculateTotals();
+    if (!computedItems.some((item) => String(item.description || "").trim())) {
+      return null;
+    }
+    const draft = getDraftInvoice();
+    const invoiceForPayload = {
+      ...draft,
+      id: `preview_${Date.now()}`,
+      type: invType,
+      docKind: formDocKind,
+      issueDate,
+      dueDate,
+      items: computedItems,
+      contactId,
+      contactName: contact.name,
+      taxNumber: contact.taxNumber || "",
+      subtotal,
+      totalVat,
+      grandTotal,
+      status: "draft" as InvoiceStatus,
+      currency: "TRY",
+      paidAmount: 0,
+      remainingAmount: grandTotal,
+      createdAt: new Date().toISOString().split("T")[0],
+    } as Invoice;
+    return buildMysoftInvoiceOutboxPayload({
+      invoice: invoiceForPayload,
+      contact,
+      company: companySettings,
+      eDocumentType: mysoftEDocType,
+      isSaveAsDraft: true,
+    });
+  }, [
+    contactId,
+    contacts,
+    companySettings,
+    dueDate,
+    formDocKind,
+    invType,
+    issueDate,
+    items,
+    mysoftEDocType,
+    notes,
+    hasDifferentDeliveryAddress,
+    deliveryAddress,
+    invoices.length,
+  ]);
+
+  const showCreatePreviewPanel =
+    formDocKind === "invoice" && (forcedType === "sales" || invType === "sales");
 
   const handleAddItem = () => {
     setItems([
@@ -1674,7 +1729,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
       {/* MODAL: Create New Invoice */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-4xl w-full p-6 shadow-2xl space-y-6 my-8">
+          <div
+            className={`bg-white border border-slate-200 text-slate-900 rounded-2xl w-full p-6 shadow-2xl space-y-6 my-8 ${
+              showCreatePreviewPanel ? "max-w-7xl" : "max-w-4xl"
+            }`}
+          >
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 {formDocKind === "receipt" ? (
@@ -1714,7 +1773,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveInvoice} className="space-y-5">
+            <div
+              className={
+                showCreatePreviewPanel
+                  ? "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] gap-6 items-start"
+                  : ""
+              }
+            >
+            <form onSubmit={handleSaveInvoice} className="space-y-5 min-w-0">
               {/* AI OCR Scanner Shortcut for Gider Faturaları */}
               {(forcedType === "purchase" || invType === "purchase") && (
                 <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-purple-500/10 p-3 rounded-2xl border border-amber-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
@@ -2264,10 +2330,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       />
                       <span>
                         <span className="block text-xs font-bold text-purple-950">
-                          Mysoft’a giden fatura olarak gönder (GİB)
+                          Resmi e-fatura / e-arşiv olarak kes (Mysoft)
                         </span>
                         <span className="block text-[11px] text-purple-800/80 mt-0.5">
-                          Dökümandaki Giden Fatura Ekleme (invoiceOutbox) ile aynı akış.
+                          Sağdaki Mysoft sekmesinde portal şablonunuzla taslak önizleme alınır.
                         </span>
                       </span>
                     </label>
@@ -2361,6 +2427,33 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               </div>
             </form>
+
+            {showCreatePreviewPanel && (
+              <div className="hidden xl:block sticky top-0 min-h-[420px]">
+                <InvoiceCreatePreviewPanel
+                  invoice={getDraftInvoice()}
+                  companySettings={companySettings}
+                  contact={contacts.find((c) => c.id === contactId)}
+                  mysoftEnabled={sendToMysoft && !editingInvoiceId}
+                  eDocumentLabel={mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
+                  buildMysoftPayload={buildMysoftPreviewPayload}
+                />
+              </div>
+            )}
+            </div>
+
+            {showCreatePreviewPanel && (
+              <div className="xl:hidden border-t border-slate-200 pt-4">
+                <InvoiceCreatePreviewPanel
+                  invoice={getDraftInvoice()}
+                  companySettings={companySettings}
+                  contact={contacts.find((c) => c.id === contactId)}
+                  mysoftEnabled={sendToMysoft && !editingInvoiceId}
+                  eDocumentLabel={mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
+                  buildMysoftPayload={buildMysoftPreviewPayload}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1441,6 +1441,108 @@ export function sendMysoftOutgoingInvoiceWithUbl(
   return createMysoftOutgoingEDocumentWithUbl(payload, options);
 }
 
+export interface MysoftInvoiceDraftPreviewResult {
+  kind: "html" | "pdf";
+  objectUrl: string;
+  filename: string;
+  /** Revoke blob URL when panel unmounts or refreshes. */
+  revoke: () => void;
+}
+
+/** Resolve Mysoft draft preview bytes (PDF/HTML, plain or inside zip/base64 JSON). */
+async function resolveMysoftDraftPreviewBytes(
+  payload: unknown,
+  format: "html" | "pdf",
+  signal?: AbortSignal,
+): Promise<{ bytes: Uint8Array; filename: string }> {
+  const { response, payload: body } = await proxyRequest(
+    `outgoing/draft-preview?format=${format}`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+      signal,
+    },
+    "",
+  );
+  const fallbackName = `fatura-taslak.${format === "pdf" ? "pdf" : "html"}`;
+
+  if (body instanceof ArrayBuffer) {
+    return { bytes: new Uint8Array(body), filename: fallbackName };
+  }
+
+  const record = asRecord(body);
+  const data = firstString(pickField(record, ["data", "file", "content"]));
+  if (data) {
+    const decoded = decodeBase64Payload(data);
+    if (decoded) {
+      return { bytes: decoded.bytes, filename: fallbackName };
+    }
+  }
+
+  if (typeof body === "string") {
+    const decoded = decodeBase64Payload(body);
+    if (decoded) return { bytes: decoded.bytes, filename: fallbackName };
+    return { bytes: new TextEncoder().encode(body), filename: fallbackName };
+  }
+
+  throw new MysoftApiError(
+    firstString(pickField(record, ["message", "error"])) ||
+      "Mysoft taslak önizlemesi alınamadı.",
+    response.status,
+    body,
+  );
+}
+
+/**
+ * Fetch Mysoft portal draft preview (official XSLT layout). Does not send to GİB.
+ */
+export async function fetchMysoftInvoiceDraftPreview(
+  payload: unknown,
+  format: "html" | "pdf" = "html",
+  options: { signal?: AbortSignal } = {},
+): Promise<MysoftInvoiceDraftPreviewResult> {
+  const { extractFirstFileFromZip, isPdfBytes, isZipBytes } = await import(
+    "../utils/mysoftZip.ts"
+  );
+  const { bytes, filename } = await resolveMysoftDraftPreviewBytes(
+    payload,
+    format,
+    options.signal,
+  );
+  let resolved = bytes;
+  let resolvedName = filename;
+
+  if (isZipBytes(bytes)) {
+    const extracted = await extractFirstFileFromZip(bytes);
+    if (!extracted) {
+      throw new Error("Mysoft taslak zip dosyası açılamadı.");
+    }
+    resolved = extracted.bytes;
+    resolvedName = extracted.name || filename;
+  }
+
+  if (format === "pdf" || isPdfBytes(resolved)) {
+    const blob = new Blob([resolved], { type: "application/pdf" });
+    const objectUrl = URL.createObjectURL(blob);
+    return {
+      kind: "pdf",
+      objectUrl,
+      filename: resolvedName.endsWith(".pdf") ? resolvedName : `${resolvedName}.pdf`,
+      revoke: () => URL.revokeObjectURL(objectUrl),
+    };
+  }
+
+  const html = new TextDecoder().decode(resolved);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const objectUrl = URL.createObjectURL(blob);
+  return {
+    kind: "html",
+    objectUrl,
+    filename: resolvedName.endsWith(".html") ? resolvedName : `${resolvedName}.html`,
+    revoke: () => URL.revokeObjectURL(objectUrl),
+  };
+}
+
 interface MysoftListPage {
   documents: MysoftEDocument[];
   afterValue?: number;

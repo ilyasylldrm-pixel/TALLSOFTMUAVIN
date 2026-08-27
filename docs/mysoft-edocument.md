@@ -103,7 +103,12 @@ Mysoft’ta “şablon” iki ayrı şeydir; İlyas’ın kastettiği API taraf�
 
 Muavin gelir faturası formu bu modeli `src/services/mysoftInvoicePayload.ts`
 ile üretir. Gönderimde (`POST /outgoing`) boş `xsltName` / `prefix` müşteri
-VKN’sine göre Mysoft portalından otomatik doldurulur:
+VKN’sine göre Mysoft portalından otomatik doldurulur.
+
+**Önizleme (UI):** Gelir faturası kes formunda sağ panel:
+- **Canlı** — form verisiyle anlık fatura kağıdı
+- **Mysoft** — `POST /outgoing/draft-preview?format=html|pdf` ile portal
+  dizaynında resmi taslak (GİB’e gitmez)
 
 `GET /api/mysoft/tenants/{vkn}/invoice-design?eDocumentType=EFATURA`
 

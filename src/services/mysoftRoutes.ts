@@ -543,6 +543,13 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
 
   router.post("/outgoing", run((req) => client.createOutgoing(req.body)));
   router.post("/outgoing/ubl", run((req) => client.createOutgoingWithUblXml(req.body)));
+  router.post(
+    "/outgoing/draft-preview",
+    runBinary(async (req) => {
+      const format = (queryText(req, "format") || "html").toLowerCase() === "pdf" ? "pdf" : "html";
+      return client.getInvoiceOutboxDraftPreview(req.body, format);
+    }),
+  );
 
   router.get(
     "/incoming/:invoiceETTN/model",
