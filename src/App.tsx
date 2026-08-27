@@ -22,7 +22,14 @@ const EDocuments = lazy(() => import("./components/EDocuments"));
 const HRManagement = lazy(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement })));
 const FileManager = lazy(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
+<<<<<<< HEAD
 const WhatsAppCenter = lazy(() => import("./components/WhatsAppCenter").then((m) => ({ default: m.WhatsAppCenter })));
+=======
+const ProductionModule = lazy(() => import("./components/Production/ProductionModule").then((m) => ({ default: m.ProductionModule })));
+const AutoServiceModule = lazy(() => import("./components/AutoService/AutoServiceModule").then((m) => ({ default: m.AutoServiceModule })));
+const ITServiceModule = lazy(() => import("./components/ITService/ITServiceModule").then((m) => ({ default: m.ITServiceModule })));
+const ApplianceServiceModule = lazy(() => import("./components/ApplianceService/ApplianceServiceModule").then((m) => ({ default: m.ApplianceServiceModule })));
+>>>>>>> 2cc0cc5f11e06f2296776d1eb40cc86e50c542d0
 
 import {
   getStoredData,
@@ -57,6 +64,15 @@ import {
   AssetCustody,
   MysoftEDocument,
   getContactAccountCode,
+  BillOfMaterials,
+  Routing,
+  Workstation,
+  WorkOrder,
+  SubcontractOrder,
+  MrpRecommendation,
+  AutoServiceRecord,
+  ItServiceRecord,
+  ApplianceServiceRecord,
 } from "./types";
 
 import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X } from "lucide-react";
@@ -154,6 +170,295 @@ export default function App() {
   useEffect(() => { if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions); }, [data.legalDeductions]);
   useEffect(() => { if (data.costProjects) saveStoredData("COST_PROJECTS", data.costProjects); }, [data.costProjects]);
   useEffect(() => { if (data.assetCustodies) saveStoredData("ASSET_CUSTODIES", data.assetCustodies); }, [data.assetCustodies]);
+  useEffect(() => { if (data.boms) saveStoredData("BOMS", data.boms); }, [data.boms]);
+  useEffect(() => { if (data.routings) saveStoredData("ROUTINGS", data.routings); }, [data.routings]);
+  useEffect(() => { if (data.workstations) saveStoredData("WORKSTATIONS", data.workstations); }, [data.workstations]);
+  useEffect(() => { if (data.workOrders) saveStoredData("WORK_ORDERS", data.workOrders); }, [data.workOrders]);
+  useEffect(() => { if (data.subcontractOrders) saveStoredData("SUBCONTRACT_ORDERS", data.subcontractOrders); }, [data.subcontractOrders]);
+  useEffect(() => { if (data.autoServices) saveStoredData("AUTO_SERVICES", data.autoServices); }, [data.autoServices]);
+  useEffect(() => { if (data.itServices) saveStoredData("IT_SERVICES", data.itServices); }, [data.itServices]);
+  useEffect(() => { if (data.applianceServices) saveStoredData("APPLIANCE_SERVICES", data.applianceServices); }, [data.applianceServices]);
+
+  // Auto & IT & Appliance Service Handlers
+  const handleUpdateAutoServices = (services: AutoServiceRecord[]) => {
+    setData((prev) => ({ ...prev, autoServices: services }));
+  };
+
+  const handleUpdateItServices = (services: ItServiceRecord[]) => {
+    setData((prev) => ({ ...prev, itServices: services }));
+  };
+
+  const handleUpdateApplianceServices = (services: ApplianceServiceRecord[]) => {
+    setData((prev) => ({ ...prev, applianceServices: services }));
+  };
+
+  // Production Module Handlers
+  const handleSaveBom = (bom: BillOfMaterials) => {
+    setData((prev) => {
+      const exists = (prev.boms || []).some((b) => b.id === bom.id);
+      const updatedBoms = exists
+        ? (prev.boms || []).map((b) => (b.id === bom.id ? bom : b))
+        : [bom, ...(prev.boms || [])];
+      return { ...prev, boms: updatedBoms };
+    });
+  };
+
+  const handleDeleteBom = (bomId: string) => {
+    setData((prev) => ({
+      ...prev,
+      boms: (prev.boms || []).filter((b) => b.id !== bomId),
+    }));
+  };
+
+  const handleSaveRouting = (routing: Routing) => {
+    setData((prev) => {
+      const exists = (prev.routings || []).some((r) => r.id === routing.id);
+      const updated = exists
+        ? (prev.routings || []).map((r) => (r.id === routing.id ? routing : r))
+        : [routing, ...(prev.routings || [])];
+      return { ...prev, routings: updated };
+    });
+  };
+
+  const handleDeleteRouting = (routingId: string) => {
+    setData((prev) => ({
+      ...prev,
+      routings: (prev.routings || []).filter((r) => r.id !== routingId),
+    }));
+  };
+
+  const handleSaveWorkstation = (ws: Workstation) => {
+    setData((prev) => {
+      const exists = (prev.workstations || []).some((w) => w.id === ws.id);
+      const updated = exists
+        ? (prev.workstations || []).map((w) => (w.id === ws.id ? ws : w))
+        : [ws, ...(prev.workstations || [])];
+      return { ...prev, workstations: updated };
+    });
+  };
+
+  const handleDeleteWorkstation = (wsId: string) => {
+    setData((prev) => ({
+      ...prev,
+      workstations: (prev.workstations || []).filter((w) => w.id !== wsId),
+    }));
+  };
+
+  const handleSaveWorkOrder = (wo: WorkOrder) => {
+    setData((prev) => {
+      const exists = (prev.workOrders || []).some((w) => w.id === wo.id);
+      const updated = exists
+        ? (prev.workOrders || []).map((w) => (w.id === wo.id ? wo : w))
+        : [wo, ...(prev.workOrders || [])];
+      return { ...prev, workOrders: updated };
+    });
+  };
+
+  const handleDeleteWorkOrder = (woId: string) => {
+    setData((prev) => ({
+      ...prev,
+      workOrders: (prev.workOrders || []).filter((w) => w.id !== woId),
+    }));
+  };
+
+  const handleSaveSubcontractOrder = (sub: SubcontractOrder) => {
+    setData((prev) => {
+      const exists = (prev.subcontractOrders || []).some((s) => s.id === sub.id);
+      const updated = exists
+        ? (prev.subcontractOrders || []).map((s) => (s.id === sub.id ? sub : s))
+        : [sub, ...(prev.subcontractOrders || [])];
+      return { ...prev, subcontractOrders: updated };
+    });
+  };
+
+  const handleReceiveSubcontract = (orderId: string, receivedQty: number, scrapQty: number) => {
+    setData((prev) => {
+      const updatedSubs = (prev.subcontractOrders || []).map((s) => {
+        if (s.id === orderId) {
+          const totalRec = (s.receivedQuantity || 0) + receivedQty;
+          const totalScrap = (s.scrapQuantity || 0) + scrapQty;
+          const isDone = totalRec + totalScrap >= s.quantity;
+          return {
+            ...s,
+            receivedQuantity: totalRec,
+            scrapQuantity: totalScrap,
+            status: isDone ? ("completed" as const) : ("partially_received" as const),
+            actualReturnDate: new Date().toISOString().split("T")[0],
+          };
+        }
+        return s;
+      });
+      return { ...prev, subcontractOrders: updatedSubs };
+    });
+  };
+
+  const handleIssueMaterials = (woId: string) => {
+    setData((prev) => {
+      const targetWo = (prev.workOrders || []).find((w) => w.id === woId);
+      if (!targetWo || targetWo.isMaterialIssued) return prev;
+
+      // Deduct materials from inventory products
+      const updatedProducts = prev.products.map((p) => {
+        const mat = targetWo.allocatedMaterials?.find((m) => m.productId === p.id);
+        if (mat) {
+          const newStock = Math.max(0, (p.stock || 0) - mat.plannedQuantity);
+          return { ...p, stock: newStock };
+        }
+        return p;
+      });
+
+      const updatedWo: WorkOrder = {
+        ...targetWo,
+        isMaterialIssued: true,
+        status: targetWo.status === "planned" ? "in_progress" : targetWo.status,
+        allocatedMaterials: targetWo.allocatedMaterials?.map((m) => ({
+          ...m,
+          consumedQuantity: m.plannedQuantity,
+        })),
+      };
+
+      return {
+        ...prev,
+        products: updatedProducts,
+        workOrders: (prev.workOrders || []).map((w) => (w.id === woId ? updatedWo : w)),
+      };
+    });
+  };
+
+  const handleReceiveFinishedGoods = (woId: string) => {
+    setData((prev) => {
+      const targetWo = (prev.workOrders || []).find((w) => w.id === woId);
+      if (!targetWo || targetWo.isFinishedGoodReceived) return prev;
+
+      const qtyToAdd = targetWo.producedQuantity > 0 ? targetWo.producedQuantity : targetWo.plannedQuantity;
+
+      // Add finished good to inventory products
+      const updatedProducts = prev.products.map((p) => {
+        if (p.id === targetWo.productId) {
+          return { ...p, stock: (p.stock || 0) + qtyToAdd };
+        }
+        return p;
+      });
+
+      const updatedWo: WorkOrder = {
+        ...targetWo,
+        isFinishedGoodReceived: true,
+        status: "completed",
+        producedQuantity: qtyToAdd,
+      };
+
+      return {
+        ...prev,
+        products: updatedProducts,
+        workOrders: (prev.workOrders || []).map((w) => (w.id === woId ? updatedWo : w)),
+      };
+    });
+  };
+
+  const handleCreateWorkOrderFromMrp = (rec: MrpRecommendation) => {
+    const year = new Date().getFullYear();
+    const orderNumber = `WO-${year}-${String((data.workOrders || []).length + 101).padStart(5, "0")}`;
+    const matchingBom = data.boms?.find((b) => b.id === rec.bomId || b.productId === rec.productId);
+
+    const newWo: WorkOrder = {
+      id: "wo_" + Date.now(),
+      orderNumber,
+      originType: "sales_order",
+      productId: rec.productId,
+      productCode: rec.productCode,
+      productName: rec.productName,
+      bomId: matchingBom?.id || "",
+      bomCode: matchingBom?.bomCode || "",
+      routingId: matchingBom?.routingId || data.routings?.[0]?.id || "",
+      lotNumber: `LOT${year % 100}${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(
+        (data.workOrders || []).length + 1
+      ).padStart(3, "0")}`,
+      plannedQuantity: rec.suggestedQuantity,
+      producedQuantity: 0,
+      scrappedQuantity: 0,
+      unit: rec.unit,
+      sourceWarehouseId: data.warehouses?.[0]?.id || "wh_1",
+      sourceWarehouseName: data.warehouses?.[0]?.name || "Ana Depo",
+      targetWarehouseId: data.warehouses?.[0]?.id || "wh_1",
+      targetWarehouseName: data.warehouses?.[0]?.name || "Ana Depo",
+      status: "planned",
+      priority: "high",
+      plannedStartDate: new Date().toISOString().split("T")[0],
+      plannedDueDate: rec.suggestedDate,
+      isMaterialIssued: false,
+      isFinishedGoodReceived: false,
+      createdAt: new Date().toISOString().split("T")[0],
+      notes: `MRP II Motoru tarafından otomatik önerildi: ${rec.reason}`,
+      operations: [],
+      allocatedMaterials: matchingBom
+        ? matchingBom.items.map((item, idx) => {
+            const qty = item.quantityPerUnit * (1 + (item.wasteRate || 0)) * rec.suggestedQuantity;
+            return {
+              id: `wom_${Date.now()}_${idx}`,
+              productId: item.productId,
+              productCode: item.productCode,
+              productName: item.productName,
+              type: item.type,
+              plannedQuantity: qty,
+              allocatedQuantity: qty,
+              consumedQuantity: 0,
+              unit: item.unit,
+              unitCost: item.unitCost,
+              totalCost: qty * item.unitCost,
+            };
+          })
+        : [],
+    };
+
+    handleSaveWorkOrder(newWo);
+  };
+
+  const handleCreatePurchaseOrderFromMrp = (rec: MrpRecommendation) => {
+    const rawProd = data.products.find((p) => p.id === rec.productId);
+    const unitPrice = rawProd?.purchasePrice || 100;
+    const totalWithoutVat = rec.suggestedQuantity * unitPrice;
+    const vatRate = 20;
+    const vatAmount = (totalWithoutVat * vatRate) / 100;
+    const grandTotal = totalWithoutVat + vatAmount;
+
+    const newOrder: Order = {
+      id: "ord_mrp_" + Date.now(),
+      orderNumber: `SIP-AL-${new Date().getFullYear()}-${String((data.orders || []).length + 1).padStart(5, "0")}`,
+      type: "purchase",
+      contactId: data.contacts.find((c) => c.type === "supplier")?.id || data.contacts[0]?.id || "cont_1",
+      contactName: data.contacts.find((c) => c.type === "supplier")?.name || "Hammadde Tedarikçisi",
+      orderDate: new Date().toISOString().split("T")[0],
+      deliveryDate: rec.suggestedDate,
+      items: [
+        {
+          id: "item_mrp_1",
+          productId: rec.productId,
+          productCode: rec.productCode,
+          description: `${rec.productName} (MRP II Otomatik Tedarik)`,
+          quantity: rec.suggestedQuantity,
+          unit: rec.unit,
+          unitPrice,
+          vatRate,
+          discountRate: 0,
+          totalWithoutVat,
+          vatAmount,
+          totalWithVat: grandTotal,
+        },
+      ],
+      subtotal: totalWithoutVat,
+      totalVat: vatAmount,
+      grandTotal,
+      currency: "₺",
+      status: "pending",
+      notes: `MRP II Planlama Motoru Önerisi: ${rec.reason}`,
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+
+    setData((prev) => ({
+      ...prev,
+      orders: [newOrder, ...(prev.orders || [])],
+    }));
+  };
 
   // Handlers for Cost Projects
   const handleAddCostProject = (newProject: CostProject) => {
@@ -1461,6 +1766,14 @@ export default function App() {
         return "Stoklar & Depolar";
       case "products_costs":
         return "Maliyetler & Kar Analizi";
+      case "production_subcontract":
+        return "Fason Üretim Takibi";
+      case "auto_service":
+        return "Oto Servis & Araç Bakım";
+      case "it_service":
+        return "Bilişim & BT Teknik Servis";
+      case "appliance_service":
+        return "Ev Aletleri ve Klima Servisi";
       case "hr":
         return "İnsan Kaynakları";
       case "reports":
@@ -1706,6 +2019,55 @@ export default function App() {
             />
           )}
 
+          {[
+            "production",
+            "production_boms",
+            "production_routings",
+            "production_workstations",
+            "production_work_orders",
+            "production_subcontract",
+          ].includes(currentTab) && (
+            <ProductionModule
+              boms={data.boms || []}
+              routings={data.routings || []}
+              workstations={data.workstations || []}
+              workOrders={data.workOrders || []}
+              subcontractOrders={data.subcontractOrders || []}
+              products={data.products || []}
+              warehouses={data.warehouses || []}
+              branches={data.branches || []}
+              contacts={data.contacts || []}
+              orders={data.orders || []}
+              initialSubTab={
+                currentTab === "production_boms"
+                  ? "boms"
+                  : currentTab === "production_routings"
+                  ? "routings"
+                  : currentTab === "production_workstations"
+                  ? "workstations"
+                  : currentTab === "production_work_orders"
+                  ? "work_orders"
+                  : currentTab === "production_subcontract"
+                  ? "subcontract"
+                  : "overview"
+              }
+              onSaveBom={handleSaveBom}
+              onDeleteBom={handleDeleteBom}
+              onSaveRouting={handleSaveRouting}
+              onDeleteRouting={handleDeleteRouting}
+              onSaveWorkstation={handleSaveWorkstation}
+              onDeleteWorkstation={handleDeleteWorkstation}
+              onSaveWorkOrder={handleSaveWorkOrder}
+              onDeleteWorkOrder={handleDeleteWorkOrder}
+              onSaveSubcontractOrder={handleSaveSubcontractOrder}
+              onReceiveSubcontract={handleReceiveSubcontract}
+              onIssueMaterials={handleIssueMaterials}
+              onReceiveFinishedGoods={handleReceiveFinishedGoods}
+              onCreateWorkOrderFromMrp={handleCreateWorkOrderFromMrp}
+              onCreatePurchaseOrderFromMrp={handleCreatePurchaseOrderFromMrp}
+            />
+          )}
+
           {(currentTab === "waybills_dispatch" || currentTab === "waybills_receipt") && (
             <EDocuments
               family="despatch"
@@ -1715,6 +2077,39 @@ export default function App() {
                 data.settings.tenantIdentifierNumber || readStoredMysoftTenantVkn()
               }
               globalSearchTerm={searchTerm}
+            />
+          )}
+
+          {currentTab === "auto_service" && (
+            <AutoServiceModule
+              autoServices={data.autoServices || []}
+              onUpdateAutoServices={handleUpdateAutoServices}
+              contacts={data.contacts}
+              companySettings={data.settings}
+              onAddInvoice={handleAddInvoice}
+              onAddContact={handleAddContact}
+            />
+          )}
+
+          {currentTab === "it_service" && (
+            <ITServiceModule
+              itServices={data.itServices || []}
+              onUpdateItServices={handleUpdateItServices}
+              contacts={data.contacts}
+              companySettings={data.settings}
+              onAddInvoice={handleAddInvoice}
+              onAddContact={handleAddContact}
+            />
+          )}
+
+          {currentTab === "appliance_service" && (
+            <ApplianceServiceModule
+              applianceServices={data.applianceServices || []}
+              onUpdateApplianceServices={handleUpdateApplianceServices}
+              contacts={data.contacts}
+              companySettings={data.settings}
+              onAddInvoice={handleAddInvoice}
+              onAddContact={handleAddContact}
             />
           )}
 

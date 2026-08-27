@@ -36,11 +36,162 @@ export interface AccountStatementPDFOptions {
   fileName?: string;
 }
 
+// --- Turkish Unicode Font Loader for jsPDF ---
+let cachedRobotoRegularBase64: string | null = null;
+let cachedRobotoBoldBase64: string | null = null;
+let fontPreloadPromise: Promise<void> | null = null;
+
 /**
- * Turkish character normalization helper for standard jsPDF fonts
- * Ensures that Turkish characters (ç, ğ, ı, ö, ş, ü, Ç, Ğ, İ, Ö, Ş, Ü) render cleanly in standard PDF text
+ * Ultra-fast chunked ArrayBuffer to Base64 encoder (32KB blocks)
  */
-export function sanitizeTurkishChars(text?: string | number | null): string {
+function fastArrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  const CHUNK_SIZE = 0x8000; // 32KB
+  for (let i = 0; i < len; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, len));
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Fetch font with strict timeout to prevent any network hang
+ */
+async function fetchFontWithTimeout(url: string, timeoutMs: number = 1800): Promise<string | null> {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(url, {
+      mode: "cors",
+      signal: controller?.signal,
+      cache: "force-cache",
+    });
+    if (res.ok) {
+      const buffer = await res.arrayBuffer();
+      return fastArrayBufferToBase64(buffer);
+    }
+  } catch (_) {
+    // Network timeout or blocked CDN - fallback safely
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+  return null;
+}
+
+/**
+ * Pre-warms the Turkish font in the background without blocking the UI
+ */
+export function preloadTurkishFont(): Promise<void> {
+  if (fontPreloadPromise) return fontPreloadPromise;
+
+  fontPreloadPromise = (async () => {
+    try {
+      // 1. Check browser storage first (instant 0ms)
+      if (typeof window !== "undefined") {
+        try {
+          cachedRobotoRegularBase64 =
+            window.localStorage?.getItem("muavin_font_roboto_reg_v2") ||
+            window.sessionStorage?.getItem("muavin_font_roboto_reg_v2");
+          cachedRobotoBoldBase64 =
+            window.localStorage?.getItem("muavin_font_roboto_bold_v2") ||
+            window.sessionStorage?.getItem("muavin_font_roboto_bold_v2");
+        } catch (_) {}
+      }
+
+      // 2. Fetch regular font if not in cache
+      if (!cachedRobotoRegularBase64 && typeof fetch !== "undefined") {
+        const regularUrls = [
+          "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf",
+          "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.ttf",
+        ];
+        for (const url of regularUrls) {
+          const base64 = await fetchFontWithTimeout(url, 1500);
+          if (base64) {
+            cachedRobotoRegularBase64 = base64;
+            if (typeof window !== "undefined") {
+              try {
+                window.localStorage?.setItem("muavin_font_roboto_reg_v2", base64);
+              } catch (_) {}
+            }
+            break;
+          }
+        }
+      }
+
+      // 3. Fetch bold font if not in cache
+      if (!cachedRobotoBoldBase64 && typeof fetch !== "undefined") {
+        const boldUrls = [
+          "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf",
+          "https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmEU9fBBc4AMP6lQ.ttf",
+        ];
+        for (const url of boldUrls) {
+          const base64 = await fetchFontWithTimeout(url, 1500);
+          if (base64) {
+            cachedRobotoBoldBase64 = base64;
+            if (typeof window !== "undefined") {
+              try {
+                window.localStorage?.setItem("muavin_font_roboto_bold_v2", base64);
+              } catch (_) {}
+            }
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+  })();
+
+  return fontPreloadPromise;
+}
+
+// Automatically initiate background preloading on module load
+if (typeof window !== "undefined") {
+  if ("requestIdleCallback" in window) {
+    (window as any).requestIdleCallback(() => void preloadTurkishFont());
+  } else {
+    setTimeout(() => void preloadTurkishFont(), 50);
+  }
+}
+
+/**
+ * Loads and registers full UTF-8 Unicode fonts (Roboto Regular & Bold) into jsPDF instance.
+ * Enables authentic Turkish character rendering (ç, Ç, ğ, Ğ, ı, İ, ö, Ö, ş, Ş, ü, Ü, ₺) across PDF exports.
+ */
+export async function loadTurkishFontIntoPDF(doc: jsPDF): Promise<boolean> {
+  try {
+    if (!cachedRobotoRegularBase64) {
+      // Wait at most 800ms for preloader, otherwise fallback cleanly to avoid freeze
+      await Promise.race([
+        preloadTurkishFont(),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
+    }
+
+    if (cachedRobotoRegularBase64) {
+      doc.addFileToVFS("Roboto-Regular.ttf", cachedRobotoRegularBase64);
+      doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+
+      if (cachedRobotoBoldBase64) {
+        doc.addFileToVFS("Roboto-Bold.ttf", cachedRobotoBoldBase64);
+        doc.addFont("Roboto-Bold.ttf", "Roboto", "bold");
+      } else {
+        doc.addFont("Roboto-Regular.ttf", "Roboto", "bold");
+      }
+
+      doc.setFont("Roboto", "normal");
+      return true;
+    }
+  } catch (err) {
+    console.warn("Turkish font registration fallback:", err);
+  }
+  return false;
+}
+
+/**
+ * Turkish character normalization fallback for standard jsPDF fonts (when offline without TTF font)
+ */
+export function sanitizeTurkishChars(text?: string | number | boolean | null): string {
   if (text === null || text === undefined) return "";
   const str = String(text);
   return str
@@ -59,10 +210,19 @@ export function sanitizeTurkishChars(text?: string | number | null): string {
 }
 
 /**
+ * Formats string preserving authentic Turkish characters if Unicode font is active, or sanitized if fallback
+ */
+function toPdfText(text: string | number | boolean | null | undefined, hasUnicode: boolean): string {
+  if (text === null || text === undefined) return "";
+  return hasUnicode ? String(text) : sanitizeTurkishChars(text);
+}
+
+/**
  * Native jsPDF + autoTable generator for Official Account Statement (Cari Hesap Ekstresi / Muavin Defteri)
  * Generates 100% vector-sharp, perfectly paginated multi-page PDFs with headers, summaries, repeating tables, and signature blocks.
+ * Fully supports Turkish characters (ç, Ç, ğ, Ğ, ı, İ, ö, Ö, ş, Ş, ü, Ü, ₺).
  */
-export function generateAccountStatementAutoTablePDF({
+export async function generateAccountStatementAutoTablePDF({
   companySettings,
   contact,
   entries,
@@ -70,12 +230,15 @@ export function generateAccountStatementAutoTablePDF({
   title = "RESMİ CARİ HESAP EKSTRESİ VE MUAVİN DEFTERİ",
   dateRange,
   fileName,
-}: AccountStatementPDFOptions): { pdf: jsPDF; blob: Blob; fileName: string } {
+}: AccountStatementPDFOptions): Promise<{ pdf: jsPDF; blob: Blob; fileName: string }> {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
     format: "a4",
   });
+
+  const hasUnicode = await loadTurkishFontIntoPDF(doc);
+  const activeFont = hasUnicode ? "Roboto" : "helvetica";
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -106,16 +269,16 @@ export function generateAccountStatementAutoTablePDF({
   // Header texts inside banner
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.text(sanitizeTurkishChars(companyTitle.toUpperCase()), margin + 5, cursorY + 7);
+  doc.setFont(activeFont, "bold");
+  doc.text(toPdfText(companyTitle.toUpperCase(), hasUnicode), margin + 5, cursorY + 7);
 
   doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(activeFont, "normal");
   doc.setTextColor(199, 210, 254); // Light Indigo
   const subText = [companyTaxInfo, companyContactInfo].filter(Boolean).join(" • ") || "Resmi Cari Hesap & Muavin Defter Sistemi";
-  doc.text(sanitizeTurkishChars(subText), margin + 5, cursorY + 12);
+  doc.text(toPdfText(subText, hasUnicode), margin + 5, cursorY + 12);
   doc.text(
-    sanitizeTurkishChars(`Belge: ${title} • Tarih: ${formattedToday} • Para Birimi: ${currencyStr} (${currencySym})`),
+    toPdfText(`Belge: ${title} • Tarih: ${formattedToday} • Para Birimi: ${currencyStr} (${currencySym})`, hasUnicode),
     margin + 5,
     cursorY + 17
   );
@@ -136,26 +299,26 @@ export function generateAccountStatementAutoTablePDF({
   doc.roundedRect(margin, cursorY, colWidth, 7, 2, 2, "F");
   doc.setTextColor(49, 46, 129); // #312e81
   doc.setFontSize(8.5);
-  doc.setFont("helvetica", "bold");
-  doc.text("CARİ HESAP & MÜŞTERİ BİLGİLERİ", margin + 3, cursorY + 5);
+  doc.setFont(activeFont, "bold");
+  doc.text(toPdfText("CARİ HESAP & MÜŞTERİ BİLGİLERİ", hasUnicode), margin + 3, cursorY + 5);
 
   doc.setFontSize(7.5);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(activeFont, "normal");
   doc.setTextColor(71, 85, 105);
 
   let cY = cursorY + 11.5;
   const lineSpacing = 4.2;
 
-  doc.text(sanitizeTurkishChars(`Cari Ünvanı: ${contact.name}`), margin + 3, cY);
+  doc.text(toPdfText(`Cari Ünvanı: ${contact.name}`, hasUnicode), margin + 3, cY);
   cY += lineSpacing;
-  doc.text(sanitizeTurkishChars(`Hesap Kodu: ${contactCode}  |  VKN/TCKN: ${contact.taxNumber || "-"}`), margin + 3, cY);
+  doc.text(toPdfText(`Hesap Kodu: ${contactCode}  |  VKN/TCKN: ${contact.taxNumber || "-"}`, hasUnicode), margin + 3, cY);
   cY += lineSpacing;
-  doc.text(sanitizeTurkishChars(`Vergi Dairesi: ${contact.taxOffice || "-"}  |  Tel: ${contact.phone || "-"}`), margin + 3, cY);
+  doc.text(toPdfText(`Vergi Dairesi: ${contact.taxOffice || "-"}  |  Tel: ${contact.phone || "-"}`, hasUnicode), margin + 3, cY);
   cY += lineSpacing;
   const addrStr = [contact.address, contact.city].filter(Boolean).join(", ") || "-";
-  doc.text(sanitizeTurkishChars(`Adres / Şehir: ${addrStr.length > 48 ? addrStr.slice(0, 48) + "..." : addrStr}`), margin + 3, cY);
+  doc.text(toPdfText(`Adres / Şehir: ${addrStr.length > 48 ? addrStr.slice(0, 48) + "..." : addrStr}`, hasUnicode), margin + 3, cY);
   cY += lineSpacing;
-  doc.text(sanitizeTurkishChars(`E-Posta: ${contact.email || "-"}`), margin + 3, cY);
+  doc.text(toPdfText(`E-Posta: ${contact.email || "-"}`, hasUnicode), margin + 3, cY);
 
   // Right Box: Financial Balance Status
   const rightX = margin + colWidth + 4;
@@ -166,23 +329,23 @@ export function generateAccountStatementAutoTablePDF({
   doc.roundedRect(rightX, cursorY, colWidth, 7, 2, 2, "F");
   doc.setTextColor(49, 46, 129);
   doc.setFontSize(8.5);
-  doc.setFont("helvetica", "bold");
-  doc.text("FİNANSAL DURUM VE GÜNCEL BAKİYE", rightX + 3, cursorY + 5);
+  doc.setFont(activeFont, "bold");
+  doc.text(toPdfText("FİNANSAL DURUM VE GÜNCEL BAKİYE", hasUnicode), rightX + 3, cursorY + 5);
 
   let rY = cursorY + 12;
   doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(activeFont, "normal");
   doc.setTextColor(71, 85, 105);
-  doc.text("Toplam Borçlandırılan:", rightX + 3, rY);
-  doc.setFont("helvetica", "bold");
+  doc.text(toPdfText("Toplam Borçlandırılan:", hasUnicode), rightX + 3, rY);
+  doc.setFont(activeFont, "bold");
   doc.setTextColor(30, 41, 59);
   doc.text(formatCurrency(summary.totalDebit, currencyStr), rightX + colWidth - 3, rY, { align: "right" });
 
   rY += 4.5;
-  doc.setFont("helvetica", "normal");
+  doc.setFont(activeFont, "normal");
   doc.setTextColor(71, 85, 105);
-  doc.text("Toplam Alacaklandırılan:", rightX + 3, rY);
-  doc.setFont("helvetica", "bold");
+  doc.text(toPdfText("Toplam Alacaklandırılan:", hasUnicode), rightX + 3, rY);
+  doc.setFont(activeFont, "bold");
   doc.setTextColor(30, 41, 59);
   doc.text(formatCurrency(summary.totalCredit, currencyStr), rightX + colWidth - 3, rY, { align: "right" });
 
@@ -203,10 +366,10 @@ export function generateAccountStatementAutoTablePDF({
   doc.roundedRect(rightX + 2, rY, colWidth - 4, 11, 1.5, 1.5, "FD");
 
   doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
+  doc.setFont(activeFont, "bold");
   doc.setTextColor(isReceivable ? 6 : isPayable ? 159 : 51, isReceivable ? 95 : isPayable ? 18 : 65, isReceivable ? 70 : isPayable ? 57 : 85);
   doc.text(
-    `NET BAKİYE (${isReceivable ? "ALACAKLIYIZ" : isPayable ? "BORÇLUYUZ" : "SIFIR"})`,
+    toPdfText(`NET BAKİYE (${isReceivable ? "ALACAKLIYIZ" : isPayable ? "BORÇLUYUZ" : "SIFIR"})`, hasUnicode),
     rightX + 4,
     rY + 7
   );
@@ -262,12 +425,12 @@ export function generateAccountStatementAutoTablePDF({
     doc.roundedRect(px, cursorY, pillWidth, pillHeight, 1.5, 1.5, "FD");
 
     doc.setFontSize(6.5);
-    doc.setFont("helvetica", "normal");
+    doc.setFont(activeFont, "normal");
     doc.setTextColor(p.text[0], p.text[1], p.text[2]);
-    doc.text(sanitizeTurkishChars(p.title), px + pillWidth / 2, cursorY + 3.8, { align: "center" });
+    doc.text(toPdfText(p.title, hasUnicode), px + pillWidth / 2, cursorY + 3.8, { align: "center" });
 
     doc.setFontSize(8.5);
-    doc.setFont("helvetica", "bold");
+    doc.setFont(activeFont, "bold");
     doc.text(p.val, px + pillWidth / 2, cursorY + 8.5, { align: "center" });
   });
 
@@ -286,9 +449,9 @@ export function generateAccountStatementAutoTablePDF({
 
   const tableBody = entries.map((entry) => [
     formatDate(entry.date),
-    sanitizeTurkishChars(entry.documentType || "İşlem"),
-    sanitizeTurkishChars(entry.documentNo || "-"),
-    sanitizeTurkishChars(entry.description || "-"),
+    toPdfText(entry.documentType || "İşlem", hasUnicode),
+    toPdfText(entry.documentNo || "-", hasUnicode),
+    toPdfText(entry.description || "-", hasUnicode),
     entry.debit > 0 ? entry.debit.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-",
     entry.credit > 0 ? entry.credit.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-",
     Math.abs(entry.runningBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
@@ -298,10 +461,10 @@ export function generateAccountStatementAutoTablePDF({
   // Total row at bottom of table
   const tableFoot = [
     [
-      "GENEL TOPLAM",
+      toPdfText("GENEL TOPLAM", hasUnicode),
       "",
       "",
-      `${entries.length} Adet Hareket`,
+      toPdfText(`${entries.length} Adet Hareket`, hasUnicode),
       summary.totalDebit.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       summary.totalCredit.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       Math.abs(summary.netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
@@ -311,13 +474,13 @@ export function generateAccountStatementAutoTablePDF({
 
   autoTable(doc, {
     startY: cursorY,
-    head: [tableHeaders],
+    head: [tableHeaders.map((h) => toPdfText(h, hasUnicode))],
     body: tableBody,
     foot: tableFoot,
     theme: "grid",
     margin: { left: margin, right: margin, bottom: 20 },
     styles: {
-      font: "helvetica",
+      font: activeFont,
       fontSize: 7.5,
       cellPadding: 2,
       textColor: [15, 23, 42], // slate-900
@@ -326,6 +489,7 @@ export function generateAccountStatementAutoTablePDF({
       overflow: "linebreak",
     },
     headStyles: {
+      font: activeFont,
       fillColor: [30, 27, 75], // #1e1b4b Dark Indigo
       textColor: [255, 255, 255],
       fontStyle: "bold",
@@ -333,6 +497,7 @@ export function generateAccountStatementAutoTablePDF({
       halign: "left",
     },
     footStyles: {
+      font: activeFont,
       fillColor: [224, 231, 255], // #e0e7ff
       textColor: [30, 27, 75],
       fontStyle: "bold",
@@ -360,15 +525,15 @@ export function generateAccountStatementAutoTablePDF({
         doc.rect(margin, 6, contentWidth, 6, "F");
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(7.5);
-        doc.setFont("helvetica", "bold");
+        doc.setFont(activeFont, "bold");
         doc.text(
-          sanitizeTurkishChars(`${companyTitle} - ${contact.name} CARİ HESAP EKSTRESİ`),
+          toPdfText(`${companyTitle} - ${contact.name} CARİ HESAP EKSTRESİ`, hasUnicode),
           margin + 3,
           10.2
         );
-        doc.setFont("helvetica", "normal");
+        doc.setFont(activeFont, "normal");
         doc.text(
-          `Tarih: ${formattedToday}  |  Sayfa ${pageNum}`,
+          toPdfText(`Tarih: ${formattedToday}  |  Sayfa ${pageNum}`, hasUnicode),
           pageWidth - margin - 3,
           10.2,
           { align: "right" }
@@ -377,11 +542,12 @@ export function generateAccountStatementAutoTablePDF({
 
       // Page footer
       doc.setFontSize(6.5);
-      doc.setFont("helvetica", "normal");
+      doc.setFont(activeFont, "normal");
       doc.setTextColor(148, 163, 184); // slate-400
       doc.text(
-        sanitizeTurkishChars(
-          "Bu ekstre elektronik ortamda üretilmiş olup resmi kayıt niteliğindedir. Muavin Ön Muhasebe & ERP Sistemi"
+        toPdfText(
+          "Bu ekstre elektronik ortamda üretilmiş olup resmi kayıt niteliğindedir. Muavin Ön Muhasebe & ERP Sistemi",
+          hasUnicode
         ),
         margin,
         pageHeight - 6
@@ -411,20 +577,21 @@ export function generateAccountStatementAutoTablePDF({
   doc.roundedRect(margin, footerY, contentWidth, 12, 1.5, 1.5, "FD");
 
   doc.setFontSize(6.5);
-  doc.setFont("helvetica", "bold");
+  doc.setFont(activeFont, "bold");
   doc.setTextColor(30, 41, 59);
   doc.text(
-    "YASAL HÜKÜMLER, TEVSİK VE İTİRAZ ŞARTLARI:",
+    toPdfText("YASAL HÜKÜMLER, TEVSİK VE İTİRAZ ŞARTLARI:", hasUnicode),
     margin + 3,
     footerY + 4
   );
 
   doc.setFontSize(6);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(activeFont, "normal");
   doc.setTextColor(100, 116, 139);
   doc.text(
-    sanitizeTurkishChars(
-      "TTK 94. ve VUK ilgili maddeleri uyarınca işbu hesap özetine tebliğ tarihinden itibaren 8 gün içinde itiraz edilmediği takdirde mutabık kalınmış sayılır."
+    toPdfText(
+      "TTK 94. ve VUK ilgili maddeleri uyarınca işbu hesap özetine tebliğ tarihinden itibaren 8 gün içinde itiraz edilmediği takdirde mutabık kalınmış sayılır.",
+      hasUnicode
     ),
     margin + 3,
     footerY + 8
@@ -437,14 +604,14 @@ export function generateAccountStatementAutoTablePDF({
 
   // Left: Düzenleyen
   doc.setFontSize(7.5);
-  doc.setFont("helvetica", "bold");
+  doc.setFont(activeFont, "bold");
   doc.setTextColor(30, 27, 75);
-  doc.text("DÜZENLEYEN / MALİ İŞLER & MUHASEBE", margin + sigColWidth / 2, footerY, { align: "center" });
+  doc.text(toPdfText("DÜZENLEYEN / MALİ İŞLER & MUHASEBE", hasUnicode), margin + sigColWidth / 2, footerY, { align: "center" });
 
   doc.setFontSize(6.5);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(activeFont, "normal");
   doc.setTextColor(100, 116, 139);
-  doc.text("Yetkili İmza / Firma Kaşesi", margin + sigColWidth / 2, footerY + 3.5, { align: "center" });
+  doc.text(toPdfText("Yetkili İmza / Firma Kaşesi", hasUnicode), margin + sigColWidth / 2, footerY + 3.5, { align: "center" });
 
   doc.setDrawColor(203, 213, 225);
   doc.setLineDashPattern([1, 1], 0);
@@ -453,14 +620,14 @@ export function generateAccountStatementAutoTablePDF({
   // Right: Cari Hesap Sahibi Onayı
   const sigRightX = margin + sigColWidth + 20;
   doc.setFontSize(7.5);
-  doc.setFont("helvetica", "bold");
+  doc.setFont(activeFont, "bold");
   doc.setTextColor(30, 27, 75);
-  doc.text("CARİ HESAP SAHİBİ / YETKİLİ ONAYI", sigRightX + sigColWidth / 2, footerY, { align: "center" });
+  doc.text(toPdfText("CARİ HESAP SAHİBİ / YETKİLİ ONAYI", hasUnicode), sigRightX + sigColWidth / 2, footerY, { align: "center" });
 
   doc.setFontSize(6.5);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(activeFont, "normal");
   doc.setTextColor(100, 116, 139);
-  doc.text("Mutabakat İmzası / Mühür", sigRightX + sigColWidth / 2, footerY + 3.5, { align: "center" });
+  doc.text(toPdfText("Mutabakat İmzası / Mühür", hasUnicode), sigRightX + sigColWidth / 2, footerY + 3.5, { align: "center" });
 
   doc.line(sigRightX + 10, footerY + 16, sigRightX + sigColWidth - 10, footerY + 16);
   doc.setLineDashPattern([], 0); // reset dash pattern
@@ -475,9 +642,9 @@ export function generateAccountStatementAutoTablePDF({
 
 /**
  * Universal autoTable PDF table generator from ExportData interface
- * Replaces unreliable DOM scraping with pure vector rendering
+ * Replaces unreliable DOM scraping with pure vector rendering and full Turkish Unicode support
  */
-export function generateAutoTableFromExportData({
+export async function generateAutoTableFromExportData({
   filename,
   title,
   subtitle,
@@ -489,12 +656,15 @@ export function generateAutoTableFromExportData({
   subtitle?: string;
   headers: string[];
   rows: (string | number | boolean | null | undefined)[][];
-}): { pdf: jsPDF; blob: Blob; fileName: string } {
+}): Promise<{ pdf: jsPDF; blob: Blob; fileName: string }> {
   const doc = new jsPDF({
     orientation: headers.length > 5 ? "landscape" : "portrait",
     unit: "mm",
     format: "a4",
   });
+
+  const hasUnicode = await loadTurkishFontIntoPDF(doc);
+  const activeFont = hasUnicode ? "Roboto" : "helvetica";
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -516,21 +686,21 @@ export function generateAutoTableFromExportData({
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(12);
-  doc.setFont("helvetica", "bold");
-  doc.text(sanitizeTurkishChars(title), margin + 4, cursorY + 6);
+  doc.setFont(activeFont, "bold");
+  doc.text(toPdfText(title, hasUnicode), margin + 4, cursorY + 6);
 
   if (subtitle) {
     doc.setFontSize(7.5);
-    doc.setFont("helvetica", "normal");
+    doc.setFont(activeFont, "normal");
     doc.setTextColor(199, 210, 254);
-    doc.text(sanitizeTurkishChars(subtitle), margin + 4, cursorY + 11.5);
+    doc.text(toPdfText(subtitle, hasUnicode), margin + 4, cursorY + 11.5);
   }
 
   doc.setFontSize(7);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(activeFont, "normal");
   doc.setTextColor(224, 231, 255);
   doc.text(
-    `Rapor Tarihi: ${formattedToday}  |  Toplam: ${rows.length} Kayıt`,
+    toPdfText(`Rapor Tarihi: ${formattedToday}  |  Toplam: ${rows.length} Kayıt`, hasUnicode),
     pageWidth - margin - 4,
     cursorY + 6,
     { align: "right" }
@@ -557,7 +727,7 @@ export function generateAutoTableFromExportData({
   });
 
   const formattedRows = rows.map((r) =>
-    r.map((c) => (c === null || c === undefined ? "" : sanitizeTurkishChars(String(c))))
+    r.map((c) => toPdfText(c, hasUnicode))
   );
 
   const columnStylesConfig: Record<number, any> = {};
@@ -567,12 +737,12 @@ export function generateAutoTableFromExportData({
 
   autoTable(doc, {
     startY: cursorY,
-    head: [headers.map((h) => sanitizeTurkishChars(h))],
+    head: [headers.map((h) => toPdfText(h, hasUnicode))],
     body: formattedRows,
     theme: "grid",
     margin: { left: margin, right: margin, bottom: 16 },
     styles: {
-      font: "helvetica",
+      font: activeFont,
       fontSize: 7.5,
       cellPadding: 2,
       textColor: [15, 23, 42],
@@ -581,6 +751,7 @@ export function generateAutoTableFromExportData({
       overflow: "linebreak",
     },
     headStyles: {
+      font: activeFont,
       fillColor: [79, 70, 229], // Indigo 600
       textColor: [255, 255, 255],
       fontStyle: "bold",
@@ -598,15 +769,15 @@ export function generateAutoTableFromExportData({
         doc.rect(margin, 5, contentWidth, 5, "F");
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(7);
-        doc.setFont("helvetica", "bold");
-        doc.text(sanitizeTurkishChars(title), margin + 2, 8.5);
+        doc.setFont(activeFont, "bold");
+        doc.text(toPdfText(title, hasUnicode), margin + 2, 8.5);
         doc.text(`Sayfa ${pageNum}`, pageWidth - margin - 2, 8.5, { align: "right" });
       }
 
       doc.setFontSize(6.5);
-      doc.setFont("helvetica", "normal");
+      doc.setFont(activeFont, "normal");
       doc.setTextColor(148, 163, 184);
-      doc.text("Ön Muhasebe & ERP Yönetim Sistemi", margin, pageHeight - 5);
+      doc.text(toPdfText("Ön Muhasebe & ERP Yönetim Sistemi", hasUnicode), margin, pageHeight - 5);
       doc.text(`Sayfa ${pageNum}`, pageWidth - margin, pageHeight - 5, { align: "right" });
     },
   });
@@ -619,6 +790,7 @@ export function generateAutoTableFromExportData({
 
 /**
  * Enhanced DOM-to-PDF export service using html2canvas with print-specific styling and element-aware page breaks
+ * Optimized for lightning-fast execution and zero UI lag
  */
 export async function exportElementToPDFWithPrintStyling(
   elementId: string,
@@ -632,39 +804,42 @@ export async function exportElementToPDFWithPrintStyling(
     return null;
   }
 
-  const { orientation = "p", margin = 8, scale = 2 } = options;
+  // Yield to the browser to ensure UI loading indicators and spinners render smoothly
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  const { orientation = "p", margin = 8 } = options;
+  const targetScale = typeof options.scale === "number" ? options.scale : 1.6;
 
   try {
+    const elWidth = element.scrollWidth || element.clientWidth || 920;
+    const elHeight = element.scrollHeight || element.clientHeight || 1200;
+
     const canvas = await html2canvas(element, {
-      scale: scale,
+      scale: targetScale,
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
       scrollX: 0,
       scrollY: 0,
-      windowWidth: Math.max(element.scrollWidth, 1280),
-      windowHeight: Math.max(element.scrollHeight + 600, 2600),
+      windowWidth: Math.max(elWidth, 960),
+      windowHeight: Math.max(elHeight + 100, 1100),
       onclone: (clonedDoc) => {
         sanitizeOklchForHtml2Canvas(clonedDoc);
         const clonedTarget = clonedDoc.getElementById(elementId);
         if (clonedTarget) {
-          // Unconstrain target element and all parent nodes
           let curr: HTMLElement | null = clonedTarget;
           while (curr && curr !== clonedDoc.body) {
             curr.style.overflow = "visible";
             curr.style.maxHeight = "none";
             curr.style.height = "auto";
             curr.style.maxWidth = "none";
-            curr.style.position = "static";
-            curr.style.transform = "none";
             curr = curr.parentElement;
           }
           clonedDoc.body.style.overflow = "visible";
           clonedDoc.body.style.height = "auto";
-          clonedDoc.body.style.maxHeight = "none";
 
-          clonedTarget.style.width = `${element.scrollWidth || 920}px`;
-          clonedTarget.style.maxWidth = `${element.scrollWidth || 920}px`;
+          clonedTarget.style.width = `${elWidth}px`;
+          clonedTarget.style.maxWidth = `${elWidth}px`;
           clonedTarget.style.margin = "0 auto";
           clonedTarget.style.boxShadow = "none";
           clonedTarget.style.border = "none";
@@ -680,8 +855,10 @@ export async function exportElementToPDFWithPrintStyling(
     const pageUsableHeight = pdfHeight - margin * 2;
     const totalImgHeightMm = (canvas.height * imgWidth) / canvas.width;
 
-    if (totalImgHeightMm <= pageUsableHeight) {
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, totalImgHeightMm);
+    if (totalImgHeightMm <= pageUsableHeight + 1) {
+      // Single Page Fast Path
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      pdf.addImage(imgData, "JPEG", margin, margin, imgWidth, totalImgHeightMm);
     } else {
       // Element-aware page break calculation
       const pxPerMm = canvas.width / imgWidth;
@@ -753,14 +930,14 @@ export async function exportElementToPDFWithPrintStyling(
           );
         }
 
-        const subImgData = subCanvas.toDataURL("image/png");
+        const subImgData = subCanvas.toDataURL("image/jpeg", 0.95);
         const subImgHeightMm = (chunkHeightPx * imgWidth) / canvas.width;
 
         if (pageIndex > 0) {
           pdf.addPage();
         }
 
-        pdf.addImage(subImgData, "PNG", margin, margin, imgWidth, subImgHeightMm);
+        pdf.addImage(subImgData, "JPEG", margin, margin, imgWidth, subImgHeightMm);
 
         yStart = yNextCut;
         pageIndex++;

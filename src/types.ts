@@ -790,6 +790,10 @@ export interface ExtractedDocumentData {
 export type AppModuleKey =
   | "dashboard"
   | "company"
+  | "production"
+  | "auto_service"
+  | "it_service"
+  | "appliance_service"
   | "e_services"
   | "invoices"
   | "orders_module"
@@ -807,7 +811,7 @@ export interface AppModuleDefinition {
   key: AppModuleKey;
   label: string;
   description: string;
-  category: "Genel" | "Ticari" | "Finans" | "Yönetim";
+  category: "Genel" | "Ticari" | "Finans" | "Yönetim" | "Üretim";
 }
 
 export type AssetCategory =
@@ -914,8 +918,326 @@ export interface AssetCustody {
   warehouseName?: string;
 }
 
+// ==========================================
+// 🏭 ÜRETİM & MRP II & MES MODÜLÜ TİPLERİ
+// ==========================================
+
+export type BomItemType = "raw_material" | "semi_finished" | "packaging" | "consumable";
+
+export interface BomItem {
+  id: string;
+  type: BomItemType;
+  productId: string; // Stok Kartı ID
+  productCode: string;
+  productName: string;
+  quantityPerUnit: number; // 1 birim nihai ürün için gereken miktar
+  unit: string; // 'Adet', 'Kg', 'Metre', 'Litre', vb.
+  wasteRate: number; // Fire Oranı % (Örn: 0.05 -> %5)
+  unitCost: number; // Referans Alış Maliyeti
+  isOptional?: boolean; // İsteğe bağlı bileşen
+  isAlternativeAllowed?: boolean; // Alternatif ikame malzeme izinli mi?
+  alternativeProductIds?: string[]; // Alternatif ürün ID'leri
+  notes?: string;
+}
+
+export type BillOfMaterialItem = BomItem;
+
+export interface BillOfMaterials {
+  id: string;
+  bomCode: string; // Örn: "BOM-KLT-001"
+  revision: number; // 1, 2, 3
+  name: string; // Reçete Adı
+  productId: string; // Üretilecek Mamul / Yarı Mamul ID
+  productCode: string;
+  productName: string;
+  category?: string;
+  outputQuantity: number; // Temel çıktı miktarı (Varsayılan: 1)
+  outputUnit: string;
+  yieldRate: number; // Çıktı Verimi (Varsayılan: 1.00 -> %100)
+  items: BomItem[];
+  routingId?: string; // Bağlı Operasyon Rotası
+  routingName?: string;
+  laborHoursPerUnit?: number; // Birim Başı Standart İşçilik Süresi (Saat)
+  laborHourlyRate?: number; // Standart İşçilik Saat Ücreti (TL)
+  overheadCostPerUnit?: number; // Birim Başı Genel İmalat Gideri (TL)
+  description?: string;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WorkstationCategory = "machine" | "assembly_line" | "paint_booth" | "manual_bench" | "cnc" | "quality_station";
+export type WorkstationStatus = "idle" | "running" | "maintenance" | "breakdown";
+
+export interface Workstation {
+  id: string;
+  code: string; // Örn: "CNC-01", "MONTAJ-HAT-A"
+  name: string;
+  category: WorkstationCategory;
+  hourlyOperatingCost: number; // Saatlik Makine Çalışma Maliyeti (Elektrik + Bakım TL)
+  hourlyDepreciationCost: number; // Saatlik Amortisman Payı (TL)
+  standardCapacityHoursPerDay: number; // Günlük Standart Çalışma Kapasitesi (Saat, örn: 8, 16, 24)
+  efficiencyRate: number; // OEE Verimlilik Çarpanı (0.85 -> %85)
+  status: WorkstationStatus;
+  currentWorkOrderId?: string;
+  currentWorkOrderNumber?: string;
+  assignedOperatorName?: string;
+  branchId?: string;
+  branchName?: string;
+  warehouseId?: string;
+  warehouseName?: string;
+  maintenanceSchedule?: {
+    lastMaintenanceDate?: string;
+    nextMaintenanceDate?: string;
+  };
+  notes?: string;
+}
+
+export interface RoutingStep {
+  id: string;
+  sequence: number; // 10, 20, 30...
+  operationName: string; // 'Lazer Kesim', 'Büküm', 'Kaynak', 'Fason Boya', 'Montaj', 'Kalite Kontrol'
+  workstationId: string;
+  workstationName: string;
+  workstationType: "internal" | "subcontractor";
+  subcontractorContactId?: string;
+  subcontractorContactName?: string;
+  subcontractorUnitCost?: number; // Fason Birim Maliyeti (TL)
+  setupTimeMinutes: number; // Hazırlık / Kalıp Ayar Süresi (Sabit dk)
+  runTimePerUnitMinutes: number; // 1 Adet İçin İşlem Süresi (dk)
+  queueTimeMinutes?: number; // Dinlenme / Kuruma / Bekleme Süresi (dk)
+  requiresQualityInspection?: boolean; // Kalite Kontrol Zorunlu mu?
+  laborSkillLevelRequired?: string;
+  description?: string;
+}
+
+export interface Routing {
+  id: string;
+  routingCode: string; // Örn: "ROUT-KLT-01"
+  name: string;
+  productId?: string;
+  productName?: string;
+  steps: RoutingStep[];
+  totalSetupMinutes: number;
+  totalRunMinutesPerUnit: number;
+  isActive: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+export type WorkOrderStatus =
+  | "draft"
+  | "planned"
+  | "material_issued"
+  | "in_progress"
+  | "quality_control"
+  | "paused"
+  | "completed"
+  | "cancelled";
+export type WorkOrderPriority = "low" | "medium" | "high" | "urgent";
+
+export interface WorkOrderOperation {
+  id: string;
+  sequence: number;
+  operationName: string;
+  workstationId: string;
+  workstationName: string;
+  workstationType: "internal" | "subcontractor";
+  subcontractorContactId?: string;
+  subcontractorContactName?: string;
+  status: "pending" | "ready" | "in_progress" | "completed";
+  plannedDurationMinutes: number;
+  actualDurationMinutes: number;
+  actualStartTime?: string;
+  actualEndTime?: string;
+  operatorEmployeeId?: string;
+  operatorName?: string;
+  producedQuantity: number;
+  scrappedQuantity: number;
+  notes?: string;
+  qualityApproval?: {
+    approvedBy: string;
+    approvedAt: string;
+    status: "approved" | "conditional" | "rejected";
+    notes?: string;
+  };
+}
+
+export interface WorkOrderMaterial {
+  id: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  type: BomItemType;
+  plannedQuantity: number; // Planlanan
+  allocatedQuantity: number; // Rezerve Edilen
+  consumedQuantity: number; // Fiilen Sarf Edilen
+  unit: string;
+  unitCost: number;
+  totalCost: number;
+  warehouseId?: string;
+  warehouseName?: string;
+  isSubcontractDispatched?: boolean; // Fasona Sevk Edildi mi?
+  dispatchWaybillNo?: string;
+}
+
+export interface WorkOrderCostBreakdown {
+  rawMaterialCost: number; // Hammadde & Yarı Mamul Sarfiyatı
+  laborCost: number; // Direkt İşçilik
+  machineDepreciationCost: number; // Makine Amortismanı & Enerji
+  subcontractorCost: number; // Fason Hizmet Bedeli
+  overheadCost: number; // Genel Üretim Gideri
+  totalCost: number; // Toplam Fiili Maliyet
+  unitCost: number; // Birim Fiili Mamul Maliyeti
+}
+
+export interface WorkOrder {
+  id: string;
+  orderNumber: string; // Örn: "WO-2026-00101"
+  originType: "sales_order" | "mrp_auto" | "manual_stock";
+  sourceSalesOrderId?: string;
+  sourceSalesOrderNumber?: string;
+  customerName?: string;
+  
+  productId: string;
+  productCode: string;
+  productName: string;
+  bomId: string;
+  bomCode: string;
+  routingId?: string;
+  
+  lotNumber: string; // Lot / Parti Numarası (Örn: "LOT260827-01")
+  barcode?: string; // Barkod / QR (Örn: "WO2608270101")
+  
+  plannedQuantity: number; // Planlanan Miktar
+  producedQuantity: number; // Sağlam Üretilen Miktar
+  scrappedQuantity: number; // Hurda / Fire Miktar
+  unit: string;
+  
+  sourceWarehouseId: string; // Hammaddelerin Çıkacağı Depo
+  sourceWarehouseName: string;
+  targetWarehouseId: string; // Üretilen Mamulün Gireceği Depo
+  targetWarehouseName: string;
+  
+  status: WorkOrderStatus;
+  priority: WorkOrderPriority;
+  
+  plannedStartDate: string;
+  plannedDueDate: string;
+  actualStartDate?: string;
+  actualEndDate?: string;
+  
+  operations: WorkOrderOperation[];
+  allocatedMaterials: WorkOrderMaterial[];
+  costBreakdown?: WorkOrderCostBreakdown;
+  
+  isMaterialIssued: boolean; // Sarfiyat fişi kesilip stoktan düşüldü mü?
+  isFinishedGoodReceived: boolean; // Mamul deposuna giriş yapıldı mı?
+  
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SubcontractOrder {
+  id: string;
+  dispatchNo: string; // Fason İrsaliye No
+  workOrderId: string;
+  workOrderNumber: string;
+  operationId: string;
+  operationName: string;
+  subcontractorContactId: string;
+  subcontractorContactName: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  totalPrice: number;
+  dispatchDate: string;
+  expectedReturnDate: string;
+  actualReturnDate?: string;
+  status: "dispatched" | "in_process" | "received_partial" | "completed" | "cancelled";
+  receivedQuantity: number;
+  scrapQuantity: number;
+  serviceInvoiceNo?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface MrpDeficitItem {
+  productId: string;
+  productCode: string;
+  productName: string;
+  category: string;
+  unit: string;
+  type: BomItemType;
+  currentStock: number;
+  reservedStock: number;
+  availableStock: number;
+  requiredQuantity: number;
+  deficitQuantity: number; // Açık / İhtiyaç Miktarı
+  estimatedUnitCost: number;
+  estimatedTotalCost: number;
+  suggestedAction: "purchase_order" | "sub_work_order";
+  parentWorkOrderNumbers: string[];
+}
+
+export interface MrpRequirement {
+  id: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  grossRequirement: number;
+  currentStock: number;
+  scheduledReceipts: number;
+  netRequirement: number;
+  suggestedOrderDate: string;
+  requiredDate: string;
+  leadTimeDays: number;
+  unit: string;
+}
+
+export interface MrpRecommendation {
+  id: string;
+  actionType: "create_work_order" | "create_purchase_order";
+  productId: string;
+  productCode: string;
+  productName: string;
+  suggestedQuantity: number;
+  unit: string;
+  suggestedDate: string;
+  reason: string;
+  estimatedCost: number;
+  bomId?: string;
+}
+
+export interface MesTerminalLog {
+  id: string;
+  timestamp: string;
+  workOrderId: string;
+  workOrderNumber: string;
+  operationId: string;
+  operationName: string;
+  workstationId: string;
+  workstationName: string;
+  operatorEmployeeId?: string;
+  operatorName?: string;
+  action: "START" | "PAUSE" | "RESUME" | "FINISH" | "SCRAP_ENTRY";
+  producedQty?: number;
+  scrappedQty?: number;
+  scrapReason?: string;
+  durationMinutes?: number;
+  notes?: string;
+}
+
 export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "dashboard", label: "Ana Sayfa / Özet", description: "Genel finansal durum ve grafikler", category: "Genel" },
+  { key: "production", label: "Üretim & MES / MRP", description: "İş emirleri, ürün reçeteleri (BOM), rotalar ve saha kontrolü", category: "Üretim" },
+  { key: "auto_service", label: "Oto Servis & Araç Bakım", description: "Araç kabul, iş emri, arıza teşhisi ve AI asistanları", category: "Ticari" },
+  { key: "it_service", label: "Bilişim & BT Teknik Servis", description: "Cihaz kabul, parça/yazılım onarım ve AI destek rehberleri", category: "Ticari" },
+  { key: "appliance_service", label: "Ev Aletleri ve Klima", description: "Beyaz eşya, iklimlendirme ve küçük ev aletleri teknik servisi", category: "Ticari" },
   { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi", category: "Yönetim" },
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
   { key: "invoices", label: "E-Belgeler & Faturalar", description: "Satış/Alış faturaları, e-Arşiv ve irsaliyeler", category: "Ticari" },
@@ -930,6 +1252,433 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "ai", label: "AI Muavin Asistanı", description: "Yapay zeka akıllı muhasebe asistanı", category: "Genel" },
   { key: "settings", label: "Sistem Ayarları", description: "Uygulama ayarları, yedekleme ve genel tercihler", category: "Yönetim" },
 ];
+
+// ==========================================
+// 🚗 OTOMOTİV & ARAÇ BAKIM SERVİS MODÜLÜ TİPLERİ
+// ==========================================
+
+export type AutoServiceStatus =
+  | "reception" // Servis Kabul / Giriş
+  | "diagnosis" // Teşhis & Ekspertiz
+  | "quote_pending" // Müşteri Onayı Bekliyor
+  | "parts_pending" // Parça Temininde
+  | "in_progress" // Onarımda / Liftte
+  | "testing" // Test Sürüşü & Kalite / Yıkama
+  | "ready" // Teslimata Hazır
+  | "completed" // Teslim Edildi & Faturalandı
+  | "cancelled"; // İptal Edildi
+
+export interface AutoPartItem {
+  id: string;
+  partCode?: string;
+  partName: string;
+  partType: "original" | "oem" | "aftermarket" | "refurbished"; // Orijinal, OEM, Muadil, Revizyonlu
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  vatRate: number; // 0, 10, 20
+  total: number;
+  warrantyMonths?: number;
+}
+
+export interface AutoLaborItem {
+  id: string;
+  operationName: string; // ör: "Ön Fren Balata Değişimi", "Periyodik Bakım İşçiliği", "Rot Ayarı"
+  technicianName?: string;
+  hours: number;
+  hourlyRate: number;
+  vatRate: number;
+  total: number;
+}
+
+export interface AutoAiOutputs {
+  // 1. Müşteri Şikayetini Profesyonel İş Emrine Dönüştürme
+  workOrderSummary?: {
+    rawComplaint: string;
+    mainSummary: string; // Ana Şikayet Özeti
+    possibleSource: string; // Olası Kaynak / Sistem (Motor, Süspansiyon, Fren vb.)
+    safetyRisk: "Düşük" | "Orta" | "Kritik" | string; // Sürüş Güvenliği Riski
+    technicianFirstCheck: string; // Teknisyen İçin İlk Kontrol Önerisi
+    generatedAt?: string;
+  };
+  // 2. Teknik Arıza Raporunu Müşteri Diline Çevirme (Güven Oluşturma)
+  customerExplanation?: {
+    rawTechReport: string;
+    explanation: string;
+    whyChange: string;
+    risksIfNotChanged: string;
+    generatedAt?: string;
+  };
+  // 3. Fiyat Teklifi ve Onay Mesajı (WhatsApp/SMS)
+  quoteMessage?: {
+    messageText: string;
+    channel: "whatsapp" | "sms";
+    generatedAt?: string;
+  };
+  // 4. Periyodik Bakım Sonrası Ekstra İhtiyaç Hatırlatma Asistanı
+  extraReminder?: {
+    extraIssues: string;
+    callScript: string;
+    messageDraft: string;
+    generatedAt?: string;
+  };
+}
+
+export interface AutoServiceRecord {
+  id: string;
+  serviceNo: string; // ör: "SRV-2026-0084"
+  plateNumber: string; // Plaka ör: "34 ABC 789"
+  brand: string; // Marka: Renault, BMW, Ford, Volkswagen vb.
+  model: string; // Model: Megane, 320i, Focus, Passat
+  modelYear: number; // Yıl: 2021
+  fuelType?: "Benzin" | "Dizel" | "Hibrit" | "Elektrik" | "LPG" | string;
+  engineCapacity?: string; // ör: "1.5 dCi", "2.0 TDI"
+  chassisNumber?: string; // Şasi No / VIN (17 hane)
+  currentKm: number; // Araç KM
+  contactId?: string; // İlgili Müşteri / Cari Kart ID
+  contactName: string; // Araç Sahibi / Firma
+  contactPhone: string;
+  contactEmail?: string;
+  serviceType: "periodic_maintenance" | "mechanical_repair" | "body_paint" | "electrical" | "heavy_maintenance" | "tire_brake" | "diagnostic";
+  entryDate: string; // Kabul Tarihi (YYYY-MM-DD)
+  entryTime?: string; // Kabul Saati (HH:mm)
+  estimatedDeliveryDate?: string;
+  actualDeliveryDate?: string;
+  status: AutoServiceStatus;
+  
+  // Şikayet & Teşhis
+  customerComplaint: string; // Müşteri Açıklaması / Beyanı
+  workshopDiagnosis?: string; // Teknisyen / Usta Arıza Teşhis Raporu
+  assignedTechnician?: string; // Atanan Baş Teknisyen
+  fuelLevel?: "E" | "1/4" | "1/2" | "3/4" | "F"; // Depo Yakıt Seviyesi
+  valuableItemsInCar?: string; // Araçta Bırakılan Değerli Eşya
+  accessoriesReceived?: string; // Beraberinde Teslim Alınanlar (Ruhsat, Yedek Anahtar, Şarj Kablosu, Kriko, Stepne, Yangın Tüpü vb.)
+  damagePhysicalCondition?: string; // Araç Kaporta Çizik, Göçük, Deformasyon & Fiziksel Kusur Durumu
+  
+  // Maliyet & Kalemler
+  parts: AutoPartItem[];
+  labors: AutoLaborItem[];
+  partsTotal: number;
+  laborTotal: number;
+  totalVat: number;
+  grandTotal: number;
+  discountAmount?: number;
+  isApprovedByCustomer: boolean;
+  approvalMethod?: "whatsapp" | "sms" | "phone_call" | "in_person" | "email";
+  approvalDate?: string;
+  
+  // AI Yardımcı Çıktıları
+  aiOutputs?: AutoAiOutputs;
+  
+  invoiceId?: string; // Bağlı Fatura ID (Faturalandırıldıysa)
+  invoiceNumber?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// ==========================================
+// 💻 BİLİŞİM & BİLGİSAYAR / BT TEKNİK SERVİS MODÜLÜ TİPLERİ
+// ==========================================
+
+export type ItDeviceType =
+  | "laptop"
+  | "desktop"
+  | "macbook"
+  | "imac"
+  | "server"
+  | "workstation"
+  | "tablet"
+  | "smartphone"
+  | "printer"
+  | "network_device"
+  | "storage_nas"
+  | "other";
+
+export type ItServiceStatus =
+  | "reception" // Cihaz Kabul
+  | "diagnosing" // Arıza Teşhisi / Ön Değerlendirme
+  | "quote_pending" // Maliyet Onayı Bekliyor
+  | "parts_ordered" // Parça / Donanım Bekleniyor
+  | "repairing" // Onarımda / Kurulumda / Montajda
+  | "testing" // Kararlılık & Donanım Testinde (Stres Testi, MemTest vb.)
+  | "ready" // Hazır / Teslime Hazır
+  | "delivered" // Teslim Edildi & Garantilendi
+  | "cancelled"; // İptal / İade
+
+export interface ItPartItem {
+  id: string;
+  partCode?: string;
+  partName: string; // ör: "Kingston 1TB NVMe M.2 SSD", "Corsair 16GB DDR5 5600MHz", "MacBook Pro Retina Ekran Paneli"
+  category: "ssd_hdd" | "ram" | "motherboard" | "screen" | "battery" | "cooling_fan" | "gpu" | "power_supply" | "software_license" | "other";
+  quantity: number;
+  unitPrice: number;
+  vatRate: number;
+  total: number;
+  warrantyMonths?: number;
+}
+
+export interface ItLaborItem {
+  id: string;
+  operationName: string; // ör: "İşletim Sistemi Kurulumu & Sürücü Yapılandırması", "Termal Macun Yenileme & Fan Bakımı", "BGA Çip Onarımı / Reballing", "Veri Kurtarma"
+  technicianName?: string;
+  hours: number;
+  hourlyRate: number;
+  vatRate: number;
+  total: number;
+}
+
+export interface ItAiOutputs {
+  // 1. BT / Donanım Arıza Ön Değerlendirme Raporu
+  preEvaluation?: {
+    customerNotice: string;
+    faultSummary: string; // Arıza Özeti
+    possibleCauses: string; // Olası Nedenler (Donanımsal / Yazılımsal)
+    dataSecurityRisk: "Düşük" | "Orta" | "Kritik" | string; // Veri Güvenliği Riski
+    estimatedStepsAndDuration: string; // Tahmini Çözüm Adımları ve Süresi
+    generatedAt?: string;
+  };
+  // 2. Adım Adım Sorun Giderme (Troubleshooting) Rehberi
+  troubleshootingGuide?: {
+    deviceInfo: string;
+    issue: string;
+    guideText: string;
+    generatedAt?: string;
+  };
+  // 3. Donanım/Yazılım Onarım Maliyet Onay Metni
+  costApprovalMessage?: {
+    messageText: string;
+    dataBackupNoteIncluded: boolean;
+    generatedAt?: string;
+  };
+  // 4. Teknik Terimleri İçermeyen Müşteri Bilgilendirme E-postası
+  customerEmail?: {
+    rawTechReport: string;
+    subject: string;
+    emailBody: string;
+    twoTips: string[];
+    generatedAt?: string;
+  };
+}
+
+export interface ItServiceRecord {
+  id: string;
+  serviceNo: string; // ör: "IT-2026-0042"
+  deviceType: ItDeviceType;
+  brand: string; // Asus, Dell, Lenovo, Apple, HP, MSI, Acer, Cisco vb.
+  model: string; // ZenBook 14, MacBook Pro M2, ThinkPad T14, PowerEdge R740
+  serialNumber?: string; // Cihaz Seri No / Service Tag
+  devicePasswordPin?: string; // Windows / BIOS / Kullanıcı Şifresi (Varsa)
+  hasChargerIncluded: boolean; // Adaptör / Şarj Cihazı Alındı mı?
+  accessoriesIncluded?: string; // Çanta, Fare, Harici Disk vb.
+  accessoriesReceived?: string; // Beraberinde Teslim Alınan Aksesuarlar (Şarj adaptörü, kablo, çanta, dongle vb.)
+  damagePhysicalCondition?: string; // Cihaz Kasa/Ekran Çizik, Kırık, Deformasyon & Fiziksel Durumu
+  
+  dataBackupStatus: "backup_taken" | "not_needed" | "critical_risk_approved" | "recovery_requested"; // Veri Durumu
+  dataBackupNotes?: string;
+  
+  contactId?: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail?: string;
+  
+  entryDate: string;
+  estimatedCompletionDate?: string;
+  actualCompletionDate?: string;
+  status: ItServiceStatus;
+  
+  // Şikayet & Teşhis
+  customerProblemDescription: string; // Müşteri Bildirimi
+  technicianReport?: string; // Teknisyen Arıza Tespiti & Analizi
+  assignedTechnician?: string;
+  
+  // Maliyet & Kalemler
+  parts: ItPartItem[];
+  labors: ItLaborItem[];
+  partsTotal: number;
+  laborTotal: number;
+  totalVat: number;
+  grandTotal: number;
+  discountAmount?: number;
+  isApprovedByCustomer: boolean;
+  approvalDate?: string;
+  
+  // AI Destek Çıktıları
+  aiOutputs?: ItAiOutputs;
+  
+  invoiceId?: string;
+  invoiceNumber?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// ==========================================
+// 🧺 BEYAZ EŞYA, KÜÇÜK EV ALETLERİ & İKLİMLENDİRME (KLİMA / KOMBİ) SERVİS TİPLERİ
+// ==========================================
+
+export type ApplianceCategory =
+  | "major_appliance" // Beyaz Eşya (Buzdolabı, Çamaşır, Bulaşık, Fırın vb.)
+  | "hvac_climate" // İklimlendirme & Isıtma (Klima, Kombi, Şofben, Termosifon vb.)
+  | "small_appliance" // Küçük Ev / El Aletleri (Kahve Makinesi, Süpürge, Blender, Robot vb.)
+  | "other_appliance"; // Diğer
+
+export type ApplianceDeviceType =
+  // Beyaz Eşya
+  | "refrigerator" // Buzdolabı
+  | "freezer" // Derin Dondurucu
+  | "washing_machine" // Çamaşır Makinesi
+  | "dryer" // Kurutma Makinesi
+  | "dishwasher" // Bulaşık Makinesi
+  | "oven" // Fırın
+  | "cooktop_hob" // Ocak
+  | "range_hood" // Davlumbaz / Aspiratör
+  // İklimlendirme
+  | "air_conditioner_split" // Split Duvar Tipi Klima
+  | "air_conditioner_vrf" // VRF / Kaset / Kanal Tipi Klima
+  | "boiler_combi" // Kombi (Yoğuşmalı / Konvansiyonel)
+  | "water_heater" // Şofben / Termosifon
+  | "heat_pump" // Isı Pompası
+  // Küçük Ev & Mutfak Aletleri
+  | "coffee_machine" // Kahve / Espresso Makinesi
+  | "vacuum_cleaner" // Elektrikli / Dikey Süpürge
+  | "robot_vacuum" // Robot Süpürge
+  | "blender_food_processor" // Blender / Mutfak Robotu
+  | "toaster_grill" // Tost Makinesi / Elektrikli Izgara
+  | "microwave_oven" // Mikrodalga Fırın
+  | "steam_iron" // Ütü / Buhar Kazanlı Ütü
+  | "airfryer_fryer" // Airfryer / Sıcak Hava Fritözü
+  | "kettle_tea_maker" // Çay Makinesi / Su Isıtıcı
+  | "other";
+
+export type ApplianceServiceLocation = "on_site" | "workshop"; // Sahada / Müşteri Adresinde veya Atölyede
+
+export type ApplianceServiceStatus =
+  | "reception" // Servis Kaydı Alındı / Randevu Oluşturuldu
+  | "assigned" // Teknisyene / Saha Ekibine Atandı
+  | "on_the_way" // Sahada / Yolda
+  | "diagnosing" // Arıza Teşhisi & Ölçüm
+  | "quote_pending" // Teklif / Müşteri Onayı Bekliyor
+  | "parts_ordered" // Yedek Parça Bekleniyor
+  | "repairing" // Onarım / Montaj / Parça Değişimi
+  | "testing_qc" // Test, Gaz/Sızdırmazlık & Hijyen Kontrolü
+  | "ready_delivered" // Tamamlandı & Teslim Edildi
+  | "cancelled"; // İptal / İade
+
+export interface AppliancePartItem {
+  id: string;
+  partCode?: string;
+  partName: string; // ör: "NTC Sıcaklık Sensörü", "İnverter Kompresör", "Drenaj Pompası", "Kazan Rulman & Keçe Takımı", "DeLonghi 15 Bar Titreşim Pompası", "Defrost Rezistansı"
+  category:
+    | "thermostat_sensor" // Termostat & Sensör
+    | "resistance_heating" // Rezistans & Isıtıcı
+    | "pump_motor" // Pompa & Motor
+    | "gasket_seal" // Conta, Keçe & Körük
+    | "compressor_gas" // Kompresör, Gaz & Valf
+    | "electronic_board" // Elektronik Kart & Ekran
+    | "filter_boiler" // Filtre, Eşanjör & Kazan
+    | "gear_mechanical" // Dişli, Bıçak & Mekanik
+    | "other";
+  quantity: number;
+  unitPrice: number;
+  vatRate: number;
+  total: number;
+  warrantyMonths?: number; // Parça Garanti Süresi (Ay)
+}
+
+export interface ApplianceLaborItem {
+  id: string;
+  operationName: string; // ör: "Kombi Yıllık Periyodik Bakımı & Yanma Odası Temizliği", "Klima Gaz Dolumu (R32 / R410A) & Vakum", "Kazan Rulman Değişimi", "Espresso Makinesi Kireç Temizliği & Pompa Revizyonu"
+  technicianName?: string;
+  hours: number;
+  hourlyRate: number;
+  vatRate: number;
+  total: number;
+}
+
+export interface ApplianceAiOutputs {
+  // 1. Kapsamlı Saha ve Servis Operasyon Kontrol Listesi
+  fieldChecklist?: {
+    faultAnalysis: string; // Arıza Analizi ve Olası Nedenler
+    requiredPartsAndSupplies: string; // Yanında Bulundurulması Gereken Yedek Parça ve Sarf Malzemeleri
+    requiredToolsAndEquipment: string; // Gerekli El Aletleri ve Test Ekipmanları
+    safetyAndHygieneRules: string; // Güvenlik ve Hijyen Kuralları
+    formattedText?: string;
+    generatedAt?: string;
+  };
+  // 2. Müşteri Fiyat ve İşlem Onay Mesajı
+  costApprovalMessage?: {
+    messageText: string;
+    generatedAt?: string;
+  };
+  // 3. Bakım & Teslimat Bilgilendirme Raporu
+  completionReport?: {
+    subject: string;
+    summary: string;
+    maintenanceTips: string[];
+    generatedAt?: string;
+  };
+}
+
+export interface ApplianceServiceRecord {
+  id: string;
+  serviceNo: string; // ör: "SRV-2026-0105"
+  category: ApplianceCategory;
+  deviceType: ApplianceDeviceType;
+  brand: string; // Bosch, Arçelik, Beko, Daikin, DemirDöküm, Vaillant, De'Longhi, Philips, Dyson, Roborock vb.
+  model: string; // Serie 6 EcoSilence, Sensira 12000 BTU, Nitromix P28, Magnifica S, V15 Detect
+  serialNumber?: string; // Seri No / Barkod
+  serviceLocation: ApplianceServiceLocation; // "on_site" (Saha) | "workshop" (Atölye)
+  
+  // Saha / Müşteri Adres ve İletişim Bilgileri
+  contactId?: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail?: string;
+  serviceAddress: string; // Müşteri Montaj / Servis Adresi
+  city?: string;
+  district?: string;
+  
+  appointmentDate?: string; // Randevu Tarihi
+  appointmentTimeSlot?: string; // ör: "10:00 - 12:00"
+  entryDate: string;
+  completionDate?: string;
+  status: ApplianceServiceStatus;
+  
+  // Şikayet & Teknik Bulgular
+  customerProblemDescription: string; // Müşterinin Bildirdiği Sorun
+  technicianReport?: string; // Teknisyen Arıza Analizi & Uygulanan İşlem
+  assignedTechnician?: string; // Görevli Saha / Atölye Teknisyeni
+  accessoriesReceived?: string; // Beraberinde Teslim Alınanlar (Uzaktan Kumanda, Şarj İstasyonu/Adaptörü, Güç Kablosu, Filtre, Boru, Aparatlar vb.)
+  damagePhysicalCondition?: string; // Ürün Gövde Çizik, Kırık, Sararma, Deformasyon & Fiziksel Kusur Durumu
+  
+  // Cihaz Teknik Detayları (Opsiyonel / İklimlendirme - Gaz)
+  gasType?: "R32" | "R410A" | "R134a" | "R600a" | "R290" | "none"; // Gaz Türü
+  pressureBar?: number; // Basınç Değeri (Bar)
+  voltageTested?: number; // Voltaj Ölçümü (Volt)
+  isWarrantyActive?: boolean; // Garanti Kapsamında mı?
+  
+  // Maliyet & Kalemler
+  parts: AppliancePartItem[];
+  labors: ApplianceLaborItem[];
+  partsTotal: number;
+  laborTotal: number;
+  totalVat: number;
+  grandTotal: number;
+  discountAmount?: number;
+  isApprovedByCustomer: boolean;
+  approvalDate?: string;
+  
+  // AI Destek Çıktıları
+  aiOutputs?: ApplianceAiOutputs;
+  
+  invoiceId?: string;
+  invoiceNumber?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 
 
 

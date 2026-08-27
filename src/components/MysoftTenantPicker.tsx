@@ -63,8 +63,8 @@ export const MysoftTenantPicker: React.FC<MysoftTenantPickerProps> = ({
                   ? "Mysoft mükellef listesi boş"
                   : "Mükellef seçin"}
             </option>
-            {tenants.map((tenant) => (
-              <option key={tenant.taxNumber} value={tenant.taxNumber}>
+            {tenants.map((tenant, idx) => (
+              <option key={`${tenant.taxNumber}_${tenant.id || idx}`} value={tenant.taxNumber}>
                 {tenant.name} — {tenant.taxNumber}
                 {tenant.id ? ` (#${tenant.id})` : ""}
               </option>
@@ -128,8 +128,8 @@ export const MysoftTenantPicker: React.FC<MysoftTenantPickerProps> = ({
                 ? "Listede mükellef yok"
                 : "Mükellef seçin"}
           </option>
-          {tenants.map((tenant) => (
-            <option key={tenant.taxNumber} value={tenant.taxNumber}>
+          {tenants.map((tenant, idx) => (
+            <option key={`${tenant.taxNumber}_${tenant.id || idx}`} value={tenant.taxNumber}>
               {tenant.name} — {tenant.taxNumber}
               {tenant.id ? ` (#${tenant.id})` : ""}
             </option>
