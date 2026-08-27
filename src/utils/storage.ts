@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, getContactAccountCode } from "../types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, getContactAccountCode } from "../types";
 import {
   initialCompanySettings,
   initialContacts,
@@ -19,6 +19,11 @@ import {
   initialLegalDeductions,
   initialCostProjects,
   initialAssetCustodies,
+  initialBillOfMaterials,
+  initialWorkstations,
+  initialRoutings,
+  initialWorkOrders,
+  initialSubcontractOrders,
 } from "../mockData";
 
 const STORAGE_KEYS = {
@@ -42,6 +47,11 @@ const STORAGE_KEYS = {
   COST_PROJECTS: "muavin_cost_projects",
   ASSET_CUSTODIES: "muavin_asset_custodies",
   EDOCUMENTS: "muavin_e_documents",
+  BOMS: "muavin_boms",
+  WORKSTATIONS: "muavin_workstations",
+  ROUTINGS: "muavin_routings",
+  WORK_ORDERS: "muavin_work_orders",
+  SUBCONTRACT_ORDERS: "muavin_subcontract_orders",
 };
 
 export function getStoredData() {
@@ -90,6 +100,11 @@ export function getStoredData() {
     legalDeductions: get<LegalDeduction[]>(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions),
     costProjects: get<CostProject[]>(STORAGE_KEYS.COST_PROJECTS, initialCostProjects),
     assetCustodies: get<AssetCustody[]>(STORAGE_KEYS.ASSET_CUSTODIES, initialAssetCustodies),
+    boms: get<BillOfMaterials[]>(STORAGE_KEYS.BOMS, initialBillOfMaterials),
+    workstations: get<Workstation[]>(STORAGE_KEYS.WORKSTATIONS, initialWorkstations),
+    routings: get<Routing[]>(STORAGE_KEYS.ROUTINGS, initialRoutings),
+    workOrders: get<WorkOrder[]>(STORAGE_KEYS.WORK_ORDERS, initialWorkOrders),
+    subcontractOrders: get<SubcontractOrder[]>(STORAGE_KEYS.SUBCONTRACT_ORDERS, initialSubcontractOrders),
   };
 }
 
@@ -193,6 +208,11 @@ export function resetToDemoData() {
   safeSet(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions);
   safeSet(STORAGE_KEYS.COST_PROJECTS, initialCostProjects);
   safeSet(STORAGE_KEYS.ASSET_CUSTODIES, initialAssetCustodies);
+  safeSet(STORAGE_KEYS.BOMS, initialBillOfMaterials);
+  safeSet(STORAGE_KEYS.WORKSTATIONS, initialWorkstations);
+  safeSet(STORAGE_KEYS.ROUTINGS, initialRoutings);
+  safeSet(STORAGE_KEYS.WORK_ORDERS, initialWorkOrders);
+  safeSet(STORAGE_KEYS.SUBCONTRACT_ORDERS, initialSubcontractOrders);
   safeSet(STORAGE_KEYS.EDOCUMENTS, []);
 }
 
@@ -225,6 +245,11 @@ export function importBackupJSON(jsonString: string): boolean {
       if (parsed.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", parsed.legalDeductions);
       if (parsed.costProjects) saveStoredData("COST_PROJECTS", parsed.costProjects);
       if (parsed.assetCustodies) saveStoredData("ASSET_CUSTODIES", parsed.assetCustodies);
+      if (parsed.boms) saveStoredData("BOMS", parsed.boms);
+      if (parsed.workstations) saveStoredData("WORKSTATIONS", parsed.workstations);
+      if (parsed.routings) saveStoredData("ROUTINGS", parsed.routings);
+      if (parsed.workOrders) saveStoredData("WORK_ORDERS", parsed.workOrders);
+      if (parsed.subcontractOrders) saveStoredData("SUBCONTRACT_ORDERS", parsed.subcontractOrders);
       return true;
     }
   } catch (e) {

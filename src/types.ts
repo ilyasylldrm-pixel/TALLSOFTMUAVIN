@@ -790,6 +790,7 @@ export interface ExtractedDocumentData {
 export type AppModuleKey =
   | "dashboard"
   | "company"
+  | "production"
   | "e_services"
   | "invoices"
   | "orders_module"
@@ -807,7 +808,7 @@ export interface AppModuleDefinition {
   key: AppModuleKey;
   label: string;
   description: string;
-  category: "Genel" | "Ticari" | "Finans" | "Yönetim";
+  category: "Genel" | "Ticari" | "Finans" | "Yönetim" | "Üretim";
 }
 
 export type AssetCategory =
@@ -914,8 +915,323 @@ export interface AssetCustody {
   warehouseName?: string;
 }
 
+// ==========================================
+// 🏭 ÜRETİM & MRP II & MES MODÜLÜ TİPLERİ
+// ==========================================
+
+export type BomItemType = "raw_material" | "semi_finished" | "packaging" | "consumable";
+
+export interface BomItem {
+  id: string;
+  type: BomItemType;
+  productId: string; // Stok Kartı ID
+  productCode: string;
+  productName: string;
+  quantityPerUnit: number; // 1 birim nihai ürün için gereken miktar
+  unit: string; // 'Adet', 'Kg', 'Metre', 'Litre', vb.
+  wasteRate: number; // Fire Oranı % (Örn: 0.05 -> %5)
+  unitCost: number; // Referans Alış Maliyeti
+  isOptional?: boolean; // İsteğe bağlı bileşen
+  isAlternativeAllowed?: boolean; // Alternatif ikame malzeme izinli mi?
+  alternativeProductIds?: string[]; // Alternatif ürün ID'leri
+  notes?: string;
+}
+
+export type BillOfMaterialItem = BomItem;
+
+export interface BillOfMaterials {
+  id: string;
+  bomCode: string; // Örn: "BOM-KLT-001"
+  revision: number; // 1, 2, 3
+  name: string; // Reçete Adı
+  productId: string; // Üretilecek Mamul / Yarı Mamul ID
+  productCode: string;
+  productName: string;
+  category?: string;
+  outputQuantity: number; // Temel çıktı miktarı (Varsayılan: 1)
+  outputUnit: string;
+  yieldRate: number; // Çıktı Verimi (Varsayılan: 1.00 -> %100)
+  items: BomItem[];
+  routingId?: string; // Bağlı Operasyon Rotası
+  routingName?: string;
+  laborHoursPerUnit?: number; // Birim Başı Standart İşçilik Süresi (Saat)
+  laborHourlyRate?: number; // Standart İşçilik Saat Ücreti (TL)
+  overheadCostPerUnit?: number; // Birim Başı Genel İmalat Gideri (TL)
+  description?: string;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WorkstationCategory = "machine" | "assembly_line" | "paint_booth" | "manual_bench" | "cnc" | "quality_station";
+export type WorkstationStatus = "idle" | "running" | "maintenance" | "breakdown";
+
+export interface Workstation {
+  id: string;
+  code: string; // Örn: "CNC-01", "MONTAJ-HAT-A"
+  name: string;
+  category: WorkstationCategory;
+  hourlyOperatingCost: number; // Saatlik Makine Çalışma Maliyeti (Elektrik + Bakım TL)
+  hourlyDepreciationCost: number; // Saatlik Amortisman Payı (TL)
+  standardCapacityHoursPerDay: number; // Günlük Standart Çalışma Kapasitesi (Saat, örn: 8, 16, 24)
+  efficiencyRate: number; // OEE Verimlilik Çarpanı (0.85 -> %85)
+  status: WorkstationStatus;
+  currentWorkOrderId?: string;
+  currentWorkOrderNumber?: string;
+  assignedOperatorName?: string;
+  branchId?: string;
+  branchName?: string;
+  warehouseId?: string;
+  warehouseName?: string;
+  maintenanceSchedule?: {
+    lastMaintenanceDate?: string;
+    nextMaintenanceDate?: string;
+  };
+  notes?: string;
+}
+
+export interface RoutingStep {
+  id: string;
+  sequence: number; // 10, 20, 30...
+  operationName: string; // 'Lazer Kesim', 'Büküm', 'Kaynak', 'Fason Boya', 'Montaj', 'Kalite Kontrol'
+  workstationId: string;
+  workstationName: string;
+  workstationType: "internal" | "subcontractor";
+  subcontractorContactId?: string;
+  subcontractorContactName?: string;
+  subcontractorUnitCost?: number; // Fason Birim Maliyeti (TL)
+  setupTimeMinutes: number; // Hazırlık / Kalıp Ayar Süresi (Sabit dk)
+  runTimePerUnitMinutes: number; // 1 Adet İçin İşlem Süresi (dk)
+  queueTimeMinutes?: number; // Dinlenme / Kuruma / Bekleme Süresi (dk)
+  requiresQualityInspection?: boolean; // Kalite Kontrol Zorunlu mu?
+  laborSkillLevelRequired?: string;
+  description?: string;
+}
+
+export interface Routing {
+  id: string;
+  routingCode: string; // Örn: "ROUT-KLT-01"
+  name: string;
+  productId?: string;
+  productName?: string;
+  steps: RoutingStep[];
+  totalSetupMinutes: number;
+  totalRunMinutesPerUnit: number;
+  isActive: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+export type WorkOrderStatus =
+  | "draft"
+  | "planned"
+  | "material_issued"
+  | "in_progress"
+  | "quality_control"
+  | "paused"
+  | "completed"
+  | "cancelled";
+export type WorkOrderPriority = "low" | "medium" | "high" | "urgent";
+
+export interface WorkOrderOperation {
+  id: string;
+  sequence: number;
+  operationName: string;
+  workstationId: string;
+  workstationName: string;
+  workstationType: "internal" | "subcontractor";
+  subcontractorContactId?: string;
+  subcontractorContactName?: string;
+  status: "pending" | "ready" | "in_progress" | "completed";
+  plannedDurationMinutes: number;
+  actualDurationMinutes: number;
+  actualStartTime?: string;
+  actualEndTime?: string;
+  operatorEmployeeId?: string;
+  operatorName?: string;
+  producedQuantity: number;
+  scrappedQuantity: number;
+  notes?: string;
+  qualityApproval?: {
+    approvedBy: string;
+    approvedAt: string;
+    status: "approved" | "conditional" | "rejected";
+    notes?: string;
+  };
+}
+
+export interface WorkOrderMaterial {
+  id: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  type: BomItemType;
+  plannedQuantity: number; // Planlanan
+  allocatedQuantity: number; // Rezerve Edilen
+  consumedQuantity: number; // Fiilen Sarf Edilen
+  unit: string;
+  unitCost: number;
+  totalCost: number;
+  warehouseId?: string;
+  warehouseName?: string;
+  isSubcontractDispatched?: boolean; // Fasona Sevk Edildi mi?
+  dispatchWaybillNo?: string;
+}
+
+export interface WorkOrderCostBreakdown {
+  rawMaterialCost: number; // Hammadde & Yarı Mamul Sarfiyatı
+  laborCost: number; // Direkt İşçilik
+  machineDepreciationCost: number; // Makine Amortismanı & Enerji
+  subcontractorCost: number; // Fason Hizmet Bedeli
+  overheadCost: number; // Genel Üretim Gideri
+  totalCost: number; // Toplam Fiili Maliyet
+  unitCost: number; // Birim Fiili Mamul Maliyeti
+}
+
+export interface WorkOrder {
+  id: string;
+  orderNumber: string; // Örn: "WO-2026-00101"
+  originType: "sales_order" | "mrp_auto" | "manual_stock";
+  sourceSalesOrderId?: string;
+  sourceSalesOrderNumber?: string;
+  customerName?: string;
+  
+  productId: string;
+  productCode: string;
+  productName: string;
+  bomId: string;
+  bomCode: string;
+  routingId?: string;
+  
+  lotNumber: string; // Lot / Parti Numarası (Örn: "LOT260827-01")
+  barcode?: string; // Barkod / QR (Örn: "WO2608270101")
+  
+  plannedQuantity: number; // Planlanan Miktar
+  producedQuantity: number; // Sağlam Üretilen Miktar
+  scrappedQuantity: number; // Hurda / Fire Miktar
+  unit: string;
+  
+  sourceWarehouseId: string; // Hammaddelerin Çıkacağı Depo
+  sourceWarehouseName: string;
+  targetWarehouseId: string; // Üretilen Mamulün Gireceği Depo
+  targetWarehouseName: string;
+  
+  status: WorkOrderStatus;
+  priority: WorkOrderPriority;
+  
+  plannedStartDate: string;
+  plannedDueDate: string;
+  actualStartDate?: string;
+  actualEndDate?: string;
+  
+  operations: WorkOrderOperation[];
+  allocatedMaterials: WorkOrderMaterial[];
+  costBreakdown?: WorkOrderCostBreakdown;
+  
+  isMaterialIssued: boolean; // Sarfiyat fişi kesilip stoktan düşüldü mü?
+  isFinishedGoodReceived: boolean; // Mamul deposuna giriş yapıldı mı?
+  
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SubcontractOrder {
+  id: string;
+  dispatchNo: string; // Fason İrsaliye No
+  workOrderId: string;
+  workOrderNumber: string;
+  operationId: string;
+  operationName: string;
+  subcontractorContactId: string;
+  subcontractorContactName: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  totalPrice: number;
+  dispatchDate: string;
+  expectedReturnDate: string;
+  actualReturnDate?: string;
+  status: "dispatched" | "in_process" | "received_partial" | "completed" | "cancelled";
+  receivedQuantity: number;
+  scrapQuantity: number;
+  serviceInvoiceNo?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface MrpDeficitItem {
+  productId: string;
+  productCode: string;
+  productName: string;
+  category: string;
+  unit: string;
+  type: BomItemType;
+  currentStock: number;
+  reservedStock: number;
+  availableStock: number;
+  requiredQuantity: number;
+  deficitQuantity: number; // Açık / İhtiyaç Miktarı
+  estimatedUnitCost: number;
+  estimatedTotalCost: number;
+  suggestedAction: "purchase_order" | "sub_work_order";
+  parentWorkOrderNumbers: string[];
+}
+
+export interface MrpRequirement {
+  id: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  grossRequirement: number;
+  currentStock: number;
+  scheduledReceipts: number;
+  netRequirement: number;
+  suggestedOrderDate: string;
+  requiredDate: string;
+  leadTimeDays: number;
+  unit: string;
+}
+
+export interface MrpRecommendation {
+  id: string;
+  actionType: "create_work_order" | "create_purchase_order";
+  productId: string;
+  productCode: string;
+  productName: string;
+  suggestedQuantity: number;
+  unit: string;
+  suggestedDate: string;
+  reason: string;
+  estimatedCost: number;
+  bomId?: string;
+}
+
+export interface MesTerminalLog {
+  id: string;
+  timestamp: string;
+  workOrderId: string;
+  workOrderNumber: string;
+  operationId: string;
+  operationName: string;
+  workstationId: string;
+  workstationName: string;
+  operatorEmployeeId?: string;
+  operatorName?: string;
+  action: "START" | "PAUSE" | "RESUME" | "FINISH" | "SCRAP_ENTRY";
+  producedQty?: number;
+  scrappedQty?: number;
+  scrapReason?: string;
+  durationMinutes?: number;
+  notes?: string;
+}
+
 export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "dashboard", label: "Ana Sayfa / Özet", description: "Genel finansal durum ve grafikler", category: "Genel" },
+  { key: "production", label: "Üretim & MES / MRP", description: "İş emirleri, ürün reçeteleri (BOM), rotalar ve saha kontrolü", category: "Üretim" },
   { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi", category: "Yönetim" },
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
   { key: "invoices", label: "E-Belgeler & Faturalar", description: "Satış/Alış faturaları, e-Arşiv ve irsaliyeler", category: "Ticari" },

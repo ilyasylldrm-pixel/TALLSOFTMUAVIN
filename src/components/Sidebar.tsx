@@ -33,6 +33,9 @@ import {
   ShoppingCart,
   Truck,
   X,
+  Factory,
+  Cpu,
+  Layers,
 } from "lucide-react";
 import { CompanySettings } from "../types";
 import { Logo } from "./Logo";
@@ -61,6 +64,12 @@ export type NavItem =
   | "products_costs"
   | "orders"
   | "orders_module"
+  | "production"
+  | "production_boms"
+  | "production_routings"
+  | "production_workstations"
+  | "production_work_orders"
+  | "production_subcontract"
   | "hr"
   | "files"
   | "reports"
@@ -98,6 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const [isOrdersExpanded, setIsOrdersExpanded] = useState(true);
+  const [isProductionExpanded, setIsProductionExpanded] = useState(true);
   const [isFinanceExpanded, setIsFinanceExpanded] = useState(true);
   const [isInvoicesExpanded, setIsInvoicesExpanded] = useState(true);
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
@@ -120,6 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "e_services" as NavItem, label: "E-İşlemler", icon: ShieldCheck, badge: "Resmi" },
     { id: "invoices" as NavItem, label: "E-Belgeler", icon: FileText, hasSubItems: true },
     { id: "orders_module" as NavItem, label: "Sipariş & Proforma", icon: ShoppingCart, hasSubItems: true },
+    { id: "production" as NavItem, label: "Üretim & MRP", icon: Factory, hasSubItems: true, badge: "MES" },
     { id: "contacts" as NavItem, label: "Cari Hesaplar", icon: Users },
     { id: "accounts" as NavItem, label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
     { id: "products" as NavItem, label: "Stoklar", icon: PackageIcon },
@@ -160,6 +171,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const orderSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "orders", label: "Siparişler & Sipariş Oluştur", icon: ShoppingCart },
     { id: "quotes", label: "Proforma Faturalar", icon: FileSpreadsheet },
+  ];
+
+  const productionSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
+    { id: "production", label: "Üretim Özeti & KPI", icon: LayoutDashboard },
+    { id: "production_boms", label: "Ürün Reçeteleri (BOM)", icon: Boxes },
+    { id: "production_routings", label: "Operasyon & Rota", icon: TrendingUp },
+    { id: "production_workstations", label: "İş İstasyonları / CNC", icon: Cpu },
+    { id: "production_work_orders", label: "İş Emirleri & Takip", icon: Layers },
+    { id: "production_subcontract", label: "Fason Takibi", icon: Truck },
   ];
 
   const financeSubModules: { id: FinanceSubModule; label: string; icon: React.ElementType }[] = [
@@ -217,6 +237,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {navItems.map((item) => {
           const Icon = item.icon;
           const isOrderItem = item.id === "orders_module" || item.id === "orders";
+          const isProductionItem = item.id === "production";
           const isInvoiceItem = item.id === "invoices";
           const isFinanceItem = item.id === "accounts";
           const isCompanyItem = item.id === "company";
@@ -224,6 +245,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           const isActive = isOrderItem
             ? ["orders", "orders_module", "quotes"].includes(currentTab)
+            : isProductionItem
+            ? [
+                "production",
+                "production_boms",
+                "production_routings",
+                "production_workstations",
+                "production_work_orders",
+                "production_subcontract",
+              ].includes(currentTab)
             : isInvoiceItem
             ? [
                 "invoices",
@@ -251,6 +281,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     setIsOrdersExpanded((prev) => !prev);
                     if (!["orders", "orders_module", "quotes"].includes(currentTab)) {
                       handleSelectTabWithMobileClose("orders");
+                    }
+                  } else if (isProductionItem) {
+                    setIsProductionExpanded((prev) => !prev);
+                    if (
+                      ![
+                        "production",
+                        "production_boms",
+                        "production_routings",
+                        "production_workstations",
+                        "production_work_orders",
+                        "production_subcontract",
+                      ].includes(currentTab)
+                    ) {
+                      handleSelectTabWithMobileClose("production");
                     }
                   } else if (isInvoiceItem) {
                     setIsInvoicesExpanded((prev) => !prev);
@@ -306,6 +350,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ) : (
                     <ChevronRight className="w-4 h-4 text-slate-400" />
                   )
+                ) : isProductionItem ? (
+                  isProductionExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )
                 ) : isInvoiceItem ? (
                   isInvoicesExpanded ? (
                     <ChevronDown className="w-4 h-4 text-slate-400" />
@@ -333,6 +383,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {isOrderItem && isOrdersExpanded && (
                 <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
                   {orderSubModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubActive = currentTab === sub.id;
+
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => onSelectTab(sub.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          isSubActive
+                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        <SubIcon
+                          className={`w-3.5 h-3.5 ${
+                            isSubActive ? "text-white" : "text-slate-400"
+                          }`}
+                        />
+                        <span>{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Sub-modules for Üretim & MRP */}
+              {isProductionItem && isProductionExpanded && (
+                <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
+                  {productionSubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive = currentTab === sub.id;
 
