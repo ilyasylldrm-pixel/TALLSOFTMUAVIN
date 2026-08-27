@@ -122,10 +122,10 @@ export const WhatsAppCenter: React.FC<WhatsAppCenterProps> = ({ settings }) => {
     };
   }, [statusData.status]);
 
-  const handleConnect = async () => {
+  const handleConnect = async (force = false) => {
     setIsConnecting(true);
     try {
-      const data = await connectWhatsAppApi();
+      const data = await connectWhatsAppApi(force);
       setStatusData(data);
     } catch (err: any) {
       alert("Bağlantı başlatılamadı: " + err.message);
@@ -366,7 +366,7 @@ export const WhatsAppCenter: React.FC<WhatsAppCenterProps> = ({ settings }) => {
 
                 <div className="flex items-center justify-center gap-3">
                   <button
-                    onClick={handleConnect}
+                    onClick={() => handleConnect(true)}
                     disabled={isConnecting}
                     className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-2 cursor-pointer transition"
                   >
@@ -396,7 +396,7 @@ export const WhatsAppCenter: React.FC<WhatsAppCenterProps> = ({ settings }) => {
                 )}
 
                 <button
-                  onClick={handleConnect}
+                  onClick={() => handleConnect(true)}
                   disabled={isConnecting}
                   className="px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center gap-2.5 mx-auto shadow-lg shadow-emerald-600/25 cursor-pointer transition transform hover:-translate-y-0.5"
                 >

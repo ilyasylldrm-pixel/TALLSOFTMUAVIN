@@ -17,6 +17,10 @@ export function getWhatsAppRouter(): Router {
   // Start or restart connection
   router.post("/connect", async (req: Request, res: Response) => {
     try {
+      const current = whatsAppService.getStatus();
+      if (current.status === "connected" && !req.body?.force) {
+        return res.json({ success: true, message: "WhatsApp zaten bağlı.", data: current });
+      }
       await whatsAppService.init(true);
       const status = whatsAppService.getStatus();
       res.json({ success: true, message: "Bağlantı başlatıldı.", data: status });

@@ -52,9 +52,13 @@ export const fetchWhatsAppStatus = async (): Promise<WhatsAppClientStatus> => {
   }
 };
 
-export const connectWhatsAppApi = async (): Promise<WhatsAppClientStatus> => {
+export const connectWhatsAppApi = async (force = false): Promise<WhatsAppClientStatus> => {
   try {
-    const res = await fetch("/api/whatsapp/connect", { method: "POST" });
+    const res = await fetch("/api/whatsapp/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force }),
+    });
     const json = await res.json();
     if (json.success && json.data) {
       return json.data;

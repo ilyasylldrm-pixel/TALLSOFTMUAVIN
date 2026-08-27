@@ -25,6 +25,11 @@ import {
   ApplianceServiceRecord,
   CompanySettings,
 } from "../types";
+import {
+  fetchWhatsAppStatus,
+  sendWhatsAppTextApi,
+  WhatsAppClientStatus,
+} from "../services/whatsappClient";
 
 export type AnyServiceRecord = AutoServiceRecord | ItServiceRecord | ApplianceServiceRecord;
 
@@ -191,6 +196,40 @@ export const ServiceWhatsAppModal: React.FC<ServiceWhatsAppModalProps> = ({
     } catch {
       // Fallback
       setCopied(false);
+    }
+  };
+
+  const [waStatus, setWaStatus] = useState<WhatsAppClientStatus | null>(null);
+  const [isDirectSending, setIsDirectSending] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchWhatsAppStatus().then(setWaStatus).catch(() => {});
+    }
+  }, [isOpen]);
+
+  const handleSendDirect = async () => {
+    if (!cleanPhone || !message.trim()) {
+      alert("Lütfen geçerli bir telefon numarası ve mesaj girin.");
+      return;
+    }
+    setIsDirectSending(true);
+    try {
+      const res = await sendWhatsAppTextApi(
+        cleanPhone,
+        message,
+        serviceRecord ? `${serviceRecord.contactName} (${serviceRecord.serviceNo})` : "Servis Müşterisi"
+      );
+      if (res.success) {
+        alert("✅ Servis bilgilendirme mesajı WhatsApp üzerinden doğrudan müşteriye iletildi!");
+        onClose();
+      } else {
+        alert(`WhatsApp doğrudan gönderim hatası: ${res.error || "Bilinmeyen hata"}\n\nDilerseniz 'WhatsApp'ta Aç ve Gönder' seçeneğini kullanabilirsiniz.`);
+      }
+    } catch (e: any) {
+      alert("Hata: " + e.message);
+    } finally {
+      setIsDirectSending(false);
     }
   };
 
@@ -484,16 +523,29 @@ export const ServiceWhatsAppModal: React.FC<ServiceWhatsAppModalProps> = ({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleOpenWhatsApp}
-            disabled={!cleanPhone || !message.trim()}
-            className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 text-white font-black text-xs shadow-lg shadow-emerald-600/25 active:scale-95 transition-all cursor-pointer"
-          >
-            <Send className="w-4 h-4" />
-            <span>WhatsApp'ta Aç ve Gönder</span>
-            <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-          </button>
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {waStatus?.status === "connected" && (
+              <button
+                type="button"
+                onClick={handleSendDirect}
+                disabled={isDirectSending || !cleanPhone || !message.trim()}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs shadow-md shadow-emerald-600/25 active:scale-95 transition-all cursor-pointer"
+              >
+                <Send className={`w-4 h-4 ${isDirectSending ? "animate-spin" : ""}`} />
+                <span>{isDirectSending ? "İletiliyor..." : "🟢 Doğrudan WhatsApp ile Gönder"}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleOpenWhatsApp}
+              disabled={!cleanPhone || !message.trim()}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-bold text-xs shadow-md active:scale-95 transition-all cursor-pointer"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>WhatsApp Web'de Aç</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

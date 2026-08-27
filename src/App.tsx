@@ -22,14 +22,11 @@ const EDocuments = lazy(() => import("./components/EDocuments"));
 const HRManagement = lazy(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement })));
 const FileManager = lazy(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
-<<<<<<< HEAD
 const WhatsAppCenter = lazy(() => import("./components/WhatsAppCenter").then((m) => ({ default: m.WhatsAppCenter })));
-=======
 const ProductionModule = lazy(() => import("./components/Production/ProductionModule").then((m) => ({ default: m.ProductionModule })));
 const AutoServiceModule = lazy(() => import("./components/AutoService/AutoServiceModule").then((m) => ({ default: m.AutoServiceModule })));
 const ITServiceModule = lazy(() => import("./components/ITService/ITServiceModule").then((m) => ({ default: m.ITServiceModule })));
 const ApplianceServiceModule = lazy(() => import("./components/ApplianceService/ApplianceServiceModule").then((m) => ({ default: m.ApplianceServiceModule })));
->>>>>>> 2cc0cc5f11e06f2296776d1eb40cc86e50c542d0
 
 import {
   getStoredData,

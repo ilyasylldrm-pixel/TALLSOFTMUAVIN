@@ -2,7 +2,8 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  proto,
+  makeCacheableSignalKeyStore,
+  Browsers,
   WASocket,
 } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
@@ -59,7 +60,8 @@ class WhatsAppService {
   private lastError: string | null = null;
   private isInitializing: boolean = false;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5;
+  private maxReconnectAttempts: number = 10;
+  private reconnectTimer: any = null;
 
   constructor() {
     const dataDir = path.join(process.cwd(), "data");
@@ -139,30 +141,70 @@ class WhatsAppService {
     };
   }
 
+  private async cleanupSocket() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.sock) {
+      try {
+        this.sock.ev.removeAllListeners("connection.update");
+        this.sock.ev.removeAllListeners("creds.update");
+        this.sock.ev.removeAllListeners("messages.upsert");
+        this.sock.end(undefined);
+      } catch (e) {
+        // ignore cleanup error
+      }
+      this.sock = null;
+    }
+  }
+
   /**
    * Initializes the WhatsApp Baileys socket connection.
    */
   public async init(autoReconnect = true): Promise<void> {
     if (this.isInitializing) return;
+    if (this.status === "connected" && this.sock) {
+      return;
+    }
+
     this.isInitializing = true;
 
     try {
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+
+      await this.cleanupSocket();
+
       this.status = "connecting";
       this.lastError = null;
 
       const { state, saveCreds } = await useMultiFileAuthState(this.sessionDir);
-      const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015901307] as any }));
+      const { version } = await fetchLatestBaileysVersion().catch(() => ({
+        version: [2, 3000, 1043857760] as any,
+      }));
 
       const silentLogger = pino({ level: "silent" });
 
       this.sock = makeWASocket({
         version,
         logger: silentLogger,
-        auth: state,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+        },
         printQRInTerminal: false,
-        browser: ["Muavin Muhasebe", "Chrome", "1.0.0"],
+        browser: Browsers.ubuntu("Chrome"),
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 25000,
+        retryRequestDelayMs: 500,
+        maxMsgRetryCount: 3,
+        getMessage: async () => undefined,
       });
 
       this.sock.ev.on("creds.update", saveCreds);
@@ -181,6 +223,7 @@ class WhatsAppService {
               },
             });
             this.status = "qr_ready";
+            this.lastError = null;
           } catch (qrErr: any) {
             console.error("QR Kod oluşturma hatası:", qrErr);
             this.lastError = "QR Kod oluşturulamadı.";
@@ -189,29 +232,31 @@ class WhatsAppService {
 
         if (connection === "close") {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+          const shouldReconnect = !isLoggedOut;
 
           console.log(`WhatsApp bağlantısı kapandı. Sebep Kodu: ${statusCode}, Yeniden bağlanacak mı: ${shouldReconnect}`);
 
           this.status = "disconnected";
           this.qrCodeDataUrl = null;
-          this.connectedPhone = null;
-          this.connectedName = null;
-          this.connectedAt = null;
 
-          if (statusCode === DisconnectReason.loggedOut) {
+          if (isLoggedOut) {
+            this.connectedPhone = null;
+            this.connectedName = null;
+            this.connectedAt = null;
             this.lastError = "WhatsApp oturumu sonlandırıldı. Lütfen yeni QR kod okutun.";
+            await this.cleanupSocket();
             this.clearSessionFiles();
           } else if (shouldReconnect && autoReconnect) {
             if (this.reconnectAttempts < this.maxReconnectAttempts) {
               this.reconnectAttempts++;
-              console.log(`WhatsApp yeniden bağlanıyor (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-              setTimeout(() => {
-                this.isInitializing = false;
-                this.init(true);
-              }, 3000);
+              const delay = statusCode === 440 ? 5000 : 3000;
+              console.log(`WhatsApp ${delay}ms sonra yeniden bağlanıyor (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+              this.reconnectTimer = setTimeout(() => {
+                this.init(true).catch((err) => console.warn("Yeniden bağlanma hatası:", err));
+              }, delay);
             } else {
-              this.lastError = "WhatsApp sunucusuna bağlanılamadı. Lütfen 'Yeniden Bağlan' butonuna basın.";
+              this.lastError = "WhatsApp bağlantısı koptu. Lütfen 'Yeniden Bağlan' butonuna tıklayın.";
             }
           }
         } else if (connection === "open") {
@@ -246,9 +291,8 @@ class WhatsAppService {
     try {
       if (this.sock) {
         await this.sock.logout().catch(() => {});
-        this.sock.end(undefined);
-        this.sock = null;
       }
+      await this.cleanupSocket();
     } catch (err) {
       console.warn("WhatsApp logout uyarısı:", err);
     } finally {
@@ -262,7 +306,7 @@ class WhatsAppService {
     }
   }
 
-  private clearSessionFiles() {
+  public clearSessionFiles() {
     try {
       if (fs.existsSync(this.sessionDir)) {
         const files = fs.readdirSync(this.sessionDir);
@@ -276,24 +320,40 @@ class WhatsAppService {
   }
 
   /**
-   * Formats a phone number into WhatsApp JID (e.g. 905xxxxxxxxx@s.whatsapp.net)
+   * Resolves canonical WhatsApp JID for a given phone number.
    */
-  private formatJid(phone: string): string {
+  private async resolveJid(phone: string): Promise<string> {
     let clean = phone.replace(/[^0-9]/g, "");
     if (clean.startsWith("0")) {
       clean = "90" + clean.substring(1);
     } else if (clean.length === 10 && (clean.startsWith("5") || clean.startsWith("8"))) {
       clean = "90" + clean;
     }
+
+    if (this.sock && this.status === "connected") {
+      try {
+        const results = await this.sock.onWhatsApp(clean);
+        if (results && results.length > 0 && results[0]?.exists && results[0]?.jid) {
+          return results[0].jid;
+        }
+      } catch (e) {
+        // ignore lookup fail and fallback
+      }
+    }
+
     return `${clean}@s.whatsapp.net`;
   }
 
   /**
    * Sends a simple text message.
    */
-  public async sendText(phone: string, text: string, contactName?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  public async sendText(
+    phone: string,
+    text: string,
+    contactName?: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     if (this.status !== "connected" || !this.sock) {
-      const errMsg = "WhatsApp bağlı değil. Lütfen önce QR kod ile bağlanın.";
+      const errMsg = "WhatsApp bağlı değil. Lütfen önce WhatsApp Merkezi'nden QR kod ile bağlanın.";
       this.addLog({
         id: `msg_${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -307,9 +367,8 @@ class WhatsAppService {
       return { success: false, error: errMsg };
     }
 
-    const jid = this.formatJid(phone);
-
     try {
+      const jid = await this.resolveJid(phone);
       const sentMsg = await this.sock.sendMessage(jid, { text });
       const msgId = sentMsg?.key?.id || `msg_${Date.now()}`;
 
@@ -372,13 +431,14 @@ class WhatsAppService {
       return { success: false, error: errMsg };
     }
 
-    const jid = this.formatJid(phone);
-
     try {
+      const jid = await this.resolveJid(phone);
+      const cleanFileName = fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
+
       const sentMsg = await this.sock.sendMessage(jid, {
         document: fileBuffer,
         mimetype: mimeType,
-        fileName: fileName,
+        fileName: cleanFileName,
         caption: caption || undefined,
       });
 
@@ -390,7 +450,7 @@ class WhatsAppService {
         type: "document",
         phone,
         contactName,
-        fileName,
+        fileName: cleanFileName,
         caption: caption?.substring(0, 100),
         status: "sent",
       });
