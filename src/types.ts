@@ -793,6 +793,7 @@ export type AppModuleKey =
   | "production"
   | "auto_service"
   | "it_service"
+  | "appliance_service"
   | "e_services"
   | "invoices"
   | "orders_module"
@@ -1236,6 +1237,7 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "production", label: "Üretim & MES / MRP", description: "İş emirleri, ürün reçeteleri (BOM), rotalar ve saha kontrolü", category: "Üretim" },
   { key: "auto_service", label: "Oto Servis & Araç Bakım", description: "Araç kabul, iş emri, arıza teşhisi ve AI asistanları", category: "Ticari" },
   { key: "it_service", label: "Bilişim & BT Teknik Servis", description: "Cihaz kabul, parça/yazılım onarım ve AI destek rehberleri", category: "Ticari" },
+  { key: "appliance_service", label: "Ev Aletleri ve Klima", description: "Beyaz eşya, iklimlendirme ve küçük ev aletleri teknik servisi", category: "Ticari" },
   { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi", category: "Yönetim" },
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
   { key: "invoices", label: "E-Belgeler & Faturalar", description: "Satış/Alış faturaları, e-Arşiv ve irsaliyeler", category: "Ticari" },
@@ -1506,6 +1508,171 @@ export interface ItServiceRecord {
   createdAt: string;
   updatedAt?: string;
 }
+
+// ==========================================
+// 🧺 BEYAZ EŞYA, KÜÇÜK EV ALETLERİ & İKLİMLENDİRME (KLİMA / KOMBİ) SERVİS TİPLERİ
+// ==========================================
+
+export type ApplianceCategory =
+  | "major_appliance" // Beyaz Eşya (Buzdolabı, Çamaşır, Bulaşık, Fırın vb.)
+  | "hvac_climate" // İklimlendirme & Isıtma (Klima, Kombi, Şofben, Termosifon vb.)
+  | "small_appliance" // Küçük Ev / El Aletleri (Kahve Makinesi, Süpürge, Blender, Robot vb.)
+  | "other_appliance"; // Diğer
+
+export type ApplianceDeviceType =
+  // Beyaz Eşya
+  | "refrigerator" // Buzdolabı
+  | "freezer" // Derin Dondurucu
+  | "washing_machine" // Çamaşır Makinesi
+  | "dryer" // Kurutma Makinesi
+  | "dishwasher" // Bulaşık Makinesi
+  | "oven" // Fırın
+  | "cooktop_hob" // Ocak
+  | "range_hood" // Davlumbaz / Aspiratör
+  // İklimlendirme
+  | "air_conditioner_split" // Split Duvar Tipi Klima
+  | "air_conditioner_vrf" // VRF / Kaset / Kanal Tipi Klima
+  | "boiler_combi" // Kombi (Yoğuşmalı / Konvansiyonel)
+  | "water_heater" // Şofben / Termosifon
+  | "heat_pump" // Isı Pompası
+  // Küçük Ev & Mutfak Aletleri
+  | "coffee_machine" // Kahve / Espresso Makinesi
+  | "vacuum_cleaner" // Elektrikli / Dikey Süpürge
+  | "robot_vacuum" // Robot Süpürge
+  | "blender_food_processor" // Blender / Mutfak Robotu
+  | "toaster_grill" // Tost Makinesi / Elektrikli Izgara
+  | "microwave_oven" // Mikrodalga Fırın
+  | "steam_iron" // Ütü / Buhar Kazanlı Ütü
+  | "airfryer_fryer" // Airfryer / Sıcak Hava Fritözü
+  | "kettle_tea_maker" // Çay Makinesi / Su Isıtıcı
+  | "other";
+
+export type ApplianceServiceLocation = "on_site" | "workshop"; // Sahada / Müşteri Adresinde veya Atölyede
+
+export type ApplianceServiceStatus =
+  | "reception" // Servis Kaydı Alındı / Randevu Oluşturuldu
+  | "assigned" // Teknisyene / Saha Ekibine Atandı
+  | "on_the_way" // Sahada / Yolda
+  | "diagnosing" // Arıza Teşhisi & Ölçüm
+  | "quote_pending" // Teklif / Müşteri Onayı Bekliyor
+  | "parts_ordered" // Yedek Parça Bekleniyor
+  | "repairing" // Onarım / Montaj / Parça Değişimi
+  | "testing_qc" // Test, Gaz/Sızdırmazlık & Hijyen Kontrolü
+  | "ready_delivered" // Tamamlandı & Teslim Edildi
+  | "cancelled"; // İptal / İade
+
+export interface AppliancePartItem {
+  id: string;
+  partCode?: string;
+  partName: string; // ör: "NTC Sıcaklık Sensörü", "İnverter Kompresör", "Drenaj Pompası", "Kazan Rulman & Keçe Takımı", "DeLonghi 15 Bar Titreşim Pompası", "Defrost Rezistansı"
+  category:
+    | "thermostat_sensor" // Termostat & Sensör
+    | "resistance_heating" // Rezistans & Isıtıcı
+    | "pump_motor" // Pompa & Motor
+    | "gasket_seal" // Conta, Keçe & Körük
+    | "compressor_gas" // Kompresör, Gaz & Valf
+    | "electronic_board" // Elektronik Kart & Ekran
+    | "filter_boiler" // Filtre, Eşanjör & Kazan
+    | "gear_mechanical" // Dişli, Bıçak & Mekanik
+    | "other";
+  quantity: number;
+  unitPrice: number;
+  vatRate: number;
+  total: number;
+  warrantyMonths?: number; // Parça Garanti Süresi (Ay)
+}
+
+export interface ApplianceLaborItem {
+  id: string;
+  operationName: string; // ör: "Kombi Yıllık Periyodik Bakımı & Yanma Odası Temizliği", "Klima Gaz Dolumu (R32 / R410A) & Vakum", "Kazan Rulman Değişimi", "Espresso Makinesi Kireç Temizliği & Pompa Revizyonu"
+  technicianName?: string;
+  hours: number;
+  hourlyRate: number;
+  vatRate: number;
+  total: number;
+}
+
+export interface ApplianceAiOutputs {
+  // 1. Kapsamlı Saha ve Servis Operasyon Kontrol Listesi
+  fieldChecklist?: {
+    faultAnalysis: string; // Arıza Analizi ve Olası Nedenler
+    requiredPartsAndSupplies: string; // Yanında Bulundurulması Gereken Yedek Parça ve Sarf Malzemeleri
+    requiredToolsAndEquipment: string; // Gerekli El Aletleri ve Test Ekipmanları
+    safetyAndHygieneRules: string; // Güvenlik ve Hijyen Kuralları
+    formattedText?: string;
+    generatedAt?: string;
+  };
+  // 2. Müşteri Fiyat ve İşlem Onay Mesajı
+  costApprovalMessage?: {
+    messageText: string;
+    generatedAt?: string;
+  };
+  // 3. Bakım & Teslimat Bilgilendirme Raporu
+  completionReport?: {
+    subject: string;
+    summary: string;
+    maintenanceTips: string[];
+    generatedAt?: string;
+  };
+}
+
+export interface ApplianceServiceRecord {
+  id: string;
+  serviceNo: string; // ör: "SRV-2026-0105"
+  category: ApplianceCategory;
+  deviceType: ApplianceDeviceType;
+  brand: string; // Bosch, Arçelik, Beko, Daikin, DemirDöküm, Vaillant, De'Longhi, Philips, Dyson, Roborock vb.
+  model: string; // Serie 6 EcoSilence, Sensira 12000 BTU, Nitromix P28, Magnifica S, V15 Detect
+  serialNumber?: string; // Seri No / Barkod
+  serviceLocation: ApplianceServiceLocation; // "on_site" (Saha) | "workshop" (Atölye)
+  
+  // Saha / Müşteri Adres ve İletişim Bilgileri
+  contactId?: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail?: string;
+  serviceAddress: string; // Müşteri Montaj / Servis Adresi
+  city?: string;
+  district?: string;
+  
+  appointmentDate?: string; // Randevu Tarihi
+  appointmentTimeSlot?: string; // ör: "10:00 - 12:00"
+  entryDate: string;
+  completionDate?: string;
+  status: ApplianceServiceStatus;
+  
+  // Şikayet & Teknik Bulgular
+  customerProblemDescription: string; // Müşterinin Bildirdiği Sorun
+  technicianReport?: string; // Teknisyen Arıza Analizi & Uygulanan İşlem
+  assignedTechnician?: string; // Görevli Saha / Atölye Teknisyeni
+  
+  // Cihaz Teknik Detayları (Opsiyonel / İklimlendirme - Gaz)
+  gasType?: "R32" | "R410A" | "R134a" | "R600a" | "R290" | "none"; // Gaz Türü
+  pressureBar?: number; // Basınç Değeri (Bar)
+  voltageTested?: number; // Voltaj Ölçümü (Volt)
+  isWarrantyActive?: boolean; // Garanti Kapsamında mı?
+  
+  // Maliyet & Kalemler
+  parts: AppliancePartItem[];
+  labors: ApplianceLaborItem[];
+  partsTotal: number;
+  laborTotal: number;
+  totalVat: number;
+  grandTotal: number;
+  discountAmount?: number;
+  isApprovedByCustomer: boolean;
+  approvalDate?: string;
+  
+  // AI Destek Çıktıları
+  aiOutputs?: ApplianceAiOutputs;
+  
+  invoiceId?: string;
+  invoiceNumber?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 
 
 

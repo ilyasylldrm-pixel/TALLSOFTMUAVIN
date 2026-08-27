@@ -25,6 +25,7 @@ const AdminDashboard = lazy(() => import("./components/AdminDashboard").then((m)
 const ProductionModule = lazy(() => import("./components/Production/ProductionModule").then((m) => ({ default: m.ProductionModule })));
 const AutoServiceModule = lazy(() => import("./components/AutoService/AutoServiceModule").then((m) => ({ default: m.AutoServiceModule })));
 const ITServiceModule = lazy(() => import("./components/ITService/ITServiceModule").then((m) => ({ default: m.ITServiceModule })));
+const ApplianceServiceModule = lazy(() => import("./components/ApplianceService/ApplianceServiceModule").then((m) => ({ default: m.ApplianceServiceModule })));
 
 import {
   getStoredData,
@@ -67,6 +68,7 @@ import {
   MrpRecommendation,
   AutoServiceRecord,
   ItServiceRecord,
+  ApplianceServiceRecord,
 } from "./types";
 
 import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X } from "lucide-react";
@@ -171,14 +173,19 @@ export default function App() {
   useEffect(() => { if (data.subcontractOrders) saveStoredData("SUBCONTRACT_ORDERS", data.subcontractOrders); }, [data.subcontractOrders]);
   useEffect(() => { if (data.autoServices) saveStoredData("AUTO_SERVICES", data.autoServices); }, [data.autoServices]);
   useEffect(() => { if (data.itServices) saveStoredData("IT_SERVICES", data.itServices); }, [data.itServices]);
+  useEffect(() => { if (data.applianceServices) saveStoredData("APPLIANCE_SERVICES", data.applianceServices); }, [data.applianceServices]);
 
-  // Auto & IT Service Handlers
+  // Auto & IT & Appliance Service Handlers
   const handleUpdateAutoServices = (services: AutoServiceRecord[]) => {
     setData((prev) => ({ ...prev, autoServices: services }));
   };
 
   const handleUpdateItServices = (services: ItServiceRecord[]) => {
     setData((prev) => ({ ...prev, itServices: services }));
+  };
+
+  const handleUpdateApplianceServices = (services: ApplianceServiceRecord[]) => {
+    setData((prev) => ({ ...prev, applianceServices: services }));
   };
 
   // Production Module Handlers
@@ -1761,6 +1768,8 @@ export default function App() {
         return "Oto Servis & Araç Bakım";
       case "it_service":
         return "Bilişim & BT Teknik Servis";
+      case "appliance_service":
+        return "Ev Aletleri ve Klima Servisi";
       case "hr":
         return "İnsan Kaynakları";
       case "reports":
@@ -2079,6 +2088,14 @@ export default function App() {
             <ITServiceModule
               itServices={data.itServices || []}
               onUpdateItServices={handleUpdateItServices}
+              contacts={data.contacts}
+            />
+          )}
+
+          {currentTab === "appliance_service" && (
+            <ApplianceServiceModule
+              applianceServices={data.applianceServices || []}
+              onUpdateApplianceServices={handleUpdateApplianceServices}
               contacts={data.contacts}
             />
           )}

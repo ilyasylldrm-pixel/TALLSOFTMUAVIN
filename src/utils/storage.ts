@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, getContactAccountCode } from "../types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, ApplianceServiceRecord, getContactAccountCode } from "../types";
 import {
   initialCompanySettings,
   initialContacts,
@@ -26,6 +26,7 @@ import {
   initialSubcontractOrders,
   initialAutoServices,
   initialItServices,
+  initialApplianceServices,
 } from "../mockData";
 
 const STORAGE_KEYS = {
@@ -56,6 +57,7 @@ const STORAGE_KEYS = {
   SUBCONTRACT_ORDERS: "muavin_subcontract_orders",
   AUTO_SERVICES: "muavin_auto_services",
   IT_SERVICES: "muavin_it_services",
+  APPLIANCE_SERVICES: "muavin_appliance_services",
 };
 
 export function getStoredData() {
@@ -111,6 +113,7 @@ export function getStoredData() {
     subcontractOrders: get<SubcontractOrder[]>(STORAGE_KEYS.SUBCONTRACT_ORDERS, initialSubcontractOrders),
     autoServices: get<AutoServiceRecord[]>(STORAGE_KEYS.AUTO_SERVICES, initialAutoServices),
     itServices: get<ItServiceRecord[]>(STORAGE_KEYS.IT_SERVICES, initialItServices),
+    applianceServices: get<ApplianceServiceRecord[]>(STORAGE_KEYS.APPLIANCE_SERVICES, initialApplianceServices),
   };
 }
 
@@ -221,6 +224,7 @@ export function resetToDemoData() {
   safeSet(STORAGE_KEYS.SUBCONTRACT_ORDERS, initialSubcontractOrders);
   safeSet(STORAGE_KEYS.AUTO_SERVICES, initialAutoServices);
   safeSet(STORAGE_KEYS.IT_SERVICES, initialItServices);
+  safeSet(STORAGE_KEYS.APPLIANCE_SERVICES, initialApplianceServices);
   safeSet(STORAGE_KEYS.EDOCUMENTS, []);
 }
 
@@ -260,6 +264,7 @@ export function importBackupJSON(jsonString: string): boolean {
       if (parsed.subcontractOrders) saveStoredData("SUBCONTRACT_ORDERS", parsed.subcontractOrders);
       if (parsed.autoServices) saveStoredData("AUTO_SERVICES", parsed.autoServices);
       if (parsed.itServices) saveStoredData("IT_SERVICES", parsed.itServices);
+      if (parsed.applianceServices) saveStoredData("APPLIANCE_SERVICES", parsed.applianceServices);
       return true;
     }
   } catch (e) {

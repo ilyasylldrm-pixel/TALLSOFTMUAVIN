@@ -435,6 +435,102 @@ Yanıtını aşağıdaki JSON şemasına uygun ver:
   }
 });
 
+// AI Appliance, Small Appliances & HVAC Service endpoint: Beyaz Eşya, Küçük Ev Aletleri ve İklimlendirme AI Asistanı
+app.post("/api/gemini/appliance-service-ai", async (req, res) => {
+  try {
+    const aiClient = getGenAI();
+    if (!aiClient) {
+      return res.status(500).json({
+        error: "GEMINI_API_KEY tanımlanmamış. AI özellikleri için API anahtarı gereklidir.",
+      });
+    }
+
+    const { action, deviceType, brandModel, issueDescription, operationsAndCost, totalCost } = req.body;
+
+    let systemInstruction = "Sen deneyimli bir beyaz eşya, iklimlendirme (klima/kombi) ve küçük ev aletleri (kahve makinesi, elektrikli süpürge, mutfak robotu vb.) teknik servis uzmanısın.";
+    let promptContent = "";
+
+    if (action === "field_checklist" || !action) {
+      systemInstruction = `Sen deneyimli bir beyaz eşya, iklimlendirme (klima/kombi) ve küçük ev aletleri (kahve makinesi, elektrikli süpürge, mutfak robotu vb.) teknik servis uzmanısın. Müşterinin bildirdiği sorunu ({cihaz türü} - {arıza tanımı}) göz önüne alarak, sahaya gidecek veya atölyede çalışacak olan teknisyene rehberlik edecek kapsamlı bir servis operasyon listesi hazırla.
+
+Lütfen çıktıyı şu JSON formatında ver:
+{
+  "faultAnalysis": "Arıza Analizi ve Olası Nedenler: (Cihazın türüne göre elektriksel, mekanik veya ısısal olası arıza kaynakları)",
+  "requiredPartsAndSupplies": "Yanında Bulundurulması Gereken Yedek Parça ve Sarf Malzemeleri: (Örn: termostat, conta, rezistans, pompa, filtre vb.)",
+  "requiredToolsAndEquipment": "Gerekli El Aletleri ve Test Ekipmanları: (Örn: avometre/multimetre, takım çantası, lehim makinesi, kaçak dedektörü vb.)",
+  "safetyAndHygieneRules": "Güvenlik ve Hijyen Kuralları: (Cihazın türüne göre elektrik güvenliği, gaz sızıntısı veya hijyenik bakım kuralları)",
+  "formattedText": "Arıza Analizi ve Olası Nedenler: ...\\n\\nYanında Bulundurulması Gereken Yedek Parça ve Sarf Malzemeleri: ...\\n\\nGerekli El Aletleri ve Test Ekipmanları: ...\\n\\nGüvenlik ve Hijyen Kuralları: ..."
+}`;
+      promptContent = `Cihaz Türü & Marka Model: ${deviceType || "Beyaz Eşya / İklimlendirme / Küçük Ev Aleti"} - ${brandModel || ""}\nArıza Tanımı / Müşteri Bildirimi: ${issueDescription || ""}`;
+    } else if (action === "quote_approval_message") {
+      systemInstruction = `Bir beyaz eşya, iklimlendirme ve küçük ev aletleri teknik servisi adına, müşteriye WhatsApp veya SMS ile gönderilmek üzere nazik, net ve güven verici bir fiyat teklifi ve işlem onay mesajı hazırla. Orijinal/kaliteli yedek parça garantisi ve işçilik garantisini vurgula.
+Yanıtını aşağıdaki JSON şemasına uygun ver:
+{
+  "messageText": "WhatsApp / SMS onay metni"
+}`;
+      promptContent = `Cihaz: ${deviceType || "Cihaz"} (${brandModel || ""})\nYapılacak İşlem / Değişecek Parçalar: ${operationsAndCost || ""}\nToplam Tutar: ${totalCost || ""}`;
+    } else if (action === "completion_report") {
+      systemInstruction = `Teknik servis onarımı / periyodik bakımı tamamlanan cihaz için müşteriye verilecek bilgilendirme notu ve uzun ömürlü kullanım için 3 kritik bakım tavsiyesi hazırla.
+Yanıtını aşağıdaki JSON şemasına uygun ver:
+{
+  "subject": "Servis ve Bakım Bilgilendirme Raporu",
+  "summary": "Yapılan onarım ve testlerin özeti",
+  "maintenanceTips": ["1. Kullanım ve Bakım Tavsiyesi", "2. Tavsiye", "3. Tavsiye"]
+}`;
+      promptContent = `Cihaz: ${deviceType || "Cihaz"} (${brandModel || ""})\nUygulanan İşlemler: ${operationsAndCost || "Genel bakım ve onarım"}`;
+    }
+
+    try {
+      const { response } = await generateContentWithFallback(aiClient, {
+        preferredModel: "gemini-3.7-flash",
+        contents: [{ text: promptContent }],
+        systemInstruction,
+        temperature: 0.3,
+        responseMimeType: "application/json",
+      });
+
+      const responseText = response.text || "{}";
+      let parsed = {};
+      try {
+        parsed = JSON.parse(responseText);
+      } catch (pErr) {
+        parsed = { rawText: responseText };
+      }
+
+      res.json({ success: true, data: parsed });
+    } catch (aiErr: any) {
+      console.warn("Appliance Service AI fallback devrede:", aiErr?.message);
+      let fallbackData: any = {};
+      if (action === "quote_approval_message") {
+        fallbackData = {
+          messageText: `Sayın Müşterimiz, ${brandModel || deviceType || "cihazınız"} için teknik servis arıza tespitimiz tamamlanmıştır.\n\nYapılacak İşlemler: ${operationsAndCost || "Gerekli parça değişimi ve teknik bakım"}\nToplam Maliyet: ${totalCost || "Teklif tutarı"}\n\nDeğişen parçalarımız 1 Yıl Garantilidir. Onayınız akabinde işlemlere başlanacaktır.`
+        };
+      } else if (action === "completion_report") {
+        fallbackData = {
+          subject: `${brandModel || deviceType || "Cihazınızın"} Servis ve Bakımı Tamamlandı`,
+          summary: "Cihazınızın arızalı bileşenleri değiştirilmiş, elektrik, sızdırmazlık ve performans testleri başarıyla tamamlanmıştır.",
+          maintenanceTips: [
+            "Cihazınızı düzenli kireç ve filtre temizliği yaparak kullanınız.",
+            "Elektrik dalgalanmalarına karşı akım korumalı priz tercih ediniz.",
+            "Yıllık periyodik bakımlarını aksatmayınız."
+          ]
+        };
+      } else {
+        fallbackData = {
+          faultAnalysis: `Bildirilen arıza: ${issueDescription || "Çalışma ve performans problemi"}. Elektriksel sensör arızası, rezistans yıpranması, pompa/motor sıkışması veya tıkanıklık olasılıkları mevcuttur.`,
+          requiredPartsAndSupplies: "Termostat, NTC sensör, rezistans, pompa/ventil, sızdırmazlık contaları ve klemensler.",
+          requiredToolsAndEquipment: "Dijital multimetre/avometre, pense ve tornavida seti, lokma takımı, lehim ve kaçak test spreyi/dedektörü.",
+          safetyAndHygieneRules: "Ana şebeke elektriğini kesin, gaz/su vanalarını kapatın. Gıda ile temas eden cihazlarda (kahve makinesi, blender vb.) gıda onaylı temizleyici ve hijyen eldiveni kullanın.",
+          formattedText: `Arıza Analizi ve Olası Nedenler:\nBildirilen sorun: ${issueDescription || "Genel Arıza"}\n\nYanında Bulundurulması Gereken Yedek Parça ve Sarf Malzemeleri:\nTermostat, sensör, conta, rezistans ve pompa takımı.\n\nGerekli El Aletleri ve Test Ekipmanları:\nMultimetre, takım çantası, sızdırmazlık test kiti.\n\nGüvenlik ve Hijyen Kuralları:\nElektrik ve gaz emniyetini sağlayınız, hijyen kurallarına riayet ediniz.`
+        };
+      }
+      res.json({ success: true, data: fallbackData });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Ev Aletleri ve Klima AI servisinde hata oluştu." });
+  }
+});
+
 // AI Assistant endpoint: Finansal Tavsiye & Doğal Dil Komut İşleme
 app.post("/api/gemini/assistant", async (req, res) => {
   try {

@@ -1,6 +1,6 @@
 {
   "name": "Muavin - Ön Muhasebe Programı",
-  "description": "Cari hesap takibi, e-belgeler, kasa/banka/çek/senet, İK ve bordro, çok katmanlı Ürün Reçetesi (BOM), Operasyon & Rota planlama, İş Emirleri ve Lot takibi, Fason yönetimi, MRP II motoru ve MES Operatör Terminali.",
+  "description": "Cari hesap takibi, e-belgeler, kasa/banka/çek/senet, Ev Aletleri ve Klima teknik servis yönetimi, takvim ve saha randevu planı, Gemini AI saha operasyon rehberi, İK/bordro, BOM ve MES operatör terminali.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
