@@ -32,6 +32,18 @@ function pickFromRows(rows: MysoftTenant[], current?: string, hint?: string): st
   return current;
 }
 
+function deduplicateTenants(rows: MysoftTenant[]): MysoftTenant[] {
+  const map = new Map<string, MysoftTenant>();
+  for (const row of rows) {
+    if (!row || !row.taxNumber) continue;
+    const key = row.taxNumber.trim();
+    if (!map.has(key) || (!map.get(key)!.id && row.id)) {
+      map.set(key, row);
+    }
+  }
+  return Array.from(map.values());
+}
+
 export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
   const hintVkn = normalizeMysoftTenantIdentifier(options.hintVkn);
   const autoLoad = options.autoLoad !== false;
@@ -77,9 +89,10 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
     }
     try {
       const rows = await listMysoftTenants();
-      setTenants(rows);
-      applyPick(rows);
-      if (rows.length === 0) {
+      const uniqueRows = deduplicateTenants(rows);
+      setTenants(uniqueRows);
+      applyPick(uniqueRows);
+      if (uniqueRows.length === 0) {
         setError(
           "Müşteri listesi boş döndü. Erişim anahtarı yetkisini ve sunucu .env kaydını kontrol edin.",
         );

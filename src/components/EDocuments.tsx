@@ -801,8 +801,8 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                   ? "Listede iş ortağı yok"
                   : "İş ortağı seçin"}
             </option>
-            {tenants.map((tenant) => (
-              <option key={tenant.taxNumber} value={tenant.taxNumber}>
+            {tenants.map((tenant, idx) => (
+              <option key={`${tenant.taxNumber}_${tenant.id || idx}`} value={tenant.taxNumber}>
                 {tenant.name} — {tenant.taxNumber}
                 {tenant.id ? ` (#${tenant.id})` : ""}
               </option>
