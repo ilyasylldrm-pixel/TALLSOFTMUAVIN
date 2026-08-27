@@ -108,12 +108,13 @@ export function buildMysoftInvoiceOutboxPayload(
     "₺",
     "TRY",
   );
+  // Yalnızca Mysoft'a bağlı gerçek mükellef VKN/TCKN kullanılır; demo firma
+  // taxNumber (8470291038) veya portal tenant id buraya düşmez.
   const tenant =
     normalizeMysoftTenantIdentifier(
       options.tenantIdentifierNumber ||
         company.tenantIdentifierNumber ||
-        company.mysoftCredentials?.tenantIdentifierNumber ||
-        company.taxNumber,
+        company.mysoftCredentials?.tenantIdentifierNumber,
     ) || undefined;
   const buyerTax = digits(contact.taxNumber || invoice.taxNumber);
   const prefix =

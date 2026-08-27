@@ -30,6 +30,7 @@ import {
   exportBackupJSON,
   importBackupJSON,
 } from "./utils/storage";
+import { readStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
 
 import {
   Contact,
@@ -1590,6 +1591,9 @@ export default function App() {
               family="invoice"
               direction={currentTab === "e_documents_outgoing" ? "outgoing" : "incoming"}
               companySettings={data.settings}
+              tenantIdentifierNumber={
+                data.settings.tenantIdentifierNumber || readStoredMysoftTenantVkn()
+              }
               globalSearchTerm={searchTerm}
               onImportInvoice={handleImportMysoftInvoice}
             />
@@ -1706,6 +1710,9 @@ export default function App() {
               family="despatch"
               direction={currentTab === "waybills_dispatch" ? "outgoing" : "incoming"}
               companySettings={data.settings}
+              tenantIdentifierNumber={
+                data.settings.tenantIdentifierNumber || readStoredMysoftTenantVkn()
+              }
               globalSearchTerm={searchTerm}
             />
           )}

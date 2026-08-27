@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Invoice,
   InvoiceItem,
@@ -24,6 +24,9 @@ import {
   buildMysoftInvoiceOutboxPayload,
   extractMysoftOutboxResult,
 } from "../services/mysoftInvoicePayload";
+import { MysoftTenantPicker } from "./MysoftTenantPicker";
+import { readStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
+import { normalizeMysoftTenantIdentifier } from "../services/mysoftEDocumentService";
 import {
   FileText,
   FileSpreadsheet,
@@ -194,6 +197,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [isSavingMysoft, setIsSavingMysoft] = useState(false);
   const [mysoftSaveError, setMysoftSaveError] = useState<string | null>(null);
   const [mysoftSaveNotice, setMysoftSaveNotice] = useState<string | null>(null);
+  const [mysoftTenantVkn, setMysoftTenantVkn] = useState<string | undefined>(() =>
+    readStoredMysoftTenantVkn() ||
+      normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber),
+  );
+
+  useEffect(() => {
+    const fromSettings = normalizeMysoftTenantIdentifier(
+      companySettings.tenantIdentifierNumber,
+    );
+    if (fromSettings) setMysoftTenantVkn(fromSettings);
+  }, [companySettings.tenantIdentifierNumber]);
 
   const handleQuickCreateContact = (e: React.FormEvent) => {
     e.preventDefault();
@@ -476,11 +490,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
       company: companySettings,
       eDocumentType: mysoftEDocType,
       isSaveAsDraft: true,
+      tenantIdentifierNumber: mysoftTenantVkn,
     });
   }, [
     contactId,
     contacts,
     companySettings,
+    mysoftTenantVkn,
     dueDate,
     formDocKind,
     invType,
@@ -689,6 +705,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
     if (shouldSendMysoft) {
       setMysoftSaveError(null);
       setMysoftSaveNotice(null);
+      if (!mysoftTenantVkn) {
+        setMysoftSaveError(
+          "Mysoft kesimi için mükellef seçin. Listeyi yükleyip VKN/TCKN seçin veya VKN ile getirin.",
+        );
+        return;
+      }
       setIsSavingMysoft(true);
       try {
         const payload = buildMysoftInvoiceOutboxPayload({
@@ -697,6 +719,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
           company: companySettings,
           eDocumentType: mysoftEDocType,
           isSaveAsDraft: false,
+          tenantIdentifierNumber: mysoftTenantVkn,
         });
         const result = await sendMysoftOutgoingInvoice(payload);
         const outbox = extractMysoftOutboxResult(result);
@@ -2338,7 +2361,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </span>
                     </label>
                     {sendToMysoft && (
-                      <div className="flex flex-wrap gap-2 pl-6">
+                      <div className="pl-6 space-y-3">
+                        <MysoftTenantPicker
+                          variant="compact"
+                          hintVkn={companySettings.tenantIdentifierNumber}
+                          onSelect={setMysoftTenantVkn}
+                        />
+                        <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => setMysoftEDocType("e_fatura")}
@@ -2361,6 +2390,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         >
                           e-Arşiv
                         </button>
+                        </div>
                       </div>
                     )}
                     {mysoftSaveError && (

@@ -4,6 +4,7 @@ import { ExportButtons } from "./ExportButtons";
 import { ExportData } from "../utils/exportUtils";
 import { AddressSelector } from "./AddressSelector";
 import { GibPortalModal } from "./GibPortalModal";
+import { MysoftTenantPicker } from "./MysoftTenantPicker";
 import {
   Building2,
   Building,
@@ -562,6 +563,38 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono"
                 />
               </div>
+            </div>
+
+            <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 space-y-3">
+              <div>
+                <h4 className="text-sm font-extrabold text-violet-950 flex items-center gap-2">
+                  <Globe className="w-4 h-4" />
+                  Mysoft e-Belge mükellefi
+                </h4>
+                <p className="text-[11px] text-violet-800/90 mt-1 leading-relaxed">
+                  Demo firma VKN yerine erişim anahtarınıza bağlı gerçek mükellef VKN/TCKN
+                  seçin. Fatura kesimi ve e-belge senkronu bu değeri kullanır.
+                </p>
+              </div>
+              <MysoftTenantPicker
+                variant="compact"
+                hintVkn={profileForm.tenantIdentifierNumber}
+                onSelect={(vkn) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    tenantIdentifierNumber: vkn,
+                    mysoftCredentials: {
+                      ...prev.mysoftCredentials,
+                      tenantIdentifierNumber: vkn,
+                    },
+                  }))
+                }
+              />
+              {profileForm.tenantIdentifierNumber && (
+                <p className="text-[11px] font-mono text-violet-900">
+                  Kayıtlı Mysoft tenantIdentifierNumber: {profileForm.tenantIdentifierNumber}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">

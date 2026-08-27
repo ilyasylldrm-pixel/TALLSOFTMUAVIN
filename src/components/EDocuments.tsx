@@ -36,10 +36,7 @@ import type {
 } from "../types";
 import {
   getMysoftEDocument,
-  getMysoftConnectionStatus,
-  getMysoftTenant,
   listMysoftEDocuments,
-  listMysoftTenants,
   downloadMysoftEDocument,
   syncMysoftEDocuments,
   acceptMysoftEDocument,
@@ -49,8 +46,8 @@ import {
   sendMysoftDraftEDocument,
   normalizeMysoftTenantIdentifier,
   resolveMysoftDocumentStatus,
-  type MysoftTenant,
 } from "../services/mysoftEDocumentService";
+import { useMysoftTenants } from "../hooks/useMysoftTenants";
 
 export interface EDocumentsProps {
   /** The navigation item controls the API direction without exposing credentials to the browser. */
@@ -291,14 +288,19 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       companySettings?.mysoftCredentials?.tenantIdentifierNumber,
   );
   const activeManagedCompanyId = companyId || activeCompany?.id;
-  const [tenants, setTenants] = useState<MysoftTenant[]>([]);
-  const [tenantsLoading, setTenantsLoading] = useState(true);
-  const [tenantError, setTenantError] = useState<string | null>(null);
-  const [selectedTaxNumber, setSelectedTaxNumber] = useState<string | undefined>();
-  const [manualVkn, setManualVkn] = useState("");
-  const [isLookingUpVkn, setIsLookingUpVkn] = useState(false);
-  const [partnerHint, setPartnerHint] = useState<string | null>(null);
-  const activeTenantIdentifierNumber = selectedTaxNumber;
+  const {
+    tenants,
+    loading: tenantsLoading,
+    error: tenantError,
+    partnerHint,
+    selectedVkn: activeTenantIdentifierNumber,
+    setSelectedVkn: setSelectedTaxNumber,
+    manualVkn,
+    setManualVkn,
+    lookupLoading: isLookingUpVkn,
+    lookupByVkn,
+    reload: loadTenants,
+  } = useMysoftTenants({ hintVkn: hintedTaxNumber });
   const [activeDirection, setActiveDirection] = useState<"inbox" | "outbox">(
     () => normalizeDirection(direction),
   );
@@ -328,79 +330,12 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   const [isRejecting, setIsRejecting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const pickTenant = useCallback((rows: MysoftTenant[]) => {
-    setSelectedTaxNumber((current) => {
-      const match = hintedTaxNumber
-        ? rows.find((tenant) => tenant.taxNumber === hintedTaxNumber)
-        : undefined;
-      if (match) return match.taxNumber;
-      if (rows.length === 1) return rows[0].taxNumber;
-      if (current && rows.some((tenant) => tenant.taxNumber === current)) return current;
-      return undefined;
-    });
-  }, [hintedTaxNumber]);
-
-  const loadTenants = useCallback(async () => {
-    setTenantsLoading(true);
-    setTenantError(null);
-    const status = await getMysoftConnectionStatus().catch(() => null);
-    const identity = status?.identity;
-    if (identity?.businessPartnerId) {
-      setPartnerHint(
-        `İş ortağı ${identity.businessPartnerId}: belge çekmeden önce listeden müşteri seçin (VKN/TCKN).`,
-      );
-    } else {
-      setPartnerHint(null);
-    }
-    try {
-      const rows = await listMysoftTenants();
-      setTenants(rows);
-      pickTenant(rows);
-      if (rows.length === 0) {
-        setTenantError(
-          "Müşteri listesi boş döndü. Erişim anahtarı yetkisini ve sunucu .env kaydını kontrol edin.",
-        );
-      }
-    } catch (loadError) {
-      setTenants([]);
-      setSelectedTaxNumber(undefined);
-      setTenantError(getErrorMessage(loadError));
-    } finally {
-      setTenantsLoading(false);
-    }
-  }, [pickTenant]);
-
   const handleLookupVkn = async () => {
-    const vkn = normalizeMysoftTenantIdentifier(manualVkn);
-    if (!vkn) {
-      setTenantError("10 haneli VKN veya 11 haneli TCKN girin.");
-      return;
-    }
-    setIsLookingUpVkn(true);
-    setTenantError(null);
-    try {
-      const tenant = await getMysoftTenant(vkn);
-      if (!tenant) {
-        setTenantError("Bu VKN erişim anahtarına tanımlı değil.");
-        return;
-      }
-      setTenants((current) => {
-        const next = current.filter((item) => item.taxNumber !== tenant.taxNumber);
-        return [tenant, ...next];
-      });
-      setSelectedTaxNumber(tenant.taxNumber);
-      setManualVkn("");
+    const tenant = await lookupByVkn();
+    if (tenant) {
       setNotice(`${tenant.name} (${tenant.taxNumber}) seçildi. Şimdi belgeleri senkronize edin.`);
-    } catch (lookupError) {
-      setTenantError(getErrorMessage(lookupError));
-    } finally {
-      setIsLookingUpVkn(false);
     }
   };
-
-  useEffect(() => {
-    void loadTenants();
-  }, [loadTenants]);
 
   useEffect(() => {
     setSearchTerm(globalSearchTerm);
@@ -854,7 +789,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           </div>
           <select
             aria-label="Mysoft iş ortağı"
-            value={selectedTaxNumber || ""}
+            value={activeTenantIdentifierNumber || ""}
             onChange={(event) => setSelectedTaxNumber(event.target.value || undefined)}
             disabled={tenantsLoading || tenants.length === 0}
             className="flex-1 h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-sm text-slate-700 outline-none focus:border-[#8252F6]"
@@ -867,8 +802,9 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                   : "İş ortağı seçin"}
             </option>
             {tenants.map((tenant) => (
-              <option key={`${tenant.taxNumber}:${tenant.id || ""}`} value={tenant.taxNumber}>
+              <option key={tenant.taxNumber} value={tenant.taxNumber}>
                 {tenant.name} — {tenant.taxNumber}
+                {tenant.id ? ` (#${tenant.id})` : ""}
               </option>
             ))}
           </select>
@@ -900,9 +836,9 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         </div>
         {partnerHint && <p className="text-xs text-amber-700">{partnerHint}</p>}
         {tenantError && <p className="text-xs text-rose-600">{tenantError}</p>}
-        {selectedTaxNumber && (
+        {activeTenantIdentifierNumber && (
           <p className="text-xs text-slate-500">
-            Belge çekimi seçilen VKN ile yapılacak: {selectedTaxNumber}
+            Belge çekimi seçilen VKN ile yapılacak: {activeTenantIdentifierNumber}
           </p>
         )}
       </div>
