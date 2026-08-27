@@ -1352,6 +1352,8 @@ export interface AutoServiceRecord {
   assignedTechnician?: string; // Atanan Baş Teknisyen
   fuelLevel?: "E" | "1/4" | "1/2" | "3/4" | "F"; // Depo Yakıt Seviyesi
   valuableItemsInCar?: string; // Araçta Bırakılan Değerli Eşya
+  accessoriesReceived?: string; // Beraberinde Teslim Alınanlar (Ruhsat, Yedek Anahtar, Şarj Kablosu, Kriko, Stepne, Yangın Tüpü vb.)
+  damagePhysicalCondition?: string; // Araç Kaporta Çizik, Göçük, Deformasyon & Fiziksel Kusur Durumu
   
   // Maliyet & Kalemler
   parts: AutoPartItem[];
@@ -1469,6 +1471,8 @@ export interface ItServiceRecord {
   devicePasswordPin?: string; // Windows / BIOS / Kullanıcı Şifresi (Varsa)
   hasChargerIncluded: boolean; // Adaptör / Şarj Cihazı Alındı mı?
   accessoriesIncluded?: string; // Çanta, Fare, Harici Disk vb.
+  accessoriesReceived?: string; // Beraberinde Teslim Alınan Aksesuarlar (Şarj adaptörü, kablo, çanta, dongle vb.)
+  damagePhysicalCondition?: string; // Cihaz Kasa/Ekran Çizik, Kırık, Deformasyon & Fiziksel Durumu
   
   dataBackupStatus: "backup_taken" | "not_needed" | "critical_risk_approved" | "recovery_requested"; // Veri Durumu
   dataBackupNotes?: string;
@@ -1645,6 +1649,8 @@ export interface ApplianceServiceRecord {
   customerProblemDescription: string; // Müşterinin Bildirdiği Sorun
   technicianReport?: string; // Teknisyen Arıza Analizi & Uygulanan İşlem
   assignedTechnician?: string; // Görevli Saha / Atölye Teknisyeni
+  accessoriesReceived?: string; // Beraberinde Teslim Alınanlar (Uzaktan Kumanda, Şarj İstasyonu/Adaptörü, Güç Kablosu, Filtre, Boru, Aparatlar vb.)
+  damagePhysicalCondition?: string; // Ürün Gövde Çizik, Kırık, Sararma, Deformasyon & Fiziksel Kusur Durumu
   
   // Cihaz Teknik Detayları (Opsiyonel / İklimlendirme - Gaz)
   gasType?: "R32" | "R410A" | "R134a" | "R600a" | "R290" | "none"; // Gaz Türü

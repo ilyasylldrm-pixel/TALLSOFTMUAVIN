@@ -36,6 +36,11 @@ import {
   RotateCcw,
   CalendarDays,
   LayoutList,
+  Receipt,
+  FileCheck,
+  MessageCircle,
+  Package,
+  AlertTriangle,
 } from "lucide-react";
 import {
   ApplianceServiceRecord,
@@ -46,28 +51,86 @@ import {
   AppliancePartItem,
   ApplianceLaborItem,
   Contact,
+  Invoice,
+  CompanySettings,
 } from "../../types";
 import { ApplianceCalendarView } from "./ApplianceCalendarView";
+import { ServiceInvoicingModal } from "../ServiceInvoicingModal";
+import { ServiceWhatsAppModal } from "../ServiceWhatsAppModal";
+import { ServiceDeliveryModal } from "../ServiceDeliveryModal";
 
 interface ApplianceServiceModuleProps {
   applianceServices: ApplianceServiceRecord[];
   onUpdateApplianceServices: (services: ApplianceServiceRecord[]) => void;
   contacts?: Contact[];
+  companySettings?: CompanySettings;
+  onAddInvoice?: (invoice: Invoice) => void;
+  onAddContact?: (contact: Contact) => void;
 }
 
 export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   applianceServices,
   onUpdateApplianceServices,
   contacts = [],
+  companySettings,
+  onAddInvoice,
+  onAddContact,
 }) => {
   // Main Tab (List vs Calendar)
   const [activeMainTab, setActiveMainTab] = useState<"records" | "calendar">("records");
+
+  // Delivery Modal State
+  const [deliveryRecord, setDeliveryRecord] = useState<ApplianceServiceRecord | null>(null);
+  const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
+
+  // WhatsApp State
+  const [whatsAppRecord, setWhatsAppRecord] = useState<ApplianceServiceRecord | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [whatsAppTemplateType, setWhatsAppTemplateType] = useState<"completed" | "invoiced" | "diagnosis_approval" | "reception">("completed");
 
   // Filters & State
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ApplianceCategory | "all">("all");
   const [selectedStatus, setSelectedStatus] = useState<ApplianceServiceStatus | "all">("all");
   const [selectedLocation, setSelectedLocation] = useState<ApplianceServiceLocation | "all">("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const handlePresetThisMonth = () => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    setStartDate(firstDay.toISOString().split("T")[0]);
+    setEndDate(lastDay.toISOString().split("T")[0]);
+  };
+
+  const handlePresetLastMonth = () => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+    setStartDate(firstDay.toISOString().split("T")[0]);
+    setEndDate(lastDay.toISOString().split("T")[0]);
+  };
+
+  const handlePresetLast30Days = () => {
+    const now = new Date();
+    const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    setStartDate(past.toISOString().split("T")[0]);
+    setEndDate(now.toISOString().split("T")[0]);
+  };
+
+  const handlePresetThisYear = () => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), 0, 1);
+    const lastDay = new Date(now.getFullYear(), 11, 31);
+    setStartDate(firstDay.toISOString().split("T")[0]);
+    setEndDate(lastDay.toISOString().split("T")[0]);
+  };
+
+  const handleClearDates = () => {
+    setStartDate("");
+    setEndDate("");
+  };
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,6 +138,11 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   const [printRecord, setPrintRecord] = useState<ApplianceServiceRecord | null>(null);
   const [aiAssistantRecord, setAiAssistantRecord] = useState<ApplianceServiceRecord | null>(null);
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+
+  // Invoicing & Status Dropdown States
+  const [invoicingRecord, setInvoicingRecord] = useState<ApplianceServiceRecord | null>(null);
+  const [isInvoicingModalOpen, setIsInvoicingModalOpen] = useState(false);
+  const [openStatusDropdownId, setOpenStatusDropdownId] = useState<string | null>(null);
 
   // AI Assistant Specific State
   const [aiLoading, setAiLoading] = useState(false);
@@ -104,6 +172,8 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
     customerProblemDescription: "",
     technicianReport: "",
     assignedTechnician: "",
+    accessoriesReceived: "",
+    damagePhysicalCondition: "",
     gasType: "none",
     pressureBar: undefined,
     voltageTested: 220,
@@ -195,6 +265,20 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
     other: "Diğer Cihaz",
   };
 
+  // Status mapping & options
+  const applianceStatusOptions: { value: ApplianceServiceStatus; label: string; desc: string; bg: string; color: string; dot: string }[] = [
+    { value: "reception", label: "Randevu / Kayıt", desc: "Müşteri servis talebi ve randevusu açıldı", bg: "bg-amber-100/90 border-amber-300", color: "text-amber-900", dot: "bg-amber-500" },
+    { value: "assigned", label: "Teknisyene Atandı", desc: "Servis iş emri saha teknisyenine atandı", bg: "bg-blue-100/90 border-blue-300", color: "text-blue-900", dot: "bg-blue-500" },
+    { value: "on_the_way", label: "Sahada / Yolda", desc: "Teknisyen müşteri adresine seyir halinde", bg: "bg-indigo-100/90 border-indigo-300", color: "text-indigo-900", dot: "bg-indigo-500" },
+    { value: "diagnosing", label: "Arıza Teşhisinde", desc: "Cihaz inceleniyor, gaz/motor arızası tespiti yapılıyor", bg: "bg-cyan-100/90 border-cyan-300", color: "text-cyan-900", dot: "bg-cyan-500" },
+    { value: "quote_pending", label: "Müşteri Onayı Bekliyor", desc: "Maliyet/parça fiyat teklifi müşteriye sunuldu", bg: "bg-purple-100/90 border-purple-300", color: "text-purple-900", dot: "bg-purple-500" },
+    { value: "parts_ordered", label: "Yedek Parça Bekleniyor", desc: "Kompresör/kart/yedek parça tedariği bekleniyor", bg: "bg-orange-100/90 border-orange-300", color: "text-orange-900", dot: "bg-orange-500" },
+    { value: "repairing", label: "Onarımda / Montajda", desc: "Mekanik bakım, kart tamiri ve gaz şarjı yapılıyor", bg: "bg-blue-200/90 border-blue-400", color: "text-blue-900", dot: "bg-blue-600" },
+    { value: "testing_qc", label: "Test & Gaz Kontrolünde", desc: "Vakum, gaz kaçağı ve çalışma sıcaklık testleri", bg: "bg-emerald-100/90 border-emerald-300", color: "text-emerald-900", dot: "bg-emerald-500" },
+    { value: "ready_delivered", label: "Tamamlandı / Faturalandı", desc: "Onarım tamamlandı, teslim edildi ve fatura kesildi", bg: "bg-emerald-200/90 border-emerald-400", color: "text-emerald-950", dot: "bg-emerald-700" },
+    { value: "cancelled", label: "İptal / İade", desc: "Servis işlemi iptal edildi", bg: "bg-rose-100/90 border-rose-300", color: "text-rose-900", dot: "bg-rose-500" },
+  ];
+
   // Status mapping
   const statusLabels: Record<ApplianceServiceStatus, { label: string; color: string; bg: string }> = {
     reception: { label: "Randevu / Kayıt", color: "text-amber-800", bg: "bg-amber-100/90 border-amber-300" },
@@ -207,6 +291,89 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
     testing_qc: { label: "Test & Gaz Kontrolünde", color: "text-emerald-800", bg: "bg-emerald-100/90 border-emerald-300" },
     ready_delivered: { label: "Tamamlandı / Teslim Edildi", color: "text-emerald-900", bg: "bg-emerald-200/90 border-emerald-400" },
     cancelled: { label: "İptal / İade", color: "text-rose-800", bg: "bg-rose-100/90 border-rose-300" },
+  };
+
+  const handleQuickStatusChange = (recordId: string, newStatus: ApplianceServiceStatus) => {
+    const updated = applianceServices.map((s) => {
+      if (s.id === recordId) {
+        return {
+          ...s,
+          status: newStatus,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return s;
+    });
+    onUpdateApplianceServices(updated);
+    setOpenStatusDropdownId(null);
+  };
+
+  const handleOpenInvoicing = (record: ApplianceServiceRecord) => {
+    setInvoicingRecord(record);
+    setIsInvoicingModalOpen(true);
+  };
+
+  const handleOpenWhatsApp = (
+    record: ApplianceServiceRecord,
+    preferredType?: "completed" | "invoiced" | "diagnosis_approval" | "reception"
+  ) => {
+    setWhatsAppRecord(record);
+    if (preferredType) {
+      setWhatsAppTemplateType(preferredType);
+    } else if (record.invoiceNumber || record.invoiceId) {
+      setWhatsAppTemplateType("invoiced");
+    } else if (
+      record.status === "ready_delivered" ||
+      record.status === "testing_qc" ||
+      record.status === "repairing"
+    ) {
+      setWhatsAppTemplateType("completed");
+    } else if (record.status === "quote_pending") {
+      setWhatsAppTemplateType("diagnosis_approval");
+    } else {
+      setWhatsAppTemplateType("completed");
+    }
+    setIsWhatsAppModalOpen(true);
+  };
+
+  const handleOpenDeliveryModal = (record: ApplianceServiceRecord) => {
+    setDeliveryRecord(record);
+    setIsDeliveryModalOpen(true);
+  };
+
+  const handleMarkDelivered = (serviceId: string) => {
+    const updated = applianceServices.map((s) => {
+      if (s.id === serviceId) {
+        return {
+          ...s,
+          status: "ready_delivered" as ApplianceServiceStatus,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return s;
+    });
+    onUpdateApplianceServices(updated);
+  };
+
+  const handleServiceInvoiced = (serviceId: string, invoiceId: string, invoiceNumber: string) => {
+    const updated = applianceServices.map((s) => {
+      if (s.id === serviceId) {
+        const invoicedRec = {
+          ...s,
+          status: "ready_delivered" as ApplianceServiceStatus,
+          invoiceId,
+          invoiceNumber,
+          updatedAt: new Date().toISOString(),
+        };
+        // Fatura kesildikten sonra WhatsApp bilgilendirme penceresini hazırla
+        setTimeout(() => {
+          handleOpenWhatsApp(invoicedRec, "invoiced");
+        }, 400);
+        return invoicedRec;
+      }
+      return s;
+    });
+    onUpdateApplianceServices(updated);
   };
 
   // Filtered List
@@ -226,9 +393,19 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
       const matchesStatus = selectedStatus === "all" || srv.status === selectedStatus;
       const matchesLocation = selectedLocation === "all" || srv.serviceLocation === selectedLocation;
 
-      return matchesSearch && matchesCategory && matchesStatus && matchesLocation;
+      let matchesDate = true;
+      if (startDate) {
+        const d = srv.appointmentDate || srv.entryDate;
+        if (d && d < startDate) matchesDate = false;
+      }
+      if (endDate && matchesDate) {
+        const d = srv.appointmentDate || srv.entryDate;
+        if (d && d > endDate) matchesDate = false;
+      }
+
+      return matchesSearch && matchesCategory && matchesStatus && matchesLocation && matchesDate;
     });
-  }, [applianceServices, searchTerm, selectedCategory, selectedStatus, selectedLocation]);
+  }, [applianceServices, searchTerm, selectedCategory, selectedStatus, selectedLocation, startDate, endDate]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -266,6 +443,8 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
       customerProblemDescription: "",
       technicianReport: "",
       assignedTechnician: "",
+      accessoriesReceived: "Uzaktan Kumanda ve Güç Kablosu",
+      damagePhysicalCondition: "",
       gasType: "none",
       pressureBar: undefined,
       voltageTested: 220,
@@ -308,6 +487,8 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
       customerProblemDescription: "",
       technicianReport: "",
       assignedTechnician: "",
+      accessoriesReceived: "Uzaktan Kumanda ve Güç Kablosu",
+      damagePhysicalCondition: "",
       gasType: "none",
       pressureBar: undefined,
       voltageTested: 220,
@@ -484,14 +665,6 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
     setIsModalOpen(false);
   };
 
-  // Quick Status Update
-  const handleQuickStatusChange = (id: string, newStatus: ApplianceServiceStatus) => {
-    const updated = applianceServices.map((srv) =>
-      srv.id === id ? { ...srv, status: newStatus, updatedAt: new Date().toISOString() } : srv
-    );
-    onUpdateApplianceServices(updated);
-  };
-
   // Open AI Assistant modal
   const handleOpenAiAssistant = (record: ApplianceServiceRecord) => {
     setAiAssistantRecord(record);
@@ -576,97 +749,252 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* 🟣 FINANS YÖNETİMİ UYUMLU LİLA & BAL PETEĞİ BAŞLIK BANNERI */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#6938EF] via-[#8252F6] to-[#9E77ED] p-6 sm:p-8 text-white shadow-xl">
-        {/* Bal Peteği Vektör Deseni */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
-          <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
-            <defs>
-              <pattern id="honeycomb-pattern-appliance" width="56" height="96" patternUnits="userSpaceOnUse" patternTransform="scale(1)">
-                <path
-                  d="M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z M28 48 L56 64 L56 96 L28 112 L0 96 L0 64 Z"
-                  fill="none"
-                  stroke="#FFFFFF"
-                  strokeWidth="1.5"
-                />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#honeycomb-pattern-appliance)" />
-          </svg>
-        </div>
+      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-6 border border-purple-200/60 shadow-2xs space-y-4">
+        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
+            backgroundSize: "20px 35px",
+          }}
+        />
 
-        {/* Geometrik Işıltı Efektleri */}
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-purple-900/30 rounded-full blur-2xl pointer-events-none" />
+        {/* Dekoratif Geometrik Vektör Şekiller */}
+        <svg
+          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
+          viewBox="0 0 200 200"
+          fill="none"
+        >
+          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
+          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
+          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
+          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
+          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
+          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
+        </svg>
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/25 text-xs font-semibold tracking-wide">
-              <ThermometerSnowflake className="w-3.5 h-3.5 text-cyan-200 animate-pulse" />
-              <span>Beyaz Eşya, İklimlendirme (Klima/Kombi) & Küçük Ev Aletleri</span>
+        <svg
+          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-400/10"
+          viewBox="0 0 160 160"
+          fill="none"
+        >
+          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
+          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
+          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
+          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
+        </svg>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-purple-100/90 border border-purple-200/90 flex items-center justify-center text-purple-700 shadow-2xs backdrop-blur-2xs font-bold shrink-0">
+                <ThermometerSnowflake className="w-5 h-5 text-purple-700" />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-950">
+                  Ev Aletleri ve Klima Teknik Servis Yönetimi
+                </h2>
+                <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
+                  Beyaz Eşya, İklimlendirme (Klima/Kombi), Küçük Ev Aletleri Saha ve Atölye İş Emirleri, Gaz & Basınç Testleri, Takvim ve AI Destekli Operasyon.
+                </p>
+              </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Ev Aletleri ve Klima Teknik Servis Yönetimi
-            </h1>
-            <p className="text-purple-100 text-sm max-w-2xl font-medium leading-relaxed">
-              Saha ve atölye iş emirleri, parça-işçilik maliyetlendirmesi, gaz/basınç testleri, kurumsal servis fişleri ve{" "}
-              <strong className="text-white underline decoration-cyan-300">Gemini AI Destekli Saha Kontrol Listesi</strong> ile profesyonel teknik operasyon.
-            </p>
           </div>
 
-          {/* Quick Action Button */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Görünüm Değiştirme Sekmeleri */}
+            <div className="inline-flex p-1 rounded-xl bg-purple-100/70 border border-purple-200/80 backdrop-blur-md">
+              <button
+                onClick={() => setActiveMainTab("records")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeMainTab === "records"
+                    ? "bg-white text-purple-950 shadow-xs border border-purple-200/60"
+                    : "text-purple-900/80 hover:text-purple-950"
+                }`}
+              >
+                <LayoutList className="w-3.5 h-3.5" />
+                <span>İş Emirleri ({applianceServices.length})</span>
+              </button>
+              <button
+                onClick={() => setActiveMainTab("calendar")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeMainTab === "calendar"
+                    ? "bg-white text-purple-950 shadow-xs border border-purple-200/60"
+                    : "text-purple-900/80 hover:text-purple-950"
+                }`}
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                <span>Takvim & Randevu Planı</span>
+              </button>
+            </div>
+
             <button
               onClick={handleOpenCreateModal}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white text-[#6938EF] font-bold text-sm shadow-lg hover:bg-purple-50 active:scale-95 transition-all cursor-pointer"
+              className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all"
             >
-              <Plus className="w-4 h-4 text-[#6938EF]" />
+              <Plus className="w-4 h-4 text-purple-100 font-bold" />
               <span>Yeni Servis Kaydı Aç</span>
             </button>
           </div>
         </div>
-      </div>
 
-      {/* 🧭 MODÜL ANA GÖRÜNÜM SEKMELERİ (LİSTE VS TAKVİM) */}
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
-        <div className="inline-flex p-1.5 rounded-2xl bg-white border border-slate-200 shadow-xs gap-2">
+        {/* 📊 FINANS UYUMLU 5'Lİ KPI İSTATİSTİK KARTLARI */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-2 relative z-10">
+          {/* Toplam İş Emri (Amber / Nakit Kasa Stili) */}
           <button
-            onClick={() => setActiveMainTab("records")}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
-              activeMainTab === "records"
-                ? "bg-[#6938EF] text-white shadow-md shadow-purple-500/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
+            type="button"
+            onClick={() => { setSelectedCategory("all"); setSelectedStatus("all"); }}
+            className={`group relative overflow-hidden rounded-2xl p-4 sm:p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+              selectedStatus === "all" && selectedCategory === "all"
+                ? "bg-gradient-to-br from-amber-500/20 via-orange-500/10 to-amber-100/80 border-2 border-amber-500 ring-2 ring-amber-500/30 shadow-md"
+                : "bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-amber-50/70 border-amber-300/70 hover:border-amber-400 hover:shadow-md"
             }`}
           >
-            <LayoutList className="w-4 h-4" />
-            <span>İş Emirleri & Kayıtlar</span>
-            <span
-              className={`ml-1 px-2 py-0.5 rounded-full text-[11px] font-black ${
-                activeMainTab === "records" ? "bg-white/20 text-white" : "bg-purple-50 text-[#6938EF]"
-              }`}
-            >
-              {applianceServices.length}
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase text-amber-950 tracking-wider flex items-center gap-1.5">
+                <span>Toplam İş Emri</span>
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
+                <Wrench className="w-5 h-5 text-amber-700" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-amber-950 font-mono tracking-tight">
+                {stats.total}
+              </div>
+              <p className="text-xs font-semibold text-amber-900/80 mt-1 flex items-center gap-1">
+                <span className="text-amber-950 font-bold bg-amber-200/80 px-1.5 py-0.5 rounded border border-amber-300/80">
+                  {stats.total} Kayıt
+                </span>{" "}
+                toplam servis
+              </p>
+            </div>
           </button>
 
+          {/* Sahada & Yolda (Blue / Banka Stili) */}
           <button
-            onClick={() => setActiveMainTab("calendar")}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
-              activeMainTab === "calendar"
-                ? "bg-[#6938EF] text-white shadow-md shadow-purple-500/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
+            type="button"
+            onClick={() => setSelectedStatus(selectedStatus === "on_the_way" ? "all" : "on_the_way")}
+            className={`group relative overflow-hidden rounded-2xl p-4 sm:p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+              selectedStatus === "on_the_way"
+                ? "bg-gradient-to-br from-blue-500/20 via-sky-500/10 to-blue-100/80 border-2 border-blue-500 ring-2 ring-blue-500/30 shadow-md"
+                : "bg-gradient-to-br from-blue-500/10 via-sky-500/5 to-blue-50/70 border-blue-300/70 hover:border-blue-400 hover:shadow-md"
             }`}
           >
-            <CalendarDays className="w-4 h-4" />
-            <span>Takvim & Randevu Planı</span>
-            <span
-              className={`ml-1 px-2 py-0.5 rounded-full text-[11px] font-black ${
-                activeMainTab === "calendar" ? "bg-white/20 text-white" : "bg-purple-50 text-[#6938EF]"
-              }`}
-            >
-              Saha Çizelgesi
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase text-blue-950 tracking-wider flex items-center gap-1.5">
+                <span>Sahada & Yolda</span>
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-400/40 text-blue-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
+                <Truck className="w-5 h-5 text-blue-700" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-blue-950 font-mono tracking-tight">
+                {stats.onTheWay}
+              </div>
+              <p className="text-xs font-semibold text-blue-900/80 mt-1 flex items-center gap-1">
+                <span className="text-blue-950 font-bold bg-blue-200/80 px-1.5 py-0.5 rounded border border-blue-300/80">
+                  {stats.onTheWay} Randevu
+                </span>{" "}
+                saha ekibi
+              </p>
+            </div>
+          </button>
+
+          {/* Onarımda & Teşhiste (Indigo / Çek Stili) */}
+          <button
+            type="button"
+            onClick={() => setSelectedStatus(selectedStatus === "repairing" ? "all" : "repairing")}
+            className={`group relative overflow-hidden rounded-2xl p-4 sm:p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+              selectedStatus === "repairing"
+                ? "bg-gradient-to-br from-indigo-500/20 via-violet-500/10 to-indigo-100/80 border-2 border-indigo-500 ring-2 ring-indigo-500/30 shadow-md"
+                : "bg-gradient-to-br from-indigo-500/10 via-violet-500/5 to-indigo-50/70 border-indigo-300/70 hover:border-indigo-400 hover:shadow-md"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase text-indigo-950 tracking-wider flex items-center gap-1.5">
+                <span>Onarım & Teşhis</span>
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/40 text-indigo-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
+                <Zap className="w-5 h-5 text-indigo-700" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-indigo-950 font-mono tracking-tight">
+                {stats.activeRepair}
+              </div>
+              <p className="text-xs font-semibold text-indigo-900/80 mt-1 flex items-center gap-1">
+                <span className="text-indigo-950 font-bold bg-indigo-200/80 px-1.5 py-0.5 rounded border border-indigo-300/80">
+                  {stats.activeRepair} Cihaz
+                </span>{" "}
+                atölye/onarım
+              </p>
+            </div>
+          </button>
+
+          {/* Parça / Onay Bekleyen (Fuchsia / Senet Stili) */}
+          <button
+            type="button"
+            onClick={() => setSelectedStatus(selectedStatus === "quote_pending" ? "all" : "quote_pending")}
+            className={`group relative overflow-hidden rounded-2xl p-4 sm:p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+              selectedStatus === "quote_pending"
+                ? "bg-gradient-to-br from-fuchsia-500/20 via-pink-500/10 to-fuchsia-100/80 border-2 border-fuchsia-500 ring-2 ring-fuchsia-500/30 shadow-md"
+                : "bg-gradient-to-br from-fuchsia-500/10 via-pink-500/5 to-fuchsia-50/70 border-fuchsia-300/70 hover:border-fuchsia-400 hover:shadow-md"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase text-fuchsia-950 tracking-wider flex items-center gap-1.5">
+                <span>Parça / Onay</span>
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-fuchsia-500/20 border border-fuchsia-400/40 text-fuchsia-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
+                <Clock className="w-5 h-5 text-fuchsia-700" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-fuchsia-950 font-mono tracking-tight">
+                {stats.partsPending}
+              </div>
+              <p className="text-xs font-semibold text-fuchsia-900/80 mt-1 flex items-center gap-1">
+                <span className="text-fuchsia-950 font-bold bg-fuchsia-200/80 px-1.5 py-0.5 rounded border border-fuchsia-300/80">
+                  {stats.partsPending} İşlem
+                </span>{" "}
+                onay bekleyen
+              </p>
+            </div>
+          </button>
+
+          {/* Servis Cirosu / Hacim (Emerald / Virman Stili) */}
+          <button
+            type="button"
+            onClick={() => setSelectedStatus(selectedStatus === "ready_delivered" ? "all" : "ready_delivered")}
+            className={`group relative overflow-hidden rounded-2xl p-4 sm:p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+              selectedStatus === "ready_delivered"
+                ? "bg-gradient-to-br from-emerald-500/20 via-teal-500/10 to-emerald-100/80 border-2 border-emerald-500 ring-2 ring-emerald-500/30 shadow-md"
+                : "bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-emerald-50/70 border-emerald-300/70 hover:border-emerald-400 hover:shadow-md"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase text-emerald-950 tracking-wider flex items-center gap-1.5">
+                <span>Servis Hacmi</span>
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
+                <DollarSign className="w-5 h-5 text-emerald-700" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-emerald-950 font-mono tracking-tight">
+                ₺{stats.totalRevenue.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+              </div>
+              <p className="text-xs font-semibold text-emerald-900/80 mt-1 flex items-center gap-1">
+                <span className="text-emerald-950 font-bold bg-emerald-200/80 px-1.5 py-0.5 rounded border border-emerald-300/80">
+                  {stats.completed} Tamamlandı
+                </span>{" "}
+                kdv dahil
+              </p>
+            </div>
           </button>
         </div>
       </div>
@@ -682,199 +1010,210 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
         />
       ) : (
         <>
-          {/* 📊 FINANS UYUMLU CAM VE GRADIENT KPI İSTATİSTİK KARTLARI */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Toplam İş Emri */}
-        <div
-          onClick={() => { setSelectedCategory("all"); setSelectedStatus("all"); }}
-          className="relative overflow-hidden rounded-2xl bg-white/90 backdrop-blur-md p-4 border border-purple-100 shadow-sm hover:shadow-md hover:border-purple-300 transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Toplam İş Emri</span>
-            <div className="p-2 rounded-xl bg-purple-50 text-purple-600 group-hover:scale-110 transition-transform">
-              <Wrench className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-slate-800">{stats.total}</span>
-            <span className="text-xs text-slate-400 font-medium">Kayıt</span>
-          </div>
-          <div className="mt-2 text-[11px] text-purple-600 font-semibold flex items-center gap-1">
-            <span>Tüm servisleri listele</span>
-          </div>
-        </div>
-
-        {/* Sahada / Yolda */}
-        <div
-          onClick={() => setSelectedStatus("on_the_way")}
-          className="relative overflow-hidden rounded-2xl bg-white/90 backdrop-blur-md p-4 border border-indigo-100 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Sahada / Yolda</span>
-            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 group-hover:scale-110 transition-transform">
-              <Truck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-indigo-900">{stats.onTheWay}</span>
-            <span className="text-xs text-indigo-500 font-medium">Saha Ekibi</span>
-          </div>
-          <div className="mt-2 text-[11px] text-indigo-600 font-semibold flex items-center gap-1">
-            <span>Aktif randevular</span>
-          </div>
-        </div>
-
-        {/* Atölyede / Onarımda */}
-        <div
-          onClick={() => setSelectedStatus("repairing")}
-          className="relative overflow-hidden rounded-2xl bg-white/90 backdrop-blur-md p-4 border border-blue-100 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Onarım & Teşhis</span>
-            <div className="p-2 rounded-xl bg-blue-50 text-blue-600 group-hover:scale-110 transition-transform">
-              <Zap className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-blue-900">{stats.activeRepair}</span>
-            <span className="text-xs text-blue-500 font-medium">Cihaz</span>
-          </div>
-          <div className="mt-2 text-[11px] text-blue-600 font-semibold flex items-center gap-1">
-            <span>İşlem süreci devam edenler</span>
-          </div>
-        </div>
-
-        {/* Parça / Teklif Bekleyen */}
-        <div
-          onClick={() => setSelectedStatus("quote_pending")}
-          className="relative overflow-hidden rounded-2xl bg-white/90 backdrop-blur-md p-4 border border-amber-100 shadow-sm hover:shadow-md hover:border-amber-300 transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Parça / Onay</span>
-            <div className="p-2 rounded-xl bg-amber-50 text-amber-600 group-hover:scale-110 transition-transform">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-amber-900">{stats.partsPending}</span>
-            <span className="text-xs text-amber-600 font-medium">Bekleyen</span>
-          </div>
-          <div className="mt-2 text-[11px] text-amber-600 font-semibold flex items-center gap-1">
-            <span>Teklif ve tedarik aşaması</span>
-          </div>
-        </div>
-
-        {/* Toplam Ciro / Hacim */}
-        <div className="col-span-2 lg:col-span-1 relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white p-4 shadow-md">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-100 uppercase tracking-wider">Servis Hacmi</span>
-            <DollarSign className="w-4 h-4 text-emerald-200" />
-          </div>
-          <div className="mt-3">
-            <span className="text-xl sm:text-2xl font-black">{stats.totalRevenue.toLocaleString("tr-TR")} ₺</span>
-          </div>
-          <div className="mt-2 text-[11px] text-emerald-100 font-medium flex items-center justify-between">
-            <span>{stats.completed} Tamamlanan</span>
-            <span className="bg-emerald-400/30 px-1.5 py-0.5 rounded text-[10px] font-bold">KDV Dahil</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 🔍 ARAMA & KATEGORİ SEÇİM BARLARI */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
-        {/* Kategori Seçim Butonları */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-          <button
-            onClick={() => setSelectedCategory("all")}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-              selectedCategory === "all"
-                ? "bg-[#8252F6] text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            Tüm Cihazlar ({applianceServices.length})
-          </button>
-          <button
-            onClick={() => setSelectedCategory("hvac_climate")}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-              selectedCategory === "hvac_climate"
-                ? "bg-sky-600 text-white shadow-sm"
-                : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200"
-            }`}
-          >
-            <ThermometerSnowflake className="w-3.5 h-3.5" />
-            <span>İklimlendirme (Klima / Kombi)</span>
-          </button>
-          <button
-            onClick={() => setSelectedCategory("major_appliance")}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-              selectedCategory === "major_appliance"
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-            }`}
-          >
-            <Refrigerator className="w-3.5 h-3.5" />
-            <span>Beyaz Eşya</span>
-          </button>
-          <button
-            onClick={() => setSelectedCategory("small_appliance")}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-              selectedCategory === "small_appliance"
-                ? "bg-amber-600 text-white shadow-sm"
-                : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
-            }`}
-          >
-            <Coffee className="w-3.5 h-3.5" />
-            <span>Küçük Ev Aletleri (Kahve / Robot / Süpürge)</span>
-          </button>
-        </div>
-
-        {/* Filtreleme ve Arama */}
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2 border-t border-slate-100">
-          <div className="sm:col-span-6 relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Cihaz, arıza, müşteri adı, telefon, servis no veya adres ara..."
-              className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#8252F6] bg-slate-50/50"
+          {/* 📅 TARİH ARALIĞI FİLTRESİ (FINANS MODÜLÜ BİREBİR TASARIMI) */}
+          <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 border border-purple-200/60 shadow-2xs">
+            {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
+            <div
+              className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
+                backgroundSize: "20px 35px",
+              }}
             />
+
+            {/* Dekoratif Vektör Şekli */}
+            <svg
+              className="absolute -right-4 -bottom-6 w-32 h-32 pointer-events-none text-purple-400/10"
+              viewBox="0 0 200 200"
+              fill="none"
+            >
+              <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
+              <circle cx="100" cy="100" r="30" stroke="currentColor" strokeWidth="1" />
+            </svg>
+
+            <div className="flex items-center gap-3 relative z-10">
+              <div className="w-10 h-10 rounded-xl bg-purple-100/60 border border-purple-200/60 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs backdrop-blur-2xs">
+                <Calendar className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-purple-900 uppercase tracking-tight">
+                    Tarih Aralığı Filtresi (Servis Kayıtları)
+                  </span>
+                  {(startDate || endDate) && (
+                    <span className="text-[10px] font-extrabold bg-purple-600 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
+                      Filtreli
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] font-semibold text-purple-950/80">
+                  Randevu ve servis kayıtlarını belirli tarih aralığına göre listele
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10">
+              <div className="flex items-center gap-2 bg-white/80 p-1.5 rounded-xl border border-purple-200/60 shadow-2xs backdrop-blur-2xs">
+                <div className="flex items-center gap-1.5 px-2">
+                  <span className="text-[11px] font-bold text-slate-500">Başlangıç:</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="text-xs font-bold text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
+                  />
+                </div>
+                <span className="text-slate-300 font-bold">|</span>
+                <div className="flex items-center gap-1.5 px-2">
+                  <span className="text-[11px] font-bold text-slate-500">Bitiş:</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="text-xs font-bold text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
+                  />
+                </div>
+              </div>
+
+              {/* Hazır Aralık Butonları */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  onClick={handlePresetThisMonth}
+                  type="button"
+                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+                >
+                  Bu Ay
+                </button>
+                <button
+                  onClick={handlePresetLastMonth}
+                  type="button"
+                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+                >
+                  Geçen Ay
+                </button>
+                <button
+                  onClick={handlePresetLast30Days}
+                  type="button"
+                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+                >
+                  Son 30 Gün
+                </button>
+                <button
+                  onClick={handlePresetThisYear}
+                  type="button"
+                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+                >
+                  Bu Yıl
+                </button>
+                {(startDate || endDate) && (
+                  <button
+                    onClick={handleClearDates}
+                    type="button"
+                    className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Temizle</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div className="sm:col-span-3">
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value as any)}
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#8252F6]"
-            >
-              <option value="all">Tüm Durumlar ({applianceServices.length})</option>
-              <option value="reception">Randevu / Kayıt Alındı</option>
-              <option value="assigned">Teknisyene Atandı</option>
-              <option value="on_the_way">Sahada / Yolda</option>
-              <option value="diagnosing">Arıza Teşhisinde</option>
-              <option value="quote_pending">Müşteri Onayı Bekliyor</option>
-              <option value="parts_ordered">Yedek Parça Bekleniyor</option>
-              <option value="repairing">Onarımda / Montajda</option>
-              <option value="testing_qc">Test & Gaz Kontrolünde</option>
-              <option value="ready_delivered">Tamamlandı / Teslim Edildi</option>
-              <option value="cancelled">İptal / İade</option>
-            </select>
-          </div>
+          {/* 🔍 ARAMA & KATEGORİ SEÇİM BARLARI */}
+          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-purple-200/60 shadow-2xs space-y-3">
+            {/* Kategori Seçim Butonları */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              <button
+                onClick={() => setSelectedCategory("all")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  selectedCategory === "all"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "bg-purple-50/70 text-purple-900 hover:bg-purple-100/70 border border-purple-200/50"
+                }`}
+              >
+                Tüm Cihazlar ({applianceServices.length})
+              </button>
+              <button
+                onClick={() => setSelectedCategory("hvac_climate")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                  selectedCategory === "hvac_climate"
+                    ? "bg-sky-600 text-white shadow-xs"
+                    : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200"
+                }`}
+              >
+                <ThermometerSnowflake className="w-3.5 h-3.5" />
+                <span>İklimlendirme (Klima / Kombi)</span>
+              </button>
+              <button
+                onClick={() => setSelectedCategory("major_appliance")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                  selectedCategory === "major_appliance"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                }`}
+              >
+                <Refrigerator className="w-3.5 h-3.5" />
+                <span>Beyaz Eşya</span>
+              </button>
+              <button
+                onClick={() => setSelectedCategory("small_appliance")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                  selectedCategory === "small_appliance"
+                    ? "bg-amber-600 text-white shadow-xs"
+                    : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
+                }`}
+              >
+                <Coffee className="w-3.5 h-3.5" />
+                <span>Küçük Ev Aletleri (Kahve / Robot / Süpürge)</span>
+              </button>
+            </div>
 
-          <div className="sm:col-span-3">
-            <select
-              value={selectedLocation}
-              onChange={(e) => setSelectedLocation(e.target.value as any)}
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#8252F6]"
-            >
-              <option value="all">Tüm Hizmet Yerleri</option>
-              <option value="on_site">🏠 Sahada / Müşteri Adresinde</option>
-              <option value="workshop">🏢 Atölyede / Servis Merkezinde</option>
-            </select>
+            {/* Filtreleme ve Arama */}
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2 border-t border-purple-100/60">
+              <div className="sm:col-span-6 relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-purple-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Cihaz, arıza, müşteri adı, telefon, servis no veya adres ara..."
+                  className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-purple-200/70 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                />
+              </div>
+
+              <div className="sm:col-span-3">
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value as any)}
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-purple-200/70 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="all">Tüm Durumlar ({applianceServices.length})</option>
+                  <option value="reception">Randevu / Kayıt Alındı</option>
+                  <option value="assigned">Teknisyene Atandı</option>
+                  <option value="on_the_way">Sahada / Yolda</option>
+                  <option value="diagnosing">Arıza Teşhisinde</option>
+                  <option value="quote_pending">Müşteri Onayı Bekliyor</option>
+                  <option value="parts_ordered">Yedek Parça Bekleniyor</option>
+                  <option value="repairing">Onarımda / Montajda</option>
+                  <option value="testing_qc">Test & Gaz Kontrolünde</option>
+                  <option value="ready_delivered">Tamamlandı / Teslim Edildi</option>
+                  <option value="cancelled">İptal / İade</option>
+                </select>
+              </div>
+
+              <div className="sm:col-span-3">
+                <select
+                  value={selectedLocation}
+                  onChange={(e) => setSelectedLocation(e.target.value as any)}
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-purple-200/70 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="all">Tüm Hizmet Yerleri</option>
+                  <option value="on_site">🏠 Sahada / Müşteri Adresinde</option>
+                  <option value="workshop">🏢 Atölyede / Servis Merkezinde</option>
+                </select>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
       {/* 📋 İŞ EMİRLERİ LİSTESİ */}
       <div className="space-y-4">
@@ -922,9 +1261,105 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                         <span className="text-xs font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
                           {record.serviceNo}
                         </span>
-                        <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${statusMeta.bg} ${statusMeta.color}`}>
-                          {statusMeta.label}
-                        </span>
+                        <div className="relative inline-block">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenStatusDropdownId(openStatusDropdownId === record.id ? null : record.id);
+                            }}
+                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all cursor-pointer hover:shadow-xs ${statusMeta.bg} ${statusMeta.color}`}
+                            title="Durumu Değiştirmek İçin Tıklayın"
+                          >
+                            <span className={`w-2 h-2 rounded-full ${applianceStatusOptions.find(o => o.value === record.status)?.dot || 'bg-slate-400'}`} />
+                            <span>{statusMeta.label}</span>
+                            <ChevronDown className="w-3 h-3 opacity-70" />
+                          </button>
+
+                          {/* Açılır Durum Menüsü Popover */}
+                          {openStatusDropdownId === record.id && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-40"
+                                onClick={() => setOpenStatusDropdownId(null)}
+                              />
+                              <div className="absolute left-0 mt-1 w-64 bg-white rounded-2xl shadow-xl border border-purple-200/80 py-2 z-50 animate-fadeIn text-left">
+                                <div className="px-3 py-1.5 border-b border-slate-100 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                                  <span>Servis Durumu Değiştir</span>
+                                  <span className="text-purple-700 font-mono font-bold text-[10px]">{record.serviceNo}</span>
+                                </div>
+                                <div className="max-h-64 overflow-y-auto py-1">
+                                  {applianceStatusOptions.map((opt) => {
+                                    const isSelected = record.status === opt.value;
+                                    return (
+                                      <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleQuickStatusChange(record.id, opt.value);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 flex items-start gap-2.5 transition-colors cursor-pointer ${
+                                          isSelected ? "bg-purple-50 text-purple-950 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                        }`}
+                                      >
+                                        <span className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${opt.dot}`} />
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-xs font-bold flex items-center justify-between">
+                                            <span>{opt.label}</span>
+                                            {isSelected && <Check className="w-3.5 h-3.5 text-purple-700" />}
+                                          </div>
+                                          <p className="text-[10px] text-slate-500 font-normal truncate">{opt.desc}</p>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Hızlı Seçenekler / İşlem Yönlendirmeleri */}
+                                <div className="pt-1.5 mt-1 border-t border-slate-100 px-2 space-y-0.5">
+                                  <div className="px-2 py-0.5 text-[10px] font-black uppercase text-slate-400">Hızlı Belge & İşlem</div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenStatusDropdownId(null);
+                                      handleOpenDeliveryModal(record);
+                                    }}
+                                    className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-slate-800 hover:bg-purple-50 hover:text-purple-950 flex items-center gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <FileText className="w-3.5 h-3.5 text-purple-700" />
+                                    <span>Ürün Teslim Tutanağı</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenStatusDropdownId(null);
+                                      handleOpenInvoicing(record);
+                                    }}
+                                    className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-slate-800 hover:bg-emerald-50 hover:text-emerald-900 flex items-center gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <Receipt className="w-3.5 h-3.5 text-emerald-700" />
+                                    <span>Faturaya Gönder / Kes</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenStatusDropdownId(null);
+                                      handleOpenWhatsApp(record);
+                                    }}
+                                    className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-slate-800 hover:bg-emerald-50 hover:text-emerald-900 flex items-center gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>WhatsApp Gönder</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 flex items-center gap-1">
                           {record.serviceLocation === "on_site" ? (
                             <>
@@ -994,6 +1429,26 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                      {/* WhatsApp Bilgilendirme Butonu */}
+                      <button
+                        onClick={() => handleOpenWhatsApp(record)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-xs border border-emerald-300 transition-all cursor-pointer"
+                        title="Cari Hesaba WhatsApp Bilgilendirme Mesajı Gönder"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>WhatsApp</span>
+                      </button>
+
+                      {/* Ürün Teslim Tutanağı Butonu */}
+                      <button
+                        onClick={() => handleOpenDeliveryModal(record)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-900 hover:bg-purple-100 font-bold text-xs border border-purple-200 transition-all cursor-pointer"
+                        title="Ürün / Cihaz Teslim Tutanağını Görüntüle ve Yazdır"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-purple-700" />
+                        <span>Teslim Tutanağı</span>
+                      </button>
+
                       {/* AI Saha Kontrol Listesi Butonu */}
                       <button
                         onClick={() => handleOpenAiAssistant(record)}
@@ -1001,7 +1456,7 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                         title="AI Saha & Operasyon Rehberi"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-[#8252F6]" />
-                        <span>AI Operasyon Rehberi</span>
+                        <span>AI Rehber</span>
                       </button>
 
                       {/* Yazdır Fiş */}
@@ -1553,6 +2008,26 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
 
               {/* Arıza ve Yapılan İşlem */}
               <div className="space-y-2">
+                {/* Teslim Alınan Aksesuarlar & Fiziksel Durum */}
+                <div className="grid grid-cols-2 gap-3 text-[11px]">
+                  <div className="bg-purple-50/50 p-2.5 rounded-lg border border-purple-200">
+                    <strong className="block text-purple-950 mb-0.5 font-bold uppercase text-[10px]">Teslim Alınan Aksesuar & Donanımlar:</strong>
+                    <p className="text-slate-800 font-medium">
+                      {printRecord.accessoriesReceived || "Harici aksesuar teslim alınmadı (Yalnız Cihaz)."}
+                    </p>
+                  </div>
+                  <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200">
+                    <strong className="block text-amber-950 mb-0.5 font-bold uppercase text-[10px]">Cihaz Fiziksel Durumu & Deformasyon:</strong>
+                    <p className="text-slate-800 font-medium">
+                      {printRecord.damagePhysicalCondition ? (
+                        <span className="text-amber-950 font-bold">{printRecord.damagePhysicalCondition}</span>
+                      ) : (
+                        <span className="text-emerald-800 font-bold">Belirgin çizik, kırık veya kusur bulunmamaktadır.</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <strong className="block text-slate-900 mb-0.5">Bildirilen Şikayet / Arıza:</strong>
                   <p className="text-slate-700">{printRecord.customerProblemDescription}</p>
@@ -1918,6 +2393,43 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
                   />
                 </div>
+
+                {/* Teslim Alınan Aksesuarlar / Malzemeler & Cihaz Fiziksel Deformasyon Durumu */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-purple-100">
+                  <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-200/80">
+                    <label className="block text-xs font-bold text-purple-950 mb-1 flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-purple-700" />
+                      <span>Beraberinde Teslim Alınan Parça & Aksesuarlar</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.accessoriesReceived || ""}
+                      onChange={(e) => setFormData({ ...formData, accessoriesReceived: e.target.value })}
+                      placeholder="Örn: Uzaktan Kumanda, Şarj Adaptörü, Güç Kablosu, Filtre, Boru..."
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Teslim alma tutanağında eksiksiz belirtilir.
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/80">
+                    <label className="block text-xs font-bold text-amber-950 mb-1 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Cihaz / Ürün Çizik, Kırık & Deformasyon Durumu</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.damagePhysicalCondition || ""}
+                      onChange={(e) => setFormData({ ...formData, damagePhysicalCondition: e.target.value })}
+                      placeholder="Örn: Ön panelde kılcal çizikler, kapakta hafif sararma, sağ köşede sürtme..."
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Kayıt anındaki fiziksel kusurlar teslim alma tutanağına yazılır.
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* 4. Bölüm: Parça ve İşçilik Yönetimi */}
@@ -2100,6 +2612,72 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* EV ALETLERİ & KLİMA SERVİS FATURALANDIRMA MODALI */}
+      {isInvoicingModalOpen && invoicingRecord && (
+        <ServiceInvoicingModal
+          isOpen={isInvoicingModalOpen}
+          onClose={() => {
+            setIsInvoicingModalOpen(false);
+            setInvoicingRecord(null);
+          }}
+          serviceType="appliance"
+          serviceRecord={invoicingRecord}
+          contacts={contacts}
+          onAddInvoice={(invoice) => {
+            if (onAddInvoice) {
+              onAddInvoice(invoice);
+            }
+          }}
+          onAddContact={(contact) => {
+            if (onAddContact) {
+              onAddContact(contact);
+            }
+          }}
+          onServiceInvoiced={handleServiceInvoiced}
+          onOpenDeliveryModal={(record) => {
+            handleOpenDeliveryModal(record as ApplianceServiceRecord);
+          }}
+        />
+      )}
+
+      {/* WHATSAPP BİLGİLENDİRME MODALI */}
+      {isWhatsAppModalOpen && whatsAppRecord && (
+        <ServiceWhatsAppModal
+          isOpen={isWhatsAppModalOpen}
+          onClose={() => {
+            setIsWhatsAppModalOpen(false);
+            setWhatsAppRecord(null);
+          }}
+          serviceType="appliance"
+          serviceRecord={whatsAppRecord}
+          defaultTemplateType={whatsAppTemplateType}
+          companySettings={companySettings}
+        />
+      )}
+
+      {/* ÜRÜN & CİHAZ TESLİM TUTANAĞI MODALI */}
+      {isDeliveryModalOpen && deliveryRecord && (
+        <ServiceDeliveryModal
+          isOpen={isDeliveryModalOpen}
+          onClose={() => {
+            setIsDeliveryModalOpen(false);
+            setDeliveryRecord(null);
+          }}
+          serviceType="appliance"
+          serviceRecord={deliveryRecord}
+          companySettings={companySettings}
+          onOpenInvoicing={(rec) => {
+            setIsDeliveryModalOpen(false);
+            handleOpenInvoicing(rec as ApplianceServiceRecord);
+          }}
+          onOpenWhatsApp={(rec) => {
+            setIsDeliveryModalOpen(false);
+            handleOpenWhatsApp(rec as ApplianceServiceRecord, "completed");
+          }}
+          onMarkDelivered={handleMarkDelivered}
+        />
       )}
     </div>
   );

@@ -21,12 +21,18 @@ import {
   DollarSign,
   RefreshCw,
   Check,
+  ChevronDown,
   X,
   Server,
   Mail,
   ListOrdered,
   KeyRound,
   ShieldAlert,
+  FileCheck,
+  Receipt,
+  CheckCircle2,
+  MessageCircle,
+  Package,
 } from "lucide-react";
 import {
   ItServiceRecord,
@@ -35,18 +41,29 @@ import {
   Contact,
   ItServiceStatus,
   ItDeviceType,
+  Invoice,
+  CompanySettings,
 } from "../../types";
+import { ServiceInvoicingModal } from "../ServiceInvoicingModal";
+import { ServiceWhatsAppModal } from "../ServiceWhatsAppModal";
+import { ServiceDeliveryModal } from "../ServiceDeliveryModal";
 
 interface ITServiceModuleProps {
   itServices: ItServiceRecord[];
   onUpdateItServices: (services: ItServiceRecord[]) => void;
   contacts: Contact[];
+  companySettings?: CompanySettings;
+  onAddInvoice?: (invoice: Invoice) => void;
+  onAddContact?: (contact: Contact) => void;
 }
 
 export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
   itServices,
   onUpdateItServices,
   contacts,
+  companySettings,
+  onAddInvoice,
+  onAddContact,
 }) => {
   const [activeTab, setActiveTab] = useState<"records" | "ai_assistants" | "print_preview">("records");
   const [searchQuery, setSearchQuery] = useState("");
@@ -54,8 +71,22 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
   const [selectedRecord, setSelectedRecord] = useState<ItServiceRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
-  const [printDocType, setPrintDocType] = useState<"reception" | "work_order" | "quote">("reception");
+  const [printDocType, setPrintDocType] = useState<"reception" | "work_order" | "quote" | "delivery">("reception");
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+
+  // Delivery Modal State
+  const [deliveryRecord, setDeliveryRecord] = useState<ItServiceRecord | null>(null);
+  const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
+
+  // WhatsApp State
+  const [whatsAppRecord, setWhatsAppRecord] = useState<ItServiceRecord | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [whatsAppTemplateType, setWhatsAppTemplateType] = useState<"completed" | "invoiced" | "diagnosis_approval" | "reception">("completed");
+
+  // Invoicing & Status Dropdown States
+  const [invoicingRecord, setInvoicingRecord] = useState<ItServiceRecord | null>(null);
+  const [isInvoicingModalOpen, setIsInvoicingModalOpen] = useState(false);
+  const [openStatusDropdownId, setOpenStatusDropdownId] = useState<string | null>(null);
 
   // AI Assistant States
   const [aiAssistantTab, setAiAssistantTab] = useState<"triage" | "troubleshoot" | "quote_message" | "email">("triage");
@@ -102,7 +133,9 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
     serialNumber: "",
     devicePasswordPin: "",
     hasChargerIncluded: true,
-    accessoriesIncluded: "Şarj Adaptörü ve Güç Kablosu",
+    accessoriesIncluded: "Şarj Cihazı ve Güç Kablosu",
+    accessoriesReceived: "Şarj Adaptörü, Güç Kablosu ve Koruma Kılıfı",
+    damagePhysicalCondition: "",
     dataBackupStatus: "backup_taken",
     dataBackupNotes: "Veriler müşteri tarafından yedeklendi.",
     contactName: "",
@@ -135,7 +168,19 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
   const [newLaborRate, setNewLaborRate] = useState(850);
   const [newLaborVat, setNewLaborVat] = useState(20);
 
-  // Status mapping
+  // Status mapping & options
+  const itStatusOptions: { value: ItServiceStatus; label: string; desc: string; bg: string; color: string; dot: string }[] = [
+    { value: "reception", label: "Cihaz Kabulü", desc: "Cihaz teslim alındı, giriş kaydı açıldı", bg: "bg-amber-100/90 border-amber-300", color: "text-amber-900", dot: "bg-amber-500" },
+    { value: "diagnosing", label: "Ön Teşhis / İnceleme", desc: "Donanım/yazılım analizi ve arıza tespiti", bg: "bg-blue-100/90 border-blue-300", color: "text-blue-900", dot: "bg-blue-500" },
+    { value: "quote_pending", label: "Müşteri Onayı Bekliyor", desc: "Müşteriye teklif iletildi, onay bekleniyor", bg: "bg-purple-100/90 border-purple-300", color: "text-purple-900", dot: "bg-purple-500" },
+    { value: "parts_ordered", label: "Parça Bekleniyor", desc: "Çip/ekran/donanım siparişte tedarik ediliyor", bg: "bg-orange-100/90 border-orange-300", color: "text-orange-900", dot: "bg-orange-500" },
+    { value: "repairing", label: "Laboratuvarda Onarımda", desc: "BGA/Lehim/Bileşen değişimi yapılıyor", bg: "bg-indigo-100/90 border-indigo-300", color: "text-indigo-900", dot: "bg-indigo-500" },
+    { value: "testing", label: "Stres Testi & Kararlılık", desc: "MemTest, FurMark ve kararlılık testleri", bg: "bg-cyan-100/90 border-cyan-300", color: "text-cyan-900", dot: "bg-cyan-500" },
+    { value: "ready", label: "Teslime Hazır (Onarım Bitti)", desc: "Onarım ve testler tamamlandı, teslime hazır", bg: "bg-emerald-100/90 border-emerald-300", color: "text-emerald-900", dot: "bg-emerald-500" },
+    { value: "delivered", label: "Teslim Edildi & Faturalandı", desc: "Müşteriye teslim edildi, fatura kesildi", bg: "bg-slate-200 border-slate-300", color: "text-slate-900", dot: "bg-blue-600" },
+    { value: "cancelled", label: "İptal / İade", desc: "Servis iptal edildi veya iade edildi", bg: "bg-rose-100/90 border-rose-300", color: "text-rose-900", dot: "bg-rose-500" },
+  ];
+
   const statusLabels: Record<ItServiceStatus, { label: string; color: string; bg: string }> = {
     reception: { label: "Cihaz Kabulü", color: "text-amber-800", bg: "bg-amber-100/90 border-amber-300" },
     diagnosing: { label: "Ön Teşhis / İnceleme", color: "text-blue-800", bg: "bg-blue-100/90 border-blue-300" },
@@ -144,8 +189,87 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
     repairing: { label: "Laboratuvarda Onarımda", color: "text-indigo-800", bg: "bg-indigo-100/90 border-indigo-300" },
     testing: { label: "Stres Testi & Kararlılık", color: "text-cyan-800", bg: "bg-cyan-100/90 border-cyan-300" },
     ready: { label: "Teslime Hazır", color: "text-emerald-800", bg: "bg-emerald-100/90 border-emerald-300" },
-    delivered: { label: "Teslim Edildi & Garantili", color: "text-slate-800", bg: "bg-slate-200 border-slate-300" },
+    delivered: { label: "Teslim Edildi", color: "text-slate-800", bg: "bg-slate-200 border-slate-300" },
     cancelled: { label: "İptal / İade", color: "text-rose-800", bg: "bg-rose-100/90 border-rose-300" },
+  };
+
+  const handleQuickStatusChange = (recordId: string, newStatus: ItServiceStatus) => {
+    const updated = itServices.map((s) => {
+      if (s.id === recordId) {
+        return {
+          ...s,
+          status: newStatus,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return s;
+    });
+    onUpdateItServices(updated);
+    setOpenStatusDropdownId(null);
+  };
+
+  const handleOpenInvoicing = (record: ItServiceRecord) => {
+    setInvoicingRecord(record);
+    setIsInvoicingModalOpen(true);
+  };
+
+  const handleOpenWhatsApp = (
+    record: ItServiceRecord,
+    preferredType?: "completed" | "invoiced" | "diagnosis_approval" | "reception"
+  ) => {
+    setWhatsAppRecord(record);
+    if (preferredType) {
+      setWhatsAppTemplateType(preferredType);
+    } else if (record.invoiceNumber || record.invoiceId) {
+      setWhatsAppTemplateType("invoiced");
+    } else if (record.status === "ready" || record.status === "delivered" || record.status === "testing") {
+      setWhatsAppTemplateType("completed");
+    } else if (record.status === "quote_pending") {
+      setWhatsAppTemplateType("diagnosis_approval");
+    } else {
+      setWhatsAppTemplateType("completed");
+    }
+    setIsWhatsAppModalOpen(true);
+  };
+
+  const handleOpenDeliveryModal = (record: ItServiceRecord) => {
+    setDeliveryRecord(record);
+    setIsDeliveryModalOpen(true);
+  };
+
+  const handleMarkDelivered = (serviceId: string) => {
+    const updated = itServices.map((s) => {
+      if (s.id === serviceId) {
+        return {
+          ...s,
+          status: "delivered" as ItServiceStatus,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return s;
+    });
+    onUpdateItServices(updated);
+  };
+
+  const handleServiceInvoiced = (serviceId: string, invoiceId: string, invoiceNumber: string) => {
+    const updated = itServices.map((s) => {
+      if (s.id === serviceId) {
+        const invoicedRec = {
+          ...s,
+          status: "delivered" as ItServiceStatus,
+          invoiceId,
+          invoiceNumber,
+          updatedAt: new Date().toISOString(),
+        };
+        // Fatura kesildikten sonra WhatsApp bilgilendirme penceresini hazırla
+        setTimeout(() => {
+          handleOpenWhatsApp(invoicedRec, "invoiced");
+        }, 400);
+        return invoicedRec;
+      }
+      return s;
+    });
+    onUpdateItServices(updated);
   };
 
   const deviceTypeLabels: Record<ItDeviceType, string> = {
@@ -198,6 +322,8 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
       devicePasswordPin: "",
       hasChargerIncluded: true,
       accessoriesIncluded: "Şarj Cihazı ve Güç Kablosu",
+      accessoriesReceived: "Şarj Adaptörü, Orijinal Güç Kablosu",
+      damagePhysicalCondition: "",
       dataBackupStatus: "backup_taken",
       dataBackupNotes: "Veriler müşteri tarafından yedeklendi veya yedek talep edildi.",
       contactName: "",
@@ -681,7 +807,7 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
                     <th className="py-3.5 px-4">Arıza / Şikayet</th>
                     <th className="py-3.5 px-4">Tutar & Onay</th>
                     <th className="py-3.5 px-4">Durum</th>
-                    <th className="py-3.5 px-4 text-right">İşlemler</th>
+                    <th className="py-3.5 px-4 text-center">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-purple-100/80 text-sm text-slate-700">
@@ -758,36 +884,153 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
                               )}
                             </div>
                           </td>
-                          <td className="py-3.5 px-4">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${st.bg} ${st.color}`}>
-                              {st.label}
-                            </span>
+                          <td className="py-3.5 px-4 relative">
+                            <div className="relative inline-block text-left">
+                              <button
+                                type="button"
+                                onClick={() => setOpenStatusDropdownId(openStatusDropdownId === record.id ? null : record.id)}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition-all cursor-pointer hover:shadow-xs ${st.bg} ${st.color}`}
+                                title="Durumu Değiştirmek İçin Tıklayın"
+                              >
+                                <span className={`w-2 h-2 rounded-full ${itStatusOptions.find(o => o.value === record.status)?.dot || 'bg-slate-400'}`} />
+                                <span>{st.label}</span>
+                                <ChevronDown className="w-3 h-3 opacity-70" />
+                              </button>
+
+                              {/* Açılır Durum Menüsü Popover */}
+                              {openStatusDropdownId === record.id && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={() => setOpenStatusDropdownId(null)}
+                                  />
+                                  <div className="absolute left-0 mt-1 w-64 bg-white rounded-2xl shadow-xl border border-purple-200/80 py-2 z-50 animate-fadeIn">
+                                    <div className="px-3 py-1.5 border-b border-slate-100 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                                      <span>BT Durumu Değiştir</span>
+                                      <span className="text-purple-700 font-mono font-bold text-[10px]">{record.serviceNo}</span>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto py-1">
+                                      {itStatusOptions.map((opt) => {
+                                        const isSelected = record.status === opt.value;
+                                        return (
+                                          <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => handleQuickStatusChange(record.id, opt.value)}
+                                            className={`w-full text-left px-3 py-2 flex items-start gap-2.5 transition-colors cursor-pointer ${
+                                              isSelected ? "bg-purple-50 text-purple-950 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                            }`}
+                                          >
+                                            <span className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${opt.dot}`} />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="text-xs font-bold flex items-center justify-between">
+                                                <span>{opt.label}</span>
+                                                {isSelected && <Check className="w-3.5 h-3.5 text-purple-700" />}
+                                              </div>
+                                              <p className="text-[10px] text-slate-500 font-normal truncate">{opt.desc}</p>
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+
+                                    {/* Hızlı Seçenekler / İşlem Yönlendirmeleri */}
+                                    <div className="pt-1.5 mt-1 border-t border-slate-100 px-2 space-y-0.5">
+                                      <div className="px-2 py-0.5 text-[10px] font-black uppercase text-slate-400">Hızlı Belge & İşlem</div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenStatusDropdownId(null);
+                                          handleOpenDeliveryModal(record);
+                                        }}
+                                        className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-slate-800 hover:bg-purple-50 hover:text-purple-950 flex items-center gap-2 transition-colors cursor-pointer"
+                                      >
+                                        <FileText className="w-3.5 h-3.5 text-purple-700" />
+                                        <span>Cihaz Teslim Tutanağı</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenStatusDropdownId(null);
+                                          handleOpenInvoicing(record);
+                                        }}
+                                        className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-slate-800 hover:bg-emerald-50 hover:text-emerald-900 flex items-center gap-2 transition-colors cursor-pointer"
+                                      >
+                                        <Receipt className="w-3.5 h-3.5 text-emerald-700" />
+                                        <span>Faturaya Gönder / Kes</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenStatusDropdownId(null);
+                                          handleOpenWhatsApp(record);
+                                        }}
+                                        className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-slate-800 hover:bg-emerald-50 hover:text-emerald-900 flex items-center gap-2 transition-colors cursor-pointer"
+                                      >
+                                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>WhatsApp Gönder</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </td>
-                          <td className="py-3.5 px-4 text-right space-x-1">
-                            <button
-                              onClick={() => handleOpenEditModal(record)}
-                              className="p-1.5 text-purple-700 hover:text-purple-950 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer"
-                              title="Düzenle / Parça & İşçilik Ekle"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedRecord(record);
-                                setActiveTab("print_preview");
-                              }}
-                              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                              title="Yazdır / İncele"
-                            >
-                              <Printer className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteRecord(record.id)}
-                              className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                              title="Sil"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              {/* Teslim Tutanağı Butonu */}
+                              <button
+                                onClick={() => handleOpenDeliveryModal(record)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-700 hover:text-purple-950 bg-slate-100 hover:bg-purple-100 border border-slate-200 hover:border-purple-300 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                                title="Cihaz Teslim Tutanağını Görüntüle ve Yazdır"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-purple-700" />
+                                <span>Tutanak</span>
+                              </button>
+
+                              {/* WhatsApp Bilgilendirme Butonu */}
+                              <button
+                                onClick={() => handleOpenWhatsApp(record)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 hover:border-emerald-300 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                                title="Cari Hesaba WhatsApp Bilgilendirme Mesajı Gönder"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>WhatsApp</span>
+                              </button>
+
+                              {/* Düzenle Butonu */}
+                              <button
+                                onClick={() => handleOpenEditModal(record)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-purple-800 hover:text-purple-950 bg-purple-50 hover:bg-purple-100 border border-purple-200 hover:border-purple-300 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                                title="Düzenle / Parça & İşçilik Ekle"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-purple-700" />
+                                <span>Düzenle</span>
+                              </button>
+
+                              {/* Yazdır Butonu */}
+                              <button
+                                onClick={() => {
+                                  setSelectedRecord(record);
+                                  setActiveTab("print_preview");
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                                title="Yazdır / İncele"
+                              >
+                                <Printer className="w-3.5 h-3.5 text-slate-600" />
+                                <span>Yazdır</span>
+                              </button>
+
+                              {/* Sil Butonu */}
+                              <button
+                                onClick={() => handleDeleteRecord(record.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 hover:border-rose-300 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                                title="Sil"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Sil</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1392,6 +1635,16 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
                 >
                   Onarım & Garanti Tutanağı
                 </button>
+                <button
+                  onClick={() => setPrintDocType("delivery")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                    printDocType === "delivery"
+                      ? "bg-purple-700 text-white border-purple-700 shadow-xs"
+                      : "bg-white text-purple-950 border-purple-200 hover:bg-purple-50"
+                  }`}
+                >
+                  BT Cihaz Teslim Tutanağı
+                </button>
               </div>
             </div>
 
@@ -1443,6 +1696,7 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
                 {printDocType === "reception" && "CİHAZ KABUL VE TESLİM ALMA FORMU (BARKODLU)"}
                 {printDocType === "work_order" && "LABORATUVAR İŞ EMRİ VE TEST PROTOKOLÜ"}
                 {printDocType === "quote" && "DONANIM ONARIM, PARÇA VE GARANTİ TESLİM BELGESİ"}
+                {printDocType === "delivery" && "BİLİŞİM CİHAZ VE DONANIM TESLİM TUTANAĞI"}
               </div>
 
               {/* Info Grid */}
@@ -1475,6 +1729,30 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
                     <span className="text-slate-500">Sorumlu BT Uzmanı:</span>
                     <span className="font-bold text-slate-900">{selectedRecord.assignedTechnician}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Beraberinde Teslim Alınan Aksesuarlar & Fiziksel Durum / Deformasyon */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-purple-50/50 p-3 rounded-2xl border border-purple-200/80 text-xs space-y-1">
+                  <span className="text-[10px] font-black text-purple-950 uppercase block">
+                    Beraberinde Teslim Alınan Aksesuar & Donanımlar:
+                  </span>
+                  <p className="font-semibold text-slate-900 mt-0.5">
+                    {selectedRecord.accessoriesReceived || selectedRecord.accessoriesIncluded || "Harici aksesuar teslim alınmadı (Yalnız Cihaz)."}
+                  </p>
+                </div>
+                <div className="bg-amber-50/50 p-3 rounded-2xl border border-amber-200/80 text-xs space-y-1">
+                  <span className="text-[10px] font-black text-amber-950 uppercase block">
+                    Cihaz Kasa/Ekran Fiziksel Durumu & Deformasyon:
+                  </span>
+                  <p className="font-semibold text-slate-900 mt-0.5">
+                    {selectedRecord.damagePhysicalCondition ? (
+                      <span className="text-amber-950 font-bold">{selectedRecord.damagePhysicalCondition}</span>
+                    ) : (
+                      <span className="text-emerald-800 font-bold">Kayıt anında tespit edilen çizik, kırık veya deformasyon bulunmamaktadır.</span>
+                    )}
+                  </p>
                 </div>
               </div>
 
@@ -1689,22 +1967,36 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
                     className="w-full px-3 py-2 rounded-xl border border-purple-200 font-bold focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">Servis Durumu</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as ItServiceStatus })}
-                    className="w-full px-3 py-2 rounded-xl border border-purple-200 font-bold bg-white focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="reception">Cihaz Kabulü</option>
-                    <option value="diagnosing">Ön Teşhis / İnceleme</option>
-                    <option value="quote_pending">Müşteri Onayı Bekliyor</option>
-                    <option value="parts_ordered">Parça Bekleniyor</option>
-                    <option value="repairing">Laboratuvarda Onarımda</option>
-                    <option value="testing">Stres Testi</option>
-                    <option value="ready">Teslime Hazır</option>
-                    <option value="delivered">Teslim Edildi</option>
-                  </select>
+                <div className="md:col-span-3 bg-purple-50/50 p-3.5 rounded-2xl border border-purple-200/70 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-extrabold text-purple-950 flex items-center gap-1.5 text-xs">
+                      <Clock className="w-3.5 h-3.5 text-purple-700" />
+                      <span>BT Servis Durum Yönetimi & İş Akışı Adımı</span>
+                    </label>
+                    <span className="text-[11px] text-purple-700 font-semibold">Tıklayarak durumu anında değiştirin</span>
+                  </div>
+
+                  {/* Görsel Hızlı Durum Butonları */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {itStatusOptions.map((opt) => {
+                      const isSelected = formData.status === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, status: opt.value })}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            isSelected
+                              ? `${opt.bg} ${opt.color} ring-2 ring-purple-600 shadow-xs scale-105`
+                              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${opt.dot}`} />
+                          <span>{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -1729,6 +2021,42 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
                     placeholder="Laboratuvar teşhisi ve uygulanacak onarım adımları..."
                     className="w-full p-2.5 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
                   />
+                </div>
+              </div>
+
+              {/* Row 3.5: Teslim Alınan Aksesuarlar & Fiziksel Deformasyon/Kusur Durumu */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 bg-purple-50/40 rounded-2xl border border-purple-200/70">
+                <div>
+                  <label className="block text-xs font-bold text-purple-950 mb-1 flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-purple-700" />
+                    <span>Cihazla Beraberinde Teslim Alınan Aksesuarlar</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.accessoriesReceived || ""}
+                    onChange={(e) => setFormData({ ...formData, accessoriesReceived: e.target.value })}
+                    placeholder="Örn: Orijinal Şarj Adaptörü, Güç Kablosu, Taşıma Çantası, Mouse, Dönüştürücü..."
+                    className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Teslim alma tutanağında listelenir ve müşteriye ibraz edilir.
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-amber-950 mb-1 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Kasa / Ekran Çizik, Kırık & Deformasyon Durumu</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.damagePhysicalCondition || ""}
+                    onChange={(e) => setFormData({ ...formData, damagePhysicalCondition: e.target.value })}
+                    placeholder="Örn: Üst kapakta kılcal çizikler, sağ menteşede gevşeme, ekranda leke..."
+                    className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Cihaz girişi anındaki fiziksel kusurlar teslim tutanağında kayıt altına alınır.
+                  </span>
                 </div>
               </div>
 
@@ -1942,6 +2270,72 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* BT SERVİS FATURALANDIRMA MODALI */}
+      {isInvoicingModalOpen && invoicingRecord && (
+        <ServiceInvoicingModal
+          isOpen={isInvoicingModalOpen}
+          onClose={() => {
+            setIsInvoicingModalOpen(false);
+            setInvoicingRecord(null);
+          }}
+          serviceType="it"
+          serviceRecord={invoicingRecord}
+          contacts={contacts}
+          onAddInvoice={(invoice) => {
+            if (onAddInvoice) {
+              onAddInvoice(invoice);
+            }
+          }}
+          onAddContact={(contact) => {
+            if (onAddContact) {
+              onAddContact(contact);
+            }
+          }}
+          onServiceInvoiced={handleServiceInvoiced}
+          onOpenDeliveryModal={(record) => {
+            handleOpenDeliveryModal(record as ItServiceRecord);
+          }}
+        />
+      )}
+
+      {/* WHATSAPP BİLGİLENDİRME MODALI */}
+      {isWhatsAppModalOpen && whatsAppRecord && (
+        <ServiceWhatsAppModal
+          isOpen={isWhatsAppModalOpen}
+          onClose={() => {
+            setIsWhatsAppModalOpen(false);
+            setWhatsAppRecord(null);
+          }}
+          serviceType="it"
+          serviceRecord={whatsAppRecord}
+          defaultTemplateType={whatsAppTemplateType}
+          companySettings={companySettings}
+        />
+      )}
+
+      {/* ÜRÜN & BT CİHAZ TESLİM TUTANAĞI MODALI */}
+      {isDeliveryModalOpen && deliveryRecord && (
+        <ServiceDeliveryModal
+          isOpen={isDeliveryModalOpen}
+          onClose={() => {
+            setIsDeliveryModalOpen(false);
+            setDeliveryRecord(null);
+          }}
+          serviceType="it"
+          serviceRecord={deliveryRecord}
+          companySettings={companySettings}
+          onOpenInvoicing={(rec) => {
+            setIsDeliveryModalOpen(false);
+            handleOpenInvoicing(rec as ItServiceRecord);
+          }}
+          onOpenWhatsApp={(rec) => {
+            setIsDeliveryModalOpen(false);
+            handleOpenWhatsApp(rec as ItServiceRecord, "completed");
+          }}
+          onMarkDelivered={handleMarkDelivered}
+        />
       )}
     </div>
   );

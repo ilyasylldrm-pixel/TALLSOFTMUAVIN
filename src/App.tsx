@@ -2081,6 +2081,9 @@ export default function App() {
               autoServices={data.autoServices || []}
               onUpdateAutoServices={handleUpdateAutoServices}
               contacts={data.contacts}
+              companySettings={data.settings}
+              onAddInvoice={handleAddInvoice}
+              onAddContact={handleAddContact}
             />
           )}
 
@@ -2089,6 +2092,9 @@ export default function App() {
               itServices={data.itServices || []}
               onUpdateItServices={handleUpdateItServices}
               contacts={data.contacts}
+              companySettings={data.settings}
+              onAddInvoice={handleAddInvoice}
+              onAddContact={handleAddContact}
             />
           )}
 
@@ -2097,6 +2103,9 @@ export default function App() {
               applianceServices={data.applianceServices || []}
               onUpdateApplianceServices={handleUpdateApplianceServices}
               contacts={data.contacts}
+              companySettings={data.settings}
+              onAddInvoice={handleAddInvoice}
+              onAddContact={handleAddContact}
             />
           )}
 
