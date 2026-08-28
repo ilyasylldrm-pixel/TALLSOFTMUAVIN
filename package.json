@@ -40,10 +40,7 @@
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",
-<<<<<<< HEAD
     "@types/d3": "^7.4.3",
-=======
->>>>>>> d8cb00d743ea0f9269ebf475f124f67a4140af77
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/qrcode": "^1.5.6",

@@ -1,15 +1,44 @@
-import makeWASocket, {
-  DisconnectReason,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore,
-  Browsers,
-  WASocket,
-} from "@whiskeysockets/baileys";
+import * as BaileysImport from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
 import pino from "pino";
 import path from "path";
 import fs from "fs";
+
+// Robust CJS / ESM Interop Resolver for Baileys
+const baileysObj = (BaileysImport as any).default || BaileysImport;
+
+const makeWASocket =
+  typeof (BaileysImport as any).default === "function"
+    ? (BaileysImport as any).default
+    : typeof BaileysImport.makeWASocket === "function"
+    ? BaileysImport.makeWASocket
+    : typeof (BaileysImport as any).default?.default === "function"
+    ? (BaileysImport as any).default.default
+    : typeof (BaileysImport as any).default?.makeWASocket === "function"
+    ? (BaileysImport as any).default.makeWASocket
+    : (BaileysImport as any);
+
+const DisconnectReason = baileysObj.DisconnectReason || BaileysImport.DisconnectReason;
+const useMultiFileAuthState = baileysObj.useMultiFileAuthState || BaileysImport.useMultiFileAuthState;
+const fetchLatestBaileysVersion = baileysObj.fetchLatestBaileysVersion || BaileysImport.fetchLatestBaileysVersion;
+const makeCacheableSignalKeyStore = baileysObj.makeCacheableSignalKeyStore || BaileysImport.makeCacheableSignalKeyStore;
+const Browsers = baileysObj.Browsers || BaileysImport.Browsers;
+type WASocket = BaileysImport.WASocket;
+
+const toQRCodeDataURL = async (text: string, options: any): Promise<string> => {
+  const qr: any = (QRCode as any).default || QRCode;
+  if (typeof qr.toDataURL === "function") {
+    return await (qr.toDataURL(text, options) as Promise<string>);
+  }
+  throw new Error("QRCode.toDataURL is not available");
+};
+
+const createLogger = (options: any) => {
+  const p = (pino as any).default || pino;
+  if (typeof p === "function") return p(options);
+  if (typeof (pino as any) === "function") return (pino as any)(options);
+  return { level: "silent", info: () => {}, error: () => {}, warn: () => {}, debug: () => {}, trace: () => {} };
+};
 
 export interface WhatsAppStatus {
   status: "disconnected" | "connecting" | "qr_ready" | "connected";
@@ -186,17 +215,21 @@ class WhatsAppService {
         version: [2, 3000, 1043857760] as any,
       }));
 
-      const silentLogger = pino({ level: "silent" });
+      const silentLogger = createLogger({ level: "silent" });
+
+      if (typeof makeWASocket !== "function") {
+        throw new Error("makeWASocket fonksiyonu yüklenemedi. Modül yapısı doğrulanamadı.");
+      }
 
       this.sock = makeWASocket({
         version,
         logger: silentLogger,
         auth: {
           creds: state.creds,
-          keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+          keys: typeof makeCacheableSignalKeyStore === "function" ? makeCacheableSignalKeyStore(state.keys, silentLogger) : state.keys,
         },
         printQRInTerminal: false,
-        browser: Browsers.ubuntu("Chrome"),
+        browser: Browsers?.ubuntu ? Browsers.ubuntu("Chrome") : ["Ubuntu", "Chrome", "20.0.04"],
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
         connectTimeoutMs: 60000,
@@ -209,12 +242,12 @@ class WhatsAppService {
 
       this.sock.ev.on("creds.update", saveCreds);
 
-      this.sock.ev.on("connection.update", async (update) => {
+      this.sock.ev.on("connection.update", async (update: any) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
           try {
-            this.qrCodeDataUrl = await QRCode.toDataURL(qr, {
+            this.qrCodeDataUrl = await toQRCodeDataURL(qr, {
               width: 320,
               margin: 2,
               color: {
@@ -232,7 +265,7 @@ class WhatsAppService {
 
         if (connection === "close") {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-          const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+          const isLoggedOut = statusCode === DisconnectReason?.loggedOut || statusCode === 401;
           const shouldReconnect = !isLoggedOut;
 
           console.log(`WhatsApp bağlantısı kapandı. Sebep Kodu: ${statusCode}, Yeniden bağlanacak mı: ${shouldReconnect}`);
