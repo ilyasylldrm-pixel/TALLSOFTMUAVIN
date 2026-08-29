@@ -1,8 +1,40 @@
-node_modules/
-build/
-dist/
-coverage/
-.DS_Store
+﻿# Logs
+logs
 *.log
-.env*
-!.env.example
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+dev-server.log
+dev-server-error.log
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+*.local
+public/assets/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# WhatsApp Baileys Auth Session data
+auth_info_baileys/
+baileys_auth_info/
+sessions/
+
+# Editor / OS files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
