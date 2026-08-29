@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Quote, QuoteStatus, Contact, Product, Invoice, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
+import { formatQuoteWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
   FileSpreadsheet,
   Plus,
@@ -21,6 +23,8 @@ import {
   Calendar,
   Filter,
   Check,
+  Zap,
+  MessageCircle,
 } from "lucide-react";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { Logo } from "./Logo";
@@ -94,6 +98,7 @@ export const Quotes: React.FC<QuotesProps> = ({
   const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [printingQuote, setPrintingQuote] = useState<Quote | null>(null);
+  const [whatsAppQuote, setWhatsAppQuote] = useState<Quote | null>(null);
   const [isDownloadingQuotePDF, setIsDownloadingQuotePDF] = useState(false);
   const [formType, setFormType] = useState<"proforma" | "quote">("proforma");
 
@@ -533,6 +538,14 @@ export const Quotes: React.FC<QuotesProps> = ({
                           <Printer className="w-3.5 h-3.5 text-indigo-600" />
                           <span>Yazdır</span>
                         </button>
+                        <button
+                          onClick={() => setWhatsAppQuote(q)}
+                          title="Teklifi WhatsApp ile Paylaş"
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>WhatsApp</span>
+                        </button>
                         {onConvertQuoteToOrder && (
                           <button
                             onClick={() => onConvertQuoteToOrder(q)}
@@ -863,6 +876,14 @@ export const Quotes: React.FC<QuotesProps> = ({
               <div className="flex items-center gap-2.5 shrink-0">
                 <button
                   type="button"
+                  onClick={() => setWhatsAppQuote(printingQuote)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+                >
+                  <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                  <span>WhatsApp ile Gönder</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleDownloadQuotePDF}
                   disabled={isDownloadingQuotePDF}
                   className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
@@ -1051,7 +1072,53 @@ export const Quotes: React.FC<QuotesProps> = ({
           </div>
         </div>
       </div>
-    )}
+      )}
+
+      {/* WhatsApp Share Modal */}
+      {whatsAppQuote && (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppQuote}
+          onClose={() => setWhatsAppQuote(null)}
+          title="WhatsApp ile Fiyat Teklifi Paylaş"
+          documentTypeLabel="Proforma Fatura / Teklif"
+          recipientName={whatsAppQuote.contactName}
+          recipientPhone={contacts.find((c) => c.id === whatsAppQuote.contactId)?.phone || ""}
+          defaultMessage={formatQuoteWhatsAppMessage(
+            whatsAppQuote,
+            companySettings,
+            contacts.find((c) => c.id === whatsAppQuote.contactId)
+          )}
+          documentFileName={`${whatsAppQuote.quoteNumber}_Teklif.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const el = document.getElementById("printable-quote");
+            if (el) {
+              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+              return exportElementToPDFWithPrintStyling("printable-quote", `${whatsAppQuote.quoteNumber}_Teklif.pdf`, {
+                orientation: "p",
+                margin: 8,
+                scale: 1.6,
+              });
+            }
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `${whatsAppQuote.quoteNumber}_Teklif`,
+              title: `${companySettings?.companyName || "Fiyat Teklifi"} - ${whatsAppQuote.quoteNumber}`,
+              subtitle: `Müşteri: ${whatsAppQuote.contactName} | Düzenlenme: ${formatDate(whatsAppQuote.issueDate)} | Toplam: ${formatCurrency(whatsAppQuote.grandTotal)}`,
+              headers: ["Ürün / Hizmet", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
+              rows: (whatsAppQuote.items || []).map((i) => [
+                i.description,
+                i.quantity,
+                i.unit || "Adet",
+                formatCurrency(i.unitPrice),
+                `%${i.vatRate ?? 20}`,
+                formatCurrency(i.totalWithVat || i.quantity * i.unitPrice * (1 + (i.vatRate ?? 20) / 100)),
+              ]),
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
+      )}
     </div>
   );
 };

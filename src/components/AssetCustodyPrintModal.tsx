@@ -26,6 +26,9 @@ import {
 } from "lucide-react";
 import { AssetCustody, CompanySettings, Employee } from "../types";
 import { exportAssetCustodyToPDF } from "../utils/assetCustodyPdf";
+import { formatCustodyWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { Zap, MessageCircle } from "lucide-react";
 
 interface AssetCustodyPrintModalProps {
   isOpen: boolean;
@@ -49,6 +52,7 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
   );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
 
   // Sync docType when isReturnProtocol prop changes
   React.useEffect(() => {
@@ -187,6 +191,17 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
                 İade Tutanağı
               </button>
             </div>
+
+            {/* WhatsApp Share Button */}
+            <button
+              type="button"
+              onClick={() => setIsWhatsAppOpen(true)}
+              className="inline-flex items-center px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all cursor-pointer gap-1.5"
+              title="Zimmet Tutanağını Personelin WhatsApp'ına Gönder"
+            >
+              <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+              <span>WhatsApp ile Gönder</span>
+            </button>
 
             {/* Direct PDF Download Button */}
             <button
@@ -531,6 +546,31 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* WhatsApp Share Modal */}
+      <UniversalWhatsAppModal
+        isOpen={isWhatsAppOpen}
+        onClose={() => setIsWhatsAppOpen(false)}
+        title={isReturn ? "WhatsApp ile Zimmet İade Tutanağı Gönder" : "WhatsApp ile Zimmet Teslim Tutanağı Gönder"}
+        documentTypeLabel={isReturn ? "Zimmet İade ve İbra Tutanağı" : "Zimmet Teslim Tutanağı"}
+        recipientName={empName}
+        recipientPhone={employee?.phone || ""}
+        defaultMessage={formatCustodyWhatsAppMessage(
+          asset,
+          employee,
+          companySettings,
+          isReturn
+        )}
+        documentFileName={`${asset.assetCode}_${isReturn ? "Iade" : "Zimmet"}_Tutanagi.pdf`}
+        companySettings={companySettings}
+        onGeneratePdf={async () => {
+          const { exportAssetCustodyToPDF } = await import("../utils/assetCustodyPdf");
+          await exportAssetCustodyToPDF(asset, employee, companySettings, {
+            isReturnProtocol: isReturn,
+          });
+          return null;
+        }}
+      />
     </div>
   );
 };

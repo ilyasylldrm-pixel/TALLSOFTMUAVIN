@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Transaction, Account, Contact, TransactionType, Product, InvoiceItem, getContactAccountCode } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
+import { formatTransactionWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
   Receipt,
   Plus,
@@ -17,6 +19,8 @@ import {
   FileText,
   CreditCard,
   Building2,
+  Zap,
+  MessageCircle,
 } from "lucide-react";
 
 interface TransactionsProps {
@@ -97,6 +101,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
   const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
+  const [whatsAppTx, setWhatsAppTx] = useState<Transaction | null>(null);
 
   // Form State
   const [txType, setTxType] = useState<TransactionType>(forcedType || "income");
@@ -583,6 +588,14 @@ export const Transactions: React.FC<TransactionsProps> = ({
                           >
                             <Eye className="w-3.5 h-3.5" />
                             <span>İncele</span>
+                          </button>
+                          <button
+                            onClick={() => setWhatsAppTx(tx)}
+                            title="Fiş / Dekontu WhatsApp ile Paylaş"
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>WhatsApp</span>
                           </button>
                           <button
                             onClick={() => onDeleteTransaction(tx.id)}
@@ -1075,14 +1088,24 @@ export const Transactions: React.FC<TransactionsProps> = ({
               </div>
             </div>
 
-            <div className="pt-2 flex justify-between gap-2 border-t border-slate-200">
-              <button
-                onClick={() => window.print()}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Yazdır</span>
-              </button>
+            <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-200">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setWhatsAppTx(viewingTx)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                  <span>WhatsApp ile Gönder</span>
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Yazdır</span>
+                </button>
+              </div>
               <button
                 onClick={() => setViewingTx(null)}
                 className="px-5 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-xl cursor-pointer"
@@ -1092,6 +1115,43 @@ export const Transactions: React.FC<TransactionsProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* WhatsApp Share Modal */}
+      {whatsAppTx && (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppTx}
+          onClose={() => setWhatsAppTx(null)}
+          title="WhatsApp ile Fiş / Makbuz Paylaş"
+          documentTypeLabel={whatsAppTx.type === "income" || whatsAppTx.type === "collection" ? "Tahsilat / Gelir Makbuzu" : "Ödeme / Gider Fişi"}
+          recipientName={whatsAppTx.contactName || "Sayın Yetkili"}
+          recipientPhone={contacts.find((c) => c.id === whatsAppTx.contactId)?.phone || ""}
+          defaultMessage={formatTransactionWhatsAppMessage(
+            whatsAppTx,
+            null,
+            contacts.find((c) => c.id === whatsAppTx.contactId)
+          )}
+          documentFileName={`${whatsAppTx.documentNo || "Dekont"}.pdf`}
+          onGeneratePdf={async () => {
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `${whatsAppTx.documentNo || "Makbuz"}`,
+              title: `Mali İşlem Makbuzu - ${whatsAppTx.documentNo || "Dekont"}`,
+              subtitle: `Cari: ${whatsAppTx.contactName || "Genel"} | Tarih: ${formatDate(whatsAppTx.date)} | Tutar: ${formatCurrency(whatsAppTx.amount)} | Kasa/Banka: ${whatsAppTx.accountName}`,
+              headers: ["Açıklama / Kalem", "Kategori", "Tarih", "Kasa/Banka", "Tutar"],
+              rows: [
+                [
+                  whatsAppTx.description || "-",
+                  whatsAppTx.category || "-",
+                  formatDate(whatsAppTx.date),
+                  whatsAppTx.accountName || "-",
+                  formatCurrency(whatsAppTx.amount),
+                ],
+              ],
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
       )}
     </div>
   );

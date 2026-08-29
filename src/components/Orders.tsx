@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Order, OrderItem, OrderType, OrderStatus, Contact, Product, Warehouse, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
+import { formatOrderWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
   ShoppingCart,
   Plus,
@@ -30,6 +32,8 @@ import {
   FileSpreadsheet,
   Printer,
   Download,
+  Zap,
+  MessageCircle,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
@@ -65,6 +69,7 @@ export const Orders: React.FC<OrdersProps> = ({
   const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedOrderForView, setSelectedOrderForView] = useState<Order | null>(null);
+  const [whatsAppOrder, setWhatsAppOrder] = useState<Order | null>(null);
   const [isDownloadingOrderPDF, setIsDownloadingOrderPDF] = useState(false);
   const [convertConfirmOrder, setConvertConfirmOrder] = useState<Order | null>(null);
 
@@ -683,6 +688,15 @@ export const Orders: React.FC<OrdersProps> = ({
                           <Eye className="w-4 h-4" />
                         </button>
 
+                        {/* WhatsApp Share */}
+                        <button
+                          onClick={() => setWhatsAppOrder(order)}
+                          className="p-1.5 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
+                          title="Siparişi WhatsApp ile Paylaş"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </button>
+
                         {/* Convert to Invoice */}
                         {order.status !== "cancelled" && (
                           <button
@@ -1077,6 +1091,15 @@ export const Orders: React.FC<OrdersProps> = ({
 
                 <button
                   type="button"
+                  onClick={() => setWhatsAppOrder(selectedOrderForView)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+                >
+                  <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                  <span>WhatsApp ile Gönder</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleDownloadOrderPDF}
                   disabled={isDownloadingOrderPDF}
                   className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
@@ -1326,6 +1349,52 @@ export const Orders: React.FC<OrdersProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* WhatsApp Share Modal */}
+      {whatsAppOrder && (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppOrder}
+          onClose={() => setWhatsAppOrder(null)}
+          title="WhatsApp ile Sipariş Formu Paylaş"
+          documentTypeLabel={whatsAppOrder.type === "sales" ? "Satış Siparişi" : "Satın Alma Siparişi"}
+          recipientName={whatsAppOrder.contactName}
+          recipientPhone={whatsAppOrder.contactPhone || contacts.find((c) => c.id === whatsAppOrder.contactId)?.phone || ""}
+          defaultMessage={formatOrderWhatsAppMessage(
+            whatsAppOrder,
+            companySettings,
+            contacts.find((c) => c.id === whatsAppOrder.contactId)
+          )}
+          documentFileName={`${whatsAppOrder.orderNumber}_Siparis.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const el = document.getElementById("printable-order-sheet");
+            if (el) {
+              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+              return exportElementToPDFWithPrintStyling("printable-order-sheet", `${whatsAppOrder.orderNumber}_Siparis.pdf`, {
+                orientation: "p",
+                margin: 8,
+                scale: 1.6,
+              });
+            }
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `${whatsAppOrder.orderNumber}_Siparis`,
+              title: `${companySettings?.companyName || "Sipariş"} - ${whatsAppOrder.orderNumber}`,
+              subtitle: `Cari: ${whatsAppOrder.contactName} | Tarih: ${formatDate(whatsAppOrder.orderDate)} | Toplam: ${formatCurrency(whatsAppOrder.grandTotal)}`,
+              headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
+              rows: (whatsAppOrder.items || []).map((i) => [
+                i.description,
+                i.quantity,
+                i.unit || "Adet",
+                formatCurrency(i.unitPrice),
+                `%${i.vatRate ?? 20}`,
+                formatCurrency(i.totalWithVat),
+              ]),
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
       )}
     </div>
   );

@@ -23,6 +23,15 @@ export interface WhatsAppTemplates {
   statementTemplate: string;
   invoiceTemplate: string;
   paymentTemplate: string;
+  quoteTemplate?: string;
+  orderTemplate?: string;
+  waybillTemplate?: string;
+  payrollTemplate?: string;
+  custodyTemplate?: string;
+  transactionTemplate?: string;
+  reportTemplate?: string;
+  tebligatTemplate?: string;
+  productTemplate?: string;
 }
 
 export const fetchWhatsAppStatus = async (): Promise<WhatsAppClientStatus> => {

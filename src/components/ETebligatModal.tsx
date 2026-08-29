@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { ETebligatItem, CompanySettings } from "../types";
+import { formatETebligatWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
   X,
   Building2,
@@ -15,6 +17,7 @@ import {
   CheckCircle2,
   ExternalLink,
   Info,
+  Zap,
 } from "lucide-react";
 
 interface ETebligatModalProps {
@@ -32,6 +35,8 @@ export const ETebligatModal: React.FC<ETebligatModalProps> = ({
   companySettings,
   onStatusChange,
 }) => {
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
+
   if (!isOpen || !tebligat) return null;
 
   const isGib = tebligat.authority === "GIB";
@@ -202,6 +207,16 @@ export const ETebligatModal: React.FC<ETebligatModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsWhatsAppOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Yetkiliye WhatsApp Acil Tebligat Uyarısı Gönder"
+            >
+              <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
+              <span>Yetkiliye WhatsApp ile İlet</span>
+            </button>
+
             <a
               href={isGib ? "https://dijital.gib.gov.tr" : "https://etebligat.sgk.gov.tr/"}
               target="_blank"
@@ -222,6 +237,19 @@ export const ETebligatModal: React.FC<ETebligatModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* WhatsApp Share Modal */}
+      <UniversalWhatsAppModal
+        isOpen={isWhatsAppOpen}
+        onClose={() => setIsWhatsAppOpen(false)}
+        title="WhatsApp ile Acil e-Tebligat Bildirimi"
+        documentTypeLabel="Resmi Elektronik Tebligat"
+        recipientName={companySettings.eDevletCredentials?.managerName || "Şirket Yetkilisi"}
+        recipientPhone={companySettings.eDevletCredentials?.mobileSignaturePhone || companySettings.phone || ""}
+        defaultMessage={formatETebligatWhatsAppMessage(tebligat, companySettings)}
+        documentFileName={`eTebligat_${tebligat.barcodeNumber || "Mazbata"}.pdf`}
+        companySettings={companySettings}
+      />
     </div>
   );
 };

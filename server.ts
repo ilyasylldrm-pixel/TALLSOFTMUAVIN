@@ -6,6 +6,8 @@ import { GoogleGenAI } from "@google/genai";
 import { getMysoftRouter } from "./src/services/mysoftRoutes.ts";
 import { getWhatsAppRouter } from "./src/services/whatsappRoutes.ts";
 import { whatsAppService } from "./src/services/whatsappService.ts";
+import { getPortalProxyRouter } from "./src/services/portalProxyRoutes.ts";
+import { getExtensionRouter } from "./src/services/extensionRoutes.ts";
 import fs from "fs";
 
 // Cloud Run / IIS: cwd and sibling files. Avoid import.meta.url so the CJS
@@ -50,6 +52,8 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "25mb" }));
 app.use("/api/mysoft", getMysoftRouter());
 app.use("/api/whatsapp", getWhatsAppRouter());
+app.use("/api/portal-proxy", getPortalProxyRouter());
+app.use("/api/extension", getExtensionRouter());
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;
@@ -742,9 +746,24 @@ async function startServer() {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: "custom",
     });
     app.use(vite.middlewares);
+
+    app.get("*", async (req, res, next) => {
+      if (req.originalUrl.startsWith("/api")) {
+        return next();
+      }
+      try {
+        const templatePath = path.join(process.cwd(), "index.html");
+        let template = fs.readFileSync(templatePath, "utf-8");
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e) {
+        vite.ssrFixStacktrace(e as Error);
+        next(e);
+      }
+    });
   } else {
     // Support both root directory with /dist and running directly inside dist (IIS/Windows deployment)
     const distPath = (typeof __dirname !== "undefined" && path.basename(__dirname) === "dist")

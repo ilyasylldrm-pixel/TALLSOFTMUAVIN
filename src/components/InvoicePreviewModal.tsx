@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Invoice, InvoiceItem, CompanySettings, Contact, getContactAccountCode } from "../types";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { getCurrencySymbol, formatDate, exportElementToPDF } from "../utils/exportUtils";
+import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
   Printer,
   Download,
@@ -18,6 +20,7 @@ import {
   AlertCircle,
   Calendar,
   CreditCard,
+  Zap,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { NavItem } from "./Sidebar";
@@ -50,6 +53,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   title,
 }) => {
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -143,6 +147,15 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                 <span>Onayla & Oluştur</span>
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => setIsWhatsAppModalOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+            >
+              <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+              <span>WhatsApp ile Gönder</span>
+            </button>
 
             <button
               type="button"
@@ -532,6 +545,27 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* WhatsApp Share Modal */}
+      <UniversalWhatsAppModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+        title="WhatsApp ile Fatura Paylaş"
+        documentTypeLabel={isDraft ? "Taslak Fatura" : invType === "sales" ? "Satış e-Arşiv Faturası" : "Alış Faturası"}
+        recipientName={contactName}
+        recipientPhone={contact?.phone || ""}
+        defaultMessage={formatInvoiceWhatsAppMessage(invoice, companySettings, contact)}
+        documentFileName={`${invNumber}_Fatura.pdf`}
+        companySettings={companySettings}
+        onGeneratePdf={async () => {
+          const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+          return exportElementToPDFWithPrintStyling("invoice-preview-paper", `${invNumber}_Fatura.pdf`, {
+            orientation: "p",
+            margin: 8,
+            scale: 1.6,
+          });
+        }}
+      />
     </div>
   );
 };

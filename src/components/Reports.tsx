@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { ExportButtons } from "./ExportButtons";
-import { formatCurrency, formatDate } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
   Contact,
   Invoice,
@@ -14,6 +15,7 @@ import {
   TrendingUp,
   Building2,
   Calendar,
+  Zap,
   FileCheck,
   Percent,
   CheckCircle2,
@@ -141,6 +143,7 @@ export const Reports: React.FC<ReportsProps> = ({
     | { type: "month"; index: number }
     | { type: "all" }
   >({ type: "quarter", index: 0 });
+  const [isWhatsAppReportModalOpen, setIsWhatsAppReportModalOpen] = useState(false);
 
   // Additional Corporate Tax Parameters (KVK M.32 Adjustments)
   const [kkegAmount, setKkegAmount] = useState<number>(0); // Kanunen kabul edilmeyen giderler (+)
@@ -1195,29 +1198,41 @@ export const Reports: React.FC<ReportsProps> = ({
                     </div>
                   </div>
 
-                  <ExportButtons
-                    getExportData={() => ({
-                      filename: `Muavin_Dönemsel_Vergi_Raporu_${selectedYear}`,
-                      title: `${periodTitle.toUpperCase()} (${activeTaxpayerType})`,
-                      subtitle: `Dönem: ${periodBadge} | Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
-                      headers: [
-                        "Tür / İşlem", "Matrah / Tutar", "KDV / Vergi", "Net Yük / Toplam"
-                      ],
-                      rows: [
-                        ["Faturalı Satışlar", formatCurrency(periodIncome, "TRY"), formatCurrency(periodSalesVat, "TRY"), formatCurrency(periodIncome, "TRY")],
-                        ["Faturalı Alışlar", formatCurrency(periodExpense, "TRY"), formatCurrency(periodPurchaseVat, "TRY"), formatCurrency(periodExpense, "TRY")],
-                        ["Faturalı Net Matrah", formatCurrency(periodNetProfit, "TRY"), "-", formatCurrency(periodNetProfit, "TRY")],
-                        ["1 No.lu KDV (Ödenecek/Devir)", "-", formatCurrency(periodSalesVat - periodPurchaseVat, "TRY"), formatCurrency(periodPayableVat, "TRY")],
-                        ["2 No.lu KDV (KDV Tevkifatı)", "-", formatCurrency(periodPurchaseKdvTevkifat, "TRY"), formatCurrency(periodTotalKdv2Load, "TRY")],
-                        ["Muhtasar & Stopaj", formatCurrency(periodRentAmount, "TRY"), formatCurrency(periodTotalWithholding, "TRY"), formatCurrency(periodTotalWithholding, "TRY")],
-                        ["SGK Primi Yükü", "-", "-", formatCurrency(periodPayrollSgkShare, "TRY")],
-                        [provisionalTaxTitle, formatCurrency(provisionalTaxBase, "TRY"), "-", formatCurrency(provisionalTaxPayable, "TRY")],
-                      ],
-                    })}
-                    contacts={contacts}
-                    companyName={companySettings.companyName}
-                    size="sm"
-                  />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setIsWhatsAppReportModalOpen(true)}
+                      className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      title="Yöneticiye WhatsApp Mali Durum Raporu Gönder"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
+                      <span>WhatsApp Rapor İlet</span>
+                    </button>
+
+                    <ExportButtons
+                      getExportData={() => ({
+                        filename: `Muavin_Dönemsel_Vergi_Raporu_${selectedYear}`,
+                        title: `${periodTitle.toUpperCase()} (${activeTaxpayerType})`,
+                        subtitle: `Dönem: ${periodBadge} | Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
+                        headers: [
+                          "Tür / İşlem", "Matrah / Tutar", "KDV / Vergi", "Net Yük / Toplam"
+                        ],
+                        rows: [
+                          ["Faturalı Satışlar", formatCurrency(periodIncome, "TRY"), formatCurrency(periodSalesVat, "TRY"), formatCurrency(periodIncome, "TRY")],
+                          ["Faturalı Alışlar", formatCurrency(periodExpense, "TRY"), formatCurrency(periodPurchaseVat, "TRY"), formatCurrency(periodExpense, "TRY")],
+                          ["Faturalı Net Matrah", formatCurrency(periodNetProfit, "TRY"), "-", formatCurrency(periodNetProfit, "TRY")],
+                          ["1 No.lu KDV (Ödenecek/Devir)", "-", formatCurrency(periodSalesVat - periodPurchaseVat, "TRY"), formatCurrency(periodPayableVat, "TRY")],
+                          ["2 No.lu KDV (KDV Tevkifatı)", "-", formatCurrency(periodPurchaseKdvTevkifat, "TRY"), formatCurrency(periodTotalKdv2Load, "TRY")],
+                          ["Muhtasar & Stopaj", formatCurrency(periodRentAmount, "TRY"), formatCurrency(periodTotalWithholding, "TRY"), formatCurrency(periodTotalWithholding, "TRY")],
+                          ["SGK Primi Yükü", "-", "-", formatCurrency(periodPayrollSgkShare, "TRY")],
+                          [provisionalTaxTitle, formatCurrency(provisionalTaxBase, "TRY"), "-", formatCurrency(provisionalTaxPayable, "TRY")],
+                        ],
+                      })}
+                      contacts={contacts}
+                      companyName={companySettings.companyName}
+                      size="sm"
+                    />
+                  </div>
                 </div>
 
                 {/* STATUTORY OBLIGATIONS CARDS (5 Main Categories: Geçici/Kurumlar, KDV 1, KDV 2 Tevkifat, Muhtasar Stopaj, SGK) */}
@@ -1789,6 +1804,41 @@ export const Reports: React.FC<ReportsProps> = ({
                     </table>
                   </div>
                 </div>
+
+                {/* WhatsApp Report Modal */}
+                {isWhatsAppReportModalOpen && (
+                  <UniversalWhatsAppModal
+                    isOpen={isWhatsAppReportModalOpen}
+                    onClose={() => setIsWhatsAppReportModalOpen(false)}
+                    title="WhatsApp ile Yönetici Mali Durum Raporu Gönder"
+                    documentTypeLabel="Yönetim & Vergi Raporu"
+                    recipientName={companySettings.eDevletCredentials?.managerName || "Şirket Yetkilisi"}
+                    recipientPhone={companySettings.eDevletCredentials?.mobileSignaturePhone || companySettings.phone || ""}
+                    defaultMessage={`📊 *${companySettings.companyName || "Şirketimiz"} - ${periodTitle} Mali Durum & Vergi Özeti*\n\n📅 *Dönem:* ${periodBadge} (${selectedYear})\n🏢 *Mükellefiyet Türü:* ${activeTaxpayerType}\n\n📈 *Faturalı Satışlar (Ciro):* ${formatCurrency(periodIncome, "TRY")}\n📉 *Faturalı Alışlar (Gider):* ${formatCurrency(periodExpense, "TRY")}\n💵 *Net Faaliyet Matrahı:* ${formatCurrency(periodNetProfit, "TRY")}\n\n🏛️ *Dönemsel Vergi ve Yasal Yükümlülükler:*\n• 1 No'lu KDV: ${formatCurrency(periodPayableVat, "TRY")}\n• 2 No'lu KDV (Tevkifat): ${formatCurrency(periodTotalKdv2Load, "TRY")}\n• Muhtasar & Stopaj: ${formatCurrency(periodTotalWithholding, "TRY")}\n• SGK Primleri Yükü: ${formatCurrency(periodPayrollSgkShare, "TRY")}\n• ${provisionalTaxTitle}: ${formatCurrency(provisionalTaxPayable, "TRY")}\n\n📄 Ayrıntılı Yönetim Raporu PDF olarak ekte sunulmuştur.`}
+                    documentFileName={`Yonetim_Raporu_${selectedYear}_${periodBadge.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`}
+                    companySettings={companySettings}
+                    onGeneratePdf={async () => {
+                      const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+                      const expData: ExportData = {
+                        filename: `Yonetim_Raporu_${selectedYear}`,
+                        title: `${companySettings.companyName || "Şirketimiz"} - ${periodTitle} (${activeTaxpayerType})`,
+                        subtitle: `Dönem: ${periodBadge} | Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
+                        headers: ["Tür / İşlem", "Matrah / Tutar", "KDV / Vergi", "Net Yük / Toplam"],
+                        rows: [
+                          ["Faturalı Satışlar (Ciro)", formatCurrency(periodIncome, "TRY"), formatCurrency(periodSalesVat, "TRY"), formatCurrency(periodIncome, "TRY")],
+                          ["Faturalı Alışlar (Maliyet/Gider)", formatCurrency(periodExpense, "TRY"), formatCurrency(periodPurchaseVat, "TRY"), formatCurrency(periodExpense, "TRY")],
+                          ["Faturalı Net Faaliyet Matrahı", formatCurrency(periodNetProfit, "TRY"), "-", formatCurrency(periodNetProfit, "TRY")],
+                          ["1 No'lu KDV (Ödenecek/Devir)", "-", formatCurrency(periodSalesVat - periodPurchaseVat, "TRY"), formatCurrency(periodPayableVat, "TRY")],
+                          ["2 No'lu KDV (Tevkifat)", "-", formatCurrency(periodPurchaseKdvTevkifat, "TRY"), formatCurrency(periodTotalKdv2Load, "TRY")],
+                          ["Muhtasar & Stopaj", formatCurrency(periodRentAmount, "TRY"), formatCurrency(periodTotalWithholding, "TRY"), formatCurrency(periodTotalWithholding, "TRY")],
+                          ["SGK Primi Yükü", "-", "-", formatCurrency(periodPayrollSgkShare, "TRY")],
+                          [provisionalTaxTitle, formatCurrency(provisionalTaxBase, "TRY"), "-", formatCurrency(provisionalTaxPayable, "TRY")],
+                        ],
+                      };
+                      return generateAutoTableFromExportData(expData);
+                    }}
+                  />
+                )}
               </div>
             );
           })()}

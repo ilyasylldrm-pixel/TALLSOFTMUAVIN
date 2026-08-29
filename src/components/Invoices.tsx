@@ -18,6 +18,8 @@ import { InvoiceCreatePreviewPanel } from "./InvoiceCreatePreviewPanel";
 import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerModal";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
+import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { NavItem } from "./Sidebar";
 import { sendMysoftOutgoingInvoice } from "../services/mysoftEDocumentService";
 import {
@@ -33,6 +35,7 @@ import {
   Plus,
   Search,
   Printer,
+  MessageCircle,
   CheckCircle2,
   Clock,
   AlertTriangle,
@@ -156,6 +159,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [editingInvoiceNumber, setEditingInvoiceNumber] = useState<string | null>(null);
   const [isAiScannerModalOpen, setIsAiScannerModalOpen] = useState<boolean>(false);
   const [printingInvoice, setPrintingInvoice] = useState<Invoice | null>(null);
+  const [whatsAppInvoice, setWhatsAppInvoice] = useState<Invoice | null>(null);
   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState<boolean>(false);
   const [paymentModalInvoice, setPaymentModalInvoice] = useState<Invoice | null>(null);
   const [isCollectAllModalOpen, setIsCollectAllModalOpen] = useState<boolean>(false);
@@ -1706,6 +1710,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           <span>Baskı / e-Fatura</span>
                         </button>
 
+                        {/* Direct WhatsApp Share */}
+                        <button
+                          onClick={() => setWhatsAppInvoice(inv)}
+                          title="Faturayı WhatsApp ile Paylaş"
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="hidden xl:inline">WhatsApp</span>
+                        </button>
+
                         {/* Add Payment / Collection */}
                         {inv.status !== "paid" && (
                           <button
@@ -2579,6 +2593,43 @@ export const Invoices: React.FC<InvoicesProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* WHATSAPP SHARE MODAL */}
+      {whatsAppInvoice && (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppInvoice}
+          onClose={() => setWhatsAppInvoice(null)}
+          title="WhatsApp ile Fatura Paylaş"
+          documentTypeLabel={whatsAppInvoice.type === "sales" ? "Satış e-Arşiv Faturası" : "Alış Faturası"}
+          recipientName={whatsAppInvoice.contactName}
+          recipientPhone={contacts.find((c) => c.id === whatsAppInvoice.contactId)?.phone || ""}
+          defaultMessage={formatInvoiceWhatsAppMessage(
+            whatsAppInvoice,
+            companySettings,
+            contacts.find((c) => c.id === whatsAppInvoice.contactId)
+          )}
+          documentFileName={`${whatsAppInvoice.invoiceNumber}_Fatura.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `${whatsAppInvoice.invoiceNumber}_Fatura`,
+              title: `${companySettings?.companyName || "Fatura"} - ${whatsAppInvoice.invoiceNumber}`,
+              subtitle: `Cari: ${whatsAppInvoice.contactName} | Tarih: ${formatDate(whatsAppInvoice.issueDate)} | Genel Toplam: ${formatCurrency(whatsAppInvoice.grandTotal)}`,
+              headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV Oranı", "Toplam Tutar"],
+              rows: (whatsAppInvoice.items || []).map((i) => [
+                i.description,
+                i.quantity,
+                i.unit || "Adet",
+                formatCurrency(i.unitPrice),
+                `%${i.vatRate ?? 20}`,
+                formatCurrency(i.totalWithVat),
+              ]),
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
       )}
 
       {/* QUICK CONTACT PICKER MODAL */}

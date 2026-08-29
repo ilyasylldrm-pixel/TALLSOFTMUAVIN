@@ -2,12 +2,16 @@ import React, { useState, useMemo, useDeferredValue } from "react";
 import { Product, Invoice, Contact, Warehouse, CostProject, Employee, Transaction, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
+import { formatProductWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { ProductCostsView } from "./ProductCostsView";
 import {
   Package,
   Plus,
   Search,
   AlertTriangle,
+  Zap,
+  MessageCircle,
   Trash2,
   X,
   Barcode,
@@ -337,6 +341,8 @@ export const Products: React.FC<ProductsProps> = ({
 
   // Selected product for Ekstre Modal
   const [selectedEkstreProduct, setSelectedEkstreProduct] = useState<Product | null>(null);
+  const [whatsAppProduct, setWhatsAppProduct] = useState<Product | null>(null);
+  const [isCatalogWhatsAppOpen, setIsCatalogWhatsAppOpen] = useState<boolean>(false);
   const [ekstreTab, setEkstreTab] = useState<"all" | "purchase" | "sales">("all");
   const [ekstreSearch, setEkstreSearch] = useState("");
   const [ekstreWarehouseId, setEkstreWarehouseId] = useState<string>("all");
@@ -1159,6 +1165,15 @@ export const Products: React.FC<ProductsProps> = ({
               <span className="font-bold text-purple-950">{filteredProducts.length}</span> ürün listeleniyor
             </span>
             <ExportButtons getExportData={getProductsExportData} size="sm" />
+            <button
+              type="button"
+              onClick={() => setIsCatalogWhatsAppOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              title="Fiyat Listesi ve Ürün Kataloğunu WhatsApp ile Paylaş"
+            >
+              <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
+              <span>Fiyat Listesini Paylaş</span>
+            </button>
           </div>
         </div>
 
@@ -1305,6 +1320,15 @@ export const Products: React.FC<ProductsProps> = ({
                         >
                           <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                           <span>Ekstre</span>
+                        </button>
+
+                        {/* WhatsApp Share Button */}
+                        <button
+                          onClick={() => setWhatsAppProduct(p)}
+                          title="Ürün Bilgisini WhatsApp ile Paylaş"
+                          className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors cursor-pointer shadow-2xs shrink-0"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
                         </button>
 
                         {/* Transfer Button */}
@@ -1549,6 +1573,16 @@ export const Products: React.FC<ProductsProps> = ({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setWhatsAppProduct(selectedEkstreProduct)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  title="Stok Ekstresini WhatsApp ile Paylaş"
+                >
+                  <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
+                  <span>WhatsApp ile Paylaş</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -2237,6 +2271,70 @@ export const Products: React.FC<ProductsProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* CATALOG WHATSAPP MODAL */}
+      {isCatalogWhatsAppOpen && (
+        <UniversalWhatsAppModal
+          isOpen={isCatalogWhatsAppOpen}
+          onClose={() => setIsCatalogWhatsAppOpen(false)}
+          title="WhatsApp ile Ürün & Fiyat Listesi Paylaş"
+          documentTypeLabel="Fiyat Kataloğu"
+          recipientName="Sayın Müşterimiz"
+          recipientPhone=""
+          defaultMessage={`Sayın Müşterimiz,\n\n*${companySettings?.companyTitle || companySettings?.companyName || "Şirketimiz"}* güncel Ürün & Fiyat Listesi Kataloğumuz ekte bilgilerinize sunulmuştur.\n\n📦 *Toplam Ürün Sayısı:* ${filteredProducts.length} Kalem\n📅 *Tarih:* ${formatDate(new Date())}\n\nSipariş ve detaylı bilgi için lütfen bizimle iletişime geçiniz.`}
+          documentFileName={`Fiyat_Listesi_${new Date().toISOString().split("T")[0]}.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            return generateAutoTableFromExportData(getProductsExportData());
+          }}
+        />
+      )}
+
+      {/* SINGLE PRODUCT / EKSTRE WHATSAPP MODAL */}
+      {whatsAppProduct && (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppProduct}
+          onClose={() => setWhatsAppProduct(null)}
+          title={`WhatsApp ile Stok Bilgisi Paylaş (${whatsAppProduct.name})`}
+          documentTypeLabel="Ürün & Stok Bilgi Kartı"
+          recipientName="Sayın İlgili"
+          recipientPhone=""
+          defaultMessage={formatProductWhatsAppMessage(whatsAppProduct, companySettings)}
+          documentFileName={`Stok_Ekstresi_${(whatsAppProduct.code || "Stok").replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const el = document.getElementById("printable-stock-ekstre");
+            if (el) {
+              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+              const safeCode = (whatsAppProduct.code || "Stok").replace(/[^a-zA-Z0-9_-]/g, "_");
+              return exportElementToPDFWithPrintStyling(
+                "printable-stock-ekstre",
+                `Stok_Ekstresi_${safeCode}.pdf`,
+                { orientation: "p", margin: 6, scale: 1.6 }
+              );
+            }
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `Urun_${whatsAppProduct.code || "Bilgi"}`,
+              title: `Ürün ve Fiyat Bilgi Kartı: ${whatsAppProduct.name}`,
+              subtitle: `Stok Kodu: ${whatsAppProduct.code} | Barkod: ${whatsAppProduct.barcode || "-"} | Mevcut Stok: ${whatsAppProduct.stockQuantity} ${whatsAppProduct.unit}`,
+              headers: ["Ürün Adı", "Stok Kodu", "KDV %", "Alış Fiyatı", "Satış Fiyatı", "Mevcut Stok"],
+              rows: [
+                [
+                  whatsAppProduct.name,
+                  whatsAppProduct.code || "-",
+                  `%${whatsAppProduct.vatRate ?? 20}`,
+                  formatCurrency(whatsAppProduct.buyPrice),
+                  formatCurrency(whatsAppProduct.sellPrice),
+                  `${whatsAppProduct.stockQuantity} ${whatsAppProduct.unit}`,
+                ],
+              ],
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
       )}
     </div>
   );

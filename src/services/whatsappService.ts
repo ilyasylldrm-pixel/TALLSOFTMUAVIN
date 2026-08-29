@@ -65,12 +65,30 @@ export interface WhatsAppTemplates {
   statementTemplate: string;
   invoiceTemplate: string;
   paymentTemplate: string;
+  quoteTemplate?: string;
+  orderTemplate?: string;
+  waybillTemplate?: string;
+  payrollTemplate?: string;
+  custodyTemplate?: string;
+  transactionTemplate?: string;
+  reportTemplate?: string;
+  tebligatTemplate?: string;
+  productTemplate?: string;
 }
 
 const DEFAULT_TEMPLATES: WhatsAppTemplates = {
   statementTemplate: `Sayın *{cari_adi}* ({hesap_kodu}),\n\n*{firma}* firmamıza ait güncel Cari Hesap Ekstreniz ekte yer almaktadır.\n\n📊 *Güncel Net Bakiye:* {bakiye} ({bakiye_durumu})\n\n📄 Ekstre belgesi bu mesaj ile birlikte PDF olarak iletilmiştir.\nİyi çalışmalar dileriz.`,
-  invoiceTemplate: `Sayın *{cari_adi}*,\n\n*{firma}* tarafından düzenlenen *{fatura_no}* numaralı e-Belgeniz ektedir.\n\n💰 *Genel Toplam:* {tutar}\n📅 *Tarih:* {tarih}\n\nİyi çalışmalar dileriz.`,
+  invoiceTemplate: `Sayın *{cari_adi}*,\n\n*{firma}* tarafından düzenlenen *{fatura_no}* numaralı e-Belgeniz ektedir.\n\n💰 *Genel Toplam:* {tutar}\n📅 *Tarih:* {tarih}\n⏳ *Vade Tarihi:* {vade}\n\nİyi çalışmalar dileriz.`,
   paymentTemplate: `Sayın *{cari_adi}*,\n\n*{firma}* cari hesabınıza ait tahsilat / ödeme dekontunuz düzenlenmiştir.\n\n💵 *İşlem Tutarı:* {tutar}\n📅 *Tarih:* {tarih}\n\nİyi çalışmalar dileriz.`,
+  quoteTemplate: `Sayın *{cari_adi}*,\n\n*{firma}* tarafından hazırlanan *{teklif_no}* numaralı Fiyat Teklifi / Proforma Faturanız ekte bilgilerinize sunulmuştur.\n\n💼 *Teklif Toplamı:* {tutar}\n📅 *Tarih:* {tarih}\n⏳ *Geçerlilik:* {gecerlilik}\n\nTeklifi onaylamak veya revize etmek için lütfen bu mesaja yanıt veriniz.\nİyi çalışmalar dileriz.`,
+  orderTemplate: `Sayın *{cari_adi}*,\n\n*{firma}* üzerinden oluşturulan *{siparis_no}* numaralı sipariş formunuz ekte yer almaktadır.\n\n📦 *Sipariş Tutarı:* {tutar}\n📅 *Sipariş Tarihi:* {tarih}\n🚚 *Tahmini Teslimat:* {teslimat_tarihi}\n\nİyi çalışmalar dileriz.`,
+  waybillTemplate: `Sayın *{cari_adi}*,\n\n*{firma}* sevkıyatına ait *{irsaliye_no}* numaralı Sevk İrsaliyesi düzenlenmiş ve ürünleriniz yola çıkmıştır.\n\n🚚 *Araç / Plaka:* {plaka}\n👤 *Şoför / Taşıyıcı:* {sofor}\n📅 *Sevk Tarihi:* {tarih}\n\nİrsaliye belgeniz ekte PDF olarak iletilmiştir.`,
+  payrollTemplate: `Sayın *{personel_adi}* (T.C.: {tckn}),\n\n*{firma}* bünyesindeki *{donem}* dönemine ait Resmi Maaş Bordronuz (Hesap Pusulası) hazırlanmış olup ekte sunulmuştur.\n\n💵 *Net Ödenecek Maaş:* {net_maas}\n📅 *Ödeme Tarihi:* {tarih}\n\nBilgilerinize sunar, iyi çalışmalar dileriz.`,
+  custodyTemplate: `Sayın *{personel_adi}*,\n\n*{firma}* tarafından adınıza tanzim edilen *{zimmet_kodu}* numaralı Demirbaş Zimmet / İade Tutanağı ekte yer almaktadır.\n\n💻 *Demirbaş:* {demirbas_adi}\n🏷️ *Seri No / Plaka:* {seri_no}\n📅 *Tutanak Tarihi:* {tarih}\n\nİyi çalışmalar dileriz.`,
+  transactionTemplate: `Sayın *{cari_adi}*,\n\n*{firma}* mali kayıtlarında gerçekleştirilen *{belge_no}* numaralı işlem makbuzu ekte sunulmuştur.\n\n💳 *İşlem Türü:* {tur}\n💵 *Tutar:* {tutar}\n📅 *Tarih:* {tarih}\n\nİyi çalışmalar dileriz.`,
+  reportTemplate: `📊 *{firma} - Yönetici Mali Durum & Günlük Özet Raporu*\n\n📅 *Rapor Tarihi:* {tarih}\n\n💰 *Toplam Kasa / Banka:* {kasa_banka}\n📈 *Toplam Satışlar:* {satislar}\n💳 *Bekleyen Alacaklar:* {alacaklar}\n📉 *Bekleyen Borçlar:* {borclar}\n\n📄 Ayrıntılı Yönetim Raporu PDF olarak ekte yer almaktadır.`,
+  tebligatTemplate: `⚠️ *ACİL: Resmi Elektronik Tebligat Bildirimi*\n\nSayın Şirket Yetkilisi,\n*{firma}* adına *{kurum}* tarafından yeni bir elektronik tebligat düzenlenmiştir.\n\n📄 *Belge:* {belge_baslik}\n📌 *Barkod No:* {barkod}\n⏳ *Kalan Yasal İtiraz Süresi:* {kalan_gun} Gün\n\nDetaylı tebligat tutanağı ekte yer almaktadır. Lütfen yasal süre içinde inceleyiniz.`,
+  productTemplate: `Sayın İlgili,\n\n*{firma}* güncel Ürün & Fiyat Listesi Kataloğumuz ekte yer almaktadır.\n\n📦 *Toplam Ürün Sayısı:* {urun_sayisi}\n📅 *Güncellenme Tarihi:* {tarih}\n\nDetaylı bilgi ve sipariş için lütfen iletişime geçiniz.`,
 };
 
 class WhatsAppService {

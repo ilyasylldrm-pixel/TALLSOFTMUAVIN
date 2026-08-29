@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "Muavin - Resmi Portallar ve E-İşlem Asistanı",
+  "version": "1.0.0",
+  "description": "GİB Dijital Vergi Dairesi, e-Arşiv Fatura, SGK İşveren Sistemi, e-Devlet ve MERSİS portallarına tek tıkla otomatik şifre doldurma ve giriş asistanı.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://dijital.gib.gov.tr/*",
+    "*://ivd.gib.gov.tr/*",
+    "*://earsivportal.efatura.gov.tr/*",
+    "*://uyg.sgk.gov.tr/*",
+    "*://ebildirge.sgk.gov.tr/*",
+    "*://giris.turkiye.gov.tr/*",
+    "*://mersis.gtb.gov.tr/*",
+    "*://etebligat.sgk.gov.tr/*",
+    "*://localhost/*",
+    "*://127.0.0.1/*",
+    "*://*.muavin.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Muavin E-İşlem Asistanı",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://dijital.gib.gov.tr/*",
+        "*://ivd.gib.gov.tr/*",
+        "*://earsivportal.efatura.gov.tr/*",
+        "*://uyg.sgk.gov.tr/*",
+        "*://ebildirge.sgk.gov.tr/*",
+        "*://giris.turkiye.gov.tr/*",
+        "*://mersis.gtb.gov.tr/*",
+        "*://etebligat.sgk.gov.tr/*",
+        "*://localhost/*",
+        "*://127.0.0.1/*",
+        "*://*.muavin.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}

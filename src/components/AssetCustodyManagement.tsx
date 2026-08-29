@@ -9,6 +9,7 @@ import {
   Search,
   Filter,
   Printer,
+  MessageCircle,
   RotateCcw,
   Edit2,
   Trash2,
@@ -1193,6 +1194,14 @@ export const AssetCustodyManagement: React.FC<AssetCustodyManagementProps> = ({
                             title="Zimmet Tutanağı Yazdır / Önizle"
                           >
                             <Printer className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => handleOpenPrintModal(asset, asset.status === "returned")}
+                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                            title="Zimmet / İade Tutanağını WhatsApp ile Paylaş"
+                          >
+                            <MessageCircle className="w-4 h-4" />
                           </button>
                           {asset.status === "active" ? (
                             <button

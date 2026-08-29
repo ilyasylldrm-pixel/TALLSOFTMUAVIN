@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Waybill, WaybillItem, WaybillType, WaybillStatus, Contact, Product, Warehouse, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
+import { formatWaybillWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
   Truck,
   Plus,
@@ -31,6 +33,8 @@ import {
   Download,
   Navigation,
   User,
+  Zap,
+  MessageCircle,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
@@ -119,6 +123,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
   const [editingWaybillId, setEditingWaybillId] = useState<string | null>(null);
   const [editingWaybillNumber, setEditingWaybillNumber] = useState<string | null>(null);
   const [selectedWaybillForView, setSelectedWaybillForView] = useState<Waybill | null>(null);
+  const [whatsAppWaybill, setWhatsAppWaybill] = useState<Waybill | null>(null);
   const [isDownloadingWaybillPDF, setIsDownloadingWaybillPDF] = useState(false);
   const [convertConfirmWaybill, setConvertConfirmWaybill] = useState<Waybill | null>(null);
 
@@ -1055,6 +1060,16 @@ export const Waybills: React.FC<WaybillsProps> = ({
                           <span>İncele</span>
                         </button>
 
+                        {/* WhatsApp Share Button */}
+                        <button
+                          onClick={() => setWhatsAppWaybill(waybill)}
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="İrsaliyeyi WhatsApp ile Paylaş"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>WhatsApp</span>
+                        </button>
+
                         {/* Yazdır Button */}
                         <button
                           onClick={() => {
@@ -1519,6 +1534,15 @@ export const Waybills: React.FC<WaybillsProps> = ({
 
                 <button
                   type="button"
+                  onClick={() => setWhatsAppWaybill(selectedWaybillForView)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+                >
+                  <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                  <span>WhatsApp ile Gönder</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleDownloadWaybillPDF}
                   disabled={isDownloadingWaybillPDF}
                   className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
@@ -1752,6 +1776,52 @@ export const Waybills: React.FC<WaybillsProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* WhatsApp Share Modal */}
+      {whatsAppWaybill && (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppWaybill}
+          onClose={() => setWhatsAppWaybill(null)}
+          title="WhatsApp ile İrsaliye Paylaş"
+          documentTypeLabel={whatsAppWaybill.type === "receipt" ? "Alış İrsaliyesi" : "Sevk İrsaliyesi"}
+          recipientName={whatsAppWaybill.contactName}
+          recipientPhone={contacts.find((c) => c.id === whatsAppWaybill.contactId)?.phone || ""}
+          defaultMessage={formatWaybillWhatsAppMessage(
+            whatsAppWaybill,
+            companySettings,
+            contacts.find((c) => c.id === whatsAppWaybill.contactId)
+          )}
+          documentFileName={`${whatsAppWaybill.waybillNumber}_Irsaliye.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const el = document.getElementById("printable-waybill-sheet");
+            if (el) {
+              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+              return exportElementToPDFWithPrintStyling("printable-waybill-sheet", `${whatsAppWaybill.waybillNumber}_Irsaliye.pdf`, {
+                orientation: "p",
+                margin: 8,
+                scale: 1.6,
+              });
+            }
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `${whatsAppWaybill.waybillNumber}_Irsaliye`,
+              title: `${companySettings?.companyName || "Sevk İrsaliyesi"} - ${whatsAppWaybill.waybillNumber}`,
+              subtitle: `Cari: ${whatsAppWaybill.contactName} | Tarih: ${formatDate(whatsAppWaybill.waybillDate)} | Şoför: ${whatsAppWaybill.driverName || "-"} (${whatsAppWaybill.plateNumber || "-"})`,
+              headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
+              rows: (whatsAppWaybill.items || []).map((i) => [
+                i.description,
+                i.quantity,
+                i.unit || "Adet",
+                formatCurrency(i.unitPrice),
+                `%${i.vatRate ?? 20}`,
+                formatCurrency(i.totalWithVat),
+              ]),
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
       )}
     </div>
   );

@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { Employee, CompanySettings, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction } from "../types";
 import { exportElementToPDF } from "../utils/exportUtils";
+import { formatPayrollWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { Zap, MessageCircle } from "lucide-react";
 
 export type PayrollPrintMode =
   | "single_monthly_slip"    // Seçilen Personel - Seçilen Ay Ücret Pusulası
@@ -360,6 +363,7 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
   }, [sortedEmployees, selectedYear, payrollCustomizations, advanceRequests, leaveRequests, legalDeductions]);
 
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
 
   // Print execution handler
   const handlePrint = () => {
@@ -413,6 +417,17 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
+              {scope === "single" && currentEmp && (
+                <button
+                  type="button"
+                  onClick={() => setIsWhatsAppOpen(true)}
+                  className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                  <span>WhatsApp ile Gönder</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleDownloadPDF}
@@ -1268,6 +1283,34 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* WhatsApp Share Modal */}
+      {currentEmp && (
+        <UniversalWhatsAppModal
+          isOpen={isWhatsAppOpen}
+          onClose={() => setIsWhatsAppOpen(false)}
+          title="WhatsApp ile Maaş Bordrosu Gönder"
+          documentTypeLabel="Maaş Hesap Pusulası (4857 S.K. Md. 37)"
+          recipientName={currentEmp.fullName}
+          recipientPhone={currentEmp.phone || ""}
+          defaultMessage={formatPayrollWhatsAppMessage(
+            singleMonthlyRecord,
+            currentEmp,
+            companySettings
+          )}
+          documentFileName={`Maas_Pusulasi_${currentEmp.fullName.trim().replace(/\s+/g, "_")}_${monthStr}.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+            const fileName = `Maas_Pusulasi_${currentEmp.fullName.trim().replace(/\s+/g, "_")}_${monthStr}.pdf`;
+            return exportElementToPDFWithPrintStyling("printable-payroll-area", fileName, {
+              orientation: "p",
+              margin: 8,
+              scale: 1.6,
+            });
+          }}
+        />
+      )}
     </div>
   );
 };

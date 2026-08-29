@@ -1,13 +1,18 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { CompanySettings, Branch, Warehouse, WorkplaceSgkCredential, ETebligatItem, ETebligatStatus } from "../types";
 import { GibPortalModal } from "./GibPortalModal";
 import { SgkPortalModal } from "./SgkPortalModal";
 import { ETebligatModal } from "./ETebligatModal";
+import { EmbeddedPortalViewer } from "./EmbeddedPortalViewer";
+import { ExtensionInstallModal } from "./ExtensionInstallModal";
 import {
   ShieldCheck,
   Lock,
   Key,
   Eye,
+  Zap,
+  Puzzle,
+  FolderArchive,
   EyeOff,
   User,
   FileText,
@@ -61,8 +66,41 @@ export const EServices: React.FC<EServicesProps> = ({
   onSaveSettings,
 }) => {
   const [form, setForm] = useState<CompanySettings>(settings);
+  const [activeMainTab, setActiveMainTab] = useState<"embedded" | "credentials" | "eTebligat">("embedded");
   const [isSaved, setIsSaved] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Extension Integration State
+  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
+  const [isExtensionDetected, setIsExtensionDetected] = useState(
+    typeof window !== "undefined" && Boolean((window as any).__MUAVIN_EXTENSION_INSTALLED__)
+  );
+
+  const syncToExtension = (dataToSync: CompanySettings) => {
+    if (typeof window !== "undefined") {
+      window.postMessage({ type: "MUAVIN_SYNC_CREDENTIALS", payload: dataToSync }, "*");
+    }
+    fetch("/api/extension/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dataToSync),
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    const handleExtensionReady = () => {
+      setIsExtensionDetected(true);
+      syncToExtension(form);
+    };
+
+    window.addEventListener("MUAVIN_EXTENSION_READY", handleExtensionReady);
+    if (typeof window !== "undefined" && (window as any).__MUAVIN_EXTENSION_INSTALLED__) {
+      setIsExtensionDetected(true);
+      syncToExtension(form);
+    }
+
+    return () => window.removeEventListener("MUAVIN_EXTENSION_READY", handleExtensionReady);
+  }, [form]);
 
   // Password visibility states
   const [showTaxPasswords, setShowTaxPasswords] = useState(false);
@@ -345,7 +383,21 @@ export const EServices: React.FC<EServicesProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* Chrome/Edge Extension Button */}
+            <button
+              type="button"
+              onClick={() => setIsExtensionModalOpen(true)}
+              className={`text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer border ${
+                isExtensionDetected
+                  ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300"
+                  : "bg-slate-900 hover:bg-slate-800 text-white border-slate-700 shadow-md shadow-slate-900/20"
+              }`}
+            >
+              <Zap className={`w-4 h-4 ${isExtensionDetected ? "text-emerald-600 fill-emerald-600" : "text-amber-400"}`} />
+              <span>{isExtensionDetected ? "🟢 Eklenti Bağlı (Aktif)" : "⚡ Muavin Eklentisi (.ZIP)"}</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setIsGibModalOpen(true)}
@@ -358,10 +410,102 @@ export const EServices: React.FC<EServicesProps> = ({
         </div>
       </div>
 
-      {/* Main Form Container */}
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Quick Portal Launchers Bar */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+      {/* Main View Switcher Tabs */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab("embedded")}
+          className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-black transition-all cursor-pointer ${
+            activeMainTab === "embedded"
+              ? "bg-slate-900 text-white shadow-lg shadow-slate-900/20"
+              : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs"
+          }`}
+        >
+          <Globe className="w-4 h-4 text-emerald-400" />
+          <span>🌐 Canlı Gömülü Portallar</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            ⚡ Auto-Fill
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab("credentials")}
+          className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-black transition-all cursor-pointer ${
+            activeMainTab === "credentials"
+              ? "bg-slate-900 text-white shadow-lg shadow-slate-900/20"
+              : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs"
+          }`}
+        >
+          <Lock className="w-4 h-4 text-purple-400" />
+          <span>🔐 Şifre Yönetimi & Entegrasyon</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab("eTebligat")}
+          className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-black transition-all cursor-pointer ${
+            activeMainTab === "eTebligat"
+              ? "bg-slate-900 text-white shadow-lg shadow-slate-900/20"
+              : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs"
+          }`}
+        >
+          <Mail className="w-4 h-4 text-amber-400" />
+          <span>📬 e-Tebligat Takip Merkezi</span>
+          {getTebligatlar().filter((t) => t.status === "unread").length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-500 text-white">
+              {getTebligatlar().filter((t) => t.status === "unread").length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* TAB 1: EMBEDDED PORTALS CONSOLE */}
+      {activeMainTab === "embedded" && (
+        <EmbeddedPortalViewer
+          companySettings={form}
+          branches={branches}
+          warehouses={warehouses}
+          onOpenGibModal={() => setIsGibModalOpen(true)}
+          onOpenSgkModal={openSgkModal}
+          onOpenTebligatModal={() => setIsAddTebligatModalOpen(true)}
+        />
+      )}
+
+      {/* Main Form Container (TAB 2 or TAB 3) */}
+      <form onSubmit={handleSubmit} className={`space-y-6 ${activeMainTab === "embedded" ? "hidden" : "block"}`}>
+        {/* Quick Portal Launchers Bar & Extension Widget */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-900 to-slate-800 p-3.5 rounded-xl text-white">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold">
+                <Zap className="w-4 h-4 fill-emerald-400" />
+              </div>
+              <div>
+                <div className="text-xs font-bold flex items-center gap-2">
+                  <span>Muavin Chrome / Edge Eklentisi</span>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded font-mono">
+                    {isExtensionDetected ? "🟢 Aktif" : "Önerilen"}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Resmi portallarda (GİB, SGK, e-Devlet) kayıtlı şifrelerinizle tek tıkla otomatik oturum açın.
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsExtensionModalOpen(true)}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Eklenti İndir & Kur</span>
+              </button>
+            </div>
+          </div>
+
           <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
             <span className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-purple-600" />
@@ -459,8 +603,11 @@ export const EServices: React.FC<EServicesProps> = ({
           </div>
         </div>
 
-        {/* 1. BÖLÜM: VERGİ DAİRESİ & GİB PORTAL ŞİFRELERİ */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
+        {/* 1, 2, 3. BÖLÜMLER: ŞİFRE YÖNETİMİ & KURUMLAR */}
+        {activeMainTab === "credentials" && (
+          <>
+            {/* 1. BÖLÜM: VERGİ DAİRESİ & GİB PORTAL ŞİFRELERİ */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
@@ -1133,9 +1280,33 @@ export const EServices: React.FC<EServicesProps> = ({
           </div>
         </div>
 
-        {/* 4. BÖLÜM: SGK VE VERGİ DAİRESİ GELEN TEBLİGATLAR */}
-        {(() => {
-          const tebligatList = getTebligatlar();
+        {/* Submit Action for Credentials */}
+        <div className="flex items-center justify-between bg-purple-50/60 p-4 rounded-2xl border border-purple-200/60 shadow-xs">
+          {isSaved ? (
+            <span className="text-xs font-extrabold text-emerald-600 flex items-center gap-1.5">
+              <Check className="w-4 h-4" />
+              E-İşlemler, GİB, SGK ve e-Devlet şifreleri başarıyla kaydedildi!
+            </span>
+          ) : (
+            <span className="text-xs text-purple-900/80 font-medium">
+              Yapılan tüm kurum ve şifre değişikliklerini kaydetmek için butona basınız.
+            </span>
+          )}
+
+          <button
+            type="submit"
+            className="bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold px-6 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-2"
+          >
+            <Save className="w-4 h-4 text-[#EF7D2C]" />
+            <span>E-İşlem ve Kurum Şifrelerini Kaydet</span>
+          </button>
+        </div>
+      </>
+    )}
+
+    {/* 4. BÖLÜM: SGK VE VERGİ DAİRESİ GELEN TEBLİGATLAR */}
+    {activeMainTab === "eTebligat" && (() => {
+      const tebligatList = getTebligatlar();
           const unreadCount = tebligatList.filter((t) => t.status === "unread").length;
           const totalAmount = tebligatList.reduce((sum, t) => sum + (t.amount || 0), 0);
           const urgentCount = tebligatList.filter((t) => {
@@ -1495,30 +1666,8 @@ export const EServices: React.FC<EServicesProps> = ({
                 </div>
               )}
             </div>
-          );
-        })()}
-
-        {/* Submit Action */}
-        <div className="flex items-center justify-between bg-purple-50/60 p-4 rounded-2xl border border-purple-200/60 shadow-xs">
-          {isSaved ? (
-            <span className="text-xs font-extrabold text-emerald-600 flex items-center gap-1.5">
-              <Check className="w-4 h-4" />
-              E-İşlemler, GİB, SGK ve e-Devlet şifreleri başarıyla kaydedildi!
-            </span>
-          ) : (
-            <span className="text-xs text-purple-900/80 font-medium">
-              Yapılan tüm kurum ve şifre değişikliklerini kaydetmek için butona basınız.
-            </span>
-          )}
-
-          <button
-            type="submit"
-            className="bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold px-6 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-2"
-          >
-            <Save className="w-4 h-4 text-[#EF7D2C]" />
-            <span>E-İşlem ve Kurum Şifrelerini Kaydet</span>
-          </button>
-        </div>
+            );
+          })()}
       </form>
 
       {/* GİB Dijital Vergi Dairesi Modal */}
@@ -1951,6 +2100,13 @@ export const EServices: React.FC<EServicesProps> = ({
           </div>
         </div>
       )}
+
+      {/* Muavin Chrome/Edge Eklentisi Kurulum Rehberi Modalı */}
+      <ExtensionInstallModal
+        isOpen={isExtensionModalOpen}
+        onClose={() => setIsExtensionModalOpen(false)}
+        isExtensionDetected={isExtensionDetected}
+      />
     </div>
   );
 };

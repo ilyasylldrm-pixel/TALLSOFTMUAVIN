@@ -6,6 +6,7 @@ import {
   UserPlus,
   Search,
   Plus,
+  MessageCircle,
   Building,
   Calendar,
   CreditCard,
@@ -1928,6 +1929,19 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                             >
                               <Printer className="w-3.5 h-3.5 text-purple-700" />
                               Bordro Yazdır
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setPayrollPrintSelectedEmpId(rec.employeeId);
+                                setPayrollPrintInitialMode("month");
+                                setIsPayrollPrintModalOpen(true);
+                              }}
+                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/70 font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                              title={`${rec.employeeName} için WhatsApp Maaş Pusulası Gönder`}
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                              WhatsApp
                             </button>
                           </div>
                         </td>
