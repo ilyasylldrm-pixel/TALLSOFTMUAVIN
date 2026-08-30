@@ -29,7 +29,7 @@ export type ExtractedExpenseData = {
   companyTitle?: string;
   invoiceNumber?: string;
   issueDate?: string;
-  docType?: "Mal Alımı" | "Fatura" | "Fiş";
+  docType?: "Mal Alımı" | "Fatura" | "Fiş" | "Diğer";
   subtotal?: number;
   vatRate?: number;
   vatAmount?: number;

@@ -1915,7 +1915,7 @@ export default function App() {
               quotes={data.quotes}
               contacts={data.contacts}
               products={data.products}
-              companySettings={data.companySettings}
+              companySettings={data.settings}
               globalSearchTerm={searchTerm}
               onAddQuote={handleAddQuote}
               onConvertQuoteToInvoice={handleConvertQuoteToInvoice}
@@ -1931,7 +1931,7 @@ export default function App() {
               contacts={data.contacts}
               cheques={data.cheques || []}
               promissoryNotes={data.promissoryNotes || []}
-              companySettings={data.companySettings || data.settings}
+              companySettings={data.settings}
               activeFinanceSubTab={financeSubTab}
               globalSearchTerm={searchTerm}
               onSelectFinanceSubTab={setFinanceSubTab}
@@ -1988,7 +1988,7 @@ export default function App() {
               costProjects={data.costProjects || []}
               employees={data.employees || []}
               transactions={data.transactions || []}
-              companySettings={data.companySettings || data.settings}
+              companySettings={data.settings}
               globalSearchTerm={searchTerm}
               activeSubTab={currentTab === "products_costs" ? "costs" : "list"}
               onSelectSubTab={(sub) => setCurrentTab(sub === "costs" ? "products_costs" : "products_list")}

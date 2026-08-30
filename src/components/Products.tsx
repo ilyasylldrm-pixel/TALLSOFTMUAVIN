@@ -73,7 +73,7 @@ export interface ProductMovement {
   id: string;
   invoiceId: string;
   invoiceNumber: string;
-  type: "purchase" | "sales";
+  type: "purchase" | "sales" | "expense" | "income" | string;
   issueDate: string;
   contactId: string;
   contactName: string;

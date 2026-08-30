@@ -1,20 +1,24 @@
-export type ContactType = "customer" | "vendor" | "both";
+export type ContactType = "customer" | "vendor" | "supplier" | "both";
 
 export interface Contact {
   id: string;
   accountCode?: string; // Cari Hesap Kodu (Alıcılar: 120.VKN, Satıcılar: 320.VKN)
   name: string; // Şahıs veya Şirket Ünvanı
   companyTitle?: string;
+  companyName?: string; // Alias for companyTitle
   contactType: ContactType;
+  type?: ContactType; // Alias for contactType
   taxOffice?: string; // Vergi Dairesi
   taxNumber?: string; // VKN / TCKN
   email?: string;
   phone?: string;
+  mobile?: string; // Alias for phone
   address?: string;
   city?: string;
   district?: string; // İlçe
   neighborhood?: string; // Mahalle
   street?: string; // Cadde / Sokak
+  addressDetails?: AddressDetails;
   balance: number; // Pozitif: Alacaklıyız (Müşteri bize borçlu), Negatif: Borçluyuz (Tedarikçiye borcumuz var)
   balanceType: "receivable" | "payable" | "balanced";
   notes?: string;
@@ -76,6 +80,7 @@ export interface InvoiceTaxItem {
   taxTypeCode?: string; // "0015", "9015", "0071", "4080", "0059", "0040", "0003", "0021", "8001" vb.
   taxName?: string; // Açıklama / Adı (Örn: "Katma Değer Vergisi (%20)", "Özel İletişim Vergisi (%10)", "KDV Tevkifatı (5/10)")
   rate?: number; // Vergi Oranı (%)
+  taxRate?: number; // Alias for rate
   taxableAmount?: number; // Matrah (Vergiye esas tutar)
   taxAmount: number; // Hesaplanan vergi tutarı
   exemptionCode?: string; // İstisna Kodu (örn: 351, 301)
@@ -97,7 +102,7 @@ export interface InvoiceItem {
   totalWithVat: number;
 }
 
-export type InvoiceType = "sales" | "purchase"; // Satış Faturası / Alış Faturası
+export type InvoiceType = "sales" | "purchase" | "expense" | "purchase_invoice"; // Satış Faturası / Alış Faturası / Gider / Alış İrsaliye Faturası
 export type InvoiceStatus = "draft" | "sent" | "paid" | "partial" | "overdue" | "cancelled";
 
 export type EDocumentType = "e_fatura" | "e_arsiv" | "paper";
@@ -171,6 +176,7 @@ export interface ManagedCompany {
   name?: string;
   taxNumber?: string;
   tenantIdentifierNumber?: string;
+  isPassive?: boolean;
 }
 
 export interface MysoftCredentials {
@@ -222,6 +228,7 @@ export interface Cheque {
   bankName: string;
   branchName?: string;
   drawerName?: string;
+  drawer?: string; // Alias for drawerName
   contactId?: string;
   contactName: string;
   issueDate: string;
@@ -256,7 +263,7 @@ export interface PromissoryNote {
   endorsedDate?: string;
 }
 
-export type AccountType = "cash" | "bank" | "credit_card";
+export type AccountType = "cash" | "bank" | "credit_card" | "pos" | string;
 
 export interface Account {
   id: string;
@@ -267,6 +274,7 @@ export interface Account {
   accountNumber?: string;
   iban?: string;
   bankName?: string;
+  branchName?: string;
   isDefault?: boolean;
 }
 
@@ -300,9 +308,16 @@ export interface Product {
   unit: string;
   buyPrice: number;
   sellPrice: number;
+  purchasePrice?: number; // Alias for buyPrice
+  sellingPrice?: number; // Alias for sellPrice
   vatRate: number; // 1, 10, 20
   stockQuantity: number;
+  stock?: number; // Alias for stockQuantity
   minStockAlert?: number;
+  minStock?: number; // Alias for minStockAlert
+  currency?: string;
+  isService?: boolean;
+  serials?: string[];
   category?: string;
   stockType?: string; // "İlk Madde Malzeme", "Yarı Mamul", "Ticari Mal", "Ham Madde", "Hizmet"
   barcode?: string; // Barkod numarası
@@ -329,16 +344,19 @@ export interface StockTransfer {
   createdAt: string;
 }
 
-export type QuoteStatus = "draft" | "sent" | "approved" | "rejected" | "converted";
+export type QuoteStatus = "draft" | "sent" | "approved" | "rejected" | "converted" | "invoiced";
 
 export interface Quote {
   id: string;
   quoteNumber: string;
+  number?: string; // Alias for quoteNumber
   contactId: string;
   contactName: string;
   issueDate: string;
   validUntil: string;
   items: InvoiceItem[];
+  subtotal?: number;
+  taxTotal?: number;
   grandTotal: number;
   currency?: string;
   status: QuoteStatus;
@@ -373,6 +391,7 @@ export interface Order {
   contactEmail?: string;
   taxNumber?: string;
   orderDate: string; // Sipariş Tarihi
+  date?: string; // Alias for orderDate
   deliveryDate?: string; // Teslimat / Termin Tarihi
   items: OrderItem[];
   subtotal: number;
@@ -425,6 +444,7 @@ export interface Warehouse {
   branchName?: string; // Bağlı Olduğu Şube Adı
   status: "active" | "passive";
   address: AddressDetails;
+  isDefault?: boolean;
   createdAt: string;
 }
 
@@ -474,7 +494,9 @@ export interface SgkCredentials {
 export interface EDevletCredentials {
   managerName?: string;          // Şirket Müdürü / Yetkili Adı Soyadı
   tcKimlikNo?: string;           // T.C. Kimlik Numarası
+  tckn?: string;                 // Alias for tcKimlikNo
   eDevletPassword?: string;      // e-Devlet Şifresi
+  password?: string;             // Alias for eDevletPassword
   mobileSignaturePhone?: string; // Kayıtlı Telefon / Mobil İmza Numarası
   validUntil?: string;           // İmza Yetkisi Geçerlilik Tarihi
   notes?: string;                // Yetki Kapsamı / Notlar
@@ -506,9 +528,12 @@ export interface ETebligatItem {
 
 export interface CompanySettings {
   companyName: string;
+  name?: string; // Alias for companyName
   companyTitle: string;
+  title?: string; // Alias for companyTitle
   taxOffice: string;
   taxNumber: string;
+  vknTckn?: string; // Alias for taxNumber
   taxpayerType?: TaxpayerType | string;
   tradeRegisterNo?: string;
   mersisNo?: string;
@@ -527,6 +552,7 @@ export interface CompanySettings {
   website: string;
   logoUrl?: string;
   defaultBankIban?: string;
+  iban?: string; // Alias for defaultBankIban
   defaultBankName?: string;
   currency: string;
   taxCredentials?: TaxOfficeCredentials;
@@ -541,7 +567,7 @@ export interface CompanySettings {
 export interface LedgerEntry {
   id: string;
   date: string;
-  documentType: "Fatura" | "Tahsilat" | "Tediye" | "Dekont" | "Devir";
+  documentType: "Fatura" | "Tahsilat" | "Tediye" | "Dekont" | "Devir" | "Ödeme" | string;
   documentNo: string;
   description: string;
   debit: number; // Borç (Cari hesabın borcu - Bize borçlandı veya ödeme yaptı)
@@ -561,7 +587,10 @@ export type DepartmentType =
 export interface Employee {
   id: string;
   tckn: string;
+  tcNo?: string; // Alias for tckn
   fullName: string;
+  firstName?: string;
+  lastName?: string;
   gender?: "Erkek" | "Kadın" | string;
   title: string;
   department: DepartmentType | string;
@@ -576,10 +605,13 @@ export interface Employee {
   email: string;
   salaryType: "net" | "gross";
   salaryAmount: number; // Tutar (₺)
+  salary?: number; // Alias for salaryAmount
+  grossSalary?: number;
   foodAllowance?: number;
   roadAllowance?: number;
   hasBes?: boolean; // BES Katılımı (%3)
   sgkOccupationCode?: string; // SGK Meslek Kodu
+  sgkNo?: string;
   iban?: string;
   bankName?: string;
   emergencyContact?: string;
@@ -642,11 +674,13 @@ export interface LeaveRequest {
   employeeId: string;
   employeeName: string;
   type: "Yıllık İzin" | "Ücretli İzin" | "Ücretsiz İzin" | "Mazeretsiz İzin" | "Sıhhi İzin" | "Mazeret İzni" | "Hastalık/Rapor" | "Babalar/Annelik İzni" | string;
+  leaveType?: string; // Alias for type
   startDate: string;
   endDate: string;
   daysCount: number;
   status: "approved" | "pending" | "rejected";
   reason?: string;
+  description?: string; // Alias for reason
   createdAt: string;
 }
 
@@ -658,6 +692,7 @@ export interface AdvanceRequest {
   amount: number;
   requestDate: string;
   description: string;
+  reason?: string; // Alias for description
   status: "paid" | "approved" | "pending" | "rejected";
   createdAt: string;
 }
@@ -669,6 +704,7 @@ export interface LegalDeduction {
   type: string;
   totalDebt?: number;
   totalDebtAmount?: number;
+  totalAmount?: number; // Alias for totalDebt
   monthlyDeduction?: number;
   monthlyAmount?: number;
   paidAmount: number;
@@ -676,6 +712,7 @@ export interface LegalDeduction {
   creditorTitle?: string;
   creditorName?: string;
   fileNumber?: string;
+  fileNo?: string; // Alias for fileNumber
   iban?: string;
   calculationType?: string;
   priorityOrder?: number;
@@ -714,7 +751,9 @@ export interface Waybill {
   taxNumber?: string;
   waybillDate: string; // İrsaliye Düzenlenme Tarihi
   dispatchDate?: string; // Fiili Sevk Tarihi / Saati
+  dispatchTime?: string; // Fiili Sevk Saati
   vehiclePlate?: string; // Araç Plakası (ör: 34 ABC 123)
+  plateNumber?: string; // Alias for vehiclePlate
   driverName?: string; // Sürücü Adı Soyadı & TCKN
   driverTckn?: string;
   deliveryAddress?: string; // Teslimat Adresi
@@ -890,6 +929,7 @@ export interface AssetCustody {
   employeeTitle?: string;
   category: AssetCategory;
   assetName: string; // ör: "2024 Renault Megane Touch", "MacBook Pro 16\" M3 Max", "iPhone 15 Pro 256GB"
+  assetCode?: string; // Alias for barcodeNumber
   brand: string; // Marka (Renault, Apple, Dell, Lenovo, Samsung, HP)
   model: string; // Model (Megane 1.3 TCe, MacBook Pro, ThinkPad T14, Galaxy S24)
   serialNumber?: string;
@@ -968,7 +1008,7 @@ export interface BillOfMaterials {
 }
 
 export type WorkstationCategory = "machine" | "assembly_line" | "paint_booth" | "manual_bench" | "cnc" | "quality_station";
-export type WorkstationStatus = "idle" | "running" | "maintenance" | "breakdown";
+export type WorkstationStatus = "idle" | "running" | "maintenance" | "breakdown" | "offline";
 
 export interface Workstation {
   id: string;
@@ -1043,7 +1083,7 @@ export interface WorkOrderOperation {
   operationName: string;
   workstationId: string;
   workstationName: string;
-  workstationType: "internal" | "subcontractor";
+  workstationType?: "internal" | "subcontractor";
   subcontractorContactId?: string;
   subcontractorContactName?: string;
   status: "pending" | "ready" | "in_progress" | "completed";
@@ -1053,8 +1093,8 @@ export interface WorkOrderOperation {
   actualEndTime?: string;
   operatorEmployeeId?: string;
   operatorName?: string;
-  producedQuantity: number;
-  scrappedQuantity: number;
+  producedQuantity?: number;
+  scrappedQuantity?: number;
   notes?: string;
   qualityApproval?: {
     approvedBy: string;
@@ -1069,13 +1109,13 @@ export interface WorkOrderMaterial {
   productId: string;
   productCode: string;
   productName: string;
-  type: BomItemType;
+  type?: BomItemType;
   plannedQuantity: number; // Planlanan
-  allocatedQuantity: number; // Rezerve Edilen
+  allocatedQuantity?: number; // Rezerve Edilen
   consumedQuantity: number; // Fiilen Sarf Edilen
   unit: string;
   unitCost: number;
-  totalCost: number;
+  totalCost?: number;
   warehouseId?: string;
   warehouseName?: string;
   isSubcontractDispatched?: boolean; // Fasona Sevk Edildi mi?
@@ -1158,7 +1198,7 @@ export interface SubcontractOrder {
   dispatchDate: string;
   expectedReturnDate: string;
   actualReturnDate?: string;
-  status: "dispatched" | "in_process" | "received_partial" | "completed" | "cancelled";
+  status: "dispatched" | "in_process" | "received_partial" | "partially_received" | "completed" | "cancelled" | "pending" | string;
   receivedQuantity: number;
   scrapQuantity: number;
   serviceInvoiceNo?: string;
@@ -1483,6 +1523,7 @@ export interface ItServiceRecord {
   contactEmail?: string;
   
   entryDate: string;
+  entryTime?: string;
   estimatedCompletionDate?: string;
   actualCompletionDate?: string;
   status: ItServiceStatus;
@@ -1642,6 +1683,7 @@ export interface ApplianceServiceRecord {
   appointmentDate?: string; // Randevu Tarihi
   appointmentTimeSlot?: string; // ör: "10:00 - 12:00"
   entryDate: string;
+  entryTime?: string;
   completionDate?: string;
   status: ApplianceServiceStatus;
   
@@ -1677,6 +1719,21 @@ export interface ApplianceServiceRecord {
   notes?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface WhatsAppTemplate {
+  id: string;
+  title: string;
+  category: "invoice" | "quote" | "order" | "waybill" | "collection" | "hr" | "service" | "stock" | "custom" | string;
+  text: string;
+  shortcut?: string;
+  description?: string;
+  isFavorite?: boolean;
+  isCustom?: boolean;
+  variables?: string[];
+  usageCount?: number;
+  lastUsedAt?: string;
+  createdAt?: string;
 }
 
 

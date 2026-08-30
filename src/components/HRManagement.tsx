@@ -151,16 +151,16 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [editingLegalDeduction, setEditingLegalDeduction] = useState<LegalDeduction | null>(null);
   const [legalForm, setLegalForm] = useState<{
     employeeId: string;
-    type: "İcra Kesintisi" | "Nafaka Kesintisi" | "Diğer Yasal Kesinti";
+    type: "İcra Kesintisi" | "Nafaka Kesintisi" | "Diğer Yasal Kesinti" | string;
     fileNumber: string;
     creditorName: string;
     iban: string;
     totalDebtAmount: number;
     paidAmount: number;
     monthlyAmount: number;
-    calculationType: "quarter_salary" | "fixed";
+    calculationType: "quarter_salary" | "fixed" | string;
     priorityOrder: number;
-    status: "active" | "queued" | "completed" | "passive";
+    status: "active" | "queued" | "completed" | "passive" | string;
     notes: string;
   }>({
     employeeId: "",

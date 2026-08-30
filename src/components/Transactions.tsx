@@ -31,6 +31,7 @@ interface TransactionsProps {
   forcedType?: "income" | "expense";
   globalSearchTerm?: string;
   onAddTransaction: (tx: Transaction) => void;
+  onUpdateTransaction?: (tx: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
 }
 

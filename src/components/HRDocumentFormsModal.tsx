@@ -148,10 +148,10 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
   };
 
   // Company default strings
-  const defaultCompanyName = companySettings?.name || "ŞİRKET ÜNVANI";
+  const defaultCompanyName = companySettings?.companyName || companySettings?.name || "ŞİRKET ÜNVANI";
   const defaultTaxNo = companySettings?.taxNumber || companySettings?.vknTckn || "1234567890";
-  const defaultAddress = companySettings?.address?.fullAddress || 
-    (companySettings?.address?.city ? `${companySettings.address.district || ""} / ${companySettings.address.city}` : "Şirket Merkez Adresi");
+  const defaultAddress = (typeof companySettings?.address === "string" ? companySettings.address : companySettings?.addressDetails?.fullAddress) || 
+    (companySettings?.city ? `${companySettings.district || ""} / ${companySettings.city}` : "Şirket Merkez Adresi");
   const defaultSgkNo = companySettings?.sgkCredentials?.workplaceRegistrationNo || "2 1234 01 01 1234567 034 12-34 000";
 
   // Form State Data

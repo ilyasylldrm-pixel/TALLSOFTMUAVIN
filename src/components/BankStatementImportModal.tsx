@@ -536,6 +536,7 @@ export const BankStatementImportModal: React.FC<BankStatementImportModalProps> =
       accountName: accName,
       type: r.type,
       amount: r.amount,
+      currency: acc?.currency || "TRY",
       date: r.date,
       description: r.description,
       category: "Banka Ekstresi",

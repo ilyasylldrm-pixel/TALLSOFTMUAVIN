@@ -68,9 +68,10 @@ import {
 } from "../services/whatsappClient";
 import { AddressSelector } from "./AddressSelector";
 import { saveUserFile, uploadFileToStorage, deleteUserFile, UserProfileData } from "../lib/firebase";
+import { UserProfile } from "./AuthModal";
 
 interface ContactsProps {
-  currentUser?: UserProfileData | null;
+  currentUser?: UserProfile | UserProfileData | null;
   contacts: Contact[];
   invoices: Invoice[];
   transactions: Transaction[];
@@ -833,7 +834,7 @@ export const Contacts: React.FC<ContactsProps> = ({
       // Attempt cloud upload for direct download link (auto-deletes in 10 minutes)
       let cloudLinkStr = "";
       try {
-        const userId = currentUser?.userId || "demo_user";
+        const userId = (currentUser && "userId" in currentUser ? currentUser.userId : (currentUser && "id" in currentUser ? (currentUser as UserProfile).id : "demo_user")) || "demo_user";
         const uploadRes = await uploadFileToStorage(userId, pdfFile);
         if (uploadRes?.fileUrl) {
           const tenMinutesMs = 10 * 60 * 1000;

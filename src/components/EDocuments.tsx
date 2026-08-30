@@ -423,7 +423,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
 
   const handleDirectionChange = (nextDirection: EDocumentDirection) => {
     if (direction) return;
-    setActiveDirection(nextDirection);
+    setActiveDirection(normalizeDirection(nextDirection));
     setStatusFilter("all");
     setTypeFilter("all");
   };
@@ -444,7 +444,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         companyId: activeManagedCompanyId,
         family,
         // Prefer paging so "Bu ay" is one multi-day range, not day-by-day calls.
-        ...(activeDirection === "inbox" || activeDirection === "incoming"
+        ...(activeDirection === "inbox"
           ? { pageSize: 100, pageNumber: 1 }
           : {}),
       });

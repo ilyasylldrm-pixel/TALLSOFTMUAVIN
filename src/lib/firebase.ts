@@ -85,6 +85,7 @@ export interface ExtractedDocumentData {
 export interface UserFileMetadata {
   id: string;
   userId: string;
+  userEmail?: string;
   fileName: string;
   fileSize: number;
   fileType: string;
