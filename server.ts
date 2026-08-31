@@ -39,7 +39,7 @@ app.use(
       if (req.headers["x-no-compression"]) return false;
       return compression.filter(req, res);
     },
-  })
+  }) as any
 );
 
 // Optimize global headers for latency & caching

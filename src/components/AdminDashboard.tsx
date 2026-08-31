@@ -129,14 +129,6 @@ export const STAFF_ROLE_PRESETS: RolePreset[] = [
     ],
   },
   {
-    id: "production_lead",
-    name: "Üretim & MES Sorumlusu",
-    badge: "🏭 Üretim & MES",
-    color: "bg-indigo-50 text-indigo-800 border-indigo-200",
-    description: "İş emirleri, BOM reçeteleri, MRP ve terminal kayıtları",
-    modules: ["dashboard", "production", "products", "products_costs", "files"],
-  },
-  {
     id: "full_admin",
     name: "Tam Yetkili Yönetici",
     badge: "👑 Tüm Modüller",

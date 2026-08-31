@@ -829,7 +829,6 @@ export interface ExtractedDocumentData {
 export type AppModuleKey =
   | "dashboard"
   | "company"
-  | "production"
   | "auto_service"
   | "it_service"
   | "appliance_service"
@@ -850,7 +849,7 @@ export interface AppModuleDefinition {
   key: AppModuleKey;
   label: string;
   description: string;
-  category: "Genel" | "Ticari" | "Finans" | "Yönetim" | "Üretim";
+  category: "Genel" | "Ticari" | "Finans" | "Yönetim";
 }
 
 export type AssetCategory =
@@ -1274,7 +1273,6 @@ export interface MesTerminalLog {
 
 export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "dashboard", label: "Ana Sayfa / Özet", description: "Genel finansal durum ve grafikler", category: "Genel" },
-  { key: "production", label: "Üretim & MES / MRP", description: "İş emirleri, ürün reçeteleri (BOM), rotalar ve saha kontrolü", category: "Üretim" },
   { key: "auto_service", label: "Oto Servis & Araç Bakım", description: "Araç kabul, iş emri, arıza teşhisi ve AI asistanları", category: "Ticari" },
   { key: "it_service", label: "Bilişim & BT Teknik Servis", description: "Cihaz kabul, parça/yazılım onarım ve AI destek rehberleri", category: "Ticari" },
   { key: "appliance_service", label: "Ev Aletleri ve Klima", description: "Beyaz eşya, iklimlendirme ve küçük ev aletleri teknik servisi", category: "Ticari" },
