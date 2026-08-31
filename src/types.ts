@@ -1,23 +1,29 @@
+import { getProvincePlateCode } from "./data/locationAndTaxData";
+
 export type ContactType = "customer" | "vendor" | "supplier" | "both";
 
 export interface Contact {
   id: string;
-  accountCode?: string; // Cari Hesap Kodu (Alıcılar: 120.VKN, Satıcılar: 320.VKN)
-  name: string; // Şahıs veya Şirket Ünvanı
-  companyTitle?: string;
+  accountCode?: string; // Cari Hesap Kodu (Alıcılar: 120.İL_KODU.VKN/TCKN, Satıcılar: 320.İL_KODU.VKN/TCKN)
+  name: string; // Kısa Unvan / İsim veya Şahıs/Şirket Adı
+  companyTitle?: string; // Resmi Ticari Şirket Unvanı
   companyName?: string; // Alias for companyTitle
   contactType: ContactType;
   type?: ContactType; // Alias for contactType
   taxOffice?: string; // Vergi Dairesi
   taxNumber?: string; // VKN / TCKN
-  email?: string;
+  contactPerson?: string; // İlgili Kişi (Yetkili / İrtibat Kişisi)
   phone?: string;
   mobile?: string; // Alias for phone
+  email?: string;
   address?: string;
+  shippingAddress?: string; // Sevkiyat / Depo / Teslimat Adresi
   city?: string;
   district?: string; // İlçe
   neighborhood?: string; // Mahalle
   street?: string; // Cadde / Sokak
+  buildingNo?: string;
+  postalCode?: string;
   addressDetails?: AddressDetails;
   balance: number; // Pozitif: Alacaklıyız (Müşteri bize borçlu), Negatif: Borçluyuz (Tedarikçiye borcumuz var)
   balanceType: "receivable" | "payable" | "balanced";
@@ -29,9 +35,11 @@ export function getContactAccountCode(contact: Partial<Contact>): string {
   if (contact.accountCode && contact.accountCode.trim()) {
     return contact.accountCode.trim();
   }
-  const prefix = contact.contactType === "vendor" ? "320" : "120";
+  const prefix = contact.contactType === "vendor" || contact.contactType === "supplier" ? "320" : "120";
+  const city = contact.city || (contact.addressDetails && contact.addressDetails.city) || "İstanbul";
+  const plateCode = getProvincePlateCode(city);
   const taxNum = contact.taxNumber && contact.taxNumber.trim() ? contact.taxNumber.trim() : "0000000000";
-  return `${prefix}.${taxNum}`;
+  return `${prefix}.${plateCode}.${taxNum}`;
 }
 
 export const EXPENSE_CATEGORIES = [

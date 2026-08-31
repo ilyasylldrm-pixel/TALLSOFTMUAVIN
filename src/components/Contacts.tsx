@@ -53,6 +53,12 @@ import {
   Tag,
   Landmark,
   TrendingUp,
+  Truck,
+  UserCheck,
+  Hash,
+  Lock,
+  Unlock,
+  RotateCcw,
 } from "lucide-react";
 import {
   ALL_81_PROVINCES,
@@ -60,7 +66,14 @@ import {
   getDistrictsForProvince,
   getNeighborhoodsForDistrict,
   getTaxOfficesForProvince,
+  getProvincePlateCode,
 } from "../data/locationAndTaxData";
+import {
+  fetchTrAdresDistricts,
+  fetchTrAdresNeighborhoods,
+  fetchTrAdresProvinces,
+  TrAdresProvince,
+} from "../services/tradresApi";
 import {
   fetchWhatsAppStatus,
   sendWhatsAppDocumentApi,
@@ -304,36 +317,50 @@ export const Contacts: React.FC<ContactsProps> = ({
     setSelectedActionContact(null);
   };
 
-  // Form State
+  // Form State with user's 10 ordered fields
   const [formData, setFormData] = useState<{
-    name: string;
-    companyTitle: string;
+    accountCode: string;
+    isCustomAccountCode: boolean;
     contactType: ContactType;
-    taxOffice: string;
     taxNumber: string;
-    email: string;
-    phone: string;
-    address: string;
+    taxOffice: string;
+    companyTitle: string;
+    name: string;
     city: string;
     district: string;
     neighborhood: string;
     street: string;
     buildingNo: string;
+    doorNo: string;
+    postalCode: string;
+    address: string;
+    contactPerson: string;
+    phone: string;
+    email: string;
+    shippingAddress: string;
+    isSameShippingAddress: boolean;
     notes: string;
   }>({
-    name: "",
-    companyTitle: "",
+    accountCode: "",
+    isCustomAccountCode: false,
     contactType: "customer",
-    taxOffice: "Kadıköy V.D.",
     taxNumber: "",
-    email: "",
-    phone: "",
-    address: "",
+    taxOffice: "Kadıköy V.D.",
+    companyTitle: "",
+    name: "",
     city: "İstanbul",
     district: "Kadıköy",
     neighborhood: "Caferağa (Moda)",
     street: "Bağdat Caddesi",
-    buildingNo: "No: 12 D: 4",
+    buildingNo: "No: 12",
+    doorNo: "D: 4",
+    postalCode: "34710",
+    address: "",
+    contactPerson: "",
+    phone: "",
+    email: "",
+    shippingAddress: "",
+    isSameShippingAddress: true,
     notes: "",
   });
 
@@ -343,22 +370,110 @@ export const Contacts: React.FC<ContactsProps> = ({
   const [isCustomStreet, setIsCustomStreet] = useState<boolean>(false);
   const [isCustomTaxOffice, setIsCustomTaxOffice] = useState<boolean>(false);
 
+  // TrAdres Live API State
+  const [trAdresProvinces, setTrAdresProvinces] = useState<TrAdresProvince[]>([]);
+  const [trAdresDistricts, setTrAdresDistricts] = useState<string[]>([]);
+  const [trAdresNeighborhoods, setTrAdresNeighborhoods] = useState<string[]>([]);
+  const [isLoadingDistricts, setIsLoadingDistricts] = useState<boolean>(false);
+  const [isLoadingNeighborhoods, setIsLoadingNeighborhoods] = useState<boolean>(false);
+
+  // Load 81 Provinces on mount
+  useEffect(() => {
+    let isMounted = true;
+    fetchTrAdresProvinces().then((list) => {
+      if (isMounted && list && list.length > 0) {
+        setTrAdresProvinces(list);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fetch districts when modal is open or city changes
+  useEffect(() => {
+    if (!isModalOpen) return;
+    let isMounted = true;
+    setIsLoadingDistricts(true);
+    fetchTrAdresDistricts(formData.city).then((list) => {
+      if (isMounted) {
+        if (list && list.length > 0) {
+          setTrAdresDistricts(list.map((d) => d.name));
+        } else {
+          setTrAdresDistricts(getDistrictsForProvince(formData.city));
+        }
+        setIsLoadingDistricts(false);
+      }
+    }).catch(() => {
+      if (isMounted) {
+        setTrAdresDistricts(getDistrictsForProvince(formData.city));
+        setIsLoadingDistricts(false);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [formData.city, isModalOpen]);
+
+  // Fetch neighborhoods when district changes
+  useEffect(() => {
+    if (!isModalOpen || !formData.district || isCustomDistrict) return;
+    let isMounted = true;
+    setIsLoadingNeighborhoods(true);
+    fetchTrAdresNeighborhoods(formData.district, formData.city).then((list) => {
+      if (isMounted) {
+        if (list && list.length > 0) {
+          setTrAdresNeighborhoods(list.map((n) => n.name));
+        } else {
+          setTrAdresNeighborhoods(getNeighborhoodsForDistrict(formData.city, formData.district));
+        }
+        setIsLoadingNeighborhoods(false);
+      }
+    }).catch(() => {
+      if (isMounted) {
+        setTrAdresNeighborhoods(getNeighborhoodsForDistrict(formData.city, formData.district));
+        setIsLoadingNeighborhoods(false);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [formData.city, formData.district, isModalOpen, isCustomDistrict]);
+
+  // Computed live dynamic Cari Hesap Kodu
+  // Kural: Alıcı ise 120.<İL KODU>.<VKN/TCKN> | Satıcı ise 320.<İL KODU>.<VKN/TCKN>
+  const currentComputedAccountCode = useMemo(() => {
+    if (formData.isCustomAccountCode && formData.accountCode.trim()) {
+      return formData.accountCode.trim();
+    }
+    const prefix = formData.contactType === "vendor" || formData.contactType === "supplier" ? "320" : "120";
+    const plateCode = getProvincePlateCode(formData.city || "İstanbul");
+    const taxNum = formData.taxNumber && formData.taxNumber.trim() ? formData.taxNumber.trim() : "0000000000";
+    return `${prefix}.${plateCode}.${taxNum}`;
+  }, [formData.isCustomAccountCode, formData.accountCode, formData.contactType, formData.city, formData.taxNumber]);
+
   // Address Builder Helper
   const compileAddress = (
     nh: string,
     st: string,
     bld: string,
     dist: string,
-    ct: string
+    ct: string,
+    door?: string,
+    pc?: string
   ) => {
     const parts = [];
-    if (nh && nh !== "Diğer") parts.push(nh.endsWith("Mah.") || nh.endsWith("Mahallesi") ? nh : `${nh} Mah.`);
     if (st && st !== "Diğer") parts.push(st);
-    if (bld) parts.push(bld);
+    if (bld) parts.push(bld.startsWith("No:") || bld.startsWith("No ") ? bld : `No: ${bld}`);
+    if (door) parts.push(door.startsWith("D:") || door.startsWith("Daire:") ? door : `D: ${door}`);
+    if (nh && nh !== "Diğer") parts.push(nh.endsWith("Mah.") || nh.endsWith("Mahallesi") ? nh : `${nh} Mah.`);
     let full = parts.join(" ");
     const loc = [dist !== "Diğer" ? dist : "", ct].filter(Boolean).join(" / ");
     if (loc) {
       full = full ? `${full}, ${loc}` : loc;
+    }
+    if (pc) {
+      full = `${full} (PK: ${pc})`;
     }
     return full;
   };
@@ -375,7 +490,7 @@ export const Contacts: React.FC<ContactsProps> = ({
     setIsCustomDistrict(false);
     setIsCustomNeighborhood(false);
 
-    const newAddress = compileAddress(newNh, formData.street, formData.buildingNo, newDistrict, newCity);
+    const newAddress = compileAddress(newNh, formData.street, formData.buildingNo, newDistrict, newCity, formData.doorNo, formData.postalCode);
 
     setFormData((prev) => ({
       ...prev,
@@ -384,6 +499,7 @@ export const Contacts: React.FC<ContactsProps> = ({
       neighborhood: newNh,
       taxOffice: newTaxOffice,
       address: newAddress,
+      shippingAddress: prev.isSameShippingAddress ? newAddress : prev.shippingAddress,
     }));
   };
 
@@ -396,13 +512,14 @@ export const Contacts: React.FC<ContactsProps> = ({
     setIsCustomDistrict(false);
     const neighborhoods = getNeighborhoodsForDistrict(formData.city, newDistrict);
     const newNh = neighborhoods[0] || "Merkez Mahallesi";
-    const newAddress = compileAddress(newNh, formData.street, formData.buildingNo, newDistrict, formData.city);
+    const newAddress = compileAddress(newNh, formData.street, formData.buildingNo, newDistrict, formData.city, formData.doorNo, formData.postalCode);
 
     setFormData((prev) => ({
       ...prev,
       district: newDistrict,
       neighborhood: newNh,
       address: newAddress,
+      shippingAddress: prev.isSameShippingAddress ? newAddress : prev.shippingAddress,
     }));
   };
 
@@ -413,12 +530,13 @@ export const Contacts: React.FC<ContactsProps> = ({
       return;
     }
     setIsCustomNeighborhood(false);
-    const newAddress = compileAddress(newNh, formData.street, formData.buildingNo, formData.district, formData.city);
+    const newAddress = compileAddress(newNh, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode);
 
     setFormData((prev) => ({
       ...prev,
       neighborhood: newNh,
       address: newAddress,
+      shippingAddress: prev.isSameShippingAddress ? newAddress : prev.shippingAddress,
     }));
   };
 
@@ -429,21 +547,23 @@ export const Contacts: React.FC<ContactsProps> = ({
       return;
     }
     setIsCustomStreet(false);
-    const newAddress = compileAddress(formData.neighborhood, newStreet, formData.buildingNo, formData.district, formData.city);
+    const newAddress = compileAddress(formData.neighborhood, newStreet, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode);
 
     setFormData((prev) => ({
       ...prev,
       street: newStreet,
       address: newAddress,
+      shippingAddress: prev.isSameShippingAddress ? newAddress : prev.shippingAddress,
     }));
   };
 
   const handleBuildingNoChange = (newBld: string) => {
-    const newAddress = compileAddress(formData.neighborhood, formData.street, newBld, formData.district, formData.city);
+    const newAddress = compileAddress(formData.neighborhood, formData.street, newBld, formData.district, formData.city, formData.doorNo, formData.postalCode);
     setFormData((prev) => ({
       ...prev,
       buildingNo: newBld,
       address: newAddress,
+      shippingAddress: prev.isSameShippingAddress ? newAddress : prev.shippingAddress,
     }));
   };
 
@@ -454,21 +574,29 @@ export const Contacts: React.FC<ContactsProps> = ({
       const dist = contact.district || getDistrictsForProvince(ct)[0] || "Kadıköy";
       const nh = contact.neighborhood || getNeighborhoodsForDistrict(ct, dist)[0] || "Caferağa";
       const st = contact.street || COMMON_STREET_TYPES[0];
+      const hasCustomCode = Boolean(contact.accountCode && contact.accountCode.trim());
 
       setFormData({
-        name: contact.name,
-        companyTitle: contact.companyTitle || "",
-        contactType: contact.contactType,
-        taxOffice: contact.taxOffice || getTaxOfficesForProvince(ct)[0] || "",
+        accountCode: contact.accountCode || "",
+        isCustomAccountCode: hasCustomCode,
+        contactType: contact.contactType || "customer",
         taxNumber: contact.taxNumber || "",
-        email: contact.email || "",
-        phone: contact.phone || "",
-        address: contact.address || "",
+        taxOffice: contact.taxOffice || getTaxOfficesForProvince(ct)[0] || "",
+        companyTitle: contact.companyTitle || contact.companyName || "",
+        name: contact.name || "",
         city: ct,
         district: dist,
         neighborhood: nh,
         street: st,
-        buildingNo: "",
+        buildingNo: contact.buildingNo || "",
+        doorNo: "",
+        postalCode: contact.postalCode || "",
+        address: contact.address || "",
+        contactPerson: contact.contactPerson || "",
+        phone: contact.phone || contact.mobile || "",
+        email: contact.email || "",
+        shippingAddress: contact.shippingAddress || "",
+        isSameShippingAddress: !contact.shippingAddress || contact.shippingAddress === contact.address,
         notes: contact.notes || "",
       });
       setIsCustomDistrict(false);
@@ -481,24 +609,31 @@ export const Contacts: React.FC<ContactsProps> = ({
       const defaultDist = "Kadıköy";
       const defaultNh = "Caferağa (Moda)";
       const defaultSt = "Bağdat Caddesi";
-      const defaultBld = "No: 12 D: 4";
+      const defaultBld = "No: 12";
       const defaultTaxOffice = "Kadıköy V.D.";
-      const defaultAddr = compileAddress(defaultNh, defaultSt, defaultBld, defaultDist, defaultCity);
+      const defaultAddr = compileAddress(defaultNh, defaultSt, defaultBld, defaultDist, defaultCity, "D: 4", "34710");
 
       setFormData({
-        name: "",
-        companyTitle: "",
+        accountCode: "",
+        isCustomAccountCode: false,
         contactType: "customer",
-        taxOffice: defaultTaxOffice,
         taxNumber: "",
-        email: "",
-        phone: "",
-        address: defaultAddr,
+        taxOffice: defaultTaxOffice,
+        companyTitle: "",
+        name: "",
         city: defaultCity,
         district: defaultDist,
         neighborhood: defaultNh,
         street: defaultSt,
         buildingNo: defaultBld,
+        doorNo: "D: 4",
+        postalCode: "34710",
+        address: defaultAddr,
+        contactPerson: "",
+        phone: "",
+        email: "",
+        shippingAddress: defaultAddr,
+        isSameShippingAddress: true,
         notes: "",
       });
       setIsCustomDistrict(false);
@@ -511,27 +646,54 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) return;
+    const finalName = formData.name.trim() || formData.companyTitle.trim();
+    if (!finalName) return;
 
-    const prefix = formData.contactType === "vendor" ? "320" : "120";
-    const taxNum = formData.taxNumber && formData.taxNumber.trim() ? formData.taxNumber.trim() : "0000000000";
-    const accountCode = `${prefix}.${taxNum}`;
+    const accountCode = currentComputedAccountCode;
+    const finalShippingAddress = formData.isSameShippingAddress
+      ? (formData.address || compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode))
+      : (formData.shippingAddress || formData.address);
+
+    const contactPayload: Partial<Contact> = {
+      name: finalName,
+      companyTitle: formData.companyTitle.trim() || finalName,
+      companyName: formData.companyTitle.trim() || finalName,
+      contactType: formData.contactType,
+      type: formData.contactType,
+      accountCode,
+      taxOffice: formData.taxOffice,
+      taxNumber: formData.taxNumber,
+      contactPerson: formData.contactPerson,
+      phone: formData.phone,
+      mobile: formData.phone,
+      email: formData.email,
+      address: formData.address,
+      shippingAddress: finalShippingAddress,
+      city: formData.city,
+      district: formData.district,
+      neighborhood: formData.neighborhood,
+      street: formData.street,
+      buildingNo: formData.buildingNo,
+      postalCode: formData.postalCode,
+      notes: formData.notes,
+    };
 
     if (editingContact) {
       onUpdateContact({
         ...editingContact,
-        ...formData,
-        accountCode,
-      });
+        ...contactPayload,
+      } as Contact);
     } else {
       const newContact: Contact = {
         id: "c_" + Date.now(),
-        ...formData,
+        ...contactPayload,
+        name: finalName,
+        contactType: formData.contactType,
         accountCode,
         balance: 0,
         balanceType: "balanced",
         createdAt: new Date().toISOString().split("T")[0],
-      };
+      } as Contact;
       onAddContact(newContact);
     }
     setIsModalOpen(false);
@@ -551,8 +713,11 @@ export const Contacts: React.FC<ContactsProps> = ({
         accountCodeStr.includes(activeSearchQuery) ||
         (c.taxNumber && c.taxNumber.toLowerCase().includes(activeSearchQuery)) ||
         (c.companyTitle && c.companyTitle.toLowerCase().includes(activeSearchQuery)) ||
+        (c.contactPerson && c.contactPerson.toLowerCase().includes(activeSearchQuery)) ||
         (c.phone && c.phone.toLowerCase().includes(activeSearchQuery)) ||
-        (c.email && c.email.toLowerCase().includes(activeSearchQuery));
+        (c.email && c.email.toLowerCase().includes(activeSearchQuery)) ||
+        (c.city && c.city.toLowerCase().includes(activeSearchQuery)) ||
+        (c.shippingAddress && c.shippingAddress.toLowerCase().includes(activeSearchQuery));
 
       if (!matchesSearch) return false;
 
@@ -1628,6 +1793,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                       </td>
 
                       <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all hidden xl:table-cell">
+                        {c.contactPerson && (
+                          <div className="flex items-center gap-1 text-[11px] font-semibold text-indigo-700">
+                            <UserCheck className="w-3 h-3 text-indigo-500 shrink-0" />
+                            <span className="truncate max-w-[130px]">{c.contactPerson}</span>
+                          </div>
+                        )}
                         {c.phone && (
                           <div className="flex items-center gap-1 text-[11px]">
                             <Phone className="w-3 h-3 text-slate-400 group-hover:text-purple-500 shrink-0" />
@@ -1728,31 +1899,41 @@ export const Contacts: React.FC<ContactsProps> = ({
 
       {/* MODAL: Add / Edit Contact */}
       {isModalOpen && (() => {
-        const districtOptions = getDistrictsForProvince(formData.city);
-        const neighborhoodOptions = getNeighborhoodsForDistrict(formData.city, formData.district);
+        const districtOptions =
+          trAdresDistricts.length > 0 ? trAdresDistricts : getDistrictsForProvince(formData.city);
+        const neighborhoodOptions =
+          trAdresNeighborhoods.length > 0
+            ? trAdresNeighborhoods
+            : getNeighborhoodsForDistrict(formData.city, formData.district);
         const taxOfficeOptions = getTaxOfficesForProvince(formData.city);
+        const currentPlateCode = getProvincePlateCode(formData.city);
+        const prefixNumber = formData.contactType === "vendor" || formData.contactType === "supplier" ? "320" : "120";
 
         return (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4">
-            <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto animate-fadeIn">
+            <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto animate-fadeIn">
               {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 p-3.5 sm:p-5 shrink-0 bg-slate-50/60">
+              <div className="flex items-center justify-between border-b border-slate-200 p-3.5 sm:p-4 shrink-0 bg-slate-50/80">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                    <Building2 className="w-4 h-4" />
+                  <div className="w-9 h-9 rounded-xl bg-purple-100 border border-purple-200 flex items-center justify-center text-purple-700 shadow-2xs">
+                    <Building2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
-                      {editingContact ? "Cari Kartı Düzenle" : "Yeni Cari Kart Oluştur"}
+                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <span>{editingContact ? "Cari Kartı Düzenle" : "Yeni Cari Kart Oluştur"}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                        {currentComputedAccountCode}
+                      </span>
                     </h3>
                     <p className="text-[10px] sm:text-[11px] text-slate-500">
-                      Resmi vergi dairesi ve il, ilçe, mahalle adres bilgileri ile cari kaydı
+                      10 Adımlı Resmi Cari Bilgi Sıralaması (Otomatik 120/320 Cari Kodu &amp; VKN/TCKN Entegrasyonu)
                     </p>
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer hover:bg-slate-200 transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1760,239 +1941,549 @@ export const Contacts: React.FC<ContactsProps> = ({
 
               <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
                 <div className="p-3.5 sm:p-5 space-y-4 text-xs overflow-y-auto custom-scrollbar flex-1">
-                  {/* SECTION 1: Cari Kimlik Bilgileri */}
-                  <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 border-b border-slate-200/60 pb-2">
-                      <Users className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Cari Kimlik & Ticari Unvan</span>
+                  
+                  {/* 1. CARİ HESAP KODU (OTOMATİK OLUŞUM) */}
+                  <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3.5 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-purple-600 text-white font-bold text-[11px] flex items-center justify-center shadow-2xs">1</span>
+                        <label className="text-xs font-bold text-purple-950 uppercase tracking-wide">
+                          CARİ HESAP KODU <span className="text-[11px] font-normal text-purple-700">(Otomatik: 120/320 . İl Kodu . VKN/TCKN)</span>
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            isCustomAccountCode: !prev.isCustomAccountCode,
+                            accountCode: !prev.isCustomAccountCode ? currentComputedAccountCode : ""
+                          }));
+                        }}
+                        className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 underline flex items-center gap-1 cursor-pointer"
+                      >
+                        {formData.isCustomAccountCode ? (
+                          <>
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Otomatiğe Dön</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-3 h-3" />
+                            <span>Manuel Düzenle</span>
+                          </>
+                        )}
+                      </button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Cari Tipi *
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                      {/* Cari Tipi Seçimi */}
+                      <div className="sm:col-span-4">
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Cari Tipi (Alıcı / Satıcı) *
                         </label>
                         <select
                           value={formData.contactType}
                           onChange={(e) =>
                             setFormData({ ...formData, contactType: e.target.value as ContactType })
                           }
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                          className="w-full bg-white border border-purple-200 rounded-lg p-2 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 cursor-pointer"
                         >
-                          <option value="customer">Müşteri (120 Alıcılar)</option>
-                          <option value="vendor">Tedarikçi (320 Satıcılar)</option>
-                          <option value="both">Müşteri & Tedarikçi (120 / 320)</option>
+                          <option value="customer">120 - Alıcılar (Müşteri)</option>
+                          <option value="vendor">320 - Satıcılar (Tedarikçi)</option>
+                          <option value="both">120 / 320 - Müşteri &amp; Satıcı</option>
                         </select>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Kısa Unvan / İsim *
+                      {/* Cari Hesap Kodu Canlı Gösterimi / Giriş */}
+                      <div className="sm:col-span-8">
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Üretilen Cari Hesap Kodu
                         </label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="ör: TeknoSoft A.Ş."
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        />
+                        {formData.isCustomAccountCode ? (
+                          <input
+                            type="text"
+                            value={formData.accountCode}
+                            onChange={(e) => setFormData({ ...formData, accountCode: e.target.value })}
+                            placeholder="ör: 120.34.1234567890"
+                            className="w-full bg-white border border-purple-300 rounded-lg p-2 text-xs font-mono font-bold text-purple-950 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                          />
+                        ) : (
+                          <div className="w-full bg-white border-2 border-purple-300/80 rounded-lg p-2 text-xs font-mono font-black text-purple-950 flex flex-wrap items-center justify-between gap-1 shadow-2xs">
+                            <span className="tracking-wider text-sm text-purple-900">
+                              {currentComputedAccountCode}
+                            </span>
+                            <div className="flex items-center gap-1.5 text-[10px] font-sans font-normal text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                              <span><b>{prefixNumber}</b> ({formData.contactType === "vendor" ? "Satıcı" : "Alıcı"})</span>
+                              <span>•</span>
+                              <span><b>{currentPlateCode}</b> ({formData.city || "İstanbul"})</span>
+                              <span>•</span>
+                              <span><b>{formData.taxNumber && formData.taxNumber.trim() ? formData.taxNumber.trim() : "0000000000"}</b></span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
+                  </div>
 
+                  {/* 2. V.K.N. / T.C.K.N & 3. VERGİ DAİRESİ */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    {/* 2- V.K.N. / T.C.K.N */}
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Cari Hesap Kodu (Otomatik 120 / 320 Formatı)
-                      </label>
-                      <div className="w-full bg-purple-50/80 border border-purple-200 rounded-xl p-2 text-xs font-mono font-bold text-purple-950 flex items-center justify-between">
-                        <span>
-                          {formData.contactType === "vendor" ? "320." : "120."}
-                          {formData.taxNumber && formData.taxNumber.trim() ? formData.taxNumber.trim() : "0000000000"}
-                        </span>
-                        <span className="text-[10px] text-purple-700 font-sans font-normal">
-                          {formData.contactType === "vendor" ? "320 Satıcılar Hesabı" : "120 Alıcılar Hesabı"}
-                        </span>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">2</span>
+                          <label className="text-xs font-bold text-slate-800">
+                            V.K.N. / T.C.K.N
+                          </label>
+                        </div>
+                        {formData.taxNumber && (
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                              formData.taxNumber.length === 10
+                                ? "bg-emerald-100 text-emerald-700"
+                                : formData.taxNumber.length === 11
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {formData.taxNumber.length === 10
+                              ? "✓ 10 Hane (VKN)"
+                              : formData.taxNumber.length === 11
+                              ? "✓ 11 Hane (TCKN)"
+                              : `${formData.taxNumber.length} Hane`}
+                          </span>
+                        )}
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Resmi Ticari Şirket Unvanı
-                      </label>
                       <input
                         type="text"
-                        placeholder="ör: TeknoSoft Yazılım ve Teknoloji A.Ş."
+                        maxLength={11}
+                        placeholder="10 haneli VKN veya 11 haneli TCKN"
+                        value={formData.taxNumber}
+                        onChange={(e) => {
+                          const cleanVal = e.target.value.replace(/\D/g, "");
+                          setFormData({ ...formData, taxNumber: cleanVal });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+
+                    {/* 3- VERGİ DAİRESİ */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">3</span>
+                          <label className="text-xs font-bold text-slate-800">
+                            VERGİ DAİRESİ {formData.city ? `(${formData.city})` : ""}
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomTaxOffice(!isCustomTaxOffice)}
+                          className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                        >
+                          {isCustomTaxOffice ? "Listeden Seç" : "Manuel Gir"}
+                        </button>
+                      </div>
+                      {isCustomTaxOffice ? (
+                        <input
+                          type="text"
+                          placeholder="ör: Mecidiyeköy Vergi Dairesi"
+                          value={formData.taxOffice}
+                          onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        />
+                      ) : (
+                        <select
+                          value={formData.taxOffice}
+                          onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                        >
+                          {taxOfficeOptions.map((vd) => (
+                            <option key={vd} value={vd}>
+                              {vd}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 4. Resmi Ticari Şirket Unvanı & 5. Kısa Unvan / İsim */}
+                  <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    {/* 4- Resmi Ticari Şirket Unvanı */}
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">4</span>
+                        <label className="text-xs font-bold text-slate-800">
+                          Resmi Ticari Şirket Unvanı
+                        </label>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="ör: TeknoSoft Yazılım ve Bilişim Sanayi Ticaret Anonim Şirketi"
                         value={formData.companyTitle}
-                        onChange={(e) => setFormData({ ...formData, companyTitle: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData((prev) => ({
+                            ...prev,
+                            companyTitle: val,
+                            name: prev.name ? prev.name : val.slice(0, 35),
+                          }));
+                        }}
                         className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+
+                    {/* 5- Kısa Unvan / İsim */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">5</span>
+                          <label className="text-xs font-bold text-slate-800">
+                            Kısa Unvan / İsim *
+                          </label>
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-normal">
+                          (Listelerde ve aramalarda görünen pratik isim)
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        placeholder="ör: TeknoSoft A.Ş. veya Ahmet Yılmaz"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                       />
                     </div>
                   </div>
 
-                  {/* SECTION 2: Vergi Dairesi ve Numarası */}
+                  {/* 6. Cari Hesap Adres Bilgileri BÖLÜMÜ */}
                   <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
                     <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                        <Building className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Vergi Dairesi & Numarası (Türkiye Listesi)</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">6</span>
+                        <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                        <span className="text-xs font-bold text-slate-800">Cari Hesap Adres Bilgileri BÖLÜMÜ</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomTaxOffice(!isCustomTaxOffice)}
-                        className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
-                      >
-                        {isCustomTaxOffice ? "Listeden Seç" : "Manuel Gir"}
-                      </button>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        TrAdres Canlı Katalog
+                      </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {/* İl Seçimi (Plaka kodlarıyla) */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Vergi Dairesi {formData.city ? `(${formData.city})` : ""}
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          İl (Türkiye 81 İl) *
                         </label>
-                        {isCustomTaxOffice ? (
+                        <select
+                          value={formData.city}
+                          onChange={(e) => handleCityChange(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                        >
+                          {(trAdresProvinces.length > 0 ? trAdresProvinces : ALL_81_PROVINCES).map((prov) => (
+                            <option key={prov.code} value={prov.name}>
+                              {prov.code} - {prov.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* İlçe */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                            <span>İlçe</span>
+                            {isLoadingDistricts && <span className="text-[10px] text-indigo-600 font-normal">yükleniyor...</span>}
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setIsCustomDistrict(!isCustomDistrict)}
+                            className="text-[10px] text-indigo-600 hover:underline"
+                          >
+                            {isCustomDistrict ? "Listeden" : "Manuel"}
+                          </button>
+                        </div>
+                        {isCustomDistrict ? (
                           <input
                             type="text"
-                            placeholder="ör: Mecidiyeköy Vergi Dairesi"
-                            value={formData.taxOffice}
-                            onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
+                            placeholder="İlçe girin"
+                            value={formData.district}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, val, formData.city, formData.doorNo, formData.postalCode);
+                              setFormData(prev => ({ ...prev, district: val, address: newAddr }));
+                            }}
                             className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                           />
                         ) : (
                           <select
-                            value={formData.taxOffice}
-                            onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
+                            value={formData.district}
+                            onChange={(e) => handleDistrictChange(e.target.value)}
                             className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
                           >
-                            {taxOfficeOptions.map((vd) => (
-                              <option key={vd} value={vd}>
-                                {vd}
-                              </option>
+                            {districtOptions.map((d) => (
+                              <option key={d} value={d}>{d}</option>
                             ))}
                           </select>
                         )}
                       </div>
 
+                      {/* Mahalle */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-semibold text-slate-700">
-                            VKN / TCKN No
+                          <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                            <span>Mahalle</span>
+                            {isLoadingNeighborhoods && <span className="text-[10px] text-indigo-600 font-normal">yükleniyor...</span>}
                           </label>
-                          {formData.taxNumber && (
-                            <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                                formData.taxNumber.length === 10 || formData.taxNumber.length === 11
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-amber-100 text-amber-700"
-                              }`}
-                            >
-                              {formData.taxNumber.length === 10
-                                ? "VKN (10 hane)"
-                                : formData.taxNumber.length === 11
-                                ? "TCKN (11 hane)"
-                                : `${formData.taxNumber.length} Hane`}
-                            </span>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => setIsCustomNeighborhood(!isCustomNeighborhood)}
+                            className="text-[10px] text-indigo-600 hover:underline"
+                          >
+                            {isCustomNeighborhood ? "Listeden" : "Manuel"}
+                          </button>
                         </div>
+                        {isCustomNeighborhood ? (
+                          <input
+                            type="text"
+                            placeholder="Mahalle girin"
+                            value={formData.neighborhood}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const newAddr = compileAddress(val, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode);
+                              setFormData(prev => ({ ...prev, neighborhood: val, address: newAddr }));
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                          />
+                        ) : (
+                          <select
+                            value={formData.neighborhood}
+                            onChange={(e) => handleNeighborhoodChange(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                          >
+                            {neighborhoodOptions.map((n) => (
+                              <option key={n} value={n}>{n}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                      {/* Cadde / Sokak */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                          <span>Cadde / Sokak / Bulvar</span>
+                          <span className="text-[10px] text-slate-400 font-normal">Öneri listeli</span>
+                        </label>
                         <input
                           type="text"
-                          placeholder="10 (VKN) veya 11 (TCKN) haneli numara"
-                          value={formData.taxNumber}
-                          onChange={(e) => setFormData({ ...formData, taxNumber: e.target.value })}
+                          list="contacts-street-datalist"
+                          placeholder="ör: Bağdat Caddesi / Atatürk Bulvarı / 101. Sokak"
+                          value={formData.street}
+                          onChange={(e) => handleStreetChange(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        />
+                        <datalist id="contacts-street-datalist">
+                          {COMMON_STREET_TYPES.map((st, idx) => (
+                            <option key={`${st}-${idx}`} value={st} />
+                          ))}
+                        </datalist>
+                      </div>
+
+                      {/* Bina No */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Bina No / Blok
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="ör: No: 12"
+                          value={formData.buildingNo}
+                          onChange={(e) => handleBuildingNoChange(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        />
+                      </div>
+
+                      {/* Posta Kodu / Kapı */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Daire / Posta Kodu
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="ör: D: 4 / 34710"
+                          value={formData.postalCode}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, val);
+                            setFormData(prev => ({ ...prev, postalCode: val, address: newAddr }));
+                          }}
                           className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                         />
                       </div>
                     </div>
-                  </div>
 
-                  {/* SECTION 3: Adres Bilgileri */}
-                  <AddressSelector
-                    title="Cari Hesap Adres Bilgileri"
-                    address={{
-                      country: "Türkiye",
-                      city: formData.city || "İstanbul",
-                      district: formData.district || "Kadıköy",
-                      neighborhood: formData.neighborhood || "Caferağa",
-                      street: formData.street || "",
-                      buildingNo: formData.buildingNo || "",
-                      doorNo: "",
-                      postalCode: "",
-                      fullAddress: formData.address || "",
-                    }}
-                    onChange={(updatedDetails) => {
-                      setFormData((prev) => ({
-                        ...prev,
-                        city: updatedDetails.city,
-                        district: updatedDetails.district,
-                        neighborhood: updatedDetails.neighborhood,
-                        street: updatedDetails.street,
-                        buildingNo: updatedDetails.buildingNo,
-                        address: updatedDetails.fullAddress || prev.address,
-                      }));
-                    }}
-                  />
-
-                  {/* SECTION 4: İletişim Bilgileri ve Notlar */}
-                  <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Telefon
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="+90 212 000 0000"
-                          value={formData.phone}
-                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          E-posta
-                        </label>
-                        <input
-                          type="email"
-                          placeholder="muhasebe@firma.com"
-                          value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        />
-                      </div>
-                    </div>
-
+                    {/* Tam Açık Adres */}
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Özel Notlar
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Tam Açık Adres (Fatura &amp; Tebligat Adresi)
                       </label>
                       <textarea
                         rows={2}
-                        placeholder="Sözleşme şartları, özel iskonto oranı vb..."
-                        value={formData.notes}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        value={formData.address}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData(prev => ({
+                            ...prev,
+                            address: val,
+                            shippingAddress: prev.isSameShippingAddress ? val : prev.shippingAddress,
+                          }));
+                        }}
                         className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                       />
                     </div>
                   </div>
+
+                  {/* 7. İLGİLİ KİŞİ & 8. TELEFON & 9. E POSTA */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    {/* 7- İLGİLİ KİŞİ */}
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">7</span>
+                        <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                        <label className="text-xs font-bold text-slate-800">
+                          İLGİLİ KİŞİ
+                        </label>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="ör: Ahmet Yılmaz (Satın Alma)"
+                        value={formData.contactPerson}
+                        onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+
+                    {/* 8- TELEFON */}
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">8</span>
+                        <Phone className="w-3.5 h-3.5 text-indigo-600" />
+                        <label className="text-xs font-bold text-slate-800">
+                          TELEFON
+                        </label>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="ör: 0212 555 12 34 / 0532 555 12 34"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+
+                    {/* 9- E POSTA */}
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">9</span>
+                        <Mail className="w-3.5 h-3.5 text-indigo-600" />
+                        <label className="text-xs font-bold text-slate-800">
+                          E POSTA
+                        </label>
+                      </div>
+                      <input
+                        type="email"
+                        placeholder="ör: muhasebe@firma.com"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 10. SEVKİYAT ADRESİ */}
+                  <div className="space-y-2.5 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">10</span>
+                        <Truck className="w-3.5 h-3.5 text-indigo-600" />
+                        <span className="text-xs font-bold text-slate-800">SEVKİYAT ADRESİ</span>
+                      </div>
+                      <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.isSameShippingAddress}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setFormData(prev => ({
+                              ...prev,
+                              isSameShippingAddress: checked,
+                              shippingAddress: checked ? prev.address : prev.shippingAddress
+                            }));
+                          }}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span>Cari / Fatura Adresi ile Aynı</span>
+                      </label>
+                    </div>
+
+                    {!formData.isSameShippingAddress && (
+                      <div className="space-y-1 animate-fadeIn">
+                        <label className="block text-[11px] font-semibold text-slate-700">
+                          Depo / Sevkiyat / Mal Teslim Adresi
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="ör: Organize Sanayi Bölgesi 4. Cadde No: 18 Depo 2, Tuzla / İstanbul (Teslim Yetkilisi: Depo Sorumlusu)"
+                          value={formData.shippingAddress}
+                          onChange={(e) => setFormData({ ...formData, shippingAddress: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Ekstra: Özel Notlar */}
+                  <div className="space-y-2 bg-slate-50/80 p-3 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Özel Cari Notları &amp; Sözleşme Şartları (İsteğe Bağlı)
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Özel iskonto oranı, vade günü (30 gün/60 gün), banka IBAN bilgileri veya sözleşme notları..."
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                  </div>
+
                 </div>
 
                 {/* Footer */}
-                <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200/80 cursor-pointer transition-colors"
-                  >
-                    İptal
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>{editingContact ? "Güncelle" : "Cari Hesabı Kaydet"}</span>
-                  </button>
+                <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-medium text-slate-500 hidden sm:block">
+                    Hesap Kodu: <span className="font-mono font-bold text-purple-900">{currentComputedAccountCode}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200/80 cursor-pointer transition-colors"
+                    >
+                      İptal
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>{editingContact ? "Güncelle" : "Cari Hesabı Kaydet"}</span>
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
