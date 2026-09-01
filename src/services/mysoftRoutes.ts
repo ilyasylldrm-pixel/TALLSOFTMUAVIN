@@ -348,6 +348,16 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     }),
   );
 
+  /** Check if a recipient VKN/TCKN is an e-Fatura registered taxpayer. */
+  router.get(
+    "/check-recipient/:vknTckn",
+    run((req) => {
+      const vknTckn = textParam(req.params.vknTckn);
+      if (!vknTckn) throw new InvalidMysoftRequestError("vknTckn is required");
+      return client.checkRecipientTaxpayer(vknTckn);
+    }),
+  );
+
   // Browser-facing compatibility surface.  The UI intentionally talks to a
   // single /e-documents resource while the server-side routes below retain a
   // direction-specific form for integrations and explicit API consumers.

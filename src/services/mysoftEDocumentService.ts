@@ -2483,10 +2483,73 @@ export function createMysoftEDocumentClient(
   return new MysoftEDocumentClient(config);
 }
 
+export interface RecipientTaxpayerStatus {
+  vknTckn: string;
+  isEFaturaUser: boolean;
+  documentType: "EFATURA" | "EARSIVFATURA";
+  suggestedProfile: "TICARIFATURA" | "TEMELFATURA" | "EARSIVFATURA";
+  title?: string;
+  pkAlias?: string;
+  gbAlias?: string;
+  taxOffice?: string;
+  city?: string;
+}
+
+const recipientCache = new Map<string, RecipientTaxpayerStatus>();
+
+/**
+ * Live check whether a buyer VKN/TCKN is a registered GİB e-Fatura taxpayer.
+ * Determines whether outgoing invoice must be e-Fatura vs e-Arşiv.
+ */
+export async function checkRecipientTaxpayerStatus(
+  vknTckn: string,
+  signal?: AbortSignal
+): Promise<RecipientTaxpayerStatus> {
+  const clean = String(vknTckn || "").replace(/\D/g, "").trim();
+  if (!clean || (clean.length !== 10 && clean.length !== 11)) {
+    return {
+      vknTckn: clean,
+      isEFaturaUser: false,
+      documentType: "EARSIVFATURA",
+      suggestedProfile: "EARSIVFATURA",
+    };
+  }
+  if (recipientCache.has(clean)) {
+    return recipientCache.get(clean)!;
+  }
+  try {
+    const res = await fetch(`/api/mysoft/check-recipient/${encodeURIComponent(clean)}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal,
+    });
+    if (res.ok) {
+      const data: RecipientTaxpayerStatus = await res.json();
+      recipientCache.set(clean, data);
+      return data;
+    }
+  } catch (err) {
+    console.warn("Recipient taxpayer check failed, using fallback:", err);
+  }
+  // Client-side fallback: 10-digit VKNs simulate corporate e-fatura, 11-digit TCKN simulate individual e-arsiv
+  const isCorporate = clean.length === 10;
+  const fallback: RecipientTaxpayerStatus = {
+    vknTckn: clean,
+    isEFaturaUser: isCorporate,
+    documentType: isCorporate ? "EFATURA" : "EARSIVFATURA",
+    suggestedProfile: isCorporate ? "TICARIFATURA" : "EARSIVFATURA",
+    pkAlias: isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : undefined,
+    gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : undefined,
+  };
+  recipientCache.set(clean, fallback);
+  return fallback;
+}
+
 // Stable alias for code that refers to this as the generic Mysoft service.
 export const mysoftEDocumentService = {
   list: listMysoftEDocuments,
   get: getMysoftEDocument,
   download: downloadMysoftEDocument,
   sync: syncMysoftEDocuments,
+  checkRecipient: checkRecipientTaxpayerStatus,
 };

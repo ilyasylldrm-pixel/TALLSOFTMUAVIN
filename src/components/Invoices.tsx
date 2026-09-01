@@ -21,7 +21,11 @@ import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { NavItem } from "./Sidebar";
-import { sendMysoftOutgoingInvoice } from "../services/mysoftEDocumentService";
+import {
+  sendMysoftOutgoingInvoice,
+  checkRecipientTaxpayerStatus,
+  RecipientTaxpayerStatus,
+} from "../services/mysoftEDocumentService";
 import {
   buildMysoftInvoiceOutboxPayload,
   extractMysoftOutboxResult,
@@ -205,6 +209,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
     readStoredMysoftTenantVkn() ||
       normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber),
   );
+  const [recipientStatus, setRecipientStatus] = useState<RecipientTaxpayerStatus | null>(null);
+  const [isCheckingRecipient, setIsCheckingRecipient] = useState<boolean>(false);
 
   useEffect(() => {
     const fromSettings = normalizeMysoftTenantIdentifier(
@@ -212,6 +218,37 @@ export const Invoices: React.FC<InvoicesProps> = ({
     );
     if (fromSettings) setMysoftTenantVkn(fromSettings);
   }, [companySettings.tenantIdentifierNumber]);
+
+  // Live e-Fatura vs e-Arşiv Recipient Taxpayer Auto-Detection
+  useEffect(() => {
+    const contact = contacts.find((c) => c.id === contactId);
+    const taxNum = (contact?.taxNumber || "").replace(/\D/g, "").trim();
+    if (!taxNum || (taxNum.length !== 10 && taxNum.length !== 11)) {
+      setRecipientStatus(null);
+      return;
+    }
+
+    let isMounted = true;
+    setIsCheckingRecipient(true);
+    checkRecipientTaxpayerStatus(taxNum)
+      .then((status) => {
+        if (isMounted) {
+          setRecipientStatus(status);
+          if (status.isEFaturaUser) {
+            setMysoftEDocType("e_fatura");
+          } else {
+            setMysoftEDocType("e_arsiv");
+          }
+        }
+      })
+      .finally(() => {
+        if (isMounted) setIsCheckingRecipient(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [contactId, contacts]);
 
   const handleQuickCreateContact = (e: React.FormEvent) => {
     e.preventDefault();
@@ -495,12 +532,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
       eDocumentType: mysoftEDocType,
       isSaveAsDraft: true,
       tenantIdentifierNumber: mysoftTenantVkn,
+      pkAlias: recipientStatus?.pkAlias,
+      gbAlias: recipientStatus?.gbAlias,
     });
   }, [
     contactId,
     contacts,
     companySettings,
     mysoftTenantVkn,
+    recipientStatus,
     dueDate,
     formDocKind,
     invType,
@@ -724,6 +764,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
           eDocumentType: mysoftEDocType,
           isSaveAsDraft: false,
           tenantIdentifierNumber: mysoftTenantVkn,
+          pkAlias: recipientStatus?.pkAlias,
+          gbAlias: recipientStatus?.gbAlias,
         });
         const result = await sendMysoftOutgoingInvoice(payload);
         const outbox = extractMysoftOutboxResult(result);
@@ -2381,29 +2423,80 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           hintVkn={companySettings.tenantIdentifierNumber}
                           onSelect={setMysoftTenantVkn}
                         />
-                        <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setMysoftEDocType("e_fatura")}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
-                            mysoftEDocType === "e_fatura"
-                              ? "bg-purple-600 text-white border-purple-600"
-                              : "bg-white text-slate-600 border-slate-200"
-                          }`}
-                        >
-                          e-Fatura
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMysoftEDocType("e_arsiv")}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
-                            mysoftEDocType === "e_arsiv"
-                              ? "bg-purple-600 text-white border-purple-600"
-                              : "bg-white text-slate-600 border-slate-200"
-                          }`}
-                        >
-                          e-Arşiv
-                        </button>
+                        {/* Live GİB Recipient Taxpayer Status Card */}
+                        {isCheckingRecipient ? (
+                          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs text-slate-600">
+                            <span className="w-3.5 h-3.5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Alıcı GİB e-Fatura mükellefiyeti sorgulanıyor...</span>
+                          </div>
+                        ) : recipientStatus ? (
+                          recipientStatus.isEFaturaUser ? (
+                            <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  🟢 GİB e-Fatura Mükellefi (Otomatik Algılandı)
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-200 text-emerald-800">
+                                  e-Fatura Zorunlu
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-emerald-700">
+                                Alıcı vergi kimlik numarası GİB sistemine kayıtlıdır. Fatura doğrudan UBL posta kutusuna iletilecektir.
+                              </p>
+                              {recipientStatus.pkAlias && (
+                                <div className="text-[10px] font-mono text-emerald-800 bg-white/70 border border-emerald-200 px-2 py-0.5 rounded inline-block">
+                                  Posta Kutusu: {recipientStatus.pkAlias}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-2.5 bg-sky-50/80 border border-sky-200 rounded-xl space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-sky-900">
+                                  <span className="w-2 h-2 rounded-full bg-sky-500" />
+                                  🔵 e-Arşiv Fatura Alıcısı
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-sky-200 text-sky-800">
+                                  e-Arşiv
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-sky-700">
+                                Alıcının GİB e-Fatura kaydı bulunmamaktadır (Şahıs / Nihai Tüketici / e-Faturaya geçmemiş). Belge resmi e-Arşiv Fatura olarak düzenlenecektir.
+                              </p>
+                            </div>
+                          )
+                        ) : null}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setMysoftEDocType("e_fatura")}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                              mysoftEDocType === "e_fatura"
+                                ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            <span>e-Fatura</span>
+                            {recipientStatus?.isEFaturaUser && (
+                              <span className="text-[9px] bg-emerald-400 text-emerald-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMysoftEDocType("e_arsiv")}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                              mysoftEDocType === "e_arsiv"
+                                ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            <span>e-Arşiv</span>
+                            {recipientStatus && !recipientStatus.isEFaturaUser && (
+                              <span className="text-[9px] bg-sky-300 text-sky-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
+                            )}
+                          </button>
                         </div>
                       </div>
                     )}

@@ -1228,6 +1228,78 @@ export class MysoftEdocumentClient {
   }
 
   /**
+   * Check if a recipient VKN/TCKN is a registered GİB e-Fatura taxpayer.
+   * Returns whether the invoice should be e-Fatura vs e-Arşiv, along with default pkAlias / gbAlias.
+   */
+  async checkRecipientTaxpayer(vknTckn: string): Promise<{
+    vknTckn: string;
+    isEFaturaUser: boolean;
+    documentType: "EFATURA" | "EARSIVFATURA";
+    suggestedProfile: "TICARIFATURA" | "TEMELFATURA" | "EARSIVFATURA";
+    title?: string;
+    pkAlias?: string;
+    gbAlias?: string;
+    taxOffice?: string;
+    city?: string;
+  }> {
+    const clean = String(vknTckn || "").replace(/\D/g, "").trim();
+    if (!clean || (clean.length !== 10 && clean.length !== 11)) {
+      return {
+        vknTckn: clean,
+        isEFaturaUser: false,
+        documentType: "EARSIVFATURA",
+        suggestedProfile: "EARSIVFATURA",
+      };
+    }
+
+    if (this.config.mockMode) {
+      // In mock/demo mode: 10-digit VKNs simulate corporate e-Fatura taxpayers
+      const isCorporate = clean.length === 10;
+      return {
+        vknTckn: clean,
+        isEFaturaUser: isCorporate,
+        documentType: isCorporate ? "EFATURA" : "EARSIVFATURA",
+        suggestedProfile: isCorporate ? "TICARIFATURA" : "EARSIVFATURA",
+        title: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi" : "Bireysel / e-Arşiv Alıcısı",
+        pkAlias: isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : undefined,
+        gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : undefined,
+      };
+    }
+
+    try {
+      // 1. Try tenantInfo or tenantWithIdentifier
+      const info = (await this.getTenantInfo(clean)) as Record<string, unknown> | null;
+      if (info && info.succeed !== false) {
+        const data = (info.data || info) as Record<string, unknown>;
+        const title = typeof data.unvan === "string" ? data.unvan : typeof data.title === "string" ? data.title : typeof data.companyName === "string" ? data.companyName : undefined;
+        const pkAlias = typeof data.pkAlias === "string" ? data.pkAlias : `urn:mail:defaultpk@${clean}.com.tr`;
+        const gbAlias = typeof data.gbAlias === "string" ? data.gbAlias : `urn:mail:defaultgb@${clean}.com.tr`;
+        return {
+          vknTckn: clean,
+          isEFaturaUser: true,
+          documentType: "EFATURA",
+          suggestedProfile: "TICARIFATURA",
+          title,
+          pkAlias,
+          gbAlias,
+          taxOffice: typeof data.taxOffice === "string" ? data.taxOffice : undefined,
+          city: typeof data.city === "string" ? data.city : undefined,
+        };
+      }
+    } catch {
+      // If lookup fails or not found, fallback to e-Arşiv
+    }
+
+    // Default when not in e-Fatura registry: e-Arşiv
+    return {
+      vknTckn: clean,
+      isEFaturaUser: false,
+      documentType: "EARSIVFATURA",
+      suggestedProfile: "EARSIVFATURA",
+    };
+  }
+
+  /**
    * Fill empty design/numerator fields from the customer's Mysoft portal
    * defaults before posting invoiceOutbox. Explicit payload values win.
    */
