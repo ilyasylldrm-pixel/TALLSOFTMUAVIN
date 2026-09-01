@@ -1305,30 +1305,126 @@ export class MysoftEdocumentClient {
 
     try {
       // 1. Try tenantInfo or tenantWithIdentifier
-      const info = (await this.getTenantInfo(clean)) as Record<string, unknown> | null;
+      let info = (await this.getTenantInfo(clean)) as Record<string, unknown> | null;
+      if (!info || info.succeed === false || (!info.data && !info.title && !info.unvan)) {
+        info = (await this.getTenantWithIdentifier(clean)) as Record<string, unknown> | null;
+      }
+
       if (info && info.succeed !== false) {
-        const data = (info.data || info) as Record<string, unknown>;
-        const title = typeof data.unvan === "string" ? data.unvan : typeof data.title === "string" ? data.title : typeof data.companyName === "string" ? data.companyName : undefined;
-        const pkAlias = typeof data.pkAlias === "string" ? data.pkAlias : `urn:mail:defaultpk@${clean}.com.tr`;
-        const gbAlias = typeof data.gbAlias === "string" ? data.gbAlias : `urn:mail:defaultgb@${clean}.com.tr`;
-        const taxOffice = typeof data.taxOffice === "string" ? data.taxOffice : typeof data.vergiDairesi === "string" ? data.vergiDairesi : "Kadıköy V.D.";
-        const city = typeof data.city === "string" ? data.city : typeof data.il === "string" ? data.il : defaultCity;
-        const district = typeof data.district === "string" ? data.district : typeof data.ilce === "string" ? data.ilce : defaultDist;
-        const neighborhood = typeof data.neighborhood === "string" ? data.neighborhood : typeof data.mahalle === "string" ? data.mahalle : defaultNh;
-        const street = typeof data.street === "string" ? data.street : typeof data.caddeSokak === "string" ? data.caddeSokak : typeof data.cadde === "string" ? data.cadde : typeof data.sokak === "string" ? data.sokak : defaultSt;
-        const buildingNo = typeof data.buildingNo === "string" ? data.buildingNo : typeof data.binaNo === "string" ? data.binaNo : typeof data.kapiNo === "string" ? data.kapiNo : defaultBld;
-        const doorNo = typeof data.doorNo === "string" ? data.doorNo : typeof data.daireNo === "string" ? data.daireNo : typeof data.icKapiNo === "string" ? data.icKapiNo : defaultDoor;
-        const postalCode = typeof data.postalCode === "string" ? data.postalCode : typeof data.postaKodu === "string" ? data.postaKodu : defaultPc;
-        const address = typeof data.address === "string" ? data.address : typeof data.adres === "string" ? data.adres : typeof data.fullAddress === "string" ? data.fullAddress : `${neighborhood} ${street} ${buildingNo} ${doorNo}, ${district} / ${city} (PK: ${postalCode})`;
-        const phone = typeof data.phone === "string" ? data.phone : typeof data.telefon === "string" ? data.telefon : typeof data.tel === "string" ? data.tel : typeof data.cepTel === "string" ? data.cepTel : "0216 444 0 123";
-        const email = typeof data.email === "string" ? data.email : typeof data.eposta === "string" ? data.eposta : typeof data.ePosta === "string" ? data.ePosta : `muhasebe@firma${clean.slice(-4)}.com.tr`;
-        const contactPerson = typeof data.contactPerson === "string" ? data.contactPerson : typeof data.yetkili === "string" ? data.yetkili : "Finans & Muhasebe Sorumlusu";
+        const data = ((info.data || info.result || info) as Record<string, unknown>) || {};
+        const title =
+          typeof data.title === "string" ? data.title :
+          typeof data.unvan === "string" ? data.unvan :
+          typeof data.companyName === "string" ? data.companyName :
+          typeof data.name === "string" ? data.name :
+          undefined;
+
+        const pkAlias =
+          typeof data.pkAlias === "string" ? data.pkAlias :
+          typeof data.postboxAlias === "string" ? data.postboxAlias :
+          typeof data.mailbox === "string" ? data.mailbox :
+          `urn:mail:defaultpk@${clean}.com.tr`;
+
+        const gbAlias =
+          typeof data.gbAlias === "string" ? data.gbAlias :
+          typeof data.senderAlias === "string" ? data.senderAlias :
+          `urn:mail:defaultgb@${clean}.com.tr`;
+
+        const taxOffice =
+          typeof data.taxOffice === "string" ? data.taxOffice :
+          typeof data.taxOfficeName === "string" ? data.taxOfficeName :
+          typeof data.vergiDairesi === "string" ? data.vergiDairesi :
+          "Kadıköy V.D.";
+
+        const city =
+          typeof data.city === "string" ? data.city :
+          typeof data.cityName === "string" ? data.cityName :
+          typeof data.il === "string" ? data.il :
+          typeof data.sehir === "string" ? data.sehir :
+          defaultCity;
+
+        const district =
+          typeof data.district === "string" ? data.district :
+          typeof data.districtName === "string" ? data.districtName :
+          typeof data.ilce === "string" ? data.ilce :
+          defaultDist;
+
+        const neighborhood =
+          typeof data.neighborhood === "string" ? data.neighborhood :
+          typeof data.neighborhoodName === "string" ? data.neighborhoodName :
+          typeof data.mahalle === "string" ? data.mahalle :
+          defaultNh;
+
+        const street =
+          typeof data.street === "string" ? data.street :
+          typeof data.streetName === "string" ? data.streetName :
+          typeof data.caddeSokak === "string" ? data.caddeSokak :
+          typeof data.cadde === "string" ? data.cadde :
+          typeof data.sokak === "string" ? data.sokak :
+          defaultSt;
+
+        const buildingNo =
+          typeof data.buildingNumber === "string" ? data.buildingNumber :
+          typeof data.buildingNo === "string" ? data.buildingNo :
+          typeof data.binaNo === "string" ? data.binaNo :
+          typeof data.kapiNo === "string" ? data.kapiNo :
+          defaultBld;
+
+        const doorNo =
+          typeof data.doorNumber === "string" ? data.doorNumber :
+          typeof data.doorNo === "string" ? data.doorNo :
+          typeof data.daireNo === "string" ? data.daireNo :
+          typeof data.icKapiNo === "string" ? data.icKapiNo :
+          defaultDoor;
+
+        const postalCode =
+          typeof data.postalCode === "string" ? data.postalCode :
+          typeof data.postaKodu === "string" ? data.postaKodu :
+          typeof data.zipCode === "string" ? data.zipCode :
+          defaultPc;
+
+        const address =
+          typeof data.address === "string" ? data.address :
+          typeof data.adres === "string" ? data.adres :
+          typeof data.fullAddress === "string" ? data.fullAddress :
+          typeof data.acikAdres === "string" ? data.acikAdres :
+          `${neighborhood} ${street} ${buildingNo} ${doorNo}, ${district} / ${city} (PK: ${postalCode})`;
+
+        const phone =
+          typeof data.phoneNumber === "string" ? data.phoneNumber :
+          typeof data.phone === "string" ? data.phone :
+          typeof data.telefon === "string" ? data.telefon :
+          typeof data.tel === "string" ? data.tel :
+          typeof data.mobileNumber === "string" ? data.mobileNumber :
+          typeof data.cepTel === "string" ? data.cepTel :
+          "0216 444 0 123";
+
+        const email =
+          typeof data.email === "string" ? data.email :
+          typeof data.eMail === "string" ? data.eMail :
+          typeof data.eposta === "string" ? data.eposta :
+          typeof data.ePosta === "string" ? data.ePosta :
+          typeof data.emailAddress === "string" ? data.emailAddress :
+          `muhasebe@firma${clean.slice(-4)}.com.tr`;
+
+        const contactPerson =
+          typeof data.contactPerson === "string" ? data.contactPerson :
+          typeof data.authorizedPerson === "string" ? data.authorizedPerson :
+          typeof data.contactName === "string" ? data.contactName :
+          typeof data.yetkili === "string" ? data.yetkili :
+          "Finans & Muhasebe Sorumlusu";
+
+        const isEFatura =
+          data.isEFaturaUser === true ||
+          data.isTaxPayer === true ||
+          data.isGibUser === true ||
+          isCorporate;
 
         return {
           vknTckn: clean,
-          isEFaturaUser: true,
-          documentType: "EFATURA",
-          suggestedProfile: "TICARIFATURA",
+          isEFaturaUser: isEFatura,
+          documentType: isEFatura ? "EFATURA" : "EARSIVFATURA",
+          suggestedProfile: isEFatura ? "TICARIFATURA" : "EARSIVFATURA",
           title,
           companyTitle: title,
           name: title ? title.split(" - ")[0].slice(0, 45).trim() : "GİB Mükellefi",
