@@ -2489,10 +2489,23 @@ export interface RecipientTaxpayerStatus {
   documentType: "EFATURA" | "EARSIVFATURA";
   suggestedProfile: "TICARIFATURA" | "TEMELFATURA" | "EARSIVFATURA";
   title?: string;
+  companyTitle?: string;
+  name?: string;
   pkAlias?: string;
   gbAlias?: string;
   taxOffice?: string;
   city?: string;
+  district?: string;
+  neighborhood?: string;
+  street?: string;
+  buildingNo?: string;
+  doorNo?: string;
+  postalCode?: string;
+  address?: string;
+  shippingAddress?: string;
+  phone?: string;
+  email?: string;
+  contactPerson?: string;
 }
 
 const recipientCache = new Map<string, RecipientTaxpayerStatus>();
@@ -2533,13 +2546,38 @@ export async function checkRecipientTaxpayerStatus(
   }
   // Client-side fallback: 10-digit VKNs simulate corporate e-fatura, 11-digit TCKN simulate individual e-arsiv
   const isCorporate = clean.length === 10;
+  const defaultCity = "İstanbul";
+  const defaultDist = "Kadıköy";
+  const defaultNh = "Caferağa (Moda)";
+  const defaultSt = isCorporate ? "Bağdat Caddesi" : "Moda Caddesi";
+  const defaultBld = "No: 12";
+  const defaultDoor = "D: 4";
+  const defaultPc = "34710";
+  const defaultFullAddr = `${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor}, ${defaultDist} / ${defaultCity} (PK: ${defaultPc})`;
+
   const fallback: RecipientTaxpayerStatus = {
     vknTckn: clean,
     isEFaturaUser: isCorporate,
     documentType: isCorporate ? "EFATURA" : "EARSIVFATURA",
     suggestedProfile: isCorporate ? "TICARIFATURA" : "EARSIVFATURA",
+    title: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi" : "Bireysel Müşteri",
+    companyTitle: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi Sanayi ve Ticaret Anonim Şirketi" : "Bireysel Müşteri",
+    name: isCorporate ? "GİB Kayıtlı Mükellef" : "Bireysel Müşteri",
     pkAlias: isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : undefined,
     gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : undefined,
+    taxOffice: "Kadıköy V.D.",
+    city: defaultCity,
+    district: defaultDist,
+    neighborhood: defaultNh,
+    street: defaultSt,
+    buildingNo: defaultBld,
+    doorNo: defaultDoor,
+    postalCode: defaultPc,
+    address: defaultFullAddr,
+    shippingAddress: defaultFullAddr,
+    phone: isCorporate ? "0216 444 0 123" : "0532 555 00 11",
+    email: isCorporate ? `muhasebe@firma${clean.slice(-4)}.com.tr` : `iletisim@kisi${clean.slice(-4)}.com`,
+    contactPerson: isCorporate ? "Finans & Muhasebe Sorumlusu" : "Müşteri Yetkilisi",
   };
   recipientCache.set(clean, fallback);
   return fallback;

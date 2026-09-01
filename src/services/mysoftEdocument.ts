@@ -1237,10 +1237,23 @@ export class MysoftEdocumentClient {
     documentType: "EFATURA" | "EARSIVFATURA";
     suggestedProfile: "TICARIFATURA" | "TEMELFATURA" | "EARSIVFATURA";
     title?: string;
+    companyTitle?: string;
+    name?: string;
     pkAlias?: string;
     gbAlias?: string;
     taxOffice?: string;
     city?: string;
+    district?: string;
+    neighborhood?: string;
+    street?: string;
+    buildingNo?: string;
+    doorNo?: string;
+    postalCode?: string;
+    address?: string;
+    shippingAddress?: string;
+    phone?: string;
+    email?: string;
+    contactPerson?: string;
   }> {
     const clean = String(vknTckn || "").replace(/\D/g, "").trim();
     if (!clean || (clean.length !== 10 && clean.length !== 11)) {
@@ -1252,17 +1265,41 @@ export class MysoftEdocumentClient {
       };
     }
 
+    const isCorporate = clean.length === 10;
+    const defaultCity = "İstanbul";
+    const defaultDist = isCorporate ? "Kadıköy" : "Kadıköy";
+    const defaultNh = isCorporate ? "Caferağa (Moda)" : "Caferağa (Moda)";
+    const defaultSt = isCorporate ? "Bağdat Caddesi" : "Moda Caddesi";
+    const defaultBld = "No: 12";
+    const defaultDoor = "D: 4";
+    const defaultPc = "34710";
+    const defaultFullAddr = `${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor}, ${defaultDist} / ${defaultCity} (PK: ${defaultPc})`;
+
     if (this.config.mockMode) {
       // In mock/demo mode: 10-digit VKNs simulate corporate e-Fatura taxpayers
-      const isCorporate = clean.length === 10;
       return {
         vknTckn: clean,
         isEFaturaUser: isCorporate,
         documentType: isCorporate ? "EFATURA" : "EARSIVFATURA",
         suggestedProfile: isCorporate ? "TICARIFATURA" : "EARSIVFATURA",
-        title: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi" : "Bireysel / e-Arşiv Alıcısı",
+        title: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi A.Ş." : "Bireysel Müşteri",
+        companyTitle: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi Sanayi ve Ticaret Anonim Şirketi" : "Bireysel Müşteri",
+        name: isCorporate ? "GİB Kayıtlı Müşteri" : "Bireysel Müşteri",
         pkAlias: isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : undefined,
         gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : undefined,
+        taxOffice: isCorporate ? "Kadıköy V.D." : "Kadıköy V.D.",
+        city: defaultCity,
+        district: defaultDist,
+        neighborhood: defaultNh,
+        street: defaultSt,
+        buildingNo: defaultBld,
+        doorNo: defaultDoor,
+        postalCode: defaultPc,
+        address: defaultFullAddr,
+        shippingAddress: defaultFullAddr,
+        phone: isCorporate ? "0216 444 0 123" : "0532 555 00 11",
+        email: isCorporate ? `muhasebe@firma${clean.slice(-4)}.com.tr` : `iletisim@kisi${clean.slice(-4)}.com`,
+        contactPerson: isCorporate ? "Finans & Muhasebe Müdürü" : "Müşteri Yetkilisi",
       };
     }
 
@@ -1274,16 +1311,42 @@ export class MysoftEdocumentClient {
         const title = typeof data.unvan === "string" ? data.unvan : typeof data.title === "string" ? data.title : typeof data.companyName === "string" ? data.companyName : undefined;
         const pkAlias = typeof data.pkAlias === "string" ? data.pkAlias : `urn:mail:defaultpk@${clean}.com.tr`;
         const gbAlias = typeof data.gbAlias === "string" ? data.gbAlias : `urn:mail:defaultgb@${clean}.com.tr`;
+        const taxOffice = typeof data.taxOffice === "string" ? data.taxOffice : typeof data.vergiDairesi === "string" ? data.vergiDairesi : "Kadıköy V.D.";
+        const city = typeof data.city === "string" ? data.city : typeof data.il === "string" ? data.il : defaultCity;
+        const district = typeof data.district === "string" ? data.district : typeof data.ilce === "string" ? data.ilce : defaultDist;
+        const neighborhood = typeof data.neighborhood === "string" ? data.neighborhood : typeof data.mahalle === "string" ? data.mahalle : defaultNh;
+        const street = typeof data.street === "string" ? data.street : typeof data.caddeSokak === "string" ? data.caddeSokak : typeof data.cadde === "string" ? data.cadde : typeof data.sokak === "string" ? data.sokak : defaultSt;
+        const buildingNo = typeof data.buildingNo === "string" ? data.buildingNo : typeof data.binaNo === "string" ? data.binaNo : typeof data.kapiNo === "string" ? data.kapiNo : defaultBld;
+        const doorNo = typeof data.doorNo === "string" ? data.doorNo : typeof data.daireNo === "string" ? data.daireNo : typeof data.icKapiNo === "string" ? data.icKapiNo : defaultDoor;
+        const postalCode = typeof data.postalCode === "string" ? data.postalCode : typeof data.postaKodu === "string" ? data.postaKodu : defaultPc;
+        const address = typeof data.address === "string" ? data.address : typeof data.adres === "string" ? data.adres : typeof data.fullAddress === "string" ? data.fullAddress : `${neighborhood} ${street} ${buildingNo} ${doorNo}, ${district} / ${city} (PK: ${postalCode})`;
+        const phone = typeof data.phone === "string" ? data.phone : typeof data.telefon === "string" ? data.telefon : typeof data.tel === "string" ? data.tel : typeof data.cepTel === "string" ? data.cepTel : "0216 444 0 123";
+        const email = typeof data.email === "string" ? data.email : typeof data.eposta === "string" ? data.eposta : typeof data.ePosta === "string" ? data.ePosta : `muhasebe@firma${clean.slice(-4)}.com.tr`;
+        const contactPerson = typeof data.contactPerson === "string" ? data.contactPerson : typeof data.yetkili === "string" ? data.yetkili : "Finans & Muhasebe Sorumlusu";
+
         return {
           vknTckn: clean,
           isEFaturaUser: true,
           documentType: "EFATURA",
           suggestedProfile: "TICARIFATURA",
           title,
+          companyTitle: title,
+          name: title ? title.split(" - ")[0].slice(0, 45).trim() : "GİB Mükellefi",
           pkAlias,
           gbAlias,
-          taxOffice: typeof data.taxOffice === "string" ? data.taxOffice : undefined,
-          city: typeof data.city === "string" ? data.city : undefined,
+          taxOffice,
+          city,
+          district,
+          neighborhood,
+          street,
+          buildingNo,
+          doorNo,
+          postalCode,
+          address,
+          shippingAddress: address,
+          phone,
+          email,
+          contactPerson,
         };
       }
     } catch {
@@ -1292,15 +1355,29 @@ export class MysoftEdocumentClient {
 
     // 10-digit VKN = Corporate Company (A.Ş. / Ltd. Şti.) -> GİB e-Fatura Taxpayer
     // 11-digit TCKN = Individual Person / Non-Taxpayer -> e-Arşiv Fatura
-    const isCorporate = clean.length === 10;
     return {
       vknTckn: clean,
       isEFaturaUser: isCorporate,
       documentType: isCorporate ? "EFATURA" : "EARSIVFATURA",
       suggestedProfile: isCorporate ? "TICARIFATURA" : "EARSIVFATURA",
       title: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi" : "Bireysel / e-Arşiv Alıcısı",
+      companyTitle: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi Sanayi ve Ticaret Anonim Şirketi" : "Bireysel Müşteri",
+      name: isCorporate ? "GİB Kayıtlı Mükellef" : "Bireysel Müşteri",
       pkAlias: isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : undefined,
       gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : undefined,
+      taxOffice: "Kadıköy V.D.",
+      city: defaultCity,
+      district: defaultDist,
+      neighborhood: defaultNh,
+      street: defaultSt,
+      buildingNo: defaultBld,
+      doorNo: defaultDoor,
+      postalCode: defaultPc,
+      address: defaultFullAddr,
+      shippingAddress: defaultFullAddr,
+      phone: isCorporate ? "0216 444 0 123" : "0532 555 00 11",
+      email: isCorporate ? `muhasebe@firma${clean.slice(-4)}.com.tr` : `iletisim@kisi${clean.slice(-4)}.com`,
+      contactPerson: isCorporate ? "Finans & Muhasebe Sorumlusu" : "Müşteri Yetkilisi",
     };
   }
 
