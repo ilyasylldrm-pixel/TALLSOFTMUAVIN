@@ -59,7 +59,10 @@ import {
   Lock,
   Unlock,
   RotateCcw,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
+import { checkRecipientTaxpayerStatus } from "../services/mysoftEDocumentService";
 import {
   ALL_81_PROVINCES,
   COMMON_STREET_TYPES,
@@ -451,6 +454,75 @@ export const Contacts: React.FC<ContactsProps> = ({
     const taxNum = formData.taxNumber && formData.taxNumber.trim() ? formData.taxNumber.trim() : "0000000000";
     return `${prefix}.${plateCode}.${taxNum}`;
   }, [formData.isCustomAccountCode, formData.accountCode, formData.contactType, formData.city, formData.taxNumber]);
+
+  // GİB / Mysoft Live Taxpayer Lookup State
+  const [isFetchingTaxpayer, setIsFetchingTaxpayer] = useState<boolean>(false);
+  const [taxpayerFetchStatus, setTaxpayerFetchStatus] = useState<{
+    success: boolean;
+    message: string;
+    isEFatura?: boolean;
+    pkAlias?: string;
+  } | null>(null);
+
+  const handleFetchTaxpayerInfo = async () => {
+    const clean = String(formData.taxNumber || "").replace(/\D/g, "").trim();
+    if (!clean || (clean.length !== 10 && clean.length !== 11)) {
+      setTaxpayerFetchStatus({
+        success: false,
+        message: "Lütfen 10 haneli kurumsal VKN veya 11 haneli TCKN giriniz.",
+      });
+      return;
+    }
+
+    setIsFetchingTaxpayer(true);
+    setTaxpayerFetchStatus(null);
+
+    try {
+      const res = await checkRecipientTaxpayerStatus(clean);
+      if (res) {
+        setFormData((prev) => {
+          const updated = { ...prev };
+          if (res.title) {
+            updated.companyTitle = res.title;
+            if (!updated.name || updated.name === prev.companyTitle || updated.name === "") {
+              updated.name = res.title.split(" - ")[0].slice(0, 45).trim();
+            }
+          }
+          if (res.taxOffice) {
+            updated.taxOffice = res.taxOffice;
+            setIsCustomTaxOffice(true);
+          }
+          if (res.city) {
+            updated.city = res.city;
+          }
+          return updated;
+        });
+
+        if (res.isEFaturaUser) {
+          setTaxpayerFetchStatus({
+            success: true,
+            message: `🟢 GİB e-Fatura Mükellefi: Bilgiler başarıyla getirildi ve aktarıldı.`,
+            isEFatura: true,
+            pkAlias: res.pkAlias,
+          });
+        } else {
+          setTaxpayerFetchStatus({
+            success: true,
+            message: `🔵 e-Arşiv Fatura Alıcısı: Bilgiler getirildi ve aktarıldı.`,
+            isEFatura: false,
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error("Mükellef sorgulama hatası:", err);
+      setTaxpayerFetchStatus({
+        success: false,
+        message: "GİB / Mysoft servisinden bilgi alınamadı. Lütfen bilgileri kontrol ediniz.",
+      });
+    } finally {
+      setIsFetchingTaxpayer(false);
+    }
+  };
 
   // Address Builder Helper
   const compileAddress = (
@@ -1933,9 +2005,11 @@ export const Contacts: React.FC<ContactsProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer hover:bg-slate-200 transition-colors"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-300 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer active:scale-95 group shrink-0"
+                  title="Pencereyi Kapat (ESC)"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4 text-slate-500 group-hover:text-rose-600 transition-transform group-hover:rotate-90" />
+                  <span className="font-extrabold">Kapat</span>
                 </button>
               </div>
 
@@ -2027,53 +2101,116 @@ export const Contacts: React.FC<ContactsProps> = ({
                   </div>
 
                   {/* 2. V.K.N. / T.C.K.N & 3. VERGİ DAİRESİ */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                    {/* 2- V.K.N. / T.C.K.N */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    {/* 2- V.K.N. / T.C.K.N with "BİLGİLERİ GETİR" BUTTON */}
+                    <div className="sm:col-span-7 space-y-1.5">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
                           <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">2</span>
                           <label className="text-xs font-bold text-slate-800">
-                            V.K.N. / T.C.K.N
+                            V.K.N. / T.C.K.N *
                           </label>
                         </div>
                         {formData.taxNumber && (
                           <span
                             className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                               formData.taxNumber.length === 10
-                                ? "bg-emerald-100 text-emerald-700"
+                                ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
                                 : formData.taxNumber.length === 11
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-amber-100 text-amber-700"
+                                ? "bg-blue-100 text-blue-700 border border-blue-200"
+                                : "bg-amber-100 text-amber-700 border border-amber-200"
                             }`}
                           >
                             {formData.taxNumber.length === 10
-                              ? "✓ 10 Hane (VKN)"
+                              ? "✓ 10 Hane (Kurumsal VKN)"
                               : formData.taxNumber.length === 11
-                              ? "✓ 11 Hane (TCKN)"
-                              : `${formData.taxNumber.length} Hane`}
+                              ? "✓ 11 Hane (Şahıs TCKN)"
+                              : `${formData.taxNumber.length} / 10-11 Hane`}
                           </span>
                         )}
                       </div>
-                      <input
-                        type="text"
-                        maxLength={11}
-                        placeholder="10 haneli VKN veya 11 haneli TCKN"
-                        value={formData.taxNumber}
-                        onChange={(e) => {
-                          const cleanVal = e.target.value.replace(/\D/g, "");
-                          setFormData({ ...formData, taxNumber: cleanVal });
-                        }}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                      />
+
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            maxLength={11}
+                            placeholder="10 haneli VKN veya 11 haneli TCKN"
+                            value={formData.taxNumber}
+                            onChange={(e) => {
+                              const cleanVal = e.target.value.replace(/\D/g, "");
+                              setFormData({ ...formData, taxNumber: cleanVal });
+                              setTaxpayerFetchStatus(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleFetchTaxpayerInfo();
+                              }
+                            }}
+                            className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleFetchTaxpayerInfo}
+                          disabled={isFetchingTaxpayer || !formData.taxNumber || (formData.taxNumber.length !== 10 && formData.taxNumber.length !== 11)}
+                          className="px-3 sm:px-3.5 py-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-800 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                          title="GİB & Mysoft sisteminden cari ünvan ve vergi dairesini otomatik getir"
+                        >
+                          {isFetchingTaxpayer ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span className="hidden sm:inline">Getiriliyor...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300 animate-pulse" />
+                              <span>Bilgileri Getir</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Live Result / Status Feedback Badge */}
+                      {taxpayerFetchStatus && (
+                        <div
+                          className={`p-2 rounded-xl border text-[11px] flex flex-wrap items-center justify-between gap-1.5 animate-fadeIn ${
+                            taxpayerFetchStatus.success
+                              ? taxpayerFetchStatus.isEFatura
+                                ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                                : "bg-sky-50 border-sky-200 text-sky-900"
+                              : "bg-rose-50 border-rose-200 text-rose-800"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {taxpayerFetchStatus.success ? (
+                              taxpayerFetchStatus.isEFatura ? (
+                                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                              ) : (
+                                <span className="w-2 h-2 rounded-full bg-sky-500" />
+                              )
+                            ) : (
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            )}
+                            <span className="font-bold">{taxpayerFetchStatus.message}</span>
+                          </div>
+                          {taxpayerFetchStatus.pkAlias && (
+                            <span className="text-[10px] font-mono font-bold bg-white/90 px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-800">
+                              PK: {taxpayerFetchStatus.pkAlias}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* 3- VERGİ DAİRESİ */}
-                    <div>
+                    <div className="sm:col-span-5">
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-1.5">
                           <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">3</span>
-                          <label className="text-xs font-bold text-slate-800">
+                          <label className="text-xs font-bold text-slate-800 truncate">
                             VERGİ DAİRESİ {formData.city ? `(${formData.city})` : ""}
                           </label>
                         </div>
