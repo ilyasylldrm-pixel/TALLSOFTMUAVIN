@@ -1287,15 +1287,20 @@ export class MysoftEdocumentClient {
         };
       }
     } catch {
-      // If lookup fails or not found, fallback to e-Arşiv
+      // If external live lookup throws, continue to deterministic VKN vs TCKN rule
     }
 
-    // Default when not in e-Fatura registry: e-Arşiv
+    // 10-digit VKN = Corporate Company (A.Ş. / Ltd. Şti.) -> GİB e-Fatura Taxpayer
+    // 11-digit TCKN = Individual Person / Non-Taxpayer -> e-Arşiv Fatura
+    const isCorporate = clean.length === 10;
     return {
       vknTckn: clean,
-      isEFaturaUser: false,
-      documentType: "EARSIVFATURA",
-      suggestedProfile: "EARSIVFATURA",
+      isEFaturaUser: isCorporate,
+      documentType: isCorporate ? "EFATURA" : "EARSIVFATURA",
+      suggestedProfile: isCorporate ? "TICARIFATURA" : "EARSIVFATURA",
+      title: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi" : "Bireysel / e-Arşiv Alıcısı",
+      pkAlias: isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : undefined,
+      gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : undefined,
     };
   }
 
