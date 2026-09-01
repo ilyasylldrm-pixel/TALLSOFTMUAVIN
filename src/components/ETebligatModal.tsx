@@ -72,10 +72,13 @@ export const ETebligatModal: React.FC<ETebligatModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 group shrink-0"
+            title="Pencereyi Kapat"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 text-white/80 group-hover:text-white transition-transform group-hover:rotate-90" />
+            <span className="font-extrabold">Kapat</span>
           </button>
         </div>
 

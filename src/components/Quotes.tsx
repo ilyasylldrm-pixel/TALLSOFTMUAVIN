@@ -592,18 +592,38 @@ export const Quotes: React.FC<QuotesProps> = ({
 
       {/* MODAL: Create New Quote / Proforma Invoice */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-purple-200/80 text-slate-900 rounded-2xl max-w-4xl w-full p-6 shadow-2xl space-y-5 my-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-purple-100 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900">
-                Yeni Proforma Fatura Oluştur
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer">
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200/90 text-slate-900 rounded-3xl max-w-4xl w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden my-auto">
+            {/* STICKY HEADER */}
+            <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-slate-200/80 flex items-center justify-between shrink-0 shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center shadow-inner shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                    Yeni Proforma Fatura & Teklif Oluştur
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Müşteri fiyat teklifi ve proforma belge düzenleme
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-300 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer active:scale-95 group shrink-0"
+                title="Pencereyi Kapat"
+              >
+                <X className="w-4 h-4 text-slate-500 group-hover:text-rose-600 transition-transform group-hover:rotate-90" />
+                <span className="font-extrabold">Kapat</span>
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-5">
+            {/* SCROLLABLE BODY */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <form onSubmit={handleSave} className="space-y-5">
               {/* Top Form Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-purple-50/50 p-4 rounded-xl border border-purple-100">
                 <div>
@@ -854,6 +874,7 @@ export const Quotes: React.FC<QuotesProps> = ({
                 </button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}

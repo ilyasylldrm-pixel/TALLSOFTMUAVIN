@@ -1807,57 +1807,91 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
       {/* MODAL: Create New Invoice */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-150">
           <div
-            className={`bg-white border border-slate-200 text-slate-900 rounded-2xl w-full p-6 shadow-2xl space-y-6 my-8 ${
+            className={`bg-white border border-slate-200/90 text-slate-900 rounded-3xl w-full shadow-2xl flex flex-col max-h-[94vh] overflow-hidden my-auto ${
               showCreatePreviewPanel ? "max-w-7xl" : "max-w-4xl"
             }`}
           >
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2">
-                {formDocKind === "receipt" ? (
-                  <FileSpreadsheet className={`w-5 h-5 ${forcedType === "purchase" || invType === "purchase" ? "text-orange-600" : "text-indigo-600"}`} />
-                ) : (
-                  <FileText className={`w-5 h-5 ${forcedType === "purchase" || invType === "purchase" ? "text-amber-600" : "text-purple-600"}`} />
-                )}
-                <h3 className="text-lg font-extrabold text-slate-900">
-                  {editingInvoiceId ? (
-                    invType === "sales"
+            {/* STICKY MODAL HEADER with Prominent High-Visibility Close Button */}
+            <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-5 sm:px-6 py-4 border-b border-slate-200/80 flex items-center justify-between shrink-0 shadow-xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
+                    forcedType === "purchase" || invType === "purchase"
                       ? formDocKind === "receipt"
-                        ? `Gelir Fişini Düzenle (${editingInvoiceNumber || ""})`
-                        : `Gelir Faturasını Düzenle (${editingInvoiceNumber || ""})`
+                        ? "bg-orange-100 text-orange-700"
+                        : "bg-amber-100 text-amber-700"
                       : formDocKind === "receipt"
-                      ? `Gider Fişini Düzenle (${editingInvoiceNumber || ""})`
-                      : `Gider Faturasını Düzenle (${editingInvoiceNumber || ""})`
-                  ) : forcedType === "sales"
-                    ? formDocKind === "receipt"
-                      ? "Yeni Gelir Fişi Ekle / Kaydet"
-                      : "Yeni Gelir Faturası Kes / Hazırla"
-                    : forcedType === "purchase"
-                    ? formDocKind === "receipt"
-                      ? "Yeni Gider Fişi Ekle / Kaydet"
-                      : "Yeni Gider Faturası Kaydet / Hazırla"
-                    : "Yeni Fatura Hazırla (Satış / Alış)"}
-                </h3>
+                      ? "bg-indigo-100 text-indigo-700"
+                      : "bg-purple-100 text-purple-700"
+                  }`}
+                >
+                  {formDocKind === "receipt" ? (
+                    <FileSpreadsheet className="w-5 h-5" />
+                  ) : (
+                    <FileText className="w-5 h-5" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2 truncate">
+                    <span>
+                      {editingInvoiceId ? (
+                        invType === "sales"
+                          ? formDocKind === "receipt"
+                            ? `Gelir Fişini Düzenle`
+                            : `Gelir Faturasını Düzenle`
+                          : formDocKind === "receipt"
+                          ? `Gider Fişini Düzenle`
+                          : `Gider Faturasını Düzenle`
+                      ) : forcedType === "sales"
+                        ? formDocKind === "receipt"
+                          ? "Yeni Gelir Fişi Ekle / Kaydet"
+                          : "Yeni Gelir Faturası Kes / Hazırla"
+                        : forcedType === "purchase"
+                        ? formDocKind === "receipt"
+                          ? "Yeni Gider Fişi Ekle / Kaydet"
+                          : "Yeni Gider Faturası Kaydet / Hazırla"
+                        : "Yeni Fatura Hazırla (Satış / Alış)"}
+                    </span>
+                    {editingInvoiceNumber && (
+                      <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-lg border border-slate-200 shrink-0">
+                        {editingInvoiceNumber}
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium truncate">
+                    {formDocKind === "receipt"
+                      ? "Kasa / Banka fiş kaydı ve cari muhasebeleştirme"
+                      : "Resmi e-Fatura, e-Arşiv ve ticari fatura oluşturucu"}
+                  </p>
+                </div>
               </div>
+
+              {/* Prominent, Highly Visible Close Button */}
               <button
+                type="button"
                 onClick={() => {
                   setEditingInvoiceId(null);
                   setEditingInvoiceNumber(null);
                   setIsCreateModalOpen(false);
                 }}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-300 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer active:scale-95 group shrink-0"
+                title="Pencereyi Kapat (ESC)"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 text-slate-500 group-hover:text-rose-600 transition-transform group-hover:rotate-90" />
+                <span className="font-extrabold">Kapat</span>
               </button>
             </div>
 
-            <div
-              className={
-                showCreatePreviewPanel
-                  ? "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] gap-6 items-start"
-                  : ""
-              }
+            {/* SCROLLABLE MODAL BODY */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              <div
+                className={
+                  showCreatePreviewPanel
+                    ? "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] gap-6 items-start"
+                    : ""
+                }
             >
             <form onSubmit={handleSaveInvoice} className="space-y-5 min-w-0">
               {/* AI OCR Scanner Shortcut for Gider Faturaları */}
@@ -2508,59 +2542,59 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     )}
                   </div>
                 )}
-                <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingInvoiceId(null);
-                    setEditingInvoiceNumber(null);
-                    setMysoftSaveError(null);
-                    setIsCreateModalOpen(false);
-                  }}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 cursor-pointer"
-                >
-                  İptal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsDraftPreviewOpen(true)}
-                  className="px-4 py-2.5 bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Eye className="w-4 h-4 text-purple-700" />
-                  <span>
-                    {formDocKind === "receipt" ? "Fişi Önizle" : "Faturayı Önizle"}
-                  </span>
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingMysoft}
-                  className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs cursor-pointer disabled:opacity-60 flex items-center gap-2 ${
-                    forcedType === "purchase" || invType === "purchase"
-                      ? formDocKind === "receipt"
-                        ? "bg-orange-600 hover:bg-orange-700"
-                        : "bg-amber-600 hover:bg-amber-700"
-                      : formDocKind === "receipt"
-                      ? "bg-indigo-600 hover:bg-indigo-700"
-                      : "bg-purple-600 hover:bg-purple-700"
-                  }`}
-                >
-                  {isSavingMysoft && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {editingInvoiceId
-                    ? "Değişiklikleri Güncelle & Kaydet"
-                    : forcedType === "sales" || invType === "sales"
-                      ? formDocKind === "receipt"
-                        ? "Gelir Fişini Kaydet"
-                        : sendToMysoft
-                          ? isSavingMysoft
-                            ? "Mysoft'a gönderiliyor..."
-                            : "Kaydet & Mysoft'a Kes"
-                          : "Gelir Faturasını Kaydet & Kes"
-                      : forcedType === "purchase" || invType === "purchase"
+                <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingInvoiceId(null);
+                      setEditingInvoiceNumber(null);
+                      setMysoftSaveError(null);
+                      setIsCreateModalOpen(false);
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
+                  >
+                    Vazgeç / İptal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDraftPreviewOpen(true)}
+                    className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 text-indigo-600" />
+                    <span>
+                      {formDocKind === "receipt" ? "Fişi Önizle" : "Faturayı Önizle"}
+                    </span>
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingMysoft}
+                    className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-sm cursor-pointer disabled:opacity-60 flex items-center gap-2 transition-all active:scale-95 ${
+                      forcedType === "purchase" || invType === "purchase"
                         ? formDocKind === "receipt"
-                          ? "Gider Fişini Kaydet"
-                          : "Gider Faturasını Kaydet"
-                        : "Faturayı Kaydet ve Oluştur"}
-                </button>
+                          ? "bg-orange-600 hover:bg-orange-700"
+                          : "bg-amber-600 hover:bg-amber-700"
+                        : formDocKind === "receipt"
+                        ? "bg-indigo-600 hover:bg-indigo-700"
+                        : "bg-purple-600 hover:bg-purple-700"
+                    }`}
+                  >
+                    {isSavingMysoft && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {editingInvoiceId
+                      ? "Değişiklikleri Güncelle & Kaydet"
+                      : forcedType === "sales" || invType === "sales"
+                        ? formDocKind === "receipt"
+                          ? "Gelir Fişini Kaydet"
+                          : sendToMysoft
+                            ? isSavingMysoft
+                              ? "Mysoft'a Gönderiliyor..."
+                              : "Kaydet & Mysoft'a Kes"
+                            : "Gelir Faturasını Kaydet & Kes"
+                        : forcedType === "purchase" || invType === "purchase"
+                          ? formDocKind === "receipt"
+                            ? "Gider Fişini Kaydet"
+                            : "Gider Faturasını Kaydet"
+                          : "Faturayı Kaydet ve Oluştur"}
+                  </button>
                 </div>
               </div>
             </form>
@@ -2591,6 +2625,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 />
               </div>
             )}
+            </div>
           </div>
         </div>
       )}

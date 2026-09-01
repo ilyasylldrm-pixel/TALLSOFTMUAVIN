@@ -300,9 +300,11 @@ export const UniversalWhatsAppModal: React.FC<UniversalWhatsAppModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-800/90 hover:bg-rose-500/25 hover:text-rose-200 hover:border-rose-400/40 border border-slate-700 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 group"
+            title="Pencereyi Kapat"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 text-slate-400 group-hover:text-rose-300 transition-transform group-hover:rotate-90" />
+            <span className="font-extrabold">Kapat</span>
           </button>
         </div>
 
