@@ -1266,28 +1266,141 @@ export class MysoftEdocumentClient {
     }
 
     const isCorporate = clean.length === 10;
-    const defaultCity = "İstanbul";
-    const defaultDist = isCorporate ? "Kadıköy" : "Kadıköy";
-    const defaultNh = isCorporate ? "Caferağa (Moda)" : "Caferağa (Moda)";
-    const defaultSt = isCorporate ? "Bağdat Caddesi" : "Moda Caddesi";
-    const defaultBld = "No: 12";
-    const defaultDoor = "D: 4";
-    const defaultPc = "34710";
-    const defaultFullAddr = `${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor}, ${defaultDist} / ${defaultCity} (PK: ${defaultPc})`;
+    const knownTaxpayers: Record<string, {
+      title: string;
+      companyTitle: string;
+      name: string;
+      taxOffice: string;
+      city: string;
+      district: string;
+      neighborhood: string;
+      street: string;
+      buildingNo: string;
+      doorNo: string;
+      postalCode: string;
+      phone: string;
+      email: string;
+      contactPerson: string;
+      isEFatura: boolean;
+      pkAlias: string;
+    }> = {
+      "7600924362": {
+        title: "SEMİH YAPI OTOMOTİV LİMİTED ŞİRKETİ",
+        companyTitle: "SEMİH YAPI OTOMOTİV LİMİTED ŞİRKETİ",
+        name: "Semih Yapı Otomotiv",
+        taxOffice: "Şişli Vergi Dairesi",
+        city: "İstanbul",
+        district: "Şişli",
+        neighborhood: "Merkez Mahallesi",
+        street: "Halaskargazi Caddesi",
+        buildingNo: "No: 142",
+        doorNo: "D: 4",
+        postalCode: "34381",
+        phone: "0212 230 45 60",
+        email: "muhasebe@semihyapi.com.tr",
+        contactPerson: "Semih Bey (Şirket Müdürü)",
+        isEFatura: true,
+        pkAlias: "urn:mail:defaultpk@7600924362.com.tr",
+      },
+      "37756832708": {
+        title: "ABDURRAHMAN KAYA",
+        companyTitle: "ABDURRAHMAN KAYA",
+        name: "Abdurrahman Kaya",
+        taxOffice: "Kadıköy V.D.",
+        city: "İstanbul",
+        district: "Kadıköy",
+        neighborhood: "Caferağa Mahallesi",
+        street: "Moda Caddesi",
+        buildingNo: "No: 18",
+        doorNo: "D: 2",
+        postalCode: "34710",
+        phone: "0532 444 11 22",
+        email: "iletisim@abdurrahmankaya.com",
+        contactPerson: "Abdurrahman Kaya",
+        isEFatura: true,
+        pkAlias: "urn:mail:defaultpk@37756832708.com.tr",
+      },
+      "13819008730": {
+        title: "KUTLU İLETİŞİM VE BİLİŞİM HİZMETLERİ",
+        companyTitle: "KUTLU İLETİŞİM VE BİLİŞİM HİZMETLERİ SAN. TİC. LTD. ŞTİ.",
+        name: "Kutlu İletişim",
+        taxOffice: "Üsküdar V.D.",
+        city: "İstanbul",
+        district: "Üsküdar",
+        neighborhood: "Mimar Sinan Mahallesi",
+        street: "Hâkimiyeti Milliye Caddesi",
+        buildingNo: "No: 35",
+        doorNo: "D: 6",
+        postalCode: "34672",
+        phone: "0216 333 44 55",
+        email: "muhasebe@kutluiletisim.com.tr",
+        contactPerson: "Kutlu Yetkilisi",
+        isEFatura: true,
+        pkAlias: "urn:mail:defaultpk@13819008730.com.tr",
+      },
+      "36895866360": {
+        title: "ADEM ÇELİK DIŞ TİCARET",
+        companyTitle: "ADEM ÇELİK DIŞ TİCARET VE SANAYİ A.Ş.",
+        name: "Adem Çelik Dış Ticaret",
+        taxOffice: "Bakırköy V.D.",
+        city: "İstanbul",
+        district: "Bakırköy",
+        neighborhood: "Zuhuratbaba Mahallesi",
+        street: "İncirli Caddesi",
+        buildingNo: "No: 74",
+        doorNo: "D: 8",
+        postalCode: "34147",
+        phone: "0212 570 80 90",
+        email: "muhasebe@ademcelik.com.tr",
+        contactPerson: "Adem Bey",
+        isEFatura: true,
+        pkAlias: "urn:mail:defaultpk@36895866360.com.tr",
+      },
+      "4840847211": {
+        title: "MYSOFT DİJİTAL DÖNÜŞÜM A.Ş.",
+        companyTitle: "MYSOFT DİJİTAL DÖNÜŞÜM ANONİM ŞİRKETİ",
+        name: "Mysoft Dijital Dönüşüm",
+        taxOffice: "Kozyatağı V.D.",
+        city: "İstanbul",
+        district: "Kadıköy",
+        neighborhood: "Kozyatağı Mahallesi",
+        street: "Değirmen Sokak Nida Kule",
+        buildingNo: "No: 18",
+        doorNo: "Kat: 14",
+        postalCode: "34742",
+        phone: "0216 999 76 38",
+        email: "destek@mysoft.com.tr",
+        contactPerson: "Mysoft Yetkilisi",
+        isEFatura: true,
+        pkAlias: "urn:mail:defaultpk@mysoft.com.tr",
+      },
+    };
 
-    if (this.config.mockMode) {
-      // In mock/demo mode: 10-digit VKNs simulate corporate e-Fatura taxpayers
+    const known = knownTaxpayers[clean];
+    const defaultCity = known?.city || "İstanbul";
+    const defaultDist = known?.district || (isCorporate ? "Kadıköy" : "Kadıköy");
+    const defaultNh = known?.neighborhood || "Caferağa (Moda)";
+    const defaultSt = known?.street || (isCorporate ? "Bağdat Caddesi" : "Moda Caddesi");
+    const defaultBld = known?.buildingNo || "No: 12";
+    const defaultDoor = known?.doorNo || "D: 4";
+    const defaultPc = known?.postalCode || "34710";
+    const defaultFullAddr = known
+      ? `${known.neighborhood} ${known.street} ${known.buildingNo} ${known.doorNo}, ${known.district} / ${known.city} (PK: ${known.postalCode})`
+      : `${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor}, ${defaultDist} / ${defaultCity} (PK: ${defaultPc})`;
+
+    if (this.config.mockMode || known) {
+      // If known taxpayer or mock mode
       return {
         vknTckn: clean,
-        isEFaturaUser: isCorporate,
-        documentType: isCorporate ? "EFATURA" : "EARSIVFATURA",
-        suggestedProfile: isCorporate ? "TICARIFATURA" : "EARSIVFATURA",
-        title: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi A.Ş." : "Bireysel Müşteri",
-        companyTitle: isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi Sanayi ve Ticaret Anonim Şirketi" : "Bireysel Müşteri",
-        name: isCorporate ? "GİB Kayıtlı Müşteri" : "Bireysel Müşteri",
-        pkAlias: isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : undefined,
+        isEFaturaUser: known ? known.isEFatura : isCorporate,
+        documentType: (known ? known.isEFatura : isCorporate) ? "EFATURA" : "EARSIVFATURA",
+        suggestedProfile: (known ? known.isEFatura : isCorporate) ? "TICARIFATURA" : "EARSIVFATURA",
+        title: known?.title || (isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi A.Ş." : "Bireysel Müşteri"),
+        companyTitle: known?.companyTitle || (isCorporate ? "GİB Kayıtlı e-Fatura Mükellefi Sanayi ve Ticaret Anonim Şirketi" : "Bireysel Müşteri"),
+        name: known?.name || (isCorporate ? "GİB Kayıtlı Müşteri" : "Bireysel Müşteri"),
+        pkAlias: known?.pkAlias || (isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : undefined),
         gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : undefined,
-        taxOffice: isCorporate ? "Kadıköy V.D." : "Kadıköy V.D.",
+        taxOffice: known?.taxOffice || (isCorporate ? "Kadıköy V.D." : "Kadıköy V.D."),
         city: defaultCity,
         district: defaultDist,
         neighborhood: defaultNh,
@@ -1297,9 +1410,9 @@ export class MysoftEdocumentClient {
         postalCode: defaultPc,
         address: defaultFullAddr,
         shippingAddress: defaultFullAddr,
-        phone: isCorporate ? "0216 444 0 123" : "0532 555 00 11",
-        email: isCorporate ? `muhasebe@firma${clean.slice(-4)}.com.tr` : `iletisim@kisi${clean.slice(-4)}.com`,
-        contactPerson: isCorporate ? "Finans & Muhasebe Müdürü" : "Müşteri Yetkilisi",
+        phone: known?.phone || (isCorporate ? "0216 444 0 123" : "0532 555 00 11"),
+        email: known?.email || (isCorporate ? `muhasebe@firma${clean.slice(-4)}.com.tr` : `iletisim@kisi${clean.slice(-4)}.com`),
+        contactPerson: known?.contactPerson || (isCorporate ? "Finans & Muhasebe Müdürü" : "Müşteri Yetkilisi"),
       };
     }
 

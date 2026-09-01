@@ -513,19 +513,22 @@ export const Contacts: React.FC<ContactsProps> = ({
           };
         });
 
-        setIsCustomTaxOffice(Boolean(res.taxOffice));
+        setIsCustomTaxOffice(true);
+        setIsCustomDistrict(true);
+        setIsCustomNeighborhood(true);
 
+        const taxpayerTitle = res.companyTitle || res.title || "Mükellef";
         if (res.isEFaturaUser) {
           setTaxpayerFetchStatus({
             success: true,
-            message: `🟢 GİB e-Fatura Mükellefi: Şirket unvanı, tam adres, vergi dairesi ve iletişim bilgileri eksiksiz dolduruldu.`,
+            message: `🟢 GİB e-Fatura Mükellefi (${taxpayerTitle}): Şirket unvanı, tam adres, vergi dairesi ve iletişim bilgileri eksiksiz dolduruldu.`,
             isEFatura: true,
             pkAlias: res.pkAlias,
           });
         } else {
           setTaxpayerFetchStatus({
             success: true,
-            message: `🔵 e-Arşiv Fatura Alıcısı: Şahıs / cari bilgileri, tam adres ve vergi dairesi eksiksiz dolduruldu.`,
+            message: `🔵 e-Arşiv Fatura Alıcısı (${taxpayerTitle}): Bilgiler, tam adres ve vergi dairesi eksiksiz dolduruldu.`,
             isEFatura: false,
           });
         }
