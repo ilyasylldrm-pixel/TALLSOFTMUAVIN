@@ -118,10 +118,10 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
     <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in">
       <div className="bg-white border border-indigo-200 text-slate-900 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[94vh] my-auto print:max-h-none print:shadow-none print:m-0 print:w-full print:max-w-none print:border-none print:bg-white print:text-black">
         {/* Control Bar Header */}
-        <div className="sticky top-0 bg-slate-900 text-white p-3.5 sm:px-6 flex items-center justify-between z-20 border-b border-slate-800 shadow-sm shrink-0 print:hidden">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="sticky top-0 bg-slate-900 text-white p-3 sm:p-3.5 sm:px-6 flex flex-wrap items-center justify-between z-20 border-b border-slate-800 gap-2.5 shadow-sm shrink-0 print:hidden">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <span
-              className={`text-xs font-extrabold px-3 py-1 rounded-lg uppercase tracking-wider shrink-0 ${
+              className={`text-[11px] sm:text-xs font-extrabold px-2.5 py-1 rounded-lg uppercase tracking-wider shrink-0 ${
                 isDraft
                   ? "bg-amber-500/20 text-amber-300 border border-amber-400/30"
                   : invType === "sales"
@@ -129,48 +129,48 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   : "bg-emerald-500/20 text-emerald-200 border border-emerald-400/30"
               }`}
             >
-              {isDraft ? "TASLAK FATURA ÖNİZLEME" : invType === "sales" ? "SATIŞ e-ARŞİV FATURASI" : "ALIŞ FATURASI"}
+              {isDraft ? "TASLAK ÖNİZLEME" : invType === "sales" ? "SATIŞ FATURASI" : "ALIŞ FATURASI"}
             </span>
-            <span className="text-xs text-slate-300 font-mono font-bold truncate">
+            <span className="text-xs text-slate-300 font-mono font-bold truncate max-w-[120px] sm:max-w-none">
               {invNumber}
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5 shrink-0 ml-auto">
             {onConfirm && isDraft && (
               <button
                 type="button"
                 onClick={onConfirm}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
               >
                 <Check className="w-4 h-4" />
-                <span>Onayla & Oluştur</span>
+                <span>Onayla</span>
               </button>
             )}
 
             <button
               type="button"
               onClick={() => setIsWhatsAppModalOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
             >
               <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
-              <span>WhatsApp ile Gönder</span>
+              <span className="hidden sm:inline">WhatsApp</span>
             </button>
 
             <button
               type="button"
               onClick={handleDownloadPDF}
               disabled={isDownloading}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/40 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
             >
               <Download className="w-4 h-4 text-indigo-200" />
-              <span>{isDownloading ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+              <span>{isDownloading ? "..." : "PDF"}</span>
             </button>
 
             <button
               type="button"
               onClick={handlePrint}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
             >
               <Printer className="w-4 h-4 text-slate-300" />
               <span className="hidden sm:inline">Yazdır</span>
@@ -179,11 +179,11 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
               title="Pencereyi Kapat"
             >
               <X className="w-4 h-4 text-rose-300" />
-              <span>Kapat</span>
+              <span className="hidden xs:inline">Kapat</span>
             </button>
           </div>
         </div>

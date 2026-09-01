@@ -512,7 +512,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+        {/* Desktop / Tablet Transactions Table View */}
+        <div className="hidden md:block overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
           <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
             <thead>
               <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
@@ -614,6 +615,96 @@ export const Transactions: React.FC<TransactionsProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Responsive Slip Cards View */}
+        <div className="block md:hidden space-y-3">
+          {filteredTxs.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 bg-white rounded-2xl border border-purple-100/80 p-5">
+              Kayıtlı fiş bulunamadı.
+            </div>
+          ) : (
+            displayedTxs.map((tx) => {
+              const isIncome = tx.type === "income" || tx.type === "collection";
+              return (
+                <div
+                  key={tx.id}
+                  className="bg-white rounded-2xl border border-purple-200/70 p-3.5 shadow-2xs space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
+                    <div>
+                      <div className="font-mono font-extrabold text-slate-900 text-xs">
+                        {tx.documentNo || (isIncome ? "GLR-FİŞ" : "GDR-FİŞ")}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {formatDate(tx.date)}
+                      </div>
+                    </div>
+                    <span
+                      className={`font-mono font-black text-sm px-2.5 py-1 rounded-xl border ${
+                        isIncome
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-rose-50 text-rose-700 border-rose-200"
+                      }`}
+                    >
+                      {isIncome ? "+" : "-"}₺
+                      {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 text-xs">
+                    {tx.contactName && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-400 font-semibold">Cari:</span>
+                        <span className="font-bold text-slate-900 truncate max-w-[180px]">
+                          {tx.contactName}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400 font-semibold">Açıklama:</span>
+                      <span className="text-slate-700 truncate max-w-[180px] font-medium">
+                        {tx.description}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-slate-400 font-semibold">Hesap & Kat:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-800 font-bold">{tx.accountName}</span>
+                        <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-slate-200">
+                          {tx.category}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5 pt-1">
+                    <button
+                      onClick={() => setViewingTx(tx)}
+                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>İncele</span>
+                    </button>
+                    <button
+                      onClick={() => setWhatsAppTx(tx)}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>WhatsApp</span>
+                    </button>
+                    <button
+                      onClick={() => onDeleteTransaction(tx.id)}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Sil</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
         {filteredTxs.length > displayLimit && (
@@ -769,7 +860,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
                   </button>
                 </div>
 
-                <div className="border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar w-full shadow-2xs">
+                {/* Desktop Table View for Items */}
+                <div className="hidden sm:block border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar w-full shadow-2xs">
                   <table className="w-full text-left text-xs min-w-[650px]">
                     <thead>
                       <tr className="bg-slate-50 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider border-b border-slate-200">
@@ -907,6 +999,125 @@ export const Transactions: React.FC<TransactionsProps> = ({
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile Cards for Items */}
+                <div className="block sm:hidden space-y-3">
+                  {items.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="bg-slate-50/90 rounded-2xl p-3 border border-slate-200 space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                        <span className="text-xs font-extrabold text-slate-800">
+                          Kalem #{idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(item.id)}
+                          disabled={items.length <= 1}
+                          className="text-rose-600 hover:text-rose-700 text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-30 p-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Sil</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {products.length > 0 && (
+                          <select
+                            value={item.productId || ""}
+                            onChange={(e) => handleItemChange(item.id, "productId", e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-medium text-slate-900"
+                          >
+                            <option value="">-- Stok / Hizmet Seç --</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.stockType ? `[${p.stockType}] ` : ""}{p.name} - ₺
+                                {txType === "income" ? p.sellPrice : p.buyPrice}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <input
+                          type="text"
+                          required
+                          placeholder="Kalem açıklaması"
+                          value={item.description}
+                          onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Miktar</label>
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="any"
+                            required
+                            value={item.quantity}
+                            onChange={(e) =>
+                              handleItemChange(item.id, "quantity", parseFloat(e.target.value) || 0)
+                            }
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-center font-bold text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Birim</label>
+                          <select
+                            value={item.unit}
+                            onChange={(e) => handleItemChange(item.id, "unit", e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-center text-slate-900"
+                          >
+                            <option value="Adet">Adet</option>
+                            <option value="Saat">Saat</option>
+                            <option value="Ay">Ay</option>
+                            <option value="Kg">Kg</option>
+                            <option value="Paket">Paket</option>
+                            <option value="Litre">Litre</option>
+                            <option value="Hizmet">Hizmet</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Birim Fiyat (TL)</label>
+                          <input
+                            type="number"
+                            step="any"
+                            required
+                            value={item.unitPrice}
+                            onChange={(e) =>
+                              handleItemChange(item.id, "unitPrice", parseFloat(e.target.value) || 0)
+                            }
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-right font-mono font-bold text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">KDV Oranı</label>
+                          <select
+                            value={item.vatRate}
+                            onChange={(e) =>
+                              handleItemChange(item.id, "vatRate", parseInt(e.target.value) || 0)
+                            }
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-center text-slate-900"
+                          >
+                            <option value={0}>%0</option>
+                            <option value={1}>%1</option>
+                            <option value={10}>%10</option>
+                            <option value={20}>%20</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-xl p-2 border border-slate-200 flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-500">Satır Toplamı (KDV Dahil):</span>
+                        <span className="font-mono font-black text-xs text-slate-950">
+                          ₺{item.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
