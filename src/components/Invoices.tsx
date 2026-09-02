@@ -504,6 +504,110 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setIsCreateModalOpen(true);
   };
 
+  // Switch invoice profile type and update line items immediately so changes reflect everywhere in real-time
+  const handleSelectInvoiceProfile = (profile: InvoiceProfileType) => {
+    setInvoiceProfileType(profile);
+
+    setItems((prevItems) => {
+      return prevItems.map((item) => {
+        if (profile === "SATIS") {
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+            exemptionCode: undefined,
+            exemptionReason: undefined,
+          };
+        } else if (profile === "TEVKIFAT") {
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            withholdingCode: item.withholdingCode || "618",
+            withholdingRateNumerator: item.withholdingRateNumerator || 5,
+            withholdingRateDenominator: item.withholdingRateDenominator || 10,
+            withholdingRate: (item.withholdingRateNumerator || 5) / (item.withholdingRateDenominator || 10),
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+            exemptionCode: undefined,
+            exemptionReason: undefined,
+          };
+        } else if (profile === "OZELMATRAH") {
+          const lineTotal = item.quantity * item.unitPrice;
+          const defaultMargin = item.specialTaxBase !== undefined && item.specialTaxBase !== null
+            ? item.specialTaxBase
+            : Math.max(0, lineTotal * 0.1);
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            specialTaxBaseCode: item.specialTaxBaseCode || "809",
+            specialTaxBase: defaultMargin,
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            exemptionCode: undefined,
+            exemptionReason: undefined,
+          };
+        } else if (profile === "ISTISNA") {
+          return {
+            ...item,
+            vatRate: 0,
+            exemptionCode: item.exemptionCode || "301",
+            exemptionReason: item.exemptionReason || "301 - Mal İhracatı",
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+          };
+        } else if (profile === "IADE") {
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+            exemptionCode: undefined,
+            exemptionReason: undefined,
+          };
+        } else if (profile === "IHRACKAYITLI") {
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            exemptionCode: "701",
+            exemptionReason: "3065 SK. 11/1-c İhraç Kayıtlı Teslimler",
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+          };
+        }
+        return item;
+      });
+    });
+  };
+
   // Recalculate invoice totals dynamically using central taxCalculationService
   const calculateTotals = () => {
     return computeInvoiceTotals(items);
@@ -1844,70 +1948,34 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     {invoiceProfileType}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                   {[
-                    { type: "SATIS", label: "SATIŞ", desc: "Standart Satış", color: "purple" },
-                    { type: "TEVKIFAT", label: "⭐ TEVKİFAT", desc: "KDV Tevkifatlı (5/10 vb.)", color: "purple" },
-                    { type: "OZELMATRAH", label: "ÖZEL MATRAH", desc: "2. El Araç / Kâr Marjı", color: "amber" },
-                    { type: "ISTISNA", label: "İSTİSNA", desc: "%0 KDV Muafiyeti", color: "emerald" },
-                    { type: "IADE", label: "İADE", desc: "Alış/Satış İade", color: "rose" },
-                    { type: "IHRACKAYITLI", label: "İHRAÇ KAYITLI", desc: "3065 SK. 11/1-c", color: "blue" },
+                    { type: "SATIS", label: "SATIŞ", desc: "Standart Satış", activeBg: "bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-400" },
+                    { type: "TEVKIFAT", label: "⭐ TEVKİFAT", desc: "KDV Tevkifatlı (5/10 vb.)", activeBg: "bg-purple-700 text-white border-purple-700 shadow-md ring-2 ring-purple-400" },
+                    { type: "OZELMATRAH", label: "ÖZEL MATRAH", desc: "2. El Araç / Kâr Marjı", activeBg: "bg-amber-600 text-white border-amber-600 shadow-md ring-2 ring-amber-400" },
+                    { type: "ISTISNA", label: "İSTİSNA", desc: "%0 KDV Muafiyeti", activeBg: "bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-400" },
+                    { type: "IADE", label: "İADE", desc: "Alış/Satış İade", activeBg: "bg-rose-600 text-white border-rose-600 shadow-md ring-2 ring-rose-400" },
+                    { type: "IHRACKAYITLI", label: "İHRAÇ KAYITLI", desc: "3065 SK. 11/1-c", activeBg: "bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-400" },
                   ].map((p) => {
                     const isSelected = invoiceProfileType === p.type;
                     return (
                       <button
                         key={p.type}
                         type="button"
-                        onClick={() => {
-                          setInvoiceProfileType(p.type as InvoiceProfileType);
-                          if (p.type === "TEVKIFAT") {
-                            setItems((prev) =>
-                              prev.map((item, idx) =>
-                                idx === 0 && !item.withholdingCode
-                                  ? {
-                                      ...item,
-                                      withholdingCode: "618",
-                                      withholdingRateNumerator: 5,
-                                      withholdingRateDenominator: 10,
-                                      withholdingRate: 0.5,
-                                    }
-                                  : item
-                              )
-                            );
-                          } else if (p.type === "OZELMATRAH") {
-                            setItems((prev) =>
-                              prev.map((item, idx) =>
-                                idx === 0 && !item.specialTaxBaseCode
-                                  ? {
-                                      ...item,
-                                      specialTaxBaseCode: "809",
-                                      specialTaxBase: Math.max(0, item.quantity * item.unitPrice * 0.1),
-                                    }
-                                  : item
-                              )
-                            );
-                          } else if (p.type === "ISTISNA") {
-                            setItems((prev) =>
-                              prev.map((item, idx) =>
-                                idx === 0 && !item.exemptionCode
-                                  ? {
-                                      ...item,
-                                      vatRate: 0,
-                                      exemptionCode: "301",
-                                    }
-                                  : item
-                              )
-                            );
-                          }
-                        }}
-                        className={`p-2 rounded-xl text-left transition-all border cursor-pointer active:scale-95 ${
+                        onClick={() => handleSelectInvoiceProfile(p.type as InvoiceProfileType)}
+                        className={`p-2.5 rounded-xl text-left transition-all border cursor-pointer active:scale-95 flex flex-col justify-between ${
                           isSelected
-                            ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                            ? p.activeBg
                             : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
                         }`}
                       >
-                        <div className="text-xs font-black truncate">{p.label}</div>
-                        <div className={`text-[10px] truncate ${isSelected ? "text-slate-300" : "text-slate-500"}`}>
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-xs font-black tracking-tight">{p.label}</span>
+                          {isSelected && (
+                            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                          )}
+                        </div>
+                        <div className={`text-[10px] mt-0.5 truncate ${isSelected ? "text-white/80" : "text-slate-500"}`}>
                           {p.desc}
                         </div>
                       </button>

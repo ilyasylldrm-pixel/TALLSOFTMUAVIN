@@ -78,6 +78,36 @@ export const InvoiceTaxSettingsModal: React.FC<InvoiceTaxSettingsModalProps> = (
   const [accommodationTaxRate, setAccommodationTaxRate] = useState<number>(item.accommodationTaxRate || 0);
   const [stopajRate, setStopajRate] = useState<number>(item.stopajRate || 0);
 
+  // Handle Tab Switch & Auto-enable corresponding tax profile
+  const handleTabChange = (targetTab: TabType) => {
+    setActiveTab(targetTab);
+    if (targetTab === "tevkifat") {
+      setWithholdingEnabled(true);
+      setSpecialTaxBaseEnabled(false);
+      setExemptionEnabled(false);
+      if (!withholdingCode) {
+        setWithholdingCode("618");
+        setNumerator(5);
+        setDenominator(10);
+      }
+    } else if (targetTab === "ozel_matrah") {
+      setSpecialTaxBaseEnabled(true);
+      setWithholdingEnabled(false);
+      setExemptionEnabled(false);
+      if (!specialTaxBaseCode) {
+        setSpecialTaxBaseCode("809");
+      }
+    } else if (targetTab === "istisna") {
+      setExemptionEnabled(true);
+      setWithholdingEnabled(false);
+      setSpecialTaxBaseEnabled(false);
+      if (!exemptionCode) {
+        setExemptionCode("301");
+        setExemptionReason("301 - Mal İhracatı");
+      }
+    }
+  };
+
   // Handle Withholding Code Change
   const handleSelectWithholdingCode = (code: string) => {
     setWithholdingCode(code);
@@ -103,6 +133,7 @@ export const InvoiceTaxSettingsModal: React.FC<InvoiceTaxSettingsModalProps> = (
   // Compute Live Item preview
   const previewItem: InvoiceItem = {
     ...item,
+    vatRate: exemptionEnabled ? 0 : item.vatRate === 0 ? 20 : item.vatRate,
     withholdingCode: withholdingEnabled ? withholdingCode : undefined,
     withholdingRateNumerator: withholdingEnabled ? numerator : undefined,
     withholdingRateDenominator: withholdingEnabled ? denominator : undefined,
@@ -191,7 +222,7 @@ export const InvoiceTaxSettingsModal: React.FC<InvoiceTaxSettingsModalProps> = (
         <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-100/70 p-1.5 shrink-0 overflow-x-auto">
           <button
             type="button"
-            onClick={() => setActiveTab("tevkifat")}
+            onClick={() => handleTabChange("tevkifat")}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === "tevkifat"
                 ? "bg-white text-purple-700 shadow-2xs border border-purple-200"
@@ -207,7 +238,7 @@ export const InvoiceTaxSettingsModal: React.FC<InvoiceTaxSettingsModalProps> = (
 
           <button
             type="button"
-            onClick={() => setActiveTab("ozel_matrah")}
+            onClick={() => handleTabChange("ozel_matrah")}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === "ozel_matrah"
                 ? "bg-white text-amber-700 shadow-2xs border border-amber-200"
@@ -223,7 +254,7 @@ export const InvoiceTaxSettingsModal: React.FC<InvoiceTaxSettingsModalProps> = (
 
           <button
             type="button"
-            onClick={() => setActiveTab("istisna")}
+            onClick={() => handleTabChange("istisna")}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === "istisna"
                 ? "bg-white text-emerald-700 shadow-2xs border border-emerald-200"
@@ -239,7 +270,7 @@ export const InvoiceTaxSettingsModal: React.FC<InvoiceTaxSettingsModalProps> = (
 
           <button
             type="button"
-            onClick={() => setActiveTab("ek_vergiler")}
+            onClick={() => handleTabChange("ek_vergiler")}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === "ek_vergiler"
                 ? "bg-white text-indigo-700 shadow-2xs border border-indigo-200"
