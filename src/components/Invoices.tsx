@@ -68,6 +68,7 @@ import {
   Receipt,
   ScanLine,
   Edit2,
+  Hash,
 } from "lucide-react";
 
 const TURKISH_MONTHS = [
@@ -192,6 +193,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   // New Invoice Form State
   const [invType, setInvType] = useState<InvoiceType>(forcedType || "sales");
+  const [invoiceNumberInput, setInvoiceNumberInput] = useState<string>("");
   const [contactId, setContactId] = useState<string>(
     initialContactIdForNewInvoice || contacts[0]?.id || ""
   );
@@ -396,6 +398,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setFormDocKind(docKind);
     const targetType = type || forcedType || "sales";
     setInvType(targetType);
+    const nextSeq = String(invoices.length + 1).padStart(7, "0");
+    const prefix = targetType === "sales" ? "MUV2026" : "TED2026";
+    setInvoiceNumberInput(`${prefix}${nextSeq}`);
     const targetContactId = initialContactIdForNewInvoice || contacts[0]?.id || "";
     setContactId(targetContactId);
     const targetContact = contacts.find((c) => c.id === targetContactId);
@@ -431,6 +436,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const handleOpenEditInvoiceModal = (inv: Invoice) => {
     setEditingInvoiceId(inv.id);
     setEditingInvoiceNumber(inv.invoiceNumber);
+    setInvoiceNumberInput(inv.invoiceNumber || "");
     setInvType(inv.type);
     setFormDocKind(inv.docKind || "invoice");
     const editContactId = inv.contactId || contacts[0]?.id || "";
@@ -519,6 +525,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       ? isReceipt ? "GLF2026" : "MUV2026"
       : isReceipt ? "GDF2026" : "TED2026";
     const nextSeq = String(invoices.length + 1).padStart(7, "0");
+    const customNum = invoiceNumberInput.trim();
 
     let finalNotes = notes.trim();
     if (hasDifferentDeliveryAddress && deliveryAddress.trim()) {
@@ -531,7 +538,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
 
     return {
-      invoiceNumber: `${prefix}${nextSeq} (TASLAK)`,
+      invoiceNumber: customNum ? `${customNum} (TASLAK)` : `${prefix}${nextSeq} (TASLAK)`,
       type: invType,
       docKind: forcedType ? formDocKind : "invoice",
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
@@ -712,6 +719,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       ? isReceipt ? "GLF2026" : "MUV2026"
       : isReceipt ? "GDF2026" : "TED2026";
     const nextSeq = String(invoices.length + 1).padStart(7, "0");
+    const effectiveInvoiceNumber = invoiceNumberInput.trim() || `${prefix}${nextSeq}`;
 
     let finalNotes = notes.trim();
     if (hasDifferentDeliveryAddress && deliveryAddress.trim()) {
@@ -745,7 +753,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
       const updatedInvoice: Invoice = {
         id: editingInvoiceId,
-        invoiceNumber: existing?.invoiceNumber || `${prefix}${nextSeq}`,
+        invoiceNumber: invoiceNumberInput.trim() || existing?.invoiceNumber || `${prefix}${nextSeq}`,
         type: invType,
         docKind: formDocKind,
         expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
@@ -779,7 +787,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     let newInvoice: Invoice = {
       id: "inv_" + Date.now(),
-      invoiceNumber: `${prefix}${nextSeq}`,
+      invoiceNumber: effectiveInvoiceNumber,
       type: invType,
       docKind: forcedType ? formDocKind : "invoice",
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
@@ -896,6 +904,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const handleApplyAiDataToForm = (data: ExtractedExpenseData, matchedContactId?: string) => {
     setInvType("purchase");
     setFormDocKind(data.docType === "Fatura" ? "invoice" : "receipt");
+    if (data.invoiceNumber) {
+      setInvoiceNumberInput(data.invoiceNumber);
+    } else {
+      const nextSeq = String(invoices.length + 1).padStart(7, "0");
+      setInvoiceNumberInput(`TED2026${nextSeq}`);
+    }
 
     if (matchedContactId) {
       setContactId(matchedContactId);
@@ -1017,16 +1031,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     if (!matchesSearch) return false;
 
-    // When inside "Gelir Faturası & Fişleri" module (forcedType === "sales")
+    // When inside "Gelir Faturaları" module (forcedType === "sales")
     if (forcedType === "sales") {
       if (inv.type !== "sales") return false;
-      if (docSubTab === "invoices" && inv.docKind === "receipt") return false;
-      if (docSubTab === "receipts" && inv.docKind !== "receipt") return false;
     } else if (forcedType === "purchase") {
-      // When inside "Gider Faturası & Fişleri" module (forcedType === "purchase")
+      // When inside "Gider Faturaları" module (forcedType === "purchase")
       if (inv.type !== "purchase") return false;
-      if (docSubTab === "invoices" && inv.docKind === "receipt") return false;
-      if (docSubTab === "receipts" && inv.docKind !== "receipt") return false;
     } else {
       if (filterType === "sales") return inv.type === "sales";
       if (filterType === "purchase") return inv.type === "purchase";
@@ -1190,16 +1200,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
         <div className="relative z-10">
           <h2 className="text-lg font-extrabold text-slate-950">
             {forcedType === "sales"
-               ? "Gelir Faturası & Fişleri"
+               ? "Gelir Faturaları"
                : forcedType === "purchase"
-               ? "Gider Faturası & Fişleri"
+               ? "Gider Faturaları"
                : "Gelir & Gider Faturaları"}
           </h2>
           <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
             {forcedType === "sales"
-              ? "Müşterilerinize kestiğiniz gelir faturaları, gelir fişleri ve tahsilat takibi."
+              ? "Müşterilerinize düzenlediğiniz satış faturaları ve tahsilat takibi."
               : forcedType === "purchase"
-              ? "Tedarikçilerden gelen gider faturaları, fişler ve ödeme takibi."
+              ? "Tedarikçilerden gelen alış/gider faturaları ve ödeme takibi."
               : "Resmi e-Fatura / e-Arşiv uyumlu faturalarınızı oluşturun ve ödeme takibi yapın."}
           </p>
         </div>
@@ -1208,38 +1218,29 @@ export const Invoices: React.FC<InvoicesProps> = ({
           <button
             onClick={() => setIsCollectAllModalOpen(true)}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-            title="Tüm açık/ödenmemiş belgeleri topluca tahsil et"
+            title="Tüm açık/ödenmemiş faturaları topluca tahsil et"
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-100" />
             <span>Tümünü Tahsil Et</span>
           </button>
 
           {forcedType === "sales" ? (
-            <>
-              <button
-                onClick={() => handleOpenNewInvoiceModal("invoice", "sales")}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Yeni Gelir Faturası Kes</span>
-              </button>
-              <button
-                onClick={() => handleOpenNewInvoiceModal("receipt", "sales")}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Yeni Gelir Fişi Ekle</span>
-              </button>
-            </>
+            <button
+              onClick={() => handleOpenNewInvoiceModal("invoice", "sales")}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Yeni Gelir Faturası Kes</span>
+            </button>
           ) : forcedType === "purchase" ? (
             <>
               <button
                 onClick={() => setIsAiScannerModalOpen(true)}
                 className="bg-gradient-to-r from-amber-600 via-orange-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all shrink-0 hover:scale-[1.02] active:scale-98 ring-2 ring-amber-300/40"
-                title="Yapay Zeka (AI OCR) ile fiş/fatura fotoğrafı veya PDF yükleyip otomatik ayrıştırın"
+                title="Yapay Zeka (AI OCR) ile fatura fotoğrafı veya PDF yükleyip otomatik ayrıştırın"
               >
                 <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
-                <span>✨ AI Fiş / Fatura Tara & Ekle</span>
+                <span>✨ AI Fatura Tara & Ekle</span>
               </button>
               <button
                 onClick={() => handleOpenNewInvoiceModal("invoice", "purchase")}
@@ -1248,23 +1249,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 <Plus className="w-4 h-4" />
                 <span>+ Yeni Gider Faturası</span>
               </button>
-              <button
-                onClick={() => handleOpenNewInvoiceModal("receipt", "purchase")}
-                className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Yeni Gider Fişi</span>
-              </button>
             </>
           ) : (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsAiScannerModalOpen(true)}
                 className="bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
-                title="Yapay Zeka ile Fiş/Fatura Tara"
+                title="Yapay Zeka ile Fatura Tara"
               >
                 <Sparkles className="w-4 h-4 text-amber-200" />
-                <span>✨ AI Fiş/Fatura Tara</span>
+                <span>✨ AI Fatura Tara</span>
               </button>
               <button
                 onClick={() => handleOpenNewInvoiceModal("invoice", forcedType || "sales")}
@@ -1277,163 +1271,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
           )}
         </div>
       </div>
-
-      {/* Gelir Faturası & Fişleri / Gider Faturası & Fişleri Sub-Navigation Section */}
-      {forcedType === "sales" && (
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-purple-50/80 via-white to-indigo-50/80 p-2.5 rounded-2xl border border-purple-200/80 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setDocSubTab("invoices")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-                docSubTab === "invoices"
-                  ? "bg-purple-600 text-white shadow-sm shadow-purple-200"
-                  : "bg-white text-purple-900 border border-purple-200 hover:bg-purple-50"
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>Gelir Faturaları</span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  docSubTab === "invoices"
-                    ? "bg-white/20 text-white"
-                    : "bg-purple-100 text-purple-800"
-                }`}
-              >
-                {salesInvoicesCount}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDocSubTab("receipts")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-                docSubTab === "receipts"
-                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200"
-                  : "bg-white text-indigo-900 border border-indigo-200 hover:bg-indigo-50"
-              }`}
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Gelir Fişleri</span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  docSubTab === "receipts"
-                    ? "bg-white/20 text-white"
-                    : "bg-indigo-100 text-indigo-800"
-                }`}
-              >
-                {salesReceiptsCount}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDocSubTab("all")}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                docSubTab === "all"
-                  ? "bg-slate-800 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <span>Tümü ({allSalesCount})</span>
-            </button>
-          </div>
-
-          <div className="text-xs text-slate-500 font-medium px-2 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-            <span>
-              {docSubTab === "invoices"
-                ? "Müşterilere düzenlenen resmi e-Fatura ve e-Arşiv gelir faturaları listeleniyor."
-                : docSubTab === "receipts"
-                ? "Perakende, yazar kasa ve nakit/banka gelir fişleri listeleniyor."
-                : "Tüm gelir faturaları ve gelir fişleri birlikte listeleniyor."}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {forcedType === "purchase" && (
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-amber-50/80 via-white to-orange-50/80 p-2.5 rounded-2xl border border-amber-200/80 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setDocSubTab("invoices")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-                docSubTab === "invoices"
-                  ? "bg-amber-600 text-white shadow-sm shadow-amber-200"
-                  : "bg-white text-amber-900 border border-amber-200 hover:bg-amber-50"
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>Gider Faturaları</span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  docSubTab === "invoices"
-                    ? "bg-white/20 text-white"
-                    : "bg-amber-100 text-amber-800"
-                }`}
-              >
-                {purchaseInvoicesCount}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDocSubTab("receipts")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-                docSubTab === "receipts"
-                  ? "bg-orange-600 text-white shadow-sm shadow-orange-200"
-                  : "bg-white text-orange-900 border border-orange-200 hover:bg-orange-50"
-              }`}
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Gider Fişleri</span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  docSubTab === "receipts"
-                    ? "bg-white/20 text-white"
-                    : "bg-orange-100 text-orange-800"
-                }`}
-              >
-                {purchaseReceiptsCount}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDocSubTab("all")}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                docSubTab === "all"
-                  ? "bg-slate-800 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <span>Tümü ({allPurchaseCount})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsAiScannerModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold text-amber-950 bg-gradient-to-r from-amber-100 to-orange-100 hover:from-amber-200 hover:to-orange-200 border border-amber-300 transition-all cursor-pointer shadow-2xs"
-              title="Yapay Zeka (AI OCR) Fiş / Fatura Tarayıcıyı Aç"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-700 animate-pulse" />
-              <span>AI ile Belge Tara</span>
-            </button>
-          </div>
-
-          <div className="text-xs text-slate-500 font-medium px-2 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-            <span>
-              {docSubTab === "invoices"
-                ? "Tedarikçilerden gelen resmi e-Fatura ve e-Arşiv alış (gider) faturaları listeleniyor."
-                : docSubTab === "receipts"
-                ? "Akaryakıt, yemek, otopark, noter, kırtasiye ve muhtelif masraf/gider fişleri listeleniyor."
-                : "Tüm gider faturaları ve gider fişleri birlikte listeleniyor."}
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* Filter Tabs & Search */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1874,39 +1711,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 <div
                   className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
                     forcedType === "purchase" || invType === "purchase"
-                      ? formDocKind === "receipt"
-                        ? "bg-orange-100 text-orange-700"
-                        : "bg-amber-100 text-amber-700"
-                      : formDocKind === "receipt"
-                      ? "bg-indigo-100 text-indigo-700"
+                      ? "bg-amber-100 text-amber-700"
                       : "bg-purple-100 text-purple-700"
                   }`}
                 >
-                  {formDocKind === "receipt" ? (
-                    <FileSpreadsheet className="w-5 h-5" />
-                  ) : (
-                    <FileText className="w-5 h-5" />
-                  )}
+                  <FileText className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2 truncate">
                     <span>
                       {editingInvoiceId ? (
                         invType === "sales"
-                          ? formDocKind === "receipt"
-                            ? `Gelir Fişini Düzenle`
-                            : `Gelir Faturasını Düzenle`
-                          : formDocKind === "receipt"
-                          ? `Gider Fişini Düzenle`
+                          ? `Gelir Faturasını Düzenle`
                           : `Gider Faturasını Düzenle`
                       ) : forcedType === "sales"
-                        ? formDocKind === "receipt"
-                          ? "Yeni Gelir Fişi Ekle / Kaydet"
-                          : "Yeni Gelir Faturası Kes / Hazırla"
+                        ? "Yeni Gelir Faturası Kes / Hazırla"
                         : forcedType === "purchase"
-                        ? formDocKind === "receipt"
-                          ? "Yeni Gider Fişi Ekle / Kaydet"
-                          : "Yeni Gider Faturası Kaydet / Hazırla"
+                        ? "Yeni Gider Faturası Kaydet / Hazırla"
                         : "Yeni Fatura Hazırla (Satış / Alış)"}
                     </span>
                     {editingInvoiceNumber && (
@@ -1916,9 +1737,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     )}
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium truncate">
-                    {formDocKind === "receipt"
-                      ? "Kasa / Banka fiş kaydı ve cari muhasebeleştirme"
-                      : "Resmi e-Fatura, e-Arşiv ve ticari fatura oluşturucu"}
+                    Resmi e-Fatura, e-Arşiv ve ticari fatura oluşturucu
                   </p>
                 </div>
               </div>
@@ -1959,7 +1778,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-extrabold text-amber-950">
-                          Fiş veya Faturanız Var mı?
+                          Faturanız Var mı?
                         </span>
                         <span className="bg-amber-200/80 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full">
                           AI OCR Otomatik Doldurma
@@ -1979,71 +1798,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all shrink-0 active:scale-95"
                   >
                     <UploadCloud className="w-4 h-4 text-amber-200" />
-                    <span>AI ile Fiş/Fatura Tara</span>
+                    <span>AI ile Fatura Tara</span>
                   </button>
                 </div>
               )}
 
               {/* Top Controls & Selected Cari Information */}
               <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-start">
-                  {/* 1. Belge Türü / Fatura Tipi */}
-                  <div className="lg:col-span-2">
-                    {forcedType ? (
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Belge Türü *
-                        </label>
-                        <div className="grid grid-cols-2 gap-1.5 bg-slate-200/80 p-1 rounded-xl">
-                          <button
-                            type="button"
-                            onClick={() => setFormDocKind("invoice")}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                              formDocKind === "invoice"
-                                ? forcedType === "purchase"
-                                  ? "bg-amber-600 text-white shadow-2xs"
-                                  : "bg-purple-600 text-white shadow-2xs"
-                                : "text-slate-700 hover:text-slate-900"
-                            }`}
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span>{forcedType === "purchase" ? "Gider Fat." : "Gelir Fat."}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setFormDocKind("receipt")}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                              formDocKind === "receipt"
-                                ? forcedType === "purchase"
-                                  ? "bg-orange-600 text-white shadow-2xs"
-                                  : "bg-indigo-600 text-white shadow-2xs"
-                                : "text-slate-700 hover:text-slate-900"
-                            }`}
-                          >
-                            <FileSpreadsheet className="w-3.5 h-3.5" />
-                            <span>{forcedType === "purchase" ? "Gider Fişi" : "Gelir Fişi"}</span>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Fatura Tipi *
-                        </label>
-                        <select
-                          value={invType}
-                          onChange={(e) => setInvType(e.target.value as InvoiceType)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900"
-                        >
-                          <option value="sales">Satış Faturası (Müşteriye)</option>
-                          <option value="purchase">Alış Faturası (Tedarikçiden)</option>
-                        </select>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2. VKN / TCKN No ile Arama / Otomatik Getirme (Cari Hesap'ın Solunda) */}
-                  <div className="lg:col-span-3">
+                <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
+                  {/* 1. VKN / TCKN No ile Arama / Otomatik Getirme (Kompakt Genişlik) */}
+                  <div className="w-full md:w-36 lg:w-40 shrink-0">
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                         <CreditCard className="w-3.5 h-3.5 text-purple-600" />
@@ -2064,10 +1828,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           {contacts.some(
                             (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
                           )
-                            ? "✓ Kayıtlı Cari"
+                            ? "✓ Kayıtlı"
                             : vknSearchInput.length >= 10
-                            ? "Bulunamadı"
-                            : `${vknSearchInput.length} Hane`}
+                            ? "Yok"
+                            : `${vknSearchInput.length}/11`}
                         </span>
                       )}
                     </div>
@@ -2075,7 +1839,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       <input
                         type="text"
                         maxLength={11}
-                        placeholder="10 VKN / 11 TCKN yazın..."
+                        placeholder="10 VKN / 11 TCKN..."
                         value={vknSearchInput}
                         onChange={(e) => handleVknInputChange(e.target.value)}
                         className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
@@ -2083,8 +1847,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </div>
                   </div>
 
-                  {/* 3. Cari Hesap Seçimi */}
-                  <div className="lg:col-span-3">
+                  {/* 2. Cari Hesap Seçimi (Daraltılmış / Dengeli Alan) */}
+                  <div className="flex-1 min-w-[180px]">
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-bold text-slate-700">
                         Cari Hesap *
@@ -2104,7 +1868,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     <select
                       value={contactId}
                       onChange={(e) => handleContactSelectChange(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 truncate shadow-2xs"
                     >
                       {contacts.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -2114,31 +1878,34 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </select>
                   </div>
 
-                  {/* 4. Fatura Tarihi */}
-                  <div className="lg:col-span-2">
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Fatura Tarihi *
+                  {/* 3. Fatura Numarası (Yeni Eklenen Bölüm) */}
+                  <div className="w-full md:w-40 lg:w-44 shrink-0">
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Hash className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Fatura Numarası *</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Örn: MUV20260000001"
+                      value={invoiceNumberInput}
+                      onChange={(e) => setInvoiceNumberInput(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                    />
+                  </div>
+
+                  {/* 4. Fatura Tarihi (Kompakt Tarih Alanı) */}
+                  <div className="w-full md:w-36 lg:w-38 shrink-0">
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Fatura Tarihi *</span>
                     </label>
                     <input
                       type="date"
                       required
                       value={issueDate}
                       onChange={(e) => setIssueDate(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-medium text-slate-900"
-                    />
-                  </div>
-
-                  {/* 5. Son Ödeme (Vade) Tarihi */}
-                  <div className="lg:col-span-2">
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Son Ödeme (Vade) Tarihi *
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={dueDate}
-                      onChange={(e) => setDueDate(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-medium text-slate-900"
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                     />
                   </div>
                 </div>
@@ -2510,16 +2277,33 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
               {/* Bottom Calculations Summary */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-end pt-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Fatura Alt Notu / Şartlar
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 placeholder-slate-400"
-                  />
+                <div className="space-y-3">
+                  <div className="w-full sm:w-48">
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Son Ödeme (Vade) Tarihi *</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Fatura Alt Notu / Şartlar
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      placeholder="Ödeme koşulları, banka hesap/IBAN bilgileri veya fatura notlarınızı buraya ekleyebilirsiniz..."
+                    />
+                  </div>
                 </div>
 
                 <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2 text-xs">
