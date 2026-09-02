@@ -195,6 +195,48 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [contactId, setContactId] = useState<string>(
     initialContactIdForNewInvoice || contacts[0]?.id || ""
   );
+  const [vknSearchInput, setVknSearchInput] = useState<string>(() => {
+    const initContact = contacts.find(
+      (c) => c.id === (initialContactIdForNewInvoice || contacts[0]?.id)
+    );
+    return initContact?.taxNumber ? initContact.taxNumber.replace(/\D/g, "") : "";
+  });
+
+  const handleVknInputChange = (val: string) => {
+    const cleanVal = val.replace(/\D/g, "").slice(0, 11);
+    setVknSearchInput(cleanVal);
+
+    if (cleanVal.length >= 2) {
+      // 1. Exact match on taxNumber
+      const exactMatch = contacts.find(
+        (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === cleanVal
+      );
+      if (exactMatch) {
+        setContactId(exactMatch.id);
+        return;
+      }
+
+      // 2. Starts with search if >= 6 digits or 10/11 digits
+      if (cleanVal.length >= 6) {
+        const startsWithMatches = contacts.filter(
+          (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "").startsWith(cleanVal)
+        );
+        if (startsWithMatches.length === 1) {
+          setContactId(startsWithMatches[0].id);
+        }
+      }
+    }
+  };
+
+  const handleContactSelectChange = (newContactId: string) => {
+    setContactId(newContactId);
+    const found = contacts.find((c) => c.id === newContactId);
+    if (found && found.taxNumber) {
+      setVknSearchInput(found.taxNumber.replace(/\D/g, ""));
+    } else {
+      setVknSearchInput("");
+    }
+  };
 
   // Delivery Address State
   const [hasDifferentDeliveryAddress, setHasDifferentDeliveryAddress] = useState<boolean>(false);
@@ -267,6 +309,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     contacts.push(createdContact);
     setContactId(createdContact.id);
+    setVknSearchInput(createdContact.taxNumber ? createdContact.taxNumber.replace(/\D/g, "") : "");
     setIsQuickContactFormOpen(false);
     setIsContactPickerOpen(false);
     setNewContactName("");
@@ -353,7 +396,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setFormDocKind(docKind);
     const targetType = type || forcedType || "sales";
     setInvType(targetType);
-    setContactId(initialContactIdForNewInvoice || contacts[0]?.id || "");
+    const targetContactId = initialContactIdForNewInvoice || contacts[0]?.id || "";
+    setContactId(targetContactId);
+    const targetContact = contacts.find((c) => c.id === targetContactId);
+    setVknSearchInput(targetContact?.taxNumber ? targetContact.taxNumber.replace(/\D/g, "") : "");
     setIssueDate(new Date().toISOString().split("T")[0]);
     setDueDate(
       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -387,7 +433,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setEditingInvoiceNumber(inv.invoiceNumber);
     setInvType(inv.type);
     setFormDocKind(inv.docKind || "invoice");
-    setContactId(inv.contactId || contacts[0]?.id || "");
+    const editContactId = inv.contactId || contacts[0]?.id || "";
+    setContactId(editContactId);
+    const editContact = contacts.find((c) => c.id === editContactId);
+    setVknSearchInput(
+      editContact?.taxNumber
+        ? editContact.taxNumber.replace(/\D/g, "")
+        : inv.taxNumber
+        ? inv.taxNumber.replace(/\D/g, "")
+        : ""
+    );
     setIssueDate(inv.issueDate || new Date().toISOString().split("T")[0]);
     setDueDate(inv.dueDate || new Date().toISOString().split("T")[0]);
 
@@ -1931,67 +1986,125 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
               {/* Top Controls & Selected Cari Information */}
               <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  {forcedType ? (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Belge Türü *
-                      </label>
-                      <div className="grid grid-cols-2 gap-1.5 bg-slate-200/80 p-1 rounded-xl">
-                        <button
-                          type="button"
-                          onClick={() => setFormDocKind("invoice")}
-                          className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                            formDocKind === "invoice"
-                              ? forcedType === "purchase"
-                                ? "bg-amber-600 text-white shadow-2xs"
-                                : "bg-purple-600 text-white shadow-2xs"
-                              : "text-slate-700 hover:text-slate-900"
-                          }`}
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>{forcedType === "purchase" ? "Gider Fat." : "Gelir Fat."}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFormDocKind("receipt")}
-                          className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                            formDocKind === "receipt"
-                              ? forcedType === "purchase"
-                                ? "bg-orange-600 text-white shadow-2xs"
-                                : "bg-indigo-600 text-white shadow-2xs"
-                              : "text-slate-700 hover:text-slate-900"
-                          }`}
-                        >
-                          <FileSpreadsheet className="w-3.5 h-3.5" />
-                          <span>{forcedType === "purchase" ? "Gider Fişi" : "Gelir Fişi"}</span>
-                        </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-start">
+                  {/* 1. Belge Türü / Fatura Tipi */}
+                  <div className="lg:col-span-2">
+                    {forcedType ? (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Belge Türü *
+                        </label>
+                        <div className="grid grid-cols-2 gap-1.5 bg-slate-200/80 p-1 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setFormDocKind("invoice")}
+                            className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                              formDocKind === "invoice"
+                                ? forcedType === "purchase"
+                                  ? "bg-amber-600 text-white shadow-2xs"
+                                  : "bg-purple-600 text-white shadow-2xs"
+                                : "text-slate-700 hover:text-slate-900"
+                            }`}
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>{forcedType === "purchase" ? "Gider Fat." : "Gelir Fat."}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormDocKind("receipt")}
+                            className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                              formDocKind === "receipt"
+                                ? forcedType === "purchase"
+                                  ? "bg-orange-600 text-white shadow-2xs"
+                                  : "bg-indigo-600 text-white shadow-2xs"
+                                : "text-slate-700 hover:text-slate-900"
+                            }`}
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            <span>{forcedType === "purchase" ? "Gider Fişi" : "Gelir Fişi"}</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Fatura Tipi *
-                      </label>
-                      <select
-                        value={invType}
-                        onChange={(e) => setInvType(e.target.value as InvoiceType)}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900"
-                      >
-                        <option value="sales">Satış Faturası (Müşteriye)</option>
-                        <option value="purchase">Alış Faturası (Tedarikçiden)</option>
-                      </select>
-                    </div>
-                  )}
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Fatura Tipi *
+                        </label>
+                        <select
+                          value={invType}
+                          onChange={(e) => setInvType(e.target.value as InvoiceType)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900"
+                        >
+                          <option value="sales">Satış Faturası (Müşteriye)</option>
+                          <option value="purchase">Alış Faturası (Tedarikçiden)</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Cari Hesap *
-                    </label>
+                  {/* 2. VKN / TCKN No ile Arama / Otomatik Getirme (Cari Hesap'ın Solunda) */}
+                  <div className="lg:col-span-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <CreditCard className="w-3.5 h-3.5 text-purple-600" />
+                        <span>VKN / TCKN No</span>
+                      </label>
+                      {vknSearchInput && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                            contacts.some(
+                              (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
+                            )
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              : vknSearchInput.length >= 10
+                              ? "bg-amber-100 text-amber-800 border border-amber-200"
+                              : "text-slate-400 font-semibold"
+                          }`}
+                        >
+                          {contacts.some(
+                            (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
+                          )
+                            ? "✓ Kayıtlı Cari"
+                            : vknSearchInput.length >= 10
+                            ? "Bulunamadı"
+                            : `${vknSearchInput.length} Hane`}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        maxLength={11}
+                        placeholder="10 VKN / 11 TCKN yazın..."
+                        value={vknSearchInput}
+                        onChange={(e) => handleVknInputChange(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 3. Cari Hesap Seçimi */}
+                  <div className="lg:col-span-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700">
+                        Cari Hesap *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewContactTaxNo(vknSearchInput);
+                          setIsContactPickerOpen(true);
+                        }}
+                        className="text-[11px] font-bold text-purple-600 hover:text-purple-800 cursor-pointer flex items-center gap-0.5"
+                      >
+                        <Search className="w-3 h-3" />
+                        <span>Rehber</span>
+                      </button>
+                    </div>
                     <select
                       value={contactId}
-                      onChange={(e) => setContactId(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900"
+                      onChange={(e) => handleContactSelectChange(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                     >
                       {contacts.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -2001,7 +2114,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </select>
                   </div>
 
-                  <div>
+                  {/* 4. Fatura Tarihi */}
+                  <div className="lg:col-span-2">
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Fatura Tarihi *
                     </label>
@@ -2014,7 +2128,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     />
                   </div>
 
-                  <div>
+                  {/* 5. Son Ödeme (Vade) Tarihi */}
+                  <div className="lg:col-span-2">
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Son Ödeme (Vade) Tarihi *
                     </label>
@@ -2941,6 +3056,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           type="button"
                           onClick={() => {
                             setContactId(c.id);
+                            setVknSearchInput(c.taxNumber ? c.taxNumber.replace(/\D/g, "") : "");
                             setIsContactPickerOpen(false);
                           }}
                           className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
