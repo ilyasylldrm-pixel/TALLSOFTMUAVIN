@@ -74,7 +74,36 @@ function mapLine(item: InvoiceItem, index: number, currency: string) {
   const unitPrice = Number(item.unitPrice) || 0;
   const amtTra = Number(item.totalWithoutVat) || qty * unitPrice;
   const vatRate = Number(item.vatRate) || 0;
-  const amtVatTra = Number(item.vatAmount) || (amtTra * vatRate) / 100;
+
+  // Effective taxable amount (for special tax base / kar marji)
+  const taxableAmtTra =
+    item.specialTaxBase !== undefined && item.specialTaxBase !== null && item.specialTaxBase >= 0
+      ? Number(item.specialTaxBase)
+      : amtTra;
+  const amtVatTra = Number(item.vatAmount) || (taxableAmtTra * vatRate) / 100;
+
+  // Tevkifat mapping
+  const withholdingTaxTypeCode: string | undefined = item.withholdingCode || undefined;
+  let withholdingTaxPercentage: number | undefined = undefined;
+  let withholdingTaxAmount: number | undefined = undefined;
+  let withholdingTaxableAmount: number | undefined = undefined;
+
+  if (item.withholdingRateNumerator && item.withholdingRateDenominator && item.withholdingRateDenominator > 0) {
+    withholdingTaxPercentage = Math.round((item.withholdingRateNumerator / item.withholdingRateDenominator) * 100);
+    withholdingTaxAmount = (amtVatTra * item.withholdingRateNumerator) / item.withholdingRateDenominator;
+    withholdingTaxableAmount = taxableAmtTra;
+  } else if (item.withholdingRate && item.withholdingRate > 0) {
+    withholdingTaxPercentage = Math.round(item.withholdingRate * 100);
+    withholdingTaxAmount = amtVatTra * item.withholdingRate;
+    withholdingTaxableAmount = taxableAmtTra;
+  }
+
+  // İstisna or Özel Matrah Reason Code
+  const taxExemptionReasonCode =
+    item.exemptionCode ||
+    item.specialTaxBaseCode ||
+    (vatRate === 0 ? "350" : undefined);
+
   const code =
     item.productId ||
     `LINE${String(index + 1).padStart(3, "0")}`;
@@ -88,7 +117,13 @@ function mapLine(item: InvoiceItem, index: number, currency: string) {
     amtTra,
     vatRate,
     amtVatTra,
-    taxableAmtTra: amtTra,
+    taxableAmtTra,
+    taxExemptionReasonCode: taxExemptionReasonCode || undefined,
+    withholdingTaxTypeCode: withholdingTaxTypeCode || undefined,
+    withholdingTaxPercentage: withholdingTaxPercentage || undefined,
+    withholdingTaxableAmount: withholdingTaxableAmount || undefined,
+    withholdingTaxAmount: withholdingTaxAmount || undefined,
+    allowanceCharge: [],
   };
 }
 
@@ -108,6 +143,19 @@ export function buildMysoftInvoiceOutboxPayload(
     "₺",
     "TRY",
   );
+
+  // Auto-detect invoiceType if not explicitly passed
+  let resolvedInvoiceType = String(options.invoiceType || invoice.invoiceProfileType || "SATIS").toUpperCase();
+  if (!options.invoiceType && !invoice.invoiceProfileType) {
+    if (invoice.items?.some((i) => i.withholdingCode || (i.withholdingRate && i.withholdingRate > 0))) {
+      resolvedInvoiceType = "TEVKIFAT";
+    } else if (invoice.items?.some((i) => i.specialTaxBaseCode || i.specialTaxBase !== undefined)) {
+      resolvedInvoiceType = "OZELMATRAH";
+    } else if (invoice.items?.some((i) => i.exemptionCode || i.vatRate === 0)) {
+      resolvedInvoiceType = "ISTISNA";
+    }
+  }
+
   // Yalnızca Mysoft'a bağlı gerçek mükellef VKN/TCKN kullanılır; demo firma
   // taxNumber (8470291038) veya portal tenant id buraya düşmez.
   const tenant =
@@ -131,7 +179,7 @@ export function buildMysoftInvoiceOutboxPayload(
     isCalculateByApi: true,
     eDocumentType,
     profile,
-    invoiceType: String(options.invoiceType || "SATIS").toUpperCase(),
+    invoiceType: resolvedInvoiceType,
     ettn: invoice.eDocumentEttn || undefined,
     prefix: options.numeratorSetCode ? undefined : prefix || undefined,
     numeratorSetCode: options.numeratorSetCode?.trim() || undefined,

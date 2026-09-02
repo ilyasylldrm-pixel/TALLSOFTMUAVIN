@@ -3,6 +3,7 @@ import { Invoice, InvoiceItem, CompanySettings, Contact, getContactAccountCode }
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { getCurrencySymbol, formatDate, exportElementToPDF } from "../utils/exportUtils";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
+import { computeInvoiceTotals, formatWithholdingBadge } from "../utils/taxCalculationService";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
   Printer,
@@ -66,29 +67,31 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   const currency = invoice.currency || companySettings?.currency || "TRY";
   const currSymbol = getCurrencySymbol(currency);
 
-  // Recalculate totals if not explicitly supplied
-  const calculatedSubtotal = items.reduce((sum, item) => sum + (item.totalWithoutVat || 0), 0);
-  const calculatedVat = items.reduce((sum, item) => sum + (item.vatAmount || 0), 0);
-  const calculatedWithholding = items.reduce((sum, item) => {
-    if (item.withholdingRate && item.withholdingRate > 0) {
-      return sum + (item.vatAmount || 0) * item.withholdingRate;
-    }
-    return sum;
-  }, 0);
+  // Recalculate totals accurately using computeInvoiceTotals
+  const {
+    subtotal: computedSubtotal,
+    effectiveTaxableAmount,
+    totalVat: computedVat,
+    totalWithholding: computedWithholding,
+    grandTotal: computedGrandTotal,
+    payableAmount: computedPayableAmount,
+    computedItems,
+  } = computeInvoiceTotals(items);
 
-  const subtotal = invoice.subtotal ?? calculatedSubtotal;
-  const totalVat = invoice.totalVat ?? calculatedVat;
-  const totalWithholding = invoice.totalWithholding ?? calculatedWithholding;
-  const grandTotal = invoice.grandTotal ?? (subtotal + totalVat - totalWithholding);
+  const subtotal = invoice.subtotal ?? computedSubtotal;
+  const totalVat = invoice.totalVat ?? computedVat;
+  const totalWithholding = invoice.totalWithholding ?? computedWithholding;
+  const grandTotal = invoice.grandTotal ?? computedGrandTotal;
+  const payableAmount = invoice.payableAmount ?? computedPayableAmount;
   const paidAmount = invoice.paidAmount ?? 0;
-  const remainingAmount = invoice.remainingAmount ?? (grandTotal - paidAmount);
+  const remainingAmount = invoice.remainingAmount ?? (payableAmount - paidAmount);
 
   const contactName = invoice.contactName || contact?.name || "Belirtilmemiş Müşteri / Tedarikçi";
   const contactTaxOffice = contact?.taxOffice || invoice.taxNumber || "-";
   const contactTaxNo = contact?.taxNumber || invoice.taxNumber || "-";
   const accountCode = contact ? getContactAccountCode(contact) : (invType === "sales" ? "120.00000" : "320.00000");
 
-  const writtenAmount = numberToTurkishWords(grandTotal);
+  const writtenAmount = numberToTurkishWords(payableAmount);
 
   const handlePrint = () => {
     if (onPrint) {
@@ -314,14 +317,19 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {items.length === 0 ? (
+                  {computedItems.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-6 text-center text-slate-400 font-medium">
                         Faturada henüz kalem bulunmuyor.
                       </td>
                     </tr>
                   ) : (
-                    items.map((item, idx) => (
+                    computedItems.map((item, idx) => {
+                      const withholdingBadge = formatWithholdingBadge(item);
+                      const isSpecialTaxBase = item.specialTaxBase !== undefined && item.specialTaxBase !== null;
+                      const isExempt = item.exemptionCode || item.vatRate === 0;
+
+                      return (
                       <tr key={item.id || idx} className="hover:bg-slate-50/80">
                         <td className="py-3 px-3 font-mono text-slate-500">{idx + 1}</td>
                         <td className="py-3 px-3 font-semibold text-slate-900">
@@ -330,6 +338,21 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                             {item.expenseCategory && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
                                 {item.expenseCategory}
+                              </span>
+                            )}
+                            {withholdingBadge && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                Tevkifat: {withholdingBadge}
+                              </span>
+                            )}
+                            {isSpecialTaxBase && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                Özel Matrah: {currSymbol}{Number(item.specialTaxBase).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                              </span>
+                            )}
+                            {isExempt && item.exemptionCode && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                İstisna: {item.exemptionCode}
                               </span>
                             )}
                           </div>
@@ -350,7 +373,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                           {(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -493,11 +517,29 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   </>
                 )}
 
-                <div className="pt-2 border-t-2 border-slate-900 flex justify-between items-center text-sm font-black">
-                  <span>ÖDENECEK GENEL TOPLAM:</span>
-                  <span className="text-lg font-mono text-indigo-700">
+                {totalWithholding > 0 && (
+                  <div className="flex justify-between text-purple-800 bg-purple-50 p-1.5 rounded-lg border border-purple-200">
+                    <span className="font-bold">(-) Tevkif Edilen KDV (Alıcı KDV2 ile öder):</span>
+                    <span className="font-mono font-bold">
+                      -{currSymbol}
+                      {totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between text-slate-600 pt-1 border-t border-slate-200">
+                  <span>Fatura Toplamı:</span>
+                  <span className="font-mono font-bold">
                     {currSymbol}
                     {grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div className="pt-2 border-t-2 border-slate-900 flex justify-between items-center text-sm font-black">
+                  <span>🎯 ÖDENECEK / TAHSİL EDİLECEK NET TUTAR:</span>
+                  <span className="text-lg font-mono text-indigo-700">
+                    {currSymbol}
+                    {payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 

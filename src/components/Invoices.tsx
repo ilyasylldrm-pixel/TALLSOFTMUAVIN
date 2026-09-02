@@ -3,6 +3,7 @@ import {
   Invoice,
   InvoiceItem,
   InvoiceType,
+  InvoiceProfileType,
   InvoiceStatus,
   Contact,
   Product,
@@ -15,11 +16,13 @@ import {
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
 import { InvoiceCreatePreviewPanel } from "./InvoiceCreatePreviewPanel";
+import { InvoiceTaxSettingsModal } from "./InvoiceTaxSettingsModal";
 import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerModal";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { computeInvoiceTotals, formatWithholdingBadge } from "../utils/taxCalculationService";
 import { NavItem } from "./Sidebar";
 import {
   sendMysoftOutgoingInvoice,
@@ -69,6 +72,10 @@ import {
   ScanLine,
   Edit2,
   Hash,
+  Sliders,
+  Percent,
+  ShieldCheck,
+  Scale,
 } from "lucide-react";
 
 const TURKISH_MONTHS = [
@@ -193,6 +200,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   // New Invoice Form State
   const [invType, setInvType] = useState<InvoiceType>(forcedType || "sales");
+  const [invoiceProfileType, setInvoiceProfileType] = useState<InvoiceProfileType>("SATIS");
+  const [taxModalItem, setTaxModalItem] = useState<InvoiceItem | null>(null);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState<string>("");
   const [contactId, setContactId] = useState<string>(
     initialContactIdForNewInvoice || contacts[0]?.id || ""
@@ -395,6 +404,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
   ) => {
     setEditingInvoiceId(null);
     setEditingInvoiceNumber(null);
+    setInvoiceProfileType("SATIS");
+    setTaxModalItem(null);
     setFormDocKind(docKind);
     const targetType = type || forcedType || "sales";
     setInvType(targetType);
@@ -438,6 +449,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setEditingInvoiceNumber(inv.invoiceNumber);
     setInvoiceNumberInput(inv.invoiceNumber || "");
     setInvType(inv.type);
+    setInvoiceProfileType(inv.invoiceProfileType || "SATIS");
+    setTaxModalItem(null);
     setFormDocKind(inv.docKind || "invoice");
     const editContactId = inv.contactId || contacts[0]?.id || "";
     setContactId(editContactId);
@@ -491,35 +504,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setIsCreateModalOpen(true);
   };
 
-  // Recalculate invoice totals dynamically
+  // Recalculate invoice totals dynamically using central taxCalculationService
   const calculateTotals = () => {
-    let subtotal = 0;
-    let totalVat = 0;
-
-    const computedItems = items.map((item) => {
-      const lineWithoutVat = item.quantity * item.unitPrice;
-      const lineVat = (lineWithoutVat * item.vatRate) / 100;
-      const lineWithVat = lineWithoutVat + lineVat;
-
-      subtotal += lineWithoutVat;
-      totalVat += lineVat;
-
-      return {
-        ...item,
-        totalWithoutVat: lineWithoutVat,
-        vatAmount: lineVat,
-        totalWithVat: lineWithVat,
-      };
-    });
-
-    const grandTotal = subtotal + totalVat;
-
-    return { subtotal, totalVat, grandTotal, computedItems };
+    return computeInvoiceTotals(items);
   };
 
   const getDraftInvoice = (): Partial<Invoice> => {
     const contact = contacts.find((c) => c.id === contactId);
-    const { subtotal, totalVat, grandTotal, computedItems } = calculateTotals();
+    const {
+      subtotal,
+      effectiveTaxableAmount,
+      totalVat,
+      totalWithholding,
+      payableVat,
+      grandTotal,
+      payableAmount,
+      taxItems,
+      computedItems,
+    } = calculateTotals();
     const isReceipt = formDocKind === "receipt";
     const prefix = invType === "sales"
       ? isReceipt ? "GLF2026" : "MUV2026"
@@ -540,6 +542,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return {
       invoiceNumber: customNum ? `${customNum} (TASLAK)` : `${prefix}${nextSeq} (TASLAK)`,
       type: invType,
+      invoiceProfileType,
       docKind: forcedType ? formDocKind : "invoice",
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       contactId: contactId,
@@ -549,10 +552,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
       dueDate,
       items: computedItems,
       subtotal,
+      effectiveTaxableAmount,
       totalVat,
+      totalWithholding,
+      payableVat,
       grandTotal,
+      payableAmount,
+      taxItems,
       paidAmount: 0,
-      remainingAmount: grandTotal,
+      remainingAmount: payableAmount,
       status: "draft",
       currency: "TRY",
       notes: finalNotes,
@@ -712,7 +720,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
     if (!contact) return;
     if (isSavingMysoft) return;
 
-    const { subtotal, totalVat, grandTotal, computedItems } = calculateTotals();
+    const {
+      subtotal,
+      effectiveTaxableAmount,
+      totalVat,
+      totalWithholding,
+      payableVat,
+      grandTotal,
+      payableAmount,
+      taxItems,
+      computedItems,
+    } = calculateTotals();
 
     const isReceipt = formDocKind === "receipt";
     const prefix = invType === "sales"
@@ -739,7 +757,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     if (editingInvoiceId) {
       const existing = invoices.find((i) => i.id === editingInvoiceId);
       const paid = existing?.paidAmount || 0;
-      const remaining = Math.max(0, grandTotal - paid);
+      const remaining = Math.max(0, payableAmount - paid);
       let status: InvoiceStatus = existing?.status || "sent";
       if (status !== "cancelled") {
         if (remaining <= 0) {
@@ -755,6 +773,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         id: editingInvoiceId,
         invoiceNumber: invoiceNumberInput.trim() || existing?.invoiceNumber || `${prefix}${nextSeq}`,
         type: invType,
+        invoiceProfileType,
         docKind: formDocKind,
         expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
         contactId: contact.id,
@@ -764,8 +783,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
         dueDate,
         items: computedItems,
         subtotal,
+        effectiveTaxableAmount,
         totalVat,
+        totalWithholding,
+        payableVat,
+        taxItems,
         grandTotal,
+        payableAmount,
         paidAmount: paid,
         remainingAmount: remaining,
         status,
@@ -789,6 +813,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       id: "inv_" + Date.now(),
       invoiceNumber: effectiveInvoiceNumber,
       type: invType,
+      invoiceProfileType,
       docKind: forcedType ? formDocKind : "invoice",
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       contactId: contact.id,
@@ -798,10 +823,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
       dueDate,
       items: computedItems,
       subtotal,
+      effectiveTaxableAmount,
       totalVat,
+      totalWithholding,
+      payableVat,
+      taxItems,
       grandTotal,
+      payableAmount,
       paidAmount: 0,
-      remainingAmount: grandTotal,
+      remainingAmount: payableAmount,
       status: "sent",
       currency: "TRY",
       notes: finalNotes,
@@ -1803,6 +1833,89 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               )}
 
+              {/* Fatura Tipi / Profili Seçim Barı (GİB e-Fatura / e-Arşiv Standartları) */}
+              <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Fatura Türü / Profili (GİB Standardı):</span>
+                  </label>
+                  <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                    {invoiceProfileType}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5">
+                  {[
+                    { type: "SATIS", label: "SATIŞ", desc: "Standart Satış", color: "purple" },
+                    { type: "TEVKIFAT", label: "⭐ TEVKİFAT", desc: "KDV Tevkifatlı (5/10 vb.)", color: "purple" },
+                    { type: "OZELMATRAH", label: "ÖZEL MATRAH", desc: "2. El Araç / Kâr Marjı", color: "amber" },
+                    { type: "ISTISNA", label: "İSTİSNA", desc: "%0 KDV Muafiyeti", color: "emerald" },
+                    { type: "IADE", label: "İADE", desc: "Alış/Satış İade", color: "rose" },
+                    { type: "IHRACKAYITLI", label: "İHRAÇ KAYITLI", desc: "3065 SK. 11/1-c", color: "blue" },
+                  ].map((p) => {
+                    const isSelected = invoiceProfileType === p.type;
+                    return (
+                      <button
+                        key={p.type}
+                        type="button"
+                        onClick={() => {
+                          setInvoiceProfileType(p.type as InvoiceProfileType);
+                          if (p.type === "TEVKIFAT") {
+                            setItems((prev) =>
+                              prev.map((item, idx) =>
+                                idx === 0 && !item.withholdingCode
+                                  ? {
+                                      ...item,
+                                      withholdingCode: "618",
+                                      withholdingRateNumerator: 5,
+                                      withholdingRateDenominator: 10,
+                                      withholdingRate: 0.5,
+                                    }
+                                  : item
+                              )
+                            );
+                          } else if (p.type === "OZELMATRAH") {
+                            setItems((prev) =>
+                              prev.map((item, idx) =>
+                                idx === 0 && !item.specialTaxBaseCode
+                                  ? {
+                                      ...item,
+                                      specialTaxBaseCode: "809",
+                                      specialTaxBase: Math.max(0, item.quantity * item.unitPrice * 0.1),
+                                    }
+                                  : item
+                              )
+                            );
+                          } else if (p.type === "ISTISNA") {
+                            setItems((prev) =>
+                              prev.map((item, idx) =>
+                                idx === 0 && !item.exemptionCode
+                                  ? {
+                                      ...item,
+                                      vatRate: 0,
+                                      exemptionCode: "301",
+                                    }
+                                  : item
+                              )
+                            );
+                          }
+                        }}
+                        className={`p-2 rounded-xl text-left transition-all border cursor-pointer active:scale-95 ${
+                          isSelected
+                            ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
+                      >
+                        <div className="text-xs font-black truncate">{p.label}</div>
+                        <div className={`text-[10px] truncate ${isSelected ? "text-slate-300" : "text-slate-500"}`}>
+                          {p.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Top Controls & Selected Cari Information */}
               <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
@@ -2066,7 +2179,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
 
                 <div className="border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar w-full">
-                  <table className="w-full text-left text-xs min-w-[650px]">
+                  <table className="w-full text-left text-xs min-w-[720px]">
                     <thead>
                       <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
                         <th className="py-2 px-3">
@@ -2075,13 +2188,19 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <th className="py-2 px-3 w-20 text-center">Miktar</th>
                         <th className="py-2 px-3 w-20 text-center">Birim</th>
                         <th className="py-2 px-3 w-28 text-right">Birim Fiyat</th>
-                        <th className="py-2 px-3 w-24 text-center">KDV %</th>
+                        <th className="py-2 px-3 w-20 text-center">KDV %</th>
+                        <th className="py-2 px-3 w-32 text-center">Tevkifat / Matrah</th>
                         <th className="py-2 px-3 w-28 text-right">Toplam (TL)</th>
                         <th className="py-2 px-2 w-10"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {items.map((item) => (
+                      {items.map((item) => {
+                        const withholdingBadge = formatWithholdingBadge(item);
+                        const isSpecialTaxBase = item.specialTaxBase !== undefined && item.specialTaxBase !== null;
+                        const isExempt = item.exemptionCode || item.vatRate === 0;
+
+                        return (
                         <tr key={item.id} className="hover:bg-slate-50">
                           <td className="p-2">
                             <div className="space-y-1.5">
@@ -2250,6 +2369,40 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             </select>
                           </td>
 
+                          {/* Vergi & Tevkifat / Özel Matrah Ayar Butonu */}
+                          <td className="p-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setTaxModalItem(item)}
+                              className={`w-full px-2 py-1.5 rounded-lg text-[11px] font-extrabold flex flex-col items-center justify-center gap-0.5 transition-all border cursor-pointer active:scale-95 ${
+                                withholdingBadge
+                                  ? "bg-purple-100 text-purple-800 border-purple-300 shadow-2xs"
+                                  : isSpecialTaxBase
+                                  ? "bg-amber-100 text-amber-800 border-amber-300 shadow-2xs"
+                                  : isExempt
+                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                  : "bg-slate-100 hover:bg-purple-50 text-slate-600 hover:text-purple-700 border-slate-200"
+                              }`}
+                              title="Kalem Vergi, Tevkifat ve Özel Matrah Ayarlarını Aç"
+                            >
+                              <div className="flex items-center gap-1">
+                                <Sliders className="w-3 h-3" />
+                                <span>
+                                  {withholdingBadge
+                                    ? withholdingBadge
+                                    : isSpecialTaxBase
+                                    ? "Özel Matrah"
+                                    : isExempt
+                                    ? "İstisna"
+                                    : "Ayarlar"}
+                                </span>
+                              </div>
+                              {withholdingBadge && (
+                                <span className="text-[9px] font-normal text-purple-700">Tevkifatlı</span>
+                              )}
+                            </button>
+                          </td>
+
                           <td className="p-2 text-right font-extrabold font-mono text-slate-900">
                             ₺
                             {(
@@ -2269,7 +2422,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -2306,28 +2460,58 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2 text-xs">
-                  <div className="flex justify-between text-slate-500">
-                    <span>Ara Toplam (KDV Hariç):</span>
-                    <span className="font-mono font-bold text-slate-800">
-                      ₺{subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
+                {(() => {
+                  const totals = calculateTotals();
+                  return (
+                    <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2 text-xs">
+                      <div className="flex justify-between text-slate-500">
+                        <span>Ara Toplam (KDV Hariç):</span>
+                        <span className="font-mono font-bold text-slate-800">
+                          ₺{totals.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
 
-                  <div className="flex justify-between text-slate-500">
-                    <span>Toplam KDV Tutarı:</span>
-                    <span className="font-mono font-bold text-slate-800">
-                      ₺{totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
+                      {totals.effectiveTaxableAmount !== totals.subtotal && (
+                        <div className="flex justify-between text-amber-700 bg-amber-50 p-1.5 rounded-lg border border-amber-200 font-medium">
+                          <span>Özel KDV Matrahı:</span>
+                          <span className="font-mono font-bold">
+                            ₺{totals.effectiveTaxableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
 
-                  <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-sm font-black">
-                    <span className="text-slate-900">GENEL TOPLAM:</span>
-                    <span className="text-indigo-600 font-mono text-base">
-                      ₺{grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </div>
+                      <div className="flex justify-between text-slate-500">
+                        <span>Toplam Hesaplanan KDV:</span>
+                        <span className="font-mono font-bold text-slate-800">
+                          ₺{totals.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {totals.totalWithholding > 0 && (
+                        <div className="flex justify-between text-purple-700 font-medium bg-purple-50 p-1.5 rounded-lg border border-purple-100">
+                          <span className="font-bold">(-) Tevkif Edilen KDV:</span>
+                          <span className="font-mono font-bold">
+                            -₺{totals.totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between text-slate-600 pt-1 border-t border-slate-200">
+                        <span>Fatura Genel Toplamı:</span>
+                        <span className="font-mono font-bold">
+                          ₺{totals.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-300 flex justify-between items-center text-sm font-black">
+                        <span className="text-slate-900">🎯 ÖDENECEK / TAHSİL EDİLECEK:</span>
+                        <span className="text-indigo-600 font-mono text-base">
+                          ₺{totals.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="pt-3 flex flex-col gap-3 border-t border-slate-200">
@@ -2543,6 +2727,29 @@ export const Invoices: React.FC<InvoicesProps> = ({
             handleSaveInvoice(dummyEvent);
           }}
           onSelectTab={onSelectTab}
+        />
+      )}
+
+      {/* MODAL: Kalem Vergi & Tevkifat / Özel Matrah Ayarları Modalı */}
+      {taxModalItem && (
+        <InvoiceTaxSettingsModal
+          isOpen={true}
+          item={taxModalItem}
+          currency="TRY"
+          onClose={() => setTaxModalItem(null)}
+          onApply={(updatedItem) => {
+            setItems((prevItems) =>
+              prevItems.map((it) => (it.id === updatedItem.id ? updatedItem : it))
+            );
+            if (updatedItem.withholdingCode || (updatedItem.withholdingRate && updatedItem.withholdingRate > 0)) {
+              if (invoiceProfileType === "SATIS") setInvoiceProfileType("TEVKIFAT");
+            } else if (updatedItem.specialTaxBaseCode || (updatedItem.specialTaxBase !== undefined && updatedItem.specialTaxBase !== null)) {
+              if (invoiceProfileType === "SATIS") setInvoiceProfileType("OZELMATRAH");
+            } else if (updatedItem.exemptionCode || updatedItem.vatRate === 0) {
+              if (invoiceProfileType === "SATIS") setInvoiceProfileType("ISTISNA");
+            }
+            setTaxModalItem(null);
+          }}
         />
       )}
 

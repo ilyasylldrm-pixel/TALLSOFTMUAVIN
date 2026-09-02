@@ -105,10 +105,38 @@ export interface InvoiceItem {
   unitPrice: number;
   vatRate: number; // 0, 1, 10, 20
   withholdingRate?: number; // Tevkifat Oranı (ör: 0, 0.2, 0.5 - 5/10, 0.7 - 7/10, 1)
+  withholdingCode?: string; // GİB Tevkifat Kodu (örn: "601", "602", "618", "624", "625")
+  withholdingRateNumerator?: number; // Tevkifat Payı (örn: 5)
+  withholdingRateDenominator?: number; // Tevkifat Paydası (örn: 10)
+  withholdingAmount?: number; // Tevkif edilen KDV tutarı
+  specialTaxBase?: number; // Özel Matrah Tutarı (Kâr marjı / KDV'ye tabi asıl matrah)
+  specialTaxBaseCode?: string; // GİB Özel Matrah Kodu (örn: "809", "810", "805")
+  specialTaxBaseReason?: string; // Özel Matrah Açıklaması
+  costPrice?: number; // Alış Maliyet Fiyatı (Özel matrah kâr marjı hesabı için)
+  exemptionCode?: string; // GİB İstisna Kodu (örn: "301", "302", "351", "250")
+  exemptionReason?: string; // İstisna Sebebi Açıklaması
+  otvRate?: number; // ÖTV Oranı (%)
+  otvAmount?: number; // ÖTV Tutarı
+  oivRate?: number; // ÖİV Oranı (%)
+  oivAmount?: number; // ÖİV Tutarı
+  accommodationTaxRate?: number; // Konaklama Vergisi Oranı (%2)
+  accommodationTaxAmount?: number; // Konaklama Vergisi Tutarı
+  stopajRate?: number; // Gelir Vergisi Stopaj Oranı (%20)
+  stopajAmount?: number; // Stopaj Tutarı
   totalWithoutVat: number;
   vatAmount: number;
   totalWithVat: number;
 }
+
+export type InvoiceProfileType =
+  | "SATIS"
+  | "TEVKIFAT"
+  | "OZELMATRAH"
+  | "ISTISNA"
+  | "IADE"
+  | "IHRACKAYITLI"
+  | "SGK"
+  | "KOMISYONCU";
 
 export type InvoiceType = "sales" | "purchase" | "expense" | "purchase_invoice"; // Satış Faturası / Alış Faturası / Gider / Alış İrsaliye Faturası
 export type InvoiceStatus = "draft" | "sent" | "paid" | "partial" | "overdue" | "cancelled";
@@ -197,6 +225,7 @@ export interface Invoice {
   id: string;
   invoiceNumber: string; // ör: GIB20260000001
   type: InvoiceType;
+  invoiceProfileType?: InvoiceProfileType; // "SATIS" | "TEVKIFAT" | "OZELMATRAH" | "ISTISNA" | "IADE" | "IHRACKAYITLI" | "SGK" | "KOMISYONCU"
   docKind?: DocumentKind; // "invoice" = Gelir/Gider Faturası, "receipt" = Gelir/Gider Fişi
   expenseCategory?: string; // Ana Masraf / Gider Kalemi
   contactId: string;
@@ -206,8 +235,10 @@ export interface Invoice {
   dueDate: string; // Son Ödeme Tarihi
   items: InvoiceItem[];
   subtotal: number; // KDV Hariç Ara Toplam
+  effectiveTaxableAmount?: number; // Özel Matrah / Net KDV Matrahı Toplamı
   totalVat: number; // Toplam KDV
   totalWithholding?: number; // Toplam Tevkifat
+  payableVat?: number; // Net Tahsil Edilecek KDV (totalVat - totalWithholding)
   totalOtv?: number; // Toplam ÖTV (Özel Tüketim Vergisi)
   totalOiv?: number; // Toplam ÖİV (Özel İletişim Vergisi)
   totalAccommodationTax?: number; // Toplam Konaklama Vergisi (%2)
@@ -215,6 +246,7 @@ export interface Invoice {
   totalStopaj?: number; // Toplam Stopaj / Gelir Vergisi Kesintisi
   taxItems?: InvoiceTaxItem[]; // Faturadaki tüm vergi kalemleri ve dökümü (KDV, ÖTV, ÖİV, Tevkifat, Konaklama vb.)
   grandTotal: number; // Genel Toplam
+  payableAmount?: number; // 🎯 Ödenecek / Tahsil Edilecek Net Tutar (grandTotal - totalWithholding - totalStopaj)
   paidAmount: number; // Ödenen Miktar
   remainingAmount: number; // Kalan
   status: InvoiceStatus;
