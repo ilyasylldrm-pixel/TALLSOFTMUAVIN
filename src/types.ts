@@ -93,6 +93,17 @@ export interface InvoiceTaxItem {
   taxAmount: number; // Hesaplanan vergi tutarı
   exemptionCode?: string; // İstisna Kodu (örn: 351, 301)
   exemptionReason?: string; // İstisna Sebebi
+  isDeduction?: boolean; // True ise stopaj/kesinti gibi ödenecek tutardan düşülür, false ise eklenir
+}
+
+export interface ItemAdditionalTax {
+  id?: string;
+  code: string; // GİB Ek Vergi Kodu (örn: "0003", "0071", "4080", "1047", "SGK_PRIM")
+  name: string; // GİB Ek Vergi Adı (örn: "GV STOPAJI", "ÖTV 1.LİSTE", "DAMGA V")
+  calculationType: "percent" | "fixed"; // "percent" (Oran %) veya "fixed" (Sabit Tutar TL)
+  rate?: number; // Oran (%)
+  amount: number; // Tutar (TL)
+  isDeduction?: boolean; // Kesinti/Stopaj mı (true: ödenecek tutardan düşülür, false: genel toplama eklenir)
 }
 
 export interface InvoiceItem {
@@ -103,6 +114,8 @@ export interface InvoiceItem {
   quantity: number;
   unit: string; // Adet, Saat, Ay, Kg, vb.
   unitPrice: number;
+  discountAmount?: number; // İskonto Tutarı (TL)
+  discountRate?: number; // İskonto Oranı (%)
   vatRate: number; // 0, 1, 10, 20
   withholdingRate?: number; // Tevkifat Oranı (ör: 0, 0.2, 0.5 - 5/10, 0.7 - 7/10, 1)
   withholdingCode?: string; // GİB Tevkifat Kodu (örn: "601", "602", "618", "624", "625")
@@ -123,6 +136,7 @@ export interface InvoiceItem {
   accommodationTaxAmount?: number; // Konaklama Vergisi Tutarı
   stopajRate?: number; // Gelir Vergisi Stopaj Oranı (%20)
   stopajAmount?: number; // Stopaj Tutarı
+  additionalTaxes?: ItemAdditionalTax[]; // Kaleme eklenen ek vergiler listesi (GİB Listesi)
   totalWithoutVat: number;
   vatAmount: number;
   totalWithVat: number;
@@ -137,6 +151,14 @@ export type InvoiceProfileType =
   | "IHRACKAYITLI"
   | "SGK"
   | "KOMISYONCU";
+
+export type InvoiceScenario =
+  | "TICARIFATURA"
+  | "TEMELFATURA"
+  | "EARSIVFATURA"
+  | "IHRACAT"
+  | "KAMU"
+  | "HAL";
 
 export type InvoiceType = "sales" | "purchase" | "expense" | "purchase_invoice"; // Satış Faturası / Alış Faturası / Gider / Alış İrsaliye Faturası
 export type InvoiceStatus = "draft" | "sent" | "paid" | "partial" | "overdue" | "cancelled";
@@ -225,6 +247,7 @@ export interface Invoice {
   id: string;
   invoiceNumber: string; // ör: GIB20260000001
   type: InvoiceType;
+  invoiceScenario?: InvoiceScenario; // "TICARIFATURA" | "TEMELFATURA" | "EARSIVFATURA" | "IHRACAT" | "KAMU" | "HAL"
   invoiceProfileType?: InvoiceProfileType; // "SATIS" | "TEVKIFAT" | "OZELMATRAH" | "ISTISNA" | "IADE" | "IHRACKAYITLI" | "SGK" | "KOMISYONCU"
   docKind?: DocumentKind; // "invoice" = Gelir/Gider Faturası, "receipt" = Gelir/Gider Fişi
   expenseCategory?: string; // Ana Masraf / Gider Kalemi
@@ -234,6 +257,8 @@ export interface Invoice {
   issueDate: string; // Fatura Tarihi
   dueDate: string; // Son Ödeme Tarihi
   items: InvoiceItem[];
+  grossTotal?: number; // İskonto Öncesi Brüt Toplam
+  totalDiscount?: number; // Toplam İskonto Tutarı
   subtotal: number; // KDV Hariç Ara Toplam
   effectiveTaxableAmount?: number; // Özel Matrah / Net KDV Matrahı Toplamı
   totalVat: number; // Toplam KDV

@@ -4,6 +4,7 @@ import {
   InvoiceItem,
   InvoiceType,
   InvoiceProfileType,
+  InvoiceScenario,
   InvoiceStatus,
   Contact,
   Product,
@@ -22,7 +23,11 @@ import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
-import { computeInvoiceTotals, formatWithholdingBadge } from "../utils/taxCalculationService";
+import {
+  computeInvoiceTotals,
+  formatWithholdingBadge,
+  generateInvoiceLegalTaxNotes,
+} from "../utils/taxCalculationService";
 import { DetailPageLayout, BreadcrumbItem } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { NavItem } from "./Sidebar";
@@ -203,8 +208,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   // New Invoice Form State
   const [invType, setInvType] = useState<InvoiceType>(forcedType || "sales");
+  const [invoiceScenario, setInvoiceScenario] = useState<InvoiceScenario>("TICARIFATURA");
   const [invoiceProfileType, setInvoiceProfileType] = useState<InvoiceProfileType>("SATIS");
   const [taxModalItem, setTaxModalItem] = useState<InvoiceItem | null>(null);
+  const [taxModalInitialTab, setTaxModalInitialTab] = useState<"tevkifat" | "ozel_matrah" | "istisna" | "ek_vergiler" | undefined>(undefined);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState<string>("");
   const [contactId, setContactId] = useState<string>(
     initialContactIdForNewInvoice || contacts[0]?.id || ""
@@ -359,8 +366,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
       setItems((prevItems) =>
         prevItems.map((item) => {
           if (item.id === targetItemRowId) {
-            const qty = item.quantity || 1;
-            const lineNoVat = qty * defaultUnitPrice;
+            const qty = Number(item.quantity) || 1;
+            const gross = qty * defaultUnitPrice;
+            let discAmt = Number(item.discountAmount) || 0;
+            if (item.discountRate && item.discountRate > 0) {
+              discAmt = parseFloat(((gross * item.discountRate) / 100).toFixed(2));
+            } else if (discAmt > gross) {
+              discAmt = gross;
+            }
+            const lineNoVat = Math.max(0, gross - discAmt);
             const lineVat = (lineNoVat * vat) / 100;
             return {
               ...item,
@@ -369,6 +383,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
               unit: prod.unit || "Adet",
               unitPrice: defaultUnitPrice,
               vatRate: vat,
+              discountAmount: discAmt,
               totalWithoutVat: lineNoVat,
               vatAmount: lineVat,
               totalWithVat: lineNoVat + lineVat,
@@ -426,8 +441,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
   ) => {
     setEditingInvoiceId(null);
     setEditingInvoiceNumber(null);
+    setInvoiceScenario("TICARIFATURA");
     setInvoiceProfileType("SATIS");
     setTaxModalItem(null);
+    setTaxModalInitialTab(undefined);
     setFormDocKind(docKind);
     const targetType = type || forcedType || "sales";
     setInvType(targetType);
@@ -471,8 +488,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setEditingInvoiceNumber(inv.invoiceNumber);
     setInvoiceNumberInput(inv.invoiceNumber || "");
     setInvType(inv.type);
+    setInvoiceScenario(inv.invoiceScenario || "TICARIFATURA");
     setInvoiceProfileType(inv.invoiceProfileType || "SATIS");
     setTaxModalItem(null);
+    setTaxModalInitialTab(undefined);
     setFormDocKind(inv.docKind || "invoice");
     const editContactId = inv.contactId || contacts[0]?.id || "";
     setContactId(editContactId);
@@ -531,7 +550,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setInvoiceProfileType(profile);
 
     setItems((prevItems) => {
-      return prevItems.map((item) => {
+      const updatedItems = prevItems.map((item) => {
         if (profile === "SATIS") {
           return {
             ...item,
@@ -551,10 +570,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
           return {
             ...item,
             vatRate: item.vatRate === 0 ? 20 : item.vatRate,
-            withholdingCode: item.withholdingCode || "618",
-            withholdingRateNumerator: item.withholdingRateNumerator || 5,
+            withholdingCode: item.withholdingCode || "601",
+            withholdingRateNumerator: item.withholdingRateNumerator || 4,
             withholdingRateDenominator: item.withholdingRateDenominator || 10,
-            withholdingRate: (item.withholdingRateNumerator || 5) / (item.withholdingRateDenominator || 10),
+            withholdingRate: (item.withholdingRateNumerator || 4) / (item.withholdingRateDenominator || 10),
             specialTaxBase: undefined,
             specialTaxBaseCode: undefined,
             costPrice: undefined,
@@ -627,6 +646,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
         }
         return item;
       });
+
+      // GİB Yasal Şerhlerini ve Oranlarını Otomatik Fatura Altı Notlarına Senkronize Et
+      const legalNotes = generateInvoiceLegalTaxNotes(updatedItems, profile);
+      if (legalNotes.length > 0) {
+        setNotes((prevNotes) => {
+          let n = prevNotes.trim();
+          legalNotes.forEach((ln) => {
+            if (!n.includes(ln)) {
+              n = n ? `${n}\n${ln}` : ln;
+            }
+          });
+          return n;
+        });
+      }
+
+      return updatedItems;
     });
   };
 
@@ -638,6 +673,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const getDraftInvoice = (): Partial<Invoice> => {
     const contact = contacts.find((c) => c.id === contactId);
     const {
+      grossTotal,
+      totalDiscount,
       subtotal,
       effectiveTaxableAmount,
       totalVat,
@@ -663,11 +700,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
       }
     }
 
+    // GİB Resmi Vergi Notları & Şerhleri (Tevkifat, Özel Matrah, İstisna, İhraç Kayıtlı)
+    const legalNotes = generateInvoiceLegalTaxNotes(computedItems, invoiceProfileType);
+    if (legalNotes.length > 0) {
+      legalNotes.forEach((ln) => {
+        if (!finalNotes.includes(ln)) {
+          finalNotes = finalNotes ? `${finalNotes}\n${ln}` : ln;
+        }
+      });
+    }
+
     const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
 
     return {
       invoiceNumber: customNum ? `${customNum} (TASLAK)` : `${prefix}${nextSeq} (TASLAK)`,
       type: invType,
+      invoiceScenario,
       invoiceProfileType,
       docKind: forcedType ? formDocKind : "invoice",
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
@@ -677,6 +725,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
       issueDate,
       dueDate,
       items: computedItems,
+      grossTotal,
+      totalDiscount,
       subtotal,
       effectiveTaxableAmount,
       totalVat,
@@ -833,6 +883,38 @@ export const Invoices: React.FC<InvoicesProps> = ({
               updated.vatRate = prod.vatRate;
             }
           }
+
+          const qty = Number(updated.quantity) || 0;
+          const price = Number(updated.unitPrice) || 0;
+          const gross = qty * price;
+
+          if (field === "discountAmount") {
+            const rawVal = parseFloat(value);
+            const discAmt = isNaN(rawVal) ? 0 : Math.max(0, rawVal);
+            updated.discountAmount = discAmt;
+            updated.discountRate = gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+          } else if (field === "discountRate") {
+            const rawVal = parseFloat(value);
+            const discRate = isNaN(rawVal) ? 0 : Math.max(0, Math.min(100, rawVal));
+            updated.discountRate = discRate;
+            updated.discountAmount = parseFloat(((gross * discRate) / 100).toFixed(2));
+          } else if (field === "quantity" || field === "unitPrice" || field === "productId") {
+            if (updated.discountRate && updated.discountRate > 0) {
+              updated.discountAmount = parseFloat(((gross * updated.discountRate) / 100).toFixed(2));
+            } else if (updated.discountAmount && updated.discountAmount > 0) {
+              if (updated.discountAmount > gross) {
+                updated.discountAmount = gross;
+              }
+              updated.discountRate = gross > 0 ? parseFloat(((updated.discountAmount / gross) * 100).toFixed(2)) : 0;
+            }
+          }
+
+          const disc = Number(updated.discountAmount) || 0;
+          const net = Math.max(0, gross - disc);
+          updated.totalWithoutVat = net;
+          updated.vatAmount = (net * (Number(updated.vatRate) || 0)) / 100;
+          updated.totalWithVat = net + updated.vatAmount;
+
           return updated;
         }
         return item;
@@ -847,6 +929,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
     if (isSavingMysoft) return;
 
     const {
+      grossTotal,
+      totalDiscount,
       subtotal,
       effectiveTaxableAmount,
       totalVat,
@@ -871,6 +955,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
       if (!finalNotes.includes(deliveryAddress.trim())) {
         finalNotes = finalNotes ? `${finalNotes}\n${deliveryTag}` : deliveryTag;
       }
+    }
+
+    // GİB Resmi Vergi Notları & Şerhleri (Tevkifat, Özel Matrah, İstisna, İhraç Kayıtlı)
+    const legalNotes = generateInvoiceLegalTaxNotes(computedItems, invoiceProfileType);
+    if (legalNotes.length > 0) {
+      legalNotes.forEach((ln) => {
+        if (!finalNotes.includes(ln)) {
+          finalNotes = finalNotes ? `${finalNotes}\n${ln}` : ln;
+        }
+      });
     }
 
     const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
@@ -899,6 +993,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         id: editingInvoiceId,
         invoiceNumber: invoiceNumberInput.trim() || existing?.invoiceNumber || `${prefix}${nextSeq}`,
         type: invType,
+        invoiceScenario,
         invoiceProfileType,
         docKind: formDocKind,
         expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
@@ -908,6 +1003,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
         issueDate,
         dueDate,
         items: computedItems,
+        grossTotal,
+        totalDiscount,
         subtotal,
         effectiveTaxableAmount,
         totalVat,
@@ -939,6 +1036,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       id: "inv_" + Date.now(),
       invoiceNumber: effectiveInvoiceNumber,
       type: invType,
+      invoiceScenario,
       invoiceProfileType,
       docKind: forcedType ? formDocKind : "invoice",
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
@@ -948,6 +1046,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
       issueDate,
       dueDate,
       items: computedItems,
+      grossTotal,
+      totalDiscount,
       subtotal,
       effectiveTaxableAmount,
       totalVat,
@@ -1479,53 +1579,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               )}
 
-              {/* Fatura Tipi / Profili Seçim Barı (GİB e-Fatura / e-Arşiv Standartları) */}
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Fatura Türü / Profili (GİB Standardı):</span>
-                  </label>
-                  <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
-                    {invoiceProfileType}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                  {[
-                    { type: "SATIS", label: "SATIŞ", desc: "Standart Satış", activeBg: "bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-400" },
-                    { type: "TEVKIFAT", label: "⭐ TEVKİFAT", desc: "KDV Tevkifatlı (5/10 vb.)", activeBg: "bg-purple-700 text-white border-purple-700 shadow-md ring-2 ring-purple-400" },
-                    { type: "OZELMATRAH", label: "ÖZEL MATRAH", desc: "2. El Araç / Kâr Marjı", activeBg: "bg-amber-600 text-white border-amber-600 shadow-md ring-2 ring-amber-400" },
-                    { type: "ISTISNA", label: "İSTİSNA", desc: "%0 KDV Muafiyeti", activeBg: "bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-400" },
-                    { type: "IADE", label: "İADE", desc: "Alış/Satış İade", activeBg: "bg-rose-600 text-white border-rose-600 shadow-md ring-2 ring-rose-400" },
-                    { type: "IHRACKAYITLI", label: "İHRAÇ KAYITLI", desc: "3065 SK. 11/1-c", activeBg: "bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-400" },
-                  ].map((p) => {
-                    const isSelected = invoiceProfileType === p.type;
-                    return (
-                      <button
-                        key={p.type}
-                        type="button"
-                        onClick={() => handleSelectInvoiceProfile(p.type as InvoiceProfileType)}
-                        className={`p-2.5 rounded-xl text-left transition-all border cursor-pointer active:scale-95 flex flex-col justify-between ${
-                          isSelected
-                            ? p.activeBg
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between w-full">
-                          <span className="text-xs font-black tracking-tight">{p.label}</span>
-                          {isSelected && (
-                            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                          )}
-                        </div>
-                        <div className={`text-[10px] mt-0.5 truncate ${isSelected ? "text-white/80" : "text-slate-500"}`}>
-                          {p.desc}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Top Controls & Selected Cari Information */}
               <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
@@ -1707,6 +1760,81 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   );
                 })()}
 
+                {/* Fatura Senaryosu ve Fatura Türü (Aynı Satırda - Teslimat / Sevkiyat Adresi Bölümünün Üstünde) */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {/* Sol Sütun: Fatura Senaryosu (GİB e-Belge) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Fatura Senaryosu:</span>
+                        </label>
+                        <span className="text-[10px] font-mono font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md border border-purple-200">
+                          {invoiceScenario}
+                        </span>
+                      </div>
+                      <select
+                        value={invoiceScenario}
+                        onChange={(e) => setInvoiceScenario(e.target.value as InvoiceScenario)}
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                      >
+                        <option value="TICARIFATURA">TICARIFATURA - Ticari Fatura (7 Gün İtiraz/Kabul Süreli)</option>
+                        <option value="TEMELFATURA">TEMELFATURA - Temel Fatura (Doğrudan Kabul Edilen)</option>
+                        <option value="EARSIVFATURA">EARSIVFATURA - e-Arşiv Fatura (Standart / Nihai Tüketici)</option>
+                        <option value="IHRACAT">IHRACAT - İhracat e-Faturası (Gümrük Çıkışlı)</option>
+                        <option value="KAMU">KAMU - Kamu Kurumu Faturası</option>
+                        <option value="HAL">HAL - Hal Kayıt Sistemi (HKS) Faturası</option>
+                      </select>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {invoiceScenario === "TICARIFATURA" && "Alıcı firma 7 gün içerisinde sistem üzerinden kabul veya ticari ret verebilir."}
+                        {invoiceScenario === "TEMELFATURA" && "Sistemden doğrudan kabul edilir; itirazlar harici yollarla yapılır."}
+                        {invoiceScenario === "EARSIVFATURA" && "e-Fatura mükellefi olmayanlara ve nihai tüketicilere iletilen arşiv faturası."}
+                        {invoiceScenario === "IHRACAT" && "Gümrük ve Ticaret Bakanlığı GTİP onaylı mal ihracatı faturası senaryosu."}
+                        {invoiceScenario === "KAMU" && "Kamu kurum ve kuruluşlarına yönelik harcama onaylı kamu faturası."}
+                        {invoiceScenario === "HAL" && "Hal Kayıt Sistemi bildirimli toptancı hal satış faturası senaryosu."}
+                      </p>
+                    </div>
+
+                    {/* Sağ Sütun: Fatura Türü (GİB Standardı) ve Ek Vergi Butonu */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Fatura Türü (GİB Standardı):</span>
+                        </label>
+                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                          {invoiceProfileType}
+                        </span>
+                      </div>
+                      <select
+                        value={invoiceProfileType}
+                        onChange={(e) => handleSelectInvoiceProfile(e.target.value as InvoiceProfileType)}
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                      >
+                        <option value="SATIS">SATIŞ - Standart Satış Faturası</option>
+                        <option value="TEVKIFAT">TEVKİFAT - KDV Tevkifatlı Fatura (2/10, 5/10, 7/10, 9/10 vb.)</option>
+                        <option value="OZELMATRAH">ÖZEL MATRAH - 2. El Araç / Kâr Marjı / Kıymetli Maden (3065 SK. 23)</option>
+                        <option value="ISTISNA">İSTİSNA - KDV'den Muaf / İstisna Satış (%0 KDV)</option>
+                        <option value="IADE">İADE - Satış / Alış İade Faturası</option>
+                        <option value="IHRACKAYITLI">İHRAÇ KAYITLI - İhraç Kaydıyla Teslim (3065 SK. 11/1-c)</option>
+                        <option value="SGK">SGK - Sosyal Güvenlik Kurumu Faturası</option>
+                        <option value="KOMISYONCU">KOMİSYONCU - Komisyoncu / Aracı Faturası</option>
+                      </select>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {invoiceProfileType === "SATIS" && "Standart mal ve hizmet teslimi satış faturası profili."}
+                        {invoiceProfileType === "TEVKIFAT" && "KDV'nin bir kısmının alıcı tarafından sorumlu sıfatıyla ödendiği fatura türü."}
+                        {invoiceProfileType === "OZELMATRAH" && "KDV yalnızca kâr marjı veya işçilik farkı üzerinden hesaplanır."}
+                        {invoiceProfileType === "ISTISNA" && "Kanuni istisna maddeleri uyarınca %0 KDV uygulanan teslimler."}
+                        {invoiceProfileType === "IADE" && "Daha önce düzenlenen faturaya istinaden mal/hizmet iade faturası."}
+                        {invoiceProfileType === "IHRACKAYITLI" && "3065 SK. 11/1-c uyarınca ihraç kaydıyla teslim edilen mallar."}
+                        {invoiceProfileType === "SGK" && "Sosyal Güvenlik Kurumu'na yönelik sağlık ve medikal hizmet faturası."}
+                        {invoiceProfileType === "KOMISYONCU" && "Komisyonculuk ve aracılık faaliyetlerine konu fatura türü."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Delivery Address Section (Teslimat Adresi Farklı mı?) */}
                 <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200/80 space-y-2">
                   <div className="flex items-center justify-between">
@@ -1753,32 +1881,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setTargetItemRowId(null);
-                        setIsProductPickerOpen(true);
-                      }}
-                      className="text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
-                      title="Stok listesinden seçip faturaya yeni kalem ekleyin"
-                    >
-                      <Package className="w-3.5 h-3.5 text-purple-200" />
-                      <span>Stok Listesinden Seç & Ekle</span>
-                    </button>
-                    {onSelectTab && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsCreateModalOpen(false);
-                          onSelectTab("products");
-                        }}
-                        className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                        title="Stok & Hizmet Listesine Git"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Stok Listesine Git</span>
-                      </button>
-                    )}
-                    <button
-                      type="button"
                       onClick={handleAddItem}
                       className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 cursor-pointer border border-indigo-200 px-3 py-1.5 rounded-lg bg-indigo-50/50 hover:bg-indigo-100 transition-colors"
                     >
@@ -1789,18 +1891,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
 
                 <div className="border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar w-full">
-                  <table className="w-full text-left text-xs min-w-[720px]">
+                  <table className="w-full text-left text-xs min-w-[880px]">
                     <thead>
                       <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
                         <th className="py-2 px-3">
                           <span>{invType === "purchase" ? "Masraf Kalemi / Açıklama" : "Ürün / Açıklama"}</span>
                         </th>
-                        <th className="py-2 px-3 w-20 text-center">Miktar</th>
-                        <th className="py-2 px-3 w-20 text-center">Birim</th>
-                        <th className="py-2 px-3 w-28 text-right">Birim Fiyat</th>
-                        <th className="py-2 px-3 w-20 text-center">KDV %</th>
-                        <th className="py-2 px-3 w-32 text-center">Tevkifat / Matrah</th>
-                        <th className="py-2 px-3 w-28 text-right">Toplam (TL)</th>
+                        <th className="py-2 px-2.5 w-16 text-center">Miktar</th>
+                        <th className="py-2 px-2.5 w-16 text-center">Birim</th>
+                        <th className="py-2 px-2.5 w-24 text-right">Birim Fiyat</th>
+                        <th className="py-2 px-2 w-24 text-right">İskonto Tutarı</th>
+                        <th className="py-2 px-1.5 w-16 text-center">İskonto %</th>
+                        <th className="py-2 px-1.5 w-16 text-center">KDV %</th>
+                        <th className="py-2 px-2.5 w-28 text-right">Toplam (TL)</th>
+                        <th className="py-2 px-3 w-40 text-center">Tevkifat & Ek Vergi</th>
                         <th className="py-2 px-2 w-10"></th>
                       </tr>
                     </thead>
@@ -1816,48 +1920,77 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             <div className="space-y-1.5">
                               {invType === "purchase" ? (
                                 <div className="space-y-1.5">
+                                  <select
+                                    value={item.expenseCategory || ""}
+                                    onChange={(e) => {
+                                      const selectedCat = e.target.value;
+                                      handleItemChange(item.id, "expenseCategory", selectedCat);
+                                      if (
+                                        selectedCat &&
+                                        (!item.description ||
+                                          (EXPENSE_CATEGORIES as readonly string[]).includes(item.description) ||
+                                          item.description === "Yazılım Danışmanlık ve Sistem Destek Hizmeti")
+                                      ) {
+                                        handleItemChange(item.id, "description", selectedCat);
+                                      }
+                                    }}
+                                    className="w-full bg-amber-50/90 border border-amber-300 rounded-lg p-1.5 text-xs font-bold text-amber-950 focus:ring-2 focus:ring-amber-500"
+                                  >
+                                    <option value="">-- Masraf / Gider Kalemi Seçin ({EXPENSE_CATEGORIES.length} Kalem) --</option>
+                                    {EXPENSE_CATEGORIES.map((cat) => (
+                                      <option key={cat} value={cat}>
+                                        {cat}
+                                      </option>
+                                    ))}
+                                  </select>
+
+                                  {/* Stok Rehberi Kutucuğu */}
                                   <div className="flex items-center gap-1.5">
-                                    <select
-                                      value={item.expenseCategory || ""}
-                                      onChange={(e) => {
-                                        const selectedCat = e.target.value;
-                                        handleItemChange(item.id, "expenseCategory", selectedCat);
-                                        if (
-                                          selectedCat &&
-                                          (!item.description ||
-                                            (EXPENSE_CATEGORIES as readonly string[]).includes(item.description) ||
-                                            item.description === "Yazılım Danışmanlık ve Sistem Destek Hizmeti")
-                                        ) {
-                                          handleItemChange(item.id, "description", selectedCat);
-                                        }
+                                    <button
+                                      type="button"
+                                      id={`stock-directory-trigger-purchase-${item.id}`}
+                                      onClick={() => {
+                                        setTargetItemRowId(item.id);
+                                        setIsProductPickerOpen(true);
                                       }}
-                                      className="w-full bg-amber-50/90 border border-amber-300 rounded-lg p-1.5 text-xs font-bold text-amber-950 focus:ring-2 focus:ring-amber-500"
+                                      className="flex-1 flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-purple-50/70 border border-slate-200 hover:border-purple-300 rounded-lg text-xs cursor-pointer transition-all shadow-2xs group text-left"
+                                      title="Stok Rehberini Aç ve Ürün / Hizmet / Malzeme Seç"
                                     >
-                                      <option value="">-- Masraf / Gider Kalemi Seçin ({EXPENSE_CATEGORIES.length} Kalem) --</option>
-                                      {EXPENSE_CATEGORIES.map((cat) => (
-                                        <option key={cat} value={cat}>
-                                          {cat}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {products.length > 0 && (
-                                      <select
-                                        value={item.productId || ""}
-                                        onChange={(e) =>
-                                          handleItemChange(item.id, "productId", e.target.value)
-                                        }
-                                        className="w-48 bg-slate-50 border border-slate-200 rounded-lg p-1 text-[11px] font-medium text-slate-900 truncate"
-                                        title="Stok listesinden ürün bağla"
+                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                        <Package className="w-3.5 h-3.5 text-purple-600 shrink-0 group-hover:scale-110 transition-transform" />
+                                        <span className="font-bold text-[11px] text-slate-700 shrink-0">Stok Rehberi:</span>
+                                        <span className="text-[11px] text-slate-600 font-medium truncate">
+                                          {item.productId
+                                            ? (products.find((p) => p.id === item.productId)?.name || item.description || "Stok Seçildi")
+                                            : "Stok rehberinden ürün / hammadde seçin..."}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {item.productId && (
+                                          <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
+                                            {products.find((p) => p.id === item.productId)?.code || "Seçili"}
+                                          </span>
+                                        )}
+                                        <span className="text-[10px] font-bold text-purple-700 bg-white border border-purple-200 group-hover:bg-purple-100 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition-colors">
+                                          <Search className="w-2.5 h-2.5 text-purple-600" />
+                                          <span>Rehber</span>
+                                        </span>
+                                      </div>
+                                    </button>
+                                    {item.productId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleItemChange(item.id, "productId", "");
+                                        }}
+                                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                                        title="Stok seçimini temizle"
                                       >
-                                        <option value="">-- Stok Bağla --</option>
-                                        {products.map((p) => (
-                                          <option key={p.id} value={p.id}>
-                                            {p.name} (₺{p.buyPrice})
-                                          </option>
-                                        ))}
-                                      </select>
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
                                     )}
                                   </div>
+
                                   <input
                                     type="text"
                                     required
@@ -1871,36 +2004,53 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 </div>
                               ) : (
                                 <div className="space-y-1.5">
+                                  {/* Stok Rehberi Kutucuğu */}
                                   <div className="flex items-center gap-1.5">
-                                    {products.length > 0 && (
-                                      <select
-                                        value={item.productId || ""}
-                                        onChange={(e) =>
-                                          handleItemChange(item.id, "productId", e.target.value)
-                                        }
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-[11px] font-medium text-slate-900"
-                                      >
-                                        <option value="">-- Stok Listesinden Seç --</option>
-                                        {products.map((p) => (
-                                          <option key={p.id} value={p.id}>
-                                            {p.stockType ? `[${p.stockType}] ` : ""}{p.name} {p.barcode ? `(Barkod: ${p.barcode})` : ""} - ₺{invType === "sales" ? p.sellPrice : p.buyPrice}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    )}
                                     <button
                                       type="button"
+                                      id={`stock-directory-trigger-${item.id}`}
                                       onClick={() => {
                                         setTargetItemRowId(item.id);
                                         setIsProductPickerOpen(true);
                                       }}
-                                      className="bg-purple-100 hover:bg-purple-200 text-purple-900 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
-                                      title="Stok Listesinden Seç ve Ekle"
+                                      className="flex-1 flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-purple-50/70 border border-slate-200 hover:border-purple-300 rounded-lg text-xs cursor-pointer transition-all shadow-2xs group text-left"
+                                      title="Stok Rehberini Aç ve Ürün/Hizmet Seç"
                                     >
-                                      <Package className="w-3.5 h-3.5 text-purple-700" />
-                                      <span>Stok Seç & Ekle</span>
+                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                        <Package className="w-3.5 h-3.5 text-purple-600 shrink-0 group-hover:scale-110 transition-transform" />
+                                        <span className="font-bold text-[11px] text-slate-700 shrink-0">Stok Rehberi:</span>
+                                        <span className="text-[11px] text-slate-600 font-medium truncate">
+                                          {item.productId
+                                            ? (products.find((p) => p.id === item.productId)?.name || item.description || "Stok Seçildi")
+                                            : "Stok rehberinden ürün / hizmet seçin..."}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {item.productId && (
+                                          <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
+                                            {products.find((p) => p.id === item.productId)?.code || "Seçili"}
+                                          </span>
+                                        )}
+                                        <span className="text-[10px] font-bold text-purple-700 bg-white border border-purple-200 group-hover:bg-purple-100 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition-colors">
+                                          <Search className="w-2.5 h-2.5 text-purple-600" />
+                                          <span>Rehber</span>
+                                        </span>
+                                      </div>
                                     </button>
+                                    {item.productId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleItemChange(item.id, "productId", "");
+                                        }}
+                                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                                        title="Stok seçimini temizle"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                   </div>
+
                                   <input
                                     type="text"
                                     required
@@ -1960,6 +2110,47 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             />
                           </td>
 
+                          {/* İskonto Tutarı (TL) */}
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="0,00"
+                              value={item.discountAmount !== undefined && item.discountAmount !== null && item.discountAmount !== 0 ? item.discountAmount : ""}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "discountAmount",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-right font-mono font-bold text-slate-900 placeholder:text-slate-300 focus:bg-white focus:ring-2 focus:ring-purple-500/20"
+                              title="İskonto Tutarı (TL)"
+                            />
+                          </td>
+
+                          {/* İskonto Oranı (%) */}
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="any"
+                              placeholder="%0"
+                              value={item.discountRate !== undefined && item.discountRate !== null && item.discountRate !== 0 ? item.discountRate : ""}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "discountRate",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-center font-mono font-bold text-slate-900 placeholder:text-slate-300 focus:bg-white focus:ring-2 focus:ring-purple-500/20"
+                              title="İskonto Oranı (%)"
+                            />
+                          </td>
+
                           <td className="p-2">
                             <select
                               value={item.vatRate}
@@ -1979,47 +2170,88 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             </select>
                           </td>
 
-                          {/* Vergi & Tevkifat / Özel Matrah Ayar Butonu */}
-                          <td className="p-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => setTaxModalItem(item)}
-                              className={`w-full px-2 py-1.5 rounded-lg text-[11px] font-extrabold flex flex-col items-center justify-center gap-0.5 transition-all border cursor-pointer active:scale-95 ${
-                                withholdingBadge
-                                  ? "bg-purple-100 text-purple-800 border-purple-300 shadow-2xs"
-                                  : isSpecialTaxBase
-                                  ? "bg-amber-100 text-amber-800 border-amber-300 shadow-2xs"
-                                  : isExempt
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                  : "bg-slate-100 hover:bg-purple-50 text-slate-600 hover:text-purple-700 border-slate-200"
-                              }`}
-                              title="Kalem Vergi, Tevkifat ve Özel Matrah Ayarlarını Aç"
-                            >
-                              <div className="flex items-center gap-1">
-                                <Sliders className="w-3 h-3" />
-                                <span>
-                                  {withholdingBadge
-                                    ? withholdingBadge
-                                    : isSpecialTaxBase
-                                    ? "Özel Matrah"
-                                    : isExempt
-                                    ? "İstisna"
-                                    : "Ayarlar"}
-                                </span>
-                              </div>
-                              {withholdingBadge && (
-                                <span className="text-[9px] font-normal text-purple-700">Tevkifatlı</span>
-                              )}
-                            </button>
+                          <td className="p-2 text-right font-extrabold font-mono text-slate-900">
+                            {(() => {
+                              const singleTotals = computeInvoiceTotals([item]);
+                              return (
+                                <div>
+                                  <div>
+                                    ₺{singleTotals.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                  </div>
+                                  {singleTotals.totalDiscount > 0 && (
+                                    <div className="text-[9px] font-semibold text-rose-600 font-sans">
+                                      -₺{singleTotals.totalDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} İskonto
+                                    </div>
+                                  )}
+                                  {singleTotals.totalExtraTaxes > 0 && (
+                                    <div className="text-[9px] font-bold text-indigo-700 font-sans">
+                                      +₺{singleTotals.totalExtraTaxes.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} Ek Vergi
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
 
-                          <td className="p-2 text-right font-extrabold font-mono text-slate-900">
-                            ₺
-                            {(
-                              item.quantity *
-                              item.unitPrice *
-                              (1 + item.vatRate / 100)
-                            ).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          {/* Vergi, Tevkifat & Tekil Ek Vergi Ayar Butonları */}
+                          <td className="p-2 text-center">
+                            <div className="space-y-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTaxModalItem(item);
+                                  setTaxModalInitialTab(undefined);
+                                }}
+                                className={`w-full px-2 py-1.5 rounded-lg text-[11px] font-extrabold flex flex-col items-center justify-center gap-0.5 transition-all border cursor-pointer active:scale-95 ${
+                                  withholdingBadge
+                                    ? "bg-purple-100 text-purple-800 border-purple-300 shadow-2xs"
+                                    : isSpecialTaxBase
+                                    ? "bg-amber-100 text-amber-800 border-amber-300 shadow-2xs"
+                                    : isExempt
+                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                    : "bg-slate-100 hover:bg-purple-50 text-slate-600 hover:text-purple-700 border-slate-200"
+                                }`}
+                                title="Kalem Vergi, Tevkifat ve Özel Matrah Ayarlarını Aç"
+                              >
+                                <div className="flex items-center gap-1">
+                                  <Sliders className="w-3 h-3" />
+                                  <span>
+                                    {withholdingBadge
+                                      ? withholdingBadge
+                                      : isSpecialTaxBase
+                                      ? "Özel Matrah"
+                                      : isExempt
+                                      ? "İstisna"
+                                      : "Ayarlar"}
+                                  </span>
+                                </div>
+                                {withholdingBadge && (
+                                  <span className="text-[9px] font-normal text-purple-700">Tevkifatlı</span>
+                                )}
+                              </button>
+
+                              {/* Tekli Kalem İçin GİB Listesinden Ek Vergi Ekleme Butonu */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTaxModalItem(item);
+                                  setTaxModalInitialTab("ek_vergiler");
+                                }}
+                                className={`w-full px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center justify-center gap-1 transition-all border cursor-pointer active:scale-95 ${
+                                  item.additionalTaxes && item.additionalTaxes.length > 0
+                                    ? "bg-indigo-100 text-indigo-900 border-indigo-300 shadow-2xs"
+                                    : "bg-white hover:bg-indigo-50 text-indigo-700 border-dashed border-indigo-300"
+                                }`}
+                                title="Bu kaleme GİB ek vergi listesinden (ÖTV, ÖİV, Damga vb.) vergi ekle"
+                              >
+                                <Plus className="w-2.5 h-2.5 shrink-0" />
+                                <span className="truncate">
+                                  {item.additionalTaxes && item.additionalTaxes.length > 0
+                                    ? `${item.additionalTaxes.length} Ek Vergi`
+                                    : "+ Ek Vergi"}
+                                </span>
+                              </button>
+                            </div>
                           </td>
 
                           <td className="p-2 text-center">
@@ -2056,17 +2288,70 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Fatura Alt Notu / Şartlar
-                    </label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-700">
+                        Fatura Alt Notu / Şartlar & Yasal Şerhler
+                      </label>
+                      {(() => {
+                        const legalNotes = generateInvoiceLegalTaxNotes(items, invoiceProfileType);
+                        if (legalNotes.length === 0) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNotes((prevNotes) => {
+                                let n = prevNotes.trim();
+                                legalNotes.forEach((ln) => {
+                                  if (!n.includes(ln)) {
+                                    n = n ? `${n}\n${ln}` : ln;
+                                  }
+                                });
+                                return n;
+                              });
+                            }}
+                            className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded cursor-pointer transition-all"
+                          >
+                            + Yasal Şerhleri Notlara Aktar
+                          </button>
+                        );
+                      })()}
+                    </div>
+
                     <textarea
                       rows={3}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium"
                       placeholder="Ödeme koşulları, banka hesap/IBAN bilgileri veya fatura notlarınızı buraya ekleyebilirsiniz..."
                     />
+
+                    {/* GİB Resmi Vergi Notları ve Şerhleri Özeti (Tevkifat, Özel Matrah, İstisna, İhraç Kayıtlı) */}
+                    {(() => {
+                      const legalNotes = generateInvoiceLegalTaxNotes(items, invoiceProfileType);
+                      if (legalNotes.length === 0) return null;
+                      return (
+                        <div className="p-2.5 bg-purple-50/70 border border-purple-200 rounded-xl text-[11px] text-purple-950 space-y-1">
+                          <div className="flex items-center justify-between text-[10px] font-black uppercase text-purple-900 tracking-wider">
+                            <span>GİB Resmi Vergi Şerhleri & Oranları:</span>
+                            <span className="bg-purple-200/80 text-purple-900 px-1.5 py-0.2 rounded text-[9px]">
+                              Mevzuata Uygun
+                            </span>
+                          </div>
+                          <div className="space-y-1 text-slate-700">
+                            {legalNotes.map((note, idx) => (
+                              <div key={idx} className="flex items-start gap-1.5 leading-snug">
+                                <span className="font-bold text-purple-700 shrink-0">•</span>
+                                <span className="font-medium">{note}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-purple-800 font-semibold pt-0.5">
+                            * Bu açıklamalar ve oranlar e-Fatura / e-Arşiv faturanızın resmi alt notuna otomatik olarak yansıtılacaktır.
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -2074,8 +2359,25 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   const totals = calculateTotals();
                   return (
                     <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2 text-xs">
+                      {totals.totalDiscount > 0 && (
+                        <>
+                          <div className="flex justify-between text-slate-500">
+                            <span>Brüt Tutar (İskonto Öncesi):</span>
+                            <span className="font-mono font-bold text-slate-800">
+                              ₺{totals.grossTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-rose-700 bg-rose-50 p-1.5 rounded-lg border border-rose-100 font-medium">
+                            <span className="font-bold">(-) Toplam İskonto:</span>
+                            <span className="font-mono font-bold">
+                              -₺{totals.totalDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </>
+                      )}
+
                       <div className="flex justify-between text-slate-500">
-                        <span>Ara Toplam (KDV Hariç):</span>
+                        <span>{totals.totalDiscount > 0 ? "Ara Toplam (Net KDV Hariç):" : "Ara Toplam (KDV Hariç):"}</span>
                         <span className="font-mono font-bold text-slate-800">
                           ₺{totals.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </span>
@@ -3320,20 +3622,50 @@ export const Invoices: React.FC<InvoicesProps> = ({
         <InvoiceTaxSettingsModal
           isOpen={true}
           item={taxModalItem}
+          initialTab={taxModalInitialTab}
           currency="TRY"
-          onClose={() => setTaxModalItem(null)}
-          onApply={(updatedItem) => {
-            setItems((prevItems) =>
-              prevItems.map((it) => (it.id === updatedItem.id ? updatedItem : it))
-            );
-            if (updatedItem.withholdingCode || (updatedItem.withholdingRate && updatedItem.withholdingRate > 0)) {
-              if (invoiceProfileType === "SATIS") setInvoiceProfileType("TEVKIFAT");
-            } else if (updatedItem.specialTaxBaseCode || (updatedItem.specialTaxBase !== undefined && updatedItem.specialTaxBase !== null)) {
-              if (invoiceProfileType === "SATIS") setInvoiceProfileType("OZELMATRAH");
-            } else if (updatedItem.exemptionCode || updatedItem.vatRate === 0) {
-              if (invoiceProfileType === "SATIS") setInvoiceProfileType("ISTISNA");
-            }
+          onClose={() => {
             setTaxModalItem(null);
+            setTaxModalInitialTab(undefined);
+          }}
+          onApply={(updatedItem) => {
+            const nextItems = items.map((it) => (it.id === updatedItem.id ? updatedItem : it));
+            setItems(nextItems);
+
+            let nextProfile = invoiceProfileType;
+            if (updatedItem.withholdingCode || (updatedItem.withholdingRate && updatedItem.withholdingRate > 0)) {
+              if (invoiceProfileType === "SATIS") {
+                nextProfile = "TEVKIFAT";
+                setInvoiceProfileType("TEVKIFAT");
+              }
+            } else if (updatedItem.specialTaxBaseCode || (updatedItem.specialTaxBase !== undefined && updatedItem.specialTaxBase !== null)) {
+              if (invoiceProfileType === "SATIS") {
+                nextProfile = "OZELMATRAH";
+                setInvoiceProfileType("OZELMATRAH");
+              }
+            } else if (updatedItem.exemptionCode || updatedItem.vatRate === 0) {
+              if (invoiceProfileType === "SATIS") {
+                nextProfile = "ISTISNA";
+                setInvoiceProfileType("ISTISNA");
+              }
+            }
+
+            // GİB Resmi Vergi Notlarını ve Yasal Şerhleri Otomatik Olarak Fatura Notuna Senkronize Et
+            const legalNotes = generateInvoiceLegalTaxNotes(nextItems, nextProfile);
+            if (legalNotes.length > 0) {
+              setNotes((prevNotes) => {
+                let n = prevNotes.trim();
+                legalNotes.forEach((ln) => {
+                  if (!n.includes(ln)) {
+                    n = n ? `${n}\n${ln}` : ln;
+                  }
+                });
+                return n;
+              });
+            }
+
+            setTaxModalItem(null);
+            setTaxModalInitialTab(undefined);
           }}
         />
       )}
