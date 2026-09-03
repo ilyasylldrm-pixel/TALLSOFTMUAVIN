@@ -127,8 +127,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in">
-      <div className="bg-white border border-indigo-200 text-slate-900 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[94vh] my-auto print:max-h-none print:shadow-none print:m-0 print:w-full print:max-w-none print:border-none print:bg-white print:text-black">
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-2 md:p-3 overflow-y-auto animate-in fade-in">
+      <div className="bg-white border-0 sm:border border-indigo-200 text-slate-900 rounded-none sm:rounded-2xl w-full h-full sm:h-[98vh] shadow-2xl overflow-hidden flex flex-col my-auto print:max-h-none print:shadow-none print:m-0 print:w-full print:max-w-none print:border-none print:bg-white print:text-black">
         {/* Control Bar Header */}
         <div className="sticky top-0 bg-slate-900 text-white p-3 sm:p-3.5 sm:px-6 flex flex-wrap items-center justify-between z-20 border-b border-slate-800 gap-2.5 shadow-sm shrink-0 print:hidden">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">

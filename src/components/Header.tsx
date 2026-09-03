@@ -9,6 +9,8 @@ import {
   LogOut,
   X,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { Account } from "../types";
 import { UserProfile } from "./AuthModal";
@@ -26,6 +28,8 @@ interface HeaderProps {
   onOpenAuthModal: (mode: "login" | "register") => void;
   onLogout: () => void;
   onToggleMobileMenu?: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebarCollapse?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -41,6 +45,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuthModal,
   onLogout,
   onToggleMobileMenu,
+  isSidebarCollapsed = false,
+  onToggleSidebarCollapse,
 }) => {
   const totalTlBalance = accounts
     .filter((a) => a.currency === "TRY")
@@ -57,8 +63,8 @@ export const Header: React.FC<HeaderProps> = ({
         }}
       />
 
-      {/* Title & Mobile Hamburger Button */}
-      <div className="relative z-10 flex items-center gap-3">
+      {/* Title & Mobile Hamburger / Desktop Sidebar Toggle Button */}
+      <div className="relative z-10 flex items-center gap-2.5 sm:gap-3">
         {onToggleMobileMenu && (
           <button
             type="button"
@@ -67,6 +73,21 @@ export const Header: React.FC<HeaderProps> = ({
             title="Ana Menüyü Aç / Kapat"
           >
             <Menu className="w-5 h-5 text-purple-800" />
+          </button>
+        )}
+        {onToggleSidebarCollapse && (
+          <button
+            type="button"
+            onClick={onToggleSidebarCollapse}
+            className="hidden md:flex p-2 rounded-xl bg-white/90 hover:bg-purple-100/70 text-purple-900 border border-purple-200/80 hover:border-purple-300 shadow-2xs cursor-pointer transition-all active:scale-95 items-center justify-center"
+            title={isSidebarCollapsed ? "Kenar Çubuğunu Genişlet (Yana Aç)" : "Kenar Çubuğunu Daralt (Yana Kapat)"}
+            aria-label="Kenar Çubuğunu Aç / Kapat"
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="w-5 h-5 text-purple-700" />
+            ) : (
+              <PanelLeftClose className="w-5 h-5 text-purple-700" />
+            )}
           </button>
         )}
         <div>

@@ -90,6 +90,23 @@ export default function App() {
   const [financeSubTab, setFinanceSubTab] = useState<FinanceSubModule>("kasa");
   const [searchTerm, setSearchTerm] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("muavin_sidebar_collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebarCollapsed = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("muavin_sidebar_collapsed", String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Storage State
   const [data, setData] = useState(() => getStoredData());
@@ -1532,6 +1549,8 @@ export default function App() {
         currentUser={currentUser}
         isMobileOpen={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapsed}
       />
 
       {/* Main App Content Area */}
@@ -1549,6 +1568,8 @@ export default function App() {
           onOpenAuthModal={handleOpenAuthModal}
           onLogout={handleLogout}
           onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebarCollapse={toggleSidebarCollapsed}
         />
 
         <main className="flex-1 pb-12 bg-slate-100">
