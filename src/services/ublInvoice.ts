@@ -1,4 +1,5 @@
 import type { CompanySettings, Contact, EDocumentType, Invoice, InvoiceItem } from "../types";
+import { resolveScenarioProfileCode } from "../data/gibTaxCodes";
 
 /** Escape text placed in an XML node or attribute. */
 export function xmlEscape(value: unknown): string {
@@ -120,7 +121,10 @@ export function buildUblInvoiceXml(options: UblInvoiceBuildOptions): string {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
   const isArchive = ["e_arsiv", "earsiv", "earsivfatura", "e-arsiv"].includes(type);
-  const profile = isArchive ? "EARSIVFATURA" : String(options.profile || "TEMELFATURA").toUpperCase();
+  const rawProfile = options.profile || invoice.profile || invoice.scenario;
+  const profile = isArchive && !rawProfile
+    ? "EARSIVFATURA"
+    : resolveScenarioProfileCode(rawProfile || (isArchive ? "EARSIVFATURA" : "TEMELFATURA"));
   const currency = String(invoice.currency || company.currency || "TRY").replace("₺", "TRY");
   const id = String(invoice.invoiceNumber || invoice.id || `MUV${new Date().getFullYear()}${Date.now()}`).replace(/\s+\(.*?\)$/, "");
   const uuid = String(options.uuid || invoice.eDocumentEttn || uuidFallback());
