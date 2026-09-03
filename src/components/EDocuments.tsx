@@ -48,6 +48,8 @@ import {
   resolveMysoftDocumentStatus,
 } from "../services/mysoftEDocumentService";
 import { useMysoftTenants } from "../hooks/useMysoftTenants";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 
 export interface EDocumentsProps {
   /** The navigation item controls the API direction without exposing credentials to the browser. */
@@ -315,6 +317,16 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] =
     useState<MysoftEDocument | null>(null);
+  const docNav = useDetailNavigation({
+    moduleKey: "e-documents",
+  });
+
+  const handleCloseDetail = () => {
+    docNav.backToList();
+    setSelectedDocument(null);
+    setActionError(null);
+    setIsRejecting(false);
+  };
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<{
@@ -475,6 +487,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
 
   const openDetails = async (document: MysoftEDocument) => {
     setSelectedDocument(document);
+    docNav.openDetail(document, documentNumber(document));
     setDetailError(null);
     setActionError(null);
     setIsRejecting(false);
@@ -1145,282 +1158,316 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       </div>
 
       {selectedDocument && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="E-Belge detayı"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSelectedDocument(null);
-          }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
-            <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-slate-200">
-              <div>
-                <div className="flex items-center gap-2">
-                  <DirectionIcon
-                    className={`w-4 h-4 ${activeDirection === "inbox" ? "text-sky-600" : "text-[#8252F6]"}`}
-                  />
-                  <h2 className="font-semibold text-slate-900">
-                    {documentNumber(selectedDocument)}
-                  </h2>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  {documentType(selectedDocument)} ·{" "}
-                  {formatDate(documentDate(selectedDocument))}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedDocument(null)}
-                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100"
-                aria-label="Detayı kapat"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            {isDetailLoading ? (
-              <div className="p-12 flex justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-[#8252F6]" />
-              </div>
-            ) : (
-              <div className="p-5 space-y-5 overflow-y-auto max-h-[calc(90vh-76px)]">
-                {detailError && (
-                  <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                    Detay servisi yanıt vermedi; listede bulunan bilgiler
-                    gösteriliyor.
-                  </div>
-                )}
-                {actionError && (
-                  <div
-                    className="flex items-start justify-between gap-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800"
-                    role="alert"
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-100">
+          <DetailPageLayout
+            title={`${documentNumber(selectedDocument)} Önizleme`}
+            subtitle={`${documentType(selectedDocument)} · ${documentParty(selectedDocument)} · ${formatDate(documentDate(selectedDocument))}`}
+            breadcrumbs={[
+              { label: "E-Belgeler", onClick: handleCloseDetail },
+              {
+                label: activeDirection === "inbox" ? "Gelen Faturalar" : "Giden Faturalar",
+                onClick: handleCloseDetail,
+              },
+              {
+                label: `${documentNumber(selectedDocument)} Önizleme`,
+                active: true,
+              },
+            ]}
+            onBack={handleCloseDetail}
+            statusBadge={
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                {resolveMysoftDocumentStatus(documentStatus(selectedDocument)).label}
+              </span>
+            }
+            headerIcon={
+              <DirectionIcon
+                className={`w-5 h-5 ${activeDirection === "inbox" ? "text-sky-600" : "text-[#8252F6]"}`}
+              />
+            }
+            actions={
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void triggerDownload(selectedDocument, "xml")}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <FileCode2 className="w-3.5 h-3.5" />
+                  <span>XML</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void triggerDownload(selectedDocument, "pdf")}
+                  className="px-3 py-1.5 rounded-xl bg-[#8252F6] text-white text-xs font-semibold hover:bg-[#703EE5] flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>PDF İndir</span>
+                </button>
+                {asRecord(selectedDocument).downloadUrl && (
+                  <a
+                    href={asRecord(selectedDocument).downloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-2xs"
                   >
-                    <span>{actionError}</span>
-                    <button
-                      type="button"
-                      onClick={() => setActionError(null)}
-                      className="font-semibold underline shrink-0"
-                    >
-                      Kapat
-                    </button>
-                  </div>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Mysoft</span>
+                  </a>
                 )}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    [
-                      "Yön",
-                      documentDirection(selectedDocument) === "inbox"
-                        ? "Gelen"
-                        : "Giden",
-                    ],
-                    ["Cari", documentParty(selectedDocument)],
-                    ["VKN / TCKN", documentTaxNumber(selectedDocument)],
-                    [
-                      "Tutar",
-                      formatMoney(
-                        documentAmount(selectedDocument),
-                        documentCurrency(selectedDocument),
-                      ),
-                    ],
-                  ].map(([label, value]) => (
+                <button
+                  type="button"
+                  onClick={handleCloseDetail}
+                  className="px-4 py-1.5 rounded-xl bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 transition-colors cursor-pointer"
+                >
+                  Geri Dön
+                </button>
+              </div>
+            }
+          >
+            <div className="bg-white rounded-3xl max-w-4xl mx-auto p-6 sm:p-8 space-y-6 border border-slate-200 shadow-sm">
+              {isDetailLoading ? (
+                <div className="p-12 flex justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-[#8252F6]" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {detailError && (
+                    <div className="px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                      Detay servisi yanıt vermedi; listede bulunan bilgiler gösteriliyor.
+                    </div>
+                  )}
+                  {actionError && (
                     <div
-                      key={label}
-                      className="rounded-xl bg-slate-50 border border-slate-100 p-3"
+                      className="flex items-start justify-between gap-3 px-4 py-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800"
+                      role="alert"
                     >
-                      <p className="text-[10px] uppercase tracking-wider text-slate-400">
-                        {label}
-                      </p>
-                      <p className="text-xs font-semibold text-slate-800 mt-1 break-words">
-                        {value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-                  <div>
-                    <span className="text-xs text-slate-400">ETTN / UUID</span>
-                    <p className="font-mono text-xs text-slate-700 mt-1 break-all">
-                      {asRecord(selectedDocument).ettn ||
-                        asRecord(selectedDocument).uuid ||
-                        "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400">Durum</span>
-                    <p className="text-xs text-slate-700 mt-1">
-                      {resolveMysoftDocumentStatus(documentStatus(selectedDocument)).label}
-                    </p>
-                    {(asRecord(selectedDocument).envelopeStatusText ||
-                      asRecord(selectedDocument).envelopeStatusCode) && (
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        Zarf:{" "}
-                        {asRecord(selectedDocument).envelopeStatusText ||
-                          asRecord(selectedDocument).envelopeStatusCode}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400">Oluşturulma</span>
-                    <p className="text-xs text-slate-700 mt-1">
-                      {formatDate(asRecord(selectedDocument).createdAt)}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400">Güncellenme</span>
-                    <p className="text-xs text-slate-700 mt-1">
-                      {formatDate(asRecord(selectedDocument).updatedAt)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-100">
-                  {activeDirection === "inbox" ? (
-                    <div className="w-full flex flex-wrap items-center justify-end gap-2 pb-2 mb-1 border-b border-slate-100">
-                      {!isRejecting ? (
-                        <>
-                          {!isDespatch && (
-                          <button
-                            type="button"
-                            onClick={() => void runDocumentAction("accept")}
-                            disabled={Boolean(actionLoading)}
-                            className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
-                          >
-                            {actionLoading === "accept" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                            Kabul et
-                          </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => void runDocumentAction("acknowledge")}
-                            disabled={Boolean(actionLoading)}
-                            className="px-3 py-2 rounded-lg border border-sky-200 text-sky-700 text-xs font-semibold hover:bg-sky-50 disabled:opacity-50 flex items-center gap-2"
-                            title="Belgeyi Mysoft'ta alındı olarak kaydet"
-                          >
-                            {actionLoading === "acknowledge" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />}
-                            Alındı
-                          </button>
-                          {!isDespatch && (
-                          <button
-                            type="button"
-                            onClick={() => { setIsRejecting(true); setActionError(null); }}
-                            disabled={Boolean(actionLoading)}
-                            className="px-3 py-2 rounded-lg border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-50 disabled:opacity-50 flex items-center gap-2"
-                          >
-                            <XCircle className="w-4 h-4" />
-                            Reddet
-                          </button>
-                          )}
-                        </>
-                      ) : (
-                        <div className="w-full rounded-xl border border-rose-200 bg-rose-50/60 p-3 space-y-2">
-                          <label htmlFor="mysoft-reject-reason" className="block text-xs font-semibold text-rose-800">
-                            Ret gerekçesi
-                          </label>
-                          <textarea
-                            id="mysoft-reject-reason"
-                            value={rejectReason}
-                            onChange={(event) => setRejectReason(event.target.value)}
-                            rows={2}
-                            placeholder="Mysoft'a iletilecek ret gerekçesini yazın"
-                            className="w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs outline-none focus:border-rose-400"
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => { setIsRejecting(false); setRejectReason(""); }}
-                              disabled={Boolean(actionLoading)}
-                              className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                            >
-                              Vazgeç
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void runDocumentAction("deny")}
-                              disabled={Boolean(actionLoading) || !rejectReason.trim()}
-                              className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 disabled:opacity-50 flex items-center gap-2"
-                            >
-                              {actionLoading === "deny" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                              Ret gönder
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    !isDespatch ? (
-                    <div className="w-full flex flex-wrap items-center justify-end gap-2 pb-2 mb-1 border-b border-slate-100">
-                      {isArchiveDocument(selectedDocument) && (
-                        <button
-                          type="button"
-                          onClick={() => void runDocumentAction("cancel")}
-                          disabled={Boolean(actionLoading)}
-                          className="px-3 py-2 rounded-lg border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-50 disabled:opacity-50 flex items-center gap-2"
-                        >
-                          {actionLoading === "cancel" ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                          İptal et
-                        </button>
-                      )}
+                      <span>{actionError}</span>
                       <button
                         type="button"
-                        onClick={() => void runDocumentAction("send-draft")}
-                        disabled={Boolean(actionLoading)}
-                        className="px-3 py-2 rounded-lg bg-[#8252F6] text-white text-xs font-semibold hover:bg-[#703EE5] disabled:opacity-50 flex items-center gap-2"
+                        onClick={() => setActionError(null)}
+                        className="font-semibold underline shrink-0 cursor-pointer"
                       >
-                        {actionLoading === "send-draft" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpFromLine className="w-4 h-4" />}
-                        Taslağı GİB'e gönder
+                        Kapat
                       </button>
                     </div>
-                    ) : null
                   )}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void triggerDownload(selectedDocument, "xml")
-                    }
-                    className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                  >
-                    <FileCode2 className="w-4 h-4" />
-                    XML indir
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void triggerDownload(selectedDocument, "pdf")
-                    }
-                    className="px-3 py-2 rounded-lg bg-[#8252F6] text-white text-xs font-semibold hover:bg-[#703EE5] flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    PDF indir
-                  </button>
-                  {asRecord(selectedDocument).downloadUrl && (
-                    <a
-                      href={asRecord(selectedDocument).downloadUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Mysoft'ta aç
-                    </a>
-                  )}
-                  {activeDirection === "inbox" && onImportInvoice && !isDespatch && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      [
+                        "Yön",
+                        documentDirection(selectedDocument) === "inbox"
+                          ? "Gelen"
+                          : "Giden",
+                      ],
+                      ["Cari", documentParty(selectedDocument)],
+                      ["VKN / TCKN", documentTaxNumber(selectedDocument)],
+                      [
+                        "Tutar",
+                        formatMoney(
+                          documentAmount(selectedDocument),
+                          documentCurrency(selectedDocument),
+                        ),
+                      ],
+                    ].map(([label, value]) => (
+                      <div
+                        key={label}
+                        className="rounded-2xl bg-slate-50 border border-slate-200 p-3.5"
+                      >
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                          {label}
+                        </p>
+                        <p className="text-xs font-bold text-slate-800 mt-1 break-words">
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                    <div>
+                      <span className="text-xs text-slate-400 font-semibold">ETTN / UUID</span>
+                      <p className="font-mono text-xs text-slate-800 mt-1 break-all font-semibold">
+                        {asRecord(selectedDocument).ettn ||
+                          asRecord(selectedDocument).uuid ||
+                          "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-400 font-semibold">Durum</span>
+                      <p className="text-xs text-slate-800 mt-1 font-semibold">
+                        {resolveMysoftDocumentStatus(documentStatus(selectedDocument)).label}
+                      </p>
+                      {(asRecord(selectedDocument).envelopeStatusText ||
+                        asRecord(selectedDocument).envelopeStatusCode) && (
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Zarf:{" "}
+                          {asRecord(selectedDocument).envelopeStatusText ||
+                            asRecord(selectedDocument).envelopeStatusCode}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-400 font-semibold">Oluşturulma Tarihi</span>
+                      <p className="text-xs text-slate-800 mt-1 font-semibold">
+                        {formatDate(asRecord(selectedDocument).createdAt)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-400 font-semibold">Güncellenme Tarihi</span>
+                      <p className="text-xs text-slate-800 mt-1 font-semibold">
+                        {formatDate(asRecord(selectedDocument).updatedAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-slate-200">
+                    {activeDirection === "inbox" ? (
+                      <div className="w-full flex flex-wrap items-center justify-end gap-2 pb-2 mb-1 border-b border-slate-100">
+                        {!isRejecting ? (
+                          <>
+                            {!isDespatch && (
+                              <button
+                                type="button"
+                                onClick={() => void runDocumentAction("accept")}
+                                disabled={Boolean(actionLoading)}
+                                className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 shadow-xs cursor-pointer"
+                              >
+                                {actionLoading === "accept" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                Kabul Et
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => void runDocumentAction("acknowledge")}
+                              disabled={Boolean(actionLoading)}
+                              className="px-4 py-2 rounded-xl border border-sky-200 text-sky-700 text-xs font-bold hover:bg-sky-50 disabled:opacity-50 flex items-center gap-2 shadow-xs cursor-pointer"
+                              title="Belgeyi Mysoft'ta alındı olarak kaydet"
+                            >
+                              {actionLoading === "acknowledge" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />}
+                              Alındı
+                            </button>
+                            {!isDespatch && (
+                              <button
+                                type="button"
+                                onClick={() => { setIsRejecting(true); setActionError(null); }}
+                                disabled={Boolean(actionLoading)}
+                                className="px-4 py-2 rounded-xl border border-rose-200 text-rose-700 text-xs font-bold hover:bg-rose-50 disabled:opacity-50 flex items-center gap-2 shadow-xs cursor-pointer"
+                              >
+                                <XCircle className="w-4 h-4" />
+                                Reddet
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <div className="w-full rounded-2xl border border-rose-200 bg-rose-50/60 p-4 space-y-3">
+                            <label htmlFor="mysoft-reject-reason" className="block text-xs font-bold text-rose-800">
+                              Ret Gerekçesi
+                            </label>
+                            <textarea
+                              id="mysoft-reject-reason"
+                              value={rejectReason}
+                              onChange={(event) => setRejectReason(event.target.value)}
+                              rows={3}
+                              placeholder="Mysoft'a iletilecek resmi ret gerekçesini yazın..."
+                              className="w-full rounded-xl border border-rose-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-rose-400"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => { setIsRejecting(false); setRejectReason(""); }}
+                                disabled={Boolean(actionLoading)}
+                                className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+                              >
+                                Vazgeç
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void runDocumentAction("deny")}
+                                disabled={Boolean(actionLoading) || !rejectReason.trim()}
+                                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 disabled:opacity-50 flex items-center gap-2 shadow-xs cursor-pointer"
+                              >
+                                {actionLoading === "deny" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                Ret Gönder
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      !isDespatch ? (
+                        <div className="w-full flex flex-wrap items-center justify-end gap-2 pb-2 mb-1 border-b border-slate-100">
+                          {isArchiveDocument(selectedDocument) && (
+                            <button
+                              type="button"
+                              onClick={() => void runDocumentAction("cancel")}
+                              disabled={Boolean(actionLoading)}
+                              className="px-4 py-2 rounded-xl border border-rose-200 text-rose-700 text-xs font-bold hover:bg-rose-50 disabled:opacity-50 flex items-center gap-2 shadow-xs cursor-pointer"
+                            >
+                              {actionLoading === "cancel" ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                              İptal Et
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void runDocumentAction("send-draft")}
+                            disabled={Boolean(actionLoading)}
+                            className="px-4 py-2 rounded-xl bg-[#8252F6] text-white text-xs font-bold hover:bg-[#703EE5] disabled:opacity-50 flex items-center gap-2 shadow-xs cursor-pointer"
+                          >
+                            {actionLoading === "send-draft" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpFromLine className="w-4 h-4" />}
+                            Taslağı GİB'e Gönder
+                          </button>
+                        </div>
+                      ) : null
+                    )}
                     <button
                       type="button"
-                      onClick={() => {
-                        onImportInvoice(selectedDocument);
-                        setNotice("Belge yerel fatura taslağına aktarıldı.");
-                        setSelectedDocument(null);
-                      }}
-                      className="px-3 py-2 rounded-lg border border-[#fcdac2] bg-[#fff6ef] text-[#c25a13] text-xs font-semibold hover:bg-[#ffeddc] flex items-center gap-2"
+                      onClick={() =>
+                        void triggerDownload(selectedDocument, "xml")
+                      }
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-2xs cursor-pointer"
                     >
-                      <ArrowDownToLine className="w-4 h-4" />
-                      Faturaya aktar
+                      <FileCode2 className="w-4 h-4" />
+                      XML İndir
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void triggerDownload(selectedDocument, "pdf")
+                      }
+                      className="px-4 py-2 rounded-xl bg-[#8252F6] text-white text-xs font-bold hover:bg-[#703EE5] flex items-center gap-2 shadow-xs cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      PDF İndir
+                    </button>
+                    {asRecord(selectedDocument).downloadUrl && (
+                      <a
+                        href={asRecord(selectedDocument).downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-2xs"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Mysoft'ta Aç
+                      </a>
+                    )}
+                    {activeDirection === "inbox" && onImportInvoice && !isDespatch && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onImportInvoice(selectedDocument);
+                          setNotice("Belge yerel fatura taslağına aktarıldı.");
+                          handleCloseDetail();
+                        }}
+                        className="px-4 py-2 rounded-xl border border-[#fcdac2] bg-[#fff6ef] text-[#c25a13] text-xs font-bold hover:bg-[#ffeddc] flex items-center gap-2 shadow-xs cursor-pointer"
+                      >
+                        <ArrowDownToLine className="w-4 h-4" />
+                        Faturaya Aktar
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          </DetailPageLayout>
         </div>
       )}
     </section>

@@ -4,6 +4,8 @@ import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
 import { formatWaybillWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import {
   Truck,
   Plus,
@@ -127,6 +129,25 @@ export const Waybills: React.FC<WaybillsProps> = ({
   const [isDownloadingWaybillPDF, setIsDownloadingWaybillPDF] = useState(false);
   const [convertConfirmWaybill, setConvertConfirmWaybill] = useState<Waybill | null>(null);
 
+  const nav = useDetailNavigation<Waybill>({ moduleKey: "waybills" });
+
+  const handleBackToList = React.useCallback(() => {
+    setIsModalOpen(false);
+    setEditingWaybillId(null);
+    setEditingWaybillNumber(null);
+    setSelectedWaybillForView(null);
+    nav.backToList();
+  }, [nav]);
+
+  React.useEffect(() => {
+    if (nav.mode === "list") {
+      setIsModalOpen(false);
+      setEditingWaybillId(null);
+      setEditingWaybillNumber(null);
+      setSelectedWaybillForView(null);
+    }
+  }, [nav.mode]);
+
   const handleDownloadWaybillPDF = async () => {
     if (!selectedWaybillForView) return;
     setIsDownloadingWaybillPDF(true);
@@ -241,6 +262,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
       ]);
     }
     setIsModalOpen(true);
+    nav.openCreate();
   };
 
   const handleOpenEditWaybillModal = (waybill: Waybill) => {
@@ -287,6 +309,12 @@ export const Waybills: React.FC<WaybillsProps> = ({
       ]);
     }
     setIsModalOpen(true);
+    nav.openEdit(waybill, waybill.id);
+  };
+
+  const handleOpenWaybillDetail = (wb: Waybill) => {
+    setSelectedWaybillForView(wb);
+    nav.openDetail(wb, wb.id);
   };
 
   // Contact Selection Change
@@ -421,9 +449,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
       if (onUpdateWaybill) {
         onUpdateWaybill(updatedWaybill);
       }
-      setEditingWaybillId(null);
-      setEditingWaybillNumber(null);
-      setIsModalOpen(false);
+      handleBackToList();
       return;
     }
 
@@ -455,7 +481,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
     };
 
     onAddWaybill(newWaybill);
-    setIsModalOpen(false);
+    handleBackToList();
   };
 
   // Years memo
@@ -591,7 +617,9 @@ export const Waybills: React.FC<WaybillsProps> = ({
       : "Sevk ve alış irsaliyeleri takibi, sevkiyat araç & sürücü kaydı ve tek tıkla faturalandırma modülü";
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
+    <>
+      {!isModalOpen && !selectedWaybillForView && (
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Header (Lila Bal Peteği & Geometrik Desen - Faturalar Tasarımı ile Aynı) */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
@@ -1052,7 +1080,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
 
                         {/* İncele Button */}
                         <button
-                          onClick={() => setSelectedWaybillForView(waybill)}
+                          onClick={() => handleOpenWaybillDetail(waybill)}
                           className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                           title="İrsaliye Detayını İncele"
                         >
@@ -1073,8 +1101,8 @@ export const Waybills: React.FC<WaybillsProps> = ({
                         {/* Yazdır Button */}
                         <button
                           onClick={() => {
-                            setSelectedWaybillForView(waybill);
-                            setTimeout(() => window.print(), 100);
+                            handleOpenWaybillDetail(waybill);
+                            setTimeout(() => window.print(), 200);
                           }}
                           className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                           title="İrsaliye Belgesini Yazdır"
@@ -1126,45 +1154,74 @@ export const Waybills: React.FC<WaybillsProps> = ({
             </button>
           </div>
         )}
+        </div>
       </div>
+      )}
 
-      {/* NEW WAYBILL MODAL */}
+      {/* FULL-PAGE DETAIL VIEW: NEW / EDIT WAYBILL */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
-            {/* Modal Header */}
-            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-500/20 rounded-xl text-blue-300 border border-blue-400/30">
-                  <Truck className="w-6 h-6" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold">
-                    {editingWaybillId
-                      ? `${waybillType === "dispatch" ? "Sevk" : "Alış"} İrsaliyesini Düzenle (${editingWaybillNumber || ""})`
-                      : `Yeni ${waybillType === "dispatch" ? "Sevk" : "Alış"} İrsaliyesi Düzenle`}
-                  </h2>
-                  <p className="text-xs text-slate-300 font-medium">
-                    Cari firma, araç plaka, sürücü ve stok kalemlerini girin
-                  </p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title={
+            editingWaybillId
+              ? `${waybillType === "dispatch" ? "Sevk" : "Alış"} İrsaliyesini Düzenle`
+              : `Yeni ${waybillType === "dispatch" ? "Sevk" : "Alış"} İrsaliyesi Düzenle`
+          }
+          subtitle={
+            editingWaybillId
+              ? `Belge No: ${editingWaybillNumber || waybillNumber} • Cari firma, araç plaka, sürücü ve stok kalemlerini güncelleyin`
+              : "Cari firma, araç plaka, sürücü ve stok kalemlerini girerek irsaliye oluşturun"
+          }
+          breadcrumbs={[
+            { label: "İrsaliyeler", onClick: handleBackToList },
+            {
+              label: editingWaybillId
+                ? `${editingWaybillNumber || "İrsaliye Düzenle"}`
+                : waybillType === "dispatch"
+                ? "Yeni Sevk İrsaliyesi"
+                : "Yeni Alış İrsaliyesi",
+              active: true,
+            },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span
+              className={`px-3 py-1 text-xs font-bold rounded-xl border ${
+                waybillType === "dispatch"
+                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                  : "bg-indigo-50 text-indigo-700 border-indigo-200"
+              }`}
+            >
+              {waybillType === "dispatch" ? "Sevk İrsaliyesi (Giden)" : "Alış İrsaliyesi (Gelen)"}
+            </span>
+          }
+          headerIcon={<Truck className="w-5 h-5 text-blue-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setEditingWaybillId(null);
-                  setEditingWaybillNumber(null);
-                  setIsModalOpen(false);
-                }}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-slate-300 bg-slate-800/90 hover:bg-rose-500/25 hover:text-rose-200 hover:border-rose-400/40 border border-slate-700 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 group shrink-0"
-                title="Pencereyi Kapat"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
               >
-                <X className="w-4 h-4 text-slate-400 group-hover:text-rose-300 transition-transform group-hover:rotate-90" />
-                <span className="font-extrabold">Kapat</span>
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="waybill-form"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>
+                  {editingWaybillId
+                    ? "Değişiklikleri Güncelle & Kaydet"
+                    : "İrsaliyeyi Kaydet & Sevk Et"}
+                </span>
               </button>
             </div>
-
-            <form onSubmit={handleSaveWaybill} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          }
+          fullWidth
+        >
+          <div className="max-w-6xl mx-auto bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-8">
+            <form id="waybill-form" onSubmit={handleSaveWaybill} className="space-y-6">
               {/* Type Switcher & Waybill Number */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                 <div>
@@ -1475,15 +1532,11 @@ export const Waybills: React.FC<WaybillsProps> = ({
                 </div>
               </div>
 
-              {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+              {/* Form Bottom Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditingWaybillId(null);
-                    setEditingWaybillNumber(null);
-                    setIsModalOpen(false);
-                  }}
+                  onClick={handleBackToList}
                   className="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
                 >
                   Vazgeç
@@ -1502,82 +1555,82 @@ export const Waybills: React.FC<WaybillsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* VIEW / PRINT WAYBILL DOCUMENT PREVIEW MODAL */}
+      {/* FULL-PAGE DETAIL VIEW: WAYBILL DOCUMENT PREVIEW */}
       {selectedWaybillForView && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in">
-          <div className="bg-white border border-purple-200 text-slate-900 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto print:max-h-none print:shadow-none print:m-0 print:w-full print:max-w-none print:border-none print:bg-white print:text-black">
-            {/* Top Control Bar (Sticky at Top - Hidden on print) */}
-            <div className="sticky top-0 bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-3.5 sm:px-6 flex items-center justify-between z-20 border-b border-purple-800/40 shadow-sm shrink-0 print:hidden">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-xs font-extrabold px-3 py-1 rounded-lg uppercase tracking-wide border shrink-0 bg-purple-500/20 text-purple-200 border-purple-400/30">
-                  {selectedWaybillForView.type === "receipt" ? "Alış İrsaliyesi" : "Sevk İrsaliyesi"}
-                </span>
-                <span className="text-xs text-purple-200/90 font-mono font-bold truncate">
-                  Belge No: {selectedWaybillForView.waybillNumber}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const wb = selectedWaybillForView;
-                    setSelectedWaybillForView(null);
-                    handleOpenEditWaybillModal(wb);
-                  }}
-                  className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                  title="İrsaliyeyi Düzenle"
-                >
-                  <Edit2 className="w-3.5 h-3.5 text-amber-300" />
-                  <span className="hidden sm:inline">Düzenle</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setWhatsAppWaybill(selectedWaybillForView)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
-                >
-                  <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
-                  <span>WhatsApp ile Gönder</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleDownloadWaybillPDF}
-                  disabled={isDownloadingWaybillPDF}
-                  className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <Download className="w-4 h-4 text-purple-200" />
-                  <span>{isDownloadingWaybillPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
-                >
-                  <Printer className="w-4 h-4 text-slate-300" />
-                  <span className="hidden sm:inline">Yazdır</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedWaybillForView(null)}
-                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                  title="Pencereyi Kapat"
-                >
-                  <X className="w-4 h-4 text-rose-300" />
-                  <span>Kapat</span>
-                </button>
-              </div>
+        <DetailPageLayout
+          title={`${selectedWaybillForView.type === "receipt" ? "Alış İrsaliyesi" : "Sevk İrsaliyesi"} - ${selectedWaybillForView.waybillNumber}`}
+          subtitle={`Düzenlenme: ${formatDate(selectedWaybillForView.waybillDate)} • Cari: ${selectedWaybillForView.contactName}`}
+          breadcrumbs={[
+            { label: "İrsaliyeler", onClick: handleBackToList },
+            { label: selectedWaybillForView.waybillNumber, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-lg uppercase tracking-wide border shrink-0 bg-purple-50 text-purple-700 border-purple-200">
+                {selectedWaybillForView.type === "receipt" ? "Alış İrsaliyesi" : "Sevk İrsaliyesi"}
+              </span>
+              <span
+                className={`text-xs font-extrabold px-2.5 py-0.5 rounded-lg border ${
+                  selectedWaybillForView.status === "delivered"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-blue-50 text-blue-700 border-blue-200"
+                }`}
+              >
+                {selectedWaybillForView.status === "delivered" ? "Teslim Edildi" : "Sevk Edildi"}
+              </span>
             </div>
-
-            {/* Scrollable Printable Document Sheet */}
-            <div className="p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:overflow-visible custom-scrollbar">
-              <div id="printable-waybill-sheet" className="bg-white text-slate-900 p-6 sm:p-8 border border-purple-100 rounded-xl space-y-6 print:border-none print:p-0">
+          }
+          headerIcon={<FileText className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const wb = selectedWaybillForView;
+                  setSelectedWaybillForView(null);
+                  handleOpenEditWaybillModal(wb);
+                }}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                title="İrsaliyeyi Düzenle"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-amber-700" />
+                <span>Düzenle</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWhatsAppWaybill(selectedWaybillForView)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all"
+              >
+                <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                <span>WhatsApp ile Gönder</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadWaybillPDF}
+                disabled={isDownloadingWaybillPDF}
+                className="bg-purple-600 hover:bg-purple-700 text-white border border-purple-500 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all disabled:opacity-50"
+              >
+                <Download className="w-4 h-4 text-purple-200" />
+                <span>{isDownloadingWaybillPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-slate-800 hover:bg-slate-900 text-slate-200 border border-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all"
+              >
+                <Printer className="w-4 h-4 text-slate-300" />
+                <span>Yazdır</span>
+              </button>
+            </div>
+          }
+          fullWidth
+        >
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div id="printable-waybill-sheet" className="bg-white text-slate-900 p-6 sm:p-8 border border-purple-100 rounded-2xl shadow-sm space-y-6 print:border-none print:p-0 print:shadow-none">
                 {/* Header Banner */}
                 <div className="flex items-start justify-between border-b-2 border-purple-950 pb-6">
                   <div className="space-y-1">
@@ -1732,10 +1785,9 @@ export const Waybills: React.FC<WaybillsProps> = ({
                     <div className="text-[10px] text-slate-400">İmza / Kaşe / Teslim Alma Saati</div>
                   </div>
                 </div>
-              </div>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* CONVERT TO INVOICE CONFIRM MODAL */}
@@ -1826,6 +1878,6 @@ export const Waybills: React.FC<WaybillsProps> = ({
           }}
         />
       )}
-    </div>
+    </>
   );
 };

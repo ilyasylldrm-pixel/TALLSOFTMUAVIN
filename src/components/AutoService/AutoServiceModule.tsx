@@ -36,6 +36,8 @@ import { AutoServiceRecord, AutoPartItem, AutoLaborItem, Contact, AutoServiceSta
 import { ServiceInvoicingModal } from "../ServiceInvoicingModal";
 import { ServiceWhatsAppModal } from "../ServiceWhatsAppModal";
 import { ServiceDeliveryModal } from "../ServiceDeliveryModal";
+import { DetailPageLayout } from "../common/DetailPageLayout";
+import { useDetailNavigation } from "../../hooks/useDetailNavigation";
 
 interface AutoServiceModuleProps {
   autoServices: AutoServiceRecord[];
@@ -62,6 +64,19 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [printDocType, setPrintDocType] = useState<"reception" | "work_order" | "quote" | "delivery">("reception");
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+
+  const nav = useDetailNavigation<AutoServiceRecord>({ moduleKey: "auto-service" });
+
+  const handleBackToList = React.useCallback(() => {
+    setIsModalOpen(false);
+    nav.backToList();
+  }, [nav]);
+
+  React.useEffect(() => {
+    if (nav.mode === "list") {
+      setIsModalOpen(false);
+    }
+  }, [nav.mode]);
 
   // Delivery Modal State
   const [deliveryRecord, setDeliveryRecord] = useState<AutoServiceRecord | null>(null);
@@ -1889,32 +1904,42 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
         </div>
       )}
 
-      {/* CREATE / EDIT SERVICE RECORD MODAL */}
+      {/* FULL-PAGE DETAIL VIEW: CREATE / EDIT SERVICE RECORD */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl border border-purple-200/80 shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col animate-scaleUp">
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50 p-5 border-b border-purple-200/60 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-100 border border-purple-200 flex items-center justify-center text-purple-700 font-bold">
-                  <Car className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-950">
-                    {modalMode === "create" ? "Yeni Araç Servis Kabulü & İş Emri" : `İş Emri Düzenle (${formData.serviceNo})`}
-                  </h3>
-                  <p className="text-xs font-semibold text-purple-950/80">
-                    Araç plakası, müşteri şikayeti, yedek parçalar ve ustalık işçilikleri
-                  </p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title={modalMode === "create" ? "Yeni Araç Servis Kabulü & İş Emri" : `İş Emrini Düzenle (${formData.serviceNo})`}
+          subtitle="Araç plakası, müşteri şikayeti, yedek parçalar ve ustalık işçilikleri"
+          breadcrumbs={[
+            { label: "Oto Servis Yönetimi", onClick: handleBackToList },
+            { label: modalMode === "create" ? "Yeni Servis Kabulü" : `${formData.plate} - ${formData.serviceNo}`, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {formData.plate || "Yeni Araç"}
+            </span>
+          }
+          headerIcon={<Car className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/80 hover:bg-white text-slate-500 hover:text-slate-900 flex items-center justify-center border border-slate-200 transition-colors cursor-pointer"
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
-                <X className="w-4 h-4" />
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRecord}
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>{modalMode === "create" ? "İş Emrini Kaydet" : "Değişiklikleri Güncelle"}</span>
               </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-200/80 shadow-sm max-w-4xl mx-auto space-y-6">
 
             {/* Modal Body */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
@@ -2271,11 +2296,11 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 border-t border-purple-200/60 flex items-center justify-between">
+            {/* Form Footer */}
+            <div className="p-4 bg-slate-50 border-t border-purple-200/60 rounded-2xl flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
+                onClick={handleBackToList}
                 className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 Vazgeç
@@ -2289,7 +2314,7 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* SERVİS FATURALANDIRMA MODALI */}

@@ -21,7 +21,10 @@ import {
   Building2,
   Zap,
   MessageCircle,
+  CheckCircle2,
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 
 interface TransactionsProps {
   transactions: Transaction[];
@@ -97,6 +100,17 @@ export const Transactions: React.FC<TransactionsProps> = ({
   onAddTransaction,
   onDeleteTransaction,
 }) => {
+  // Full-Page Detail Navigation
+  const detailNav = useDetailNavigation<Transaction>({
+    moduleKey: "transactions",
+  });
+
+  const handleBackToList = () => {
+    detailNav.backToList();
+    setIsModalOpen(false);
+    setViewingTx(null);
+  };
+
   const [filterType, setFilterType] = useState<string>(forcedType || "all");
   const [search, setSearch] = useState<string>("");
   const [displayLimit, setDisplayLimit] = useState<number>(100);
@@ -177,6 +191,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
       },
     ]);
     setIsModalOpen(true);
+    detailNav.openCreate();
   };
 
   const handleAddItem = () => {
@@ -275,7 +290,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
     };
 
     onAddTransaction(newTx);
-    setIsModalOpen(false);
+    handleBackToList();
   };
 
   const activeSearchQuery = (globalSearchTerm || search).toLowerCase().trim();
@@ -391,6 +406,509 @@ export const Transactions: React.FC<TransactionsProps> = ({
       rows,
     };
   };
+
+  // =========================================================================
+  // 1. FULL-PAGE DETAIL VIEW: CREATE TRANSACTION (YENİ GELİR / GİDER FİŞİ)
+  // =========================================================================
+  if (detailNav.mode === "create" || isModalOpen) {
+    const isIncome = txType === "income";
+    return (
+      <DetailPageLayout
+        title={isIncome ? "Yeni Gelir / Tahsilat Fişi" : "Yeni Gider / Tediye Fişi"}
+        subtitle="Fatura düzeninde kalemli gelir ve gider fişi girişi, KDV hesaplaması ve finans kaydı"
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          {
+            label:
+              forcedType === "income"
+                ? "Gelir İşlemleri"
+                : forcedType === "expense"
+                ? "Gider İşlemleri"
+                : "Kasa & Banka Hareketleri",
+            onClick: handleBackToList,
+          },
+          { label: isIncome ? "Yeni Gelir Fişi" : "Yeni Gider Fişi", active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-black border ${
+              isIncome
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-rose-50 text-rose-700 border-rose-200"
+            }`}
+          >
+            {isIncome ? "+ GELİR / TAHSİLAT" : "- GİDER / TEDİYE"}
+          </span>
+        }
+        headerIcon={<Receipt className="w-5 h-5 text-purple-700" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+            >
+              İptal / Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="transaction-create-form"
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Fişi Kaydet</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-4xl mx-auto">
+          <form id="transaction-create-form" onSubmit={handleSave} className="space-y-6">
+            {/* Header Inputs Card */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Fiş Tipi *
+                  </label>
+                  <select
+                    value={txType}
+                    onChange={(e) => {
+                      const val = e.target.value as TransactionType;
+                      setTxType(val);
+                      setCategory(val === "income" ? categoriesIncome[0] : categoriesExpense[0]);
+                      setDocumentNo(
+                        val === "income"
+                          ? `GLR-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
+                          : `GDR-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
+                      );
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="income">Gelir Fişi (+ Satış / Tahsilat)</option>
+                    <option value="expense">Gider Fişi (- Harcama / Tediye)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Cari Hesap (Müşteri / Tedarikçi)
+                  </label>
+                  <select
+                    value={contactId}
+                    onChange={(e) => setContactId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">-- Cari Seçiniz (Opsiyonel) --</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.type === "customer" ? "Müşteri" : "Tedarikçi"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Kasa / Banka Hesabı *
+                  </label>
+                  <select
+                    required
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.type === "cash" ? "Kasa" : "Banka"}) - ₺
+                        {a.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Kategori *
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    {(txType === "income" ? categoriesIncome : categoriesExpense).map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Belge / Fiş No *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={documentNo}
+                    onChange={(e) => setDocumentNo(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    İşlem Tarihi *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Genel Açıklama / Not
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Fiş hakkında genel açıklama veya fatura referansı girin..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Line Items Table Card */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                    Fiş Kalemleri (Fatura Detayları)
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Stoktan ürün seçebilir veya serbest hizmet/gider kalemi girebilirsiniz.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Kalem Ekle</span>
+                </button>
+              </div>
+
+              <div className="overflow-x-auto custom-scrollbar border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs min-w-[700px]">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
+                      <th className="py-2.5 px-3">Hızlı Stok</th>
+                      <th className="py-2.5 px-3 w-1/3">Açıklama / Kalem *</th>
+                      <th className="py-2.5 px-2 text-center w-20">Miktar</th>
+                      <th className="py-2.5 px-2 text-center w-20">Birim</th>
+                      <th className="py-2.5 px-3 text-right w-28">Birim Fiyat</th>
+                      <th className="py-2.5 px-2 text-center w-20">KDV %</th>
+                      <th className="py-2.5 px-3 text-right w-28">Toplam</th>
+                      <th className="py-2.5 px-2 text-center w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {items.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="p-2">
+                          <select
+                            value={item.productId || ""}
+                            onChange={(e) => handleItemChange(item.id, "productId", e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] text-slate-700 font-medium cursor-pointer"
+                          >
+                            <option value="">-- Serbest --</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="text"
+                            required
+                            placeholder="Kalem açıklaması..."
+                            value={item.description}
+                            onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-semibold text-slate-900"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="1"
+                            step="any"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(item.id, "quantity", parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-center font-bold text-slate-900"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <select
+                            value={item.unit || "Adet"}
+                            onChange={(e) => handleItemChange(item.id, "unit", e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] text-center font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="Adet">Adet</option>
+                            <option value="Ay">Ay</option>
+                            <option value="Saat">Saat</option>
+                            <option value="Gün">Gün</option>
+                            <option value="Kg">Kg</option>
+                            <option value="Metre">Metre</option>
+                            <option value="Paket">Paket</option>
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.unitPrice}
+                            onChange={(e) => handleItemChange(item.id, "unitPrice", parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-right font-mono font-bold text-slate-900"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <select
+                            value={item.vatRate ?? 20}
+                            onChange={(e) => handleItemChange(item.id, "vatRate", parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-center font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="20">%20</option>
+                            <option value="10">%10</option>
+                            <option value="1">%1</option>
+                            <option value="0">%0</option>
+                          </select>
+                        </td>
+                        <td className="p-2 text-right font-mono font-black text-xs text-slate-900">
+                          ₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.id)}
+                            disabled={items.length <= 1}
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Totals Breakdown */}
+              <div className="flex justify-end pt-2">
+                <div className="w-full sm:w-80 bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Ara Toplam (KDV Hariç):</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      ₺{subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Hesaplanan Toplam KDV:</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      ₺{totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-extrabold text-slate-900 border-t border-slate-200 pt-2">
+                    <span className="text-purple-950 font-black">Fiş Genel Toplamı:</span>
+                    <span className="font-mono font-black text-purple-700 text-base">
+                      ₺{grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  // =========================================================================
+  // 2. FULL-PAGE DETAIL VIEW: INSPECT TRANSACTION (FİŞ & İŞLEM DETAYI)
+  // =========================================================================
+  if ((detailNav.mode === "detail" || viewingTx !== null) && viewingTx) {
+    const isInc = viewingTx.type === "income" || viewingTx.type === "collection";
+    return (
+      <DetailPageLayout
+        title={`İşlem Fişi Detayı: ${viewingTx.documentNo || viewingTx.id.slice(0, 8)}`}
+        subtitle={`${formatDate(viewingTx.date)} • ${viewingTx.accountName || "Kasa/Banka"} • ${viewingTx.contactName || "Genel Cari"}`}
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          { label: "Gelir & Gider İşlemleri", onClick: handleBackToList },
+          { label: `Fiş #${viewingTx.documentNo || viewingTx.id.slice(0, 8)}`, active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-black border ${
+              isInc
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-rose-50 text-rose-700 border-rose-200"
+            }`}
+          >
+            {isInc ? "GELİR / TAHSİLAT (+)" : "GİDER / TEDİYE (-)"}
+          </span>
+        }
+        headerIcon={<FileText className="w-5 h-5 text-purple-700" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+            >
+              ← Listeye Dön
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <Printer className="w-4 h-4 text-emerald-400" />
+              <span>Dekont Yazdır</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWhatsAppTx(viewingTx)}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+              <span>WhatsApp ile Paylaş</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("Bu mali işlemi ve fiş kaydını silmek istediğinize emin misiniz?")) {
+                  onDeleteTransaction(viewingTx.id);
+                  handleBackToList();
+                }
+              }}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Sil</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+            {/* Header info grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
+              <div>
+                <span className="text-slate-400 block text-[10px] font-bold uppercase">İşlem Tarihi</span>
+                <span className="font-bold text-slate-900">{formatDate(viewingTx.date)}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] font-bold uppercase">Kategori</span>
+                <span className="font-bold text-slate-900">{viewingTx.category}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] font-bold uppercase">Cari Hesap</span>
+                <span className="font-bold text-slate-900">
+                  {viewingTx.contactName || "Genel Müşteri / Cari Yok"}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] font-bold uppercase">Kasa / Banka Hesabı</span>
+                <span className="font-bold text-slate-900">{viewingTx.accountName}</span>
+              </div>
+            </div>
+
+            {/* Line Items Table if available */}
+            {viewingTx.items && viewingTx.items.length > 0 ? (
+              <div className="space-y-3">
+                <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                  Fiş Kalem Detayları
+                </h4>
+                <div className="border border-slate-200 rounded-2xl overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left text-xs min-w-[500px]">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                        <th className="py-2.5 px-3">Açıklama</th>
+                        <th className="py-2.5 px-3 text-center">Miktar</th>
+                        <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
+                        <th className="py-2.5 px-3 text-center">KDV %</th>
+                        <th className="py-2.5 px-3 text-right">Toplam</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {viewingTx.items.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="p-3 font-semibold text-slate-900">{item.description}</td>
+                          <td className="p-3 text-center text-slate-700">
+                            {item.quantity} {item.unit}
+                          </td>
+                          <td className="p-3 text-right font-mono text-slate-700">
+                            ₺{item.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-3 text-center text-slate-700">%{item.vatRate}</td>
+                          <td className="p-3 text-right font-mono font-bold text-slate-900">
+                            ₺{item.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
+                <span className="text-slate-500 block text-[10px] font-bold uppercase">Fiş Açıklaması</span>
+                <p className="font-semibold text-slate-900 mt-1">{viewingTx.description}</p>
+              </div>
+            )}
+
+            {/* Totals Breakdown */}
+            <div className="bg-purple-50/50 border border-purple-200/60 p-5 rounded-2xl space-y-2 text-xs">
+              {viewingTx.subtotal !== undefined && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Ara Toplam (KDV Hariç):</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    ₺{viewingTx.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              {viewingTx.totalVat !== undefined && (
+                <div className="flex justify-between text-slate-600">
+                  <span>KDV Toplamı:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    ₺{viewingTx.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-base font-extrabold text-slate-900 border-t border-purple-200/60 pt-3">
+                <span>Fiş Genel Tutarı:</span>
+                <span className={`font-mono text-xl font-black ${isInc ? "text-emerald-700" : "text-rose-700"}`}>
+                  {isInc ? "+" : "-"}₺{viewingTx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DetailPageLayout>
+    );
+  }
 
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
@@ -584,7 +1102,10 @@ export const Transactions: React.FC<TransactionsProps> = ({
                       <td className="py-3 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
-                            onClick={() => setViewingTx(tx)}
+                            onClick={() => {
+                              setViewingTx(tx);
+                              detailNav.openDetail(tx, tx.id);
+                            }}
                             title="Fiş Detayını İncele & Yazdır"
                             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                           >
@@ -680,7 +1201,10 @@ export const Transactions: React.FC<TransactionsProps> = ({
 
                   <div className="grid grid-cols-3 gap-1.5 pt-1">
                     <button
-                      onClick={() => setViewingTx(tx)}
+                      onClick={() => {
+                        setViewingTx(tx);
+                        detailNav.openDetail(tx, tx.id);
+                      }}
                       className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />

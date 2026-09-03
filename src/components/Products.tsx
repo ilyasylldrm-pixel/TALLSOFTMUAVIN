@@ -4,6 +4,8 @@ import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
 import { formatProductWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { ProductCostsView } from "./ProductCostsView";
 import {
   Package,
@@ -346,6 +348,25 @@ export const Products: React.FC<ProductsProps> = ({
   const [ekstreTab, setEkstreTab] = useState<"all" | "purchase" | "sales">("all");
   const [ekstreSearch, setEkstreSearch] = useState("");
   const [ekstreWarehouseId, setEkstreWarehouseId] = useState<string>("all");
+
+  const nav = useDetailNavigation<Product>({ moduleKey: "products" });
+
+  const handleBackToList = React.useCallback(() => {
+    setIsModalOpen(false);
+    setEditingProduct(null);
+    setSelectedEkstreProduct(null);
+    setIsTransferModalOpen(false);
+    nav.backToList();
+  }, [nav]);
+
+  React.useEffect(() => {
+    if (nav.mode === "list") {
+      setIsModalOpen(false);
+      setEditingProduct(null);
+      setSelectedEkstreProduct(null);
+      setIsTransferModalOpen(false);
+    }
+  }, [nav.mode]);
 
   // PDF Export Handler for Ekstre
   const handleExportEkstrePDF = async () => {
@@ -1397,29 +1418,30 @@ export const Products: React.FC<ProductsProps> = ({
         </>
       )}
 
-      {/* WAREHOUSE STOCK TRANSFER MODAL */}
+      {/* FULL-PAGE DETAIL VIEW: WAREHOUSE STOCK TRANSFER */}
       {isTransferModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-purple-200 max-w-lg w-full p-6 space-y-4 animate-scaleUp">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 font-bold">
-                  <ArrowRightLeft className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900">Depolar Arası Stok Transferi</h3>
-                  <p className="text-[11px] text-slate-500">
-                    Seçili stoğu depolar arasında sevk edin ve depo bakiyelerini güncelleyin.
-                  </p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title="Depolar Arası Stok Transferi"
+          subtitle="Seçili stoğu depolar arasında sevk edin ve depo bakiyelerini güncelleyin"
+          breadcrumbs={[
+            { label: "Stoklar & Depolar", onClick: handleBackToList },
+            { label: "Depolar Arası Transfer", active: true },
+          ]}
+          onBack={handleBackToList}
+          headerIcon={<ArrowRightLeft className="w-5 h-5 text-amber-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsTransferModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-2xl mx-auto space-y-6">
 
             {transferSuccessMsg ? (
               <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center gap-3 text-xs text-emerald-950 font-bold">
@@ -1544,65 +1566,50 @@ export const Products: React.FC<ProductsProps> = ({
               </form>
             )}
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* PRODUCT EKSTRE & DEPO DAĞILIM MODAL */}
+      {/* FULL-PAGE DETAIL VIEW: PRODUCT EKSTRE & DEPO DAĞILIM */}
       {selectedEkstreProduct && ekstreAnalytics && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-purple-300/80 max-w-5xl w-full max-h-[95vh] flex flex-col my-auto overflow-hidden animate-scaleUp">
-            {/* 1. Modal Top Bar - Dark Corporate & Actions (no-print) */}
-            <div className="bg-slate-900 text-white px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 shrink-0 no-print">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-purple-700 text-white flex items-center justify-center font-extrabold shrink-0 shadow-md">
-                  <Package className="w-5 h-5 text-white" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm sm:text-base font-extrabold text-white truncate">
-                      Resmi Stok Hareket Ekstresi & Depo Raporu
-                    </h3>
-                    <span className="bg-purple-800/90 text-purple-200 font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-md border border-purple-600/60">
-                      {selectedEkstreProduct.code}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 truncate">
-                    {selectedEkstreProduct.name} • Toplam Stok: {selectedEkstreProduct.stockQuantity} {selectedEkstreProduct.unit}
-                  </p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title={`${selectedEkstreProduct.name} - Stok Hareket Ekstresi & Depo Raporu`}
+          subtitle={`Stok Kodu: ${selectedEkstreProduct.code} • Toplam Stok: ${selectedEkstreProduct.stockQuantity} ${selectedEkstreProduct.unit}`}
+          breadcrumbs={[
+            { label: "Stoklar & Depolar", onClick: handleBackToList },
+            { label: selectedEkstreProduct.name, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {selectedEkstreProduct.stockQuantity > 0 ? "Stokta Var" : "Tükendi"}
+            </span>
+          }
+          headerIcon={<Package className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setWhatsAppProduct(selectedEkstreProduct)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                title="Stok Ekstresini WhatsApp ile Paylaş"
+              >
+                <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
+                <span>WhatsApp ile Paylaş</span>
+              </button>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setWhatsAppProduct(selectedEkstreProduct)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                  title="Stok Ekstresini WhatsApp ile Paylaş"
-                >
-                  <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
-                  <span>WhatsApp ile Paylaş</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Yazdır"
-                >
-                  <Printer className="w-4 h-4 text-slate-200" />
-                  <span className="hidden sm:inline">Yazdır</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedEkstreProduct(null)}
-                  className="text-slate-400 hover:text-white p-1.5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                title="Yazdır"
+              >
+                <Printer className="w-4 h-4 text-slate-300" />
+                <span className="hidden sm:inline">Yazdır</span>
+              </button>
             </div>
-
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-200/80 shadow-sm max-w-6xl mx-auto space-y-6">
             {/* 2. Interactive Control Bar (no-print) */}
             <div className="bg-purple-50/80 border-b border-purple-200/80 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0 no-print">
               {/* Warehouse selector */}
@@ -2026,44 +2033,55 @@ export const Products: React.FC<ProductsProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setSelectedEkstreProduct(null)}
+                  onClick={handleBackToList}
                   className="px-5 py-2 font-bold bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs cursor-pointer transition-colors"
                 >
-                  Kapat
+                  Geri Dön
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* STOK KART EKLE / DÜZENLE MODAL */}
+      {/* FULL-PAGE DETAIL VIEW: STOK KART EKLE / DÜZENLE */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-purple-200 max-w-xl w-full p-6 space-y-4 animate-scaleUp">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                  <Package className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900">
-                    {editingProduct ? "Stok Kartını Düzenle" : "Yeni Stok / Hizmet Kartı"}
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Stok cinsi, depo seçimi, barkod ve IMEI/Seri No bilgileri ile ürün tanımlayın.
-                  </p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title={editingProduct ? `${editingProduct.name} - Stok Kartını Düzenle` : "Yeni Stok / Ürün Kartı Tanımla"}
+          subtitle="Stok cinsi, depo seçimi, barkod ve fiyat bilgileri ile ürün tanımlayın"
+          breadcrumbs={[
+            { label: "Stoklar & Depolar", onClick: handleBackToList },
+            { label: editingProduct ? editingProduct.name : "Yeni Stok Kartı", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-indigo-50 text-indigo-700 border-indigo-200">
+              {editingProduct ? "Düzenleme Modu" : "Yeni Kart"}
+            </span>
+          }
+          headerIcon={<Package className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="product-form"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{editingProduct ? "Güncelle" : "Stok Kartını Kaydet"}</span>
               </button>
             </div>
-
-            <form onSubmit={handleSave} className="space-y-4 text-xs">
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
+            <form id="product-form" onSubmit={handleSave} className="space-y-4 text-xs">
               {/* 1. STOK CİNSİ & DEPO SEÇİMİ */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/80 p-3 rounded-xl border border-slate-200/80">
                 <div>
@@ -2255,7 +2273,7 @@ export const Products: React.FC<ProductsProps> = ({
               <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={handleBackToList}
                   className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-semibold rounded-xl cursor-pointer transition-colors"
                 >
                   İptal
@@ -2270,7 +2288,7 @@ export const Products: React.FC<ProductsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* CATALOG WHATSAPP MODAL */}

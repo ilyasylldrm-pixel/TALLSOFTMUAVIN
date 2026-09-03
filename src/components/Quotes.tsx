@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Quote, QuoteStatus, Contact, Product, Invoice, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
 import { formatQuoteWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import {
   FileSpreadsheet,
   Plus,
@@ -101,6 +103,21 @@ export const Quotes: React.FC<QuotesProps> = ({
   const [whatsAppQuote, setWhatsAppQuote] = useState<Quote | null>(null);
   const [isDownloadingQuotePDF, setIsDownloadingQuotePDF] = useState(false);
   const [formType, setFormType] = useState<"proforma" | "quote">("proforma");
+
+  const nav = useDetailNavigation<Quote>({ moduleKey: "quotes" });
+
+  const handleBackToList = useCallback(() => {
+    setIsModalOpen(false);
+    setPrintingQuote(null);
+    nav.backToList();
+  }, [nav]);
+
+  useEffect(() => {
+    if (nav.mode === "list") {
+      setIsModalOpen(false);
+      setPrintingQuote(null);
+    }
+  }, [nav.mode]);
 
   const handleDownloadQuotePDF = async () => {
     if (!printingQuote) return;
@@ -590,40 +607,43 @@ export const Quotes: React.FC<QuotesProps> = ({
         )}
       </div>
 
-      {/* MODAL: Create New Quote / Proforma Invoice */}
+      {/* FULL-PAGE DETAIL VIEW: CREATE NEW QUOTE / PROFORMA INVOICE */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-150">
-          <div className="bg-white border border-slate-200/90 text-slate-900 rounded-3xl max-w-4xl w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden my-auto">
-            {/* STICKY HEADER */}
-            <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-slate-200/80 flex items-center justify-between shrink-0 shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center shadow-inner shrink-0">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                    Yeni Proforma Fatura & Teklif Oluştur
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    Müşteri fiyat teklifi ve proforma belge düzenleme
-                  </p>
-                </div>
-              </div>
-
+        <DetailPageLayout
+          title="Yeni Proforma Fatura & Teklif Oluştur"
+          subtitle="Müşteri fiyat teklifi ve proforma belge düzenleme"
+          breadcrumbs={[
+            { label: "Proforma & Teklifler", onClick: handleBackToList },
+            { label: "Yeni Proforma Oluştur", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {formType === "proforma" ? "Proforma Fatura" : "Fiyat Teklifi"}
+            </span>
+          }
+          headerIcon={<FileText className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-300 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer active:scale-95 group shrink-0"
-                title="Pencereyi Kapat"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
-                <X className="w-4 h-4 text-slate-500 group-hover:text-rose-600 transition-transform group-hover:rotate-90" />
-                <span className="font-extrabold">Kapat</span>
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="quote-form"
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                Kaydet & Oluştur
               </button>
             </div>
-
-            {/* SCROLLABLE BODY */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              <form onSubmit={handleSave} className="space-y-5">
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-6">
+            <form id="quote-form" onSubmit={handleSave} className="space-y-6">
               {/* Top Form Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-purple-50/50 p-4 rounded-xl border border-purple-100">
                 <div>
@@ -857,80 +877,74 @@ export const Quotes: React.FC<QuotesProps> = ({
                 />
               </div>
 
-              {/* Modal Actions */}
-              <div className="pt-2 flex justify-end gap-2 border-t border-purple-100">
+              {/* Form Actions */}
+              <div className="pt-4 flex justify-end gap-3 border-t border-purple-100">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={handleBackToList}
                   className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors"
                 >
                   İptal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-xl cursor-pointer shadow-2xs transition-colors"
+                  className="px-6 py-2.5 text-xs font-extrabold bg-purple-700 hover:bg-purple-800 text-white rounded-xl cursor-pointer shadow-xs transition-colors"
                 >
                   Proforma Faturayı Kaydet
                 </button>
               </div>
             </form>
-            </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL: Print Quote / Proforma Document */}
+      {/* FULL-PAGE DETAIL VIEW: PRINT / PREVIEW QUOTE */}
       {printingQuote && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in">
-          <div className="bg-white border border-purple-200 text-slate-900 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto print:max-h-none print:shadow-none print:m-0 print:w-full print:max-w-none print:border-none print:bg-white print:text-black">
-            {/* Top Control Bar (Sticky at Top - Hidden on print) */}
-            <div className="sticky top-0 bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-3.5 sm:px-6 flex items-center justify-between z-20 border-b border-purple-800/40 shadow-sm shrink-0 print:hidden">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-xs font-extrabold px-3 py-1 rounded-lg uppercase tracking-wide border shrink-0 bg-purple-500/20 text-purple-200 border-purple-400/30">
-                  Proforma Fatura
-                </span>
-                <span className="text-xs text-purple-200/90 font-mono font-bold truncate">
-                  Belge No: {printingQuote.quoteNumber}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setWhatsAppQuote(printingQuote)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
-                >
-                  <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
-                  <span>WhatsApp ile Gönder</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadQuotePDF}
-                  disabled={isDownloadingQuotePDF}
-                  className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <Download className="w-4 h-4 text-purple-200" />
-                  <span>{isDownloadingQuotePDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
-                >
-                  <Printer className="w-4 h-4 text-slate-300" />
-                  <span className="hidden sm:inline">Yazdır</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrintingQuote(null)}
-                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                  title="Pencereyi Kapat"
-                >
-                  <X className="w-4 h-4 text-rose-300" />
-                  <span>Kapat</span>
-                </button>
-              </div>
+        <DetailPageLayout
+          title={`Proforma Fatura: ${printingQuote.quoteNumber}`}
+          subtitle={`Düzenlenme: ${formatDate(printingQuote.issueDate)} • Geçerlilik: ${formatDate(printingQuote.validUntil)}`}
+          breadcrumbs={[
+            { label: "Proforma & Teklifler", onClick: handleBackToList },
+            { label: printingQuote.quoteNumber, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {printingQuote.status === "accepted" ? "Kabul Edildi" : printingQuote.status === "rejected" ? "Reddedildi" : "Beklemede"}
+            </span>
+          }
+          headerIcon={<Printer className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setWhatsAppQuote(printingQuote)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+              >
+                <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                <span>WhatsApp ile Gönder</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadQuotePDF}
+                disabled={isDownloadingQuotePDF}
+                className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                <Download className="w-4 h-4 text-purple-200" />
+                <span>{isDownloadingQuotePDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+              >
+                <Printer className="w-4 h-4 text-slate-300" />
+                <span className="hidden sm:inline">Yazdır</span>
+              </button>
             </div>
+          }
+        >
+          <div className="max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-3xl border border-purple-200 shadow-sm print:p-0 print:border-none print:shadow-none">
 
             {/* Scrollable Printable Document Sheet */}
             <div className="p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:overflow-visible custom-scrollbar">
@@ -1090,9 +1104,9 @@ export const Quotes: React.FC<QuotesProps> = ({
                 </div>
               </div>
             </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </DetailPageLayout>
       )}
 
       {/* WhatsApp Share Modal */}

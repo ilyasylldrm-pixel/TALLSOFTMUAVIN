@@ -61,6 +61,8 @@ import { HRDocumentFormsModal, HRFormType } from "./HRDocumentFormsModal";
 import { SeveranceNoticeCalculator } from "./SeveranceNoticeCalculator";
 import { PayrollPrintModal } from "./PayrollPrintModal";
 import { AssetCustodyManagement } from "./AssetCustodyManagement";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 
 interface HRManagementProps {
   employees: Employee[];
@@ -502,6 +504,25 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [editingPayrollEmp, setEditingPayrollEmp] = useState<Employee | null>(null);
   const [editingPayrollForm, setEditingPayrollForm] = useState<CustomPayrollAdjustment>({});
   const [isPayrollFullscreen, setIsPayrollFullscreen] = useState(true);
+
+  const nav = useDetailNavigation<Employee>({ moduleKey: "hr" });
+
+  const handleBackToList = React.useCallback(() => {
+    setIsAddEmployeeOpen(false);
+    setSelectedEmployeeForDetail(null);
+    setEditingPayrollEmp(null);
+    setSelectedPayrollRecord(null);
+    nav.backToList();
+  }, [nav]);
+
+  React.useEffect(() => {
+    if (nav.mode === "list") {
+      setIsAddEmployeeOpen(false);
+      setSelectedEmployeeForDetail(null);
+      setEditingPayrollEmp(null);
+      setSelectedPayrollRecord(null);
+    }
+  }, [nav.mode]);
 
   // Payroll Period State
   const [payrollMonth, setPayrollMonth] = useState("2026-07");
@@ -3158,24 +3179,44 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         />
       )}
 
-      {/* MODAL: YENI PERSONEL EKLE */}
+      {/* FULL-PAGE DETAIL VIEW: YENI PERSONEL EKLE */}
       {isAddEmployeeOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-6 my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div>
-                <h3 className="text-lg font-black text-slate-900">Yeni Personel Kartı Oluştur</h3>
-                <p className="text-xs text-slate-500">Çalışanın kişisel, özlük ve maaş bilgilerini eksiksiz girin.</p>
-              </div>
+        <DetailPageLayout
+          title="Yeni Personel Kartı Oluştur"
+          subtitle="Çalışanın kişisel, özlük ve maaş bilgilerini eksiksiz girin"
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Yeni Personel Kartı", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              Yeni Kayıt
+            </span>
+          }
+          headerIcon={<UserPlus className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsAddEmployeeOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
-                <XCircle className="w-6 h-6" />
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="add-employee-form"
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Kaydet ve Kartı Aç</span>
               </button>
             </div>
-
-            <form onSubmit={handleCreateEmployeeSubmit} className="space-y-4">
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
+            <form id="add-employee-form" onSubmit={handleCreateEmployeeSubmit} className="space-y-4">
               {/* Photo Upload Header */}
               <div className="flex items-center gap-4 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
                 <div className="relative w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-2 border-purple-400 shrink-0 shadow-xs">
@@ -3528,7 +3569,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsAddEmployeeOpen(false)}
+                  onClick={handleBackToList}
                   className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Vazgeç
@@ -3542,95 +3583,77 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL: BORDRO & PUANTAJ HESAPLAMA (EDIT PAYROLL & TIMESHEET) */}
+      {/* FULL-PAGE DETAIL VIEW: BORDRO & PUANTAJ HESAPLAMA */}
       {editingPayrollEmp && (
-        <div className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 overflow-y-auto ${isPayrollFullscreen ? "p-1.5 sm:p-3" : "p-3 sm:p-4"}`}>
-          <div className={`bg-white rounded-3xl w-full p-4 sm:p-6 lg:p-7 shadow-2xl space-y-5 sm:space-y-6 overflow-y-auto custom-scrollbar transition-all duration-200 ${isPayrollFullscreen ? "max-w-[98vw] h-[96vh] my-1" : "max-w-5xl max-h-[92vh] my-6"}`}>
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-purple-100 pb-4">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-purple-700 text-white font-black flex items-center justify-center text-xl shadow-sm shrink-0">
-                  <Calculator className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-black text-slate-900 text-lg sm:text-xl">
-                      Bordro & Puantaj Hesaplama
-                    </h3>
-                    <span className="text-xs bg-purple-100 text-purple-900 font-extrabold px-2.5 py-0.5 rounded-full border border-purple-200">
-                      {payrollMonth} Dönemi
+        <DetailPageLayout
+          title={`Bordro & Puantaj Hesaplama - ${editingPayrollEmp.fullName}`}
+          subtitle={`${payrollMonth} Dönemi • ${editingPayrollEmp.department} (${editingPayrollEmp.title}) • TC: ${editingPayrollEmp.tckn || "—"}`}
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Bordrolar", onClick: handleBackToList },
+            { label: editingPayrollEmp.fullName, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {payrollMonth} Dönemi
+            </span>
+          }
+          headerIcon={<Calculator className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
+              {/* Alfabetik Sıra ve Gezinme Butonları */}
+              {(() => {
+                const sortedAlphabetical = [...employees].sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"));
+                const currIdx = sortedAlphabetical.findIndex((e) => e.id === editingPayrollEmp.id);
+                const prevEmp = currIdx > 0 ? sortedAlphabetical[currIdx - 1] : null;
+                const nextEmp = currIdx !== -1 && currIdx + 1 < sortedAlphabetical.length ? sortedAlphabetical[currIdx + 1] : null;
+
+                return (
+                  <div className="flex items-center gap-1 bg-purple-50 p-1 rounded-xl border border-purple-200 text-xs">
+                    <button
+                      type="button"
+                      disabled={!prevEmp}
+                      onClick={() => prevEmp && handleOpenEditPayroll(prevEmp)}
+                      className="px-2.5 py-1 rounded-lg text-purple-900 font-bold hover:bg-purple-200/70 disabled:opacity-30 transition-all flex items-center gap-1 text-[11px] cursor-pointer disabled:cursor-not-allowed"
+                      title={prevEmp ? `Önceki: ${prevEmp.fullName}` : "İlk personel"}
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Önceki</span>
+                    </button>
+
+                    <span className="px-2 py-0.5 text-[11px] font-black text-purple-950 bg-white rounded-md border border-purple-200/80 shadow-2xs">
+                      {currIdx !== -1 ? currIdx + 1 : 1} / {sortedAlphabetical.length}
                     </span>
-                    {isPayrollFullscreen && (
-                      <span className="text-[11px] bg-purple-50 text-purple-700 font-bold px-2 py-0.5 rounded-md border border-purple-200">
-                        Tam Ekran Modu
-                      </span>
-                    )}
+
+                    <button
+                      type="button"
+                      disabled={!nextEmp}
+                      onClick={() => nextEmp && handleOpenEditPayroll(nextEmp)}
+                      className="px-2.5 py-1 rounded-lg text-purple-900 font-bold hover:bg-purple-200/70 disabled:opacity-30 transition-all flex items-center gap-1 text-[11px] cursor-pointer disabled:cursor-not-allowed"
+                      title={nextEmp ? `Sonraki: ${nextEmp.fullName}` : "Son personel"}
+                    >
+                      <span className="hidden sm:inline">Sonraki</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    <span className="font-extrabold text-slate-800">{editingPayrollEmp.fullName}</span> · {editingPayrollEmp.department} ({editingPayrollEmp.title}) · TC: {editingPayrollEmp.tckn || "—"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {/* Alfabetik Sıra ve Gezinme Butonları */}
-                {(() => {
-                  const sortedAlphabetical = [...employees].sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"));
-                  const currIdx = sortedAlphabetical.findIndex((e) => e.id === editingPayrollEmp.id);
-                  const prevEmp = currIdx > 0 ? sortedAlphabetical[currIdx - 1] : null;
-                  const nextEmp = currIdx !== -1 && currIdx + 1 < sortedAlphabetical.length ? sortedAlphabetical[currIdx + 1] : null;
+                );
+              })()}
 
-                  return (
-                    <div className="flex items-center gap-1 bg-purple-50 p-1 rounded-xl border border-purple-200 text-xs">
-                      <button
-                        type="button"
-                        disabled={!prevEmp}
-                        onClick={() => prevEmp && handleOpenEditPayroll(prevEmp)}
-                        className="px-2 py-1 rounded-lg text-purple-900 font-bold hover:bg-purple-200/70 disabled:opacity-30 disabled:hover:bg-transparent transition-all flex items-center gap-1 text-[11px] cursor-pointer disabled:cursor-not-allowed"
-                        title={prevEmp ? `Önceki: ${prevEmp.fullName}` : "İlk personel"}
-                      >
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Önceki</span>
-                      </button>
-
-                      <span className="px-2 py-0.5 text-[11px] font-black text-purple-950 bg-white rounded-md border border-purple-200/80 shadow-2xs">
-                        {currIdx !== -1 ? currIdx + 1 : 1} / {sortedAlphabetical.length}
-                      </span>
-
-                      <button
-                        type="button"
-                        disabled={!nextEmp}
-                        onClick={() => nextEmp && handleOpenEditPayroll(nextEmp)}
-                        className="px-2 py-1 rounded-lg text-purple-900 font-bold hover:bg-purple-200/70 disabled:opacity-30 disabled:hover:bg-transparent transition-all flex items-center gap-1 text-[11px] cursor-pointer disabled:cursor-not-allowed"
-                        title={nextEmp ? `Sonraki: ${nextEmp.fullName}` : "Son personel"}
-                      >
-                        <span className="hidden sm:inline">Sonraki</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })()}
-
-                <button
-                  type="button"
-                  onClick={() => setIsPayrollFullscreen((prev) => !prev)}
-                  className="text-slate-400 hover:text-purple-700 hover:bg-purple-50 p-2 rounded-xl transition-colors cursor-pointer"
-                  title={isPayrollFullscreen ? "Pencere Moduna Dön" : "Tam Ekran Yap"}
-                >
-                  {isPayrollFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingPayrollEmp(null)}
-                  className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-xl transition-colors cursor-pointer"
-                  title="Kapat"
-                >
-                  <XCircle className="w-5 h-5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl w-full p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6 max-w-7xl mx-auto">
 
             {/* Auto-Transfer Info Banners */}
             {(() => {
@@ -4440,7 +4463,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setEditingPayrollEmp(null)}
+                    onClick={handleBackToList}
                     className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
                   >
                     Vazgeç
@@ -4479,25 +4502,46 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL: BORDRO PUSULASI POPUP */}
+      {/* FULL-PAGE DETAIL VIEW: BORDRO PUSULASI */}
       {selectedPayrollRecord && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">Ücret Hesap Pusulası</h3>
-                <p className="text-xs text-slate-500 font-medium">Bordro Dönemi: {selectedPayrollRecord.monthYear}</p>
-              </div>
+        <DetailPageLayout
+          title={`Ücret Hesap Pusulası - ${selectedPayrollRecord.employeeName}`}
+          subtitle={`Bordro Dönemi: ${selectedPayrollRecord.monthYear} • Departman: ${selectedPayrollRecord.department} • Net Maaş: ${formatTRY(selectedPayrollRecord.payableNetSalary)}`}
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Bordrolar", onClick: handleBackToList },
+            { label: `${selectedPayrollRecord.employeeName} (${selectedPayrollRecord.monthYear})`, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-emerald-50 text-emerald-700 border-emerald-200">
+              {formatTRY(selectedPayrollRecord.payableNetSalary)}
+            </span>
+          }
+          headerIcon={<Receipt className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setSelectedPayrollRecord(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                type="button"
+                onClick={() => window.print()}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
-                <XCircle className="w-5 h-5" />
+                <Printer className="w-4 h-4" /> <span>Yazdır / PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Geri Dön
               </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
 
             <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-semibold">
               <div className="flex justify-between py-1 border-b border-slate-200">
@@ -4625,8 +4669,16 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
               <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold rounded-xl text-xs cursor-pointer"
+              >
+                Geri Dön
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   window.print();
                 }}
@@ -4636,7 +4688,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* MODAL: IZIN TALEBI */}

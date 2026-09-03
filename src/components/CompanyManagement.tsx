@@ -5,6 +5,8 @@ import { ExportData } from "../utils/exportUtils";
 import { AddressSelector } from "./AddressSelector";
 import { GibPortalModal } from "./GibPortalModal";
 import { MysoftTenantPicker } from "./MysoftTenantPicker";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import {
   Building2,
   Building,
@@ -137,6 +139,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     setTimeout(() => setIsCredSaved(false), 3000);
   };
 
+  // Detail Navigation for Full-Page Views
+  const companyNav = useDetailNavigation({
+    moduleKey: "company-management",
+  });
+
   // Branch Modal State
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
@@ -146,6 +153,18 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   const [isWarehouseModalOpen, setIsWarehouseModalOpen] = useState(false);
   const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
   const [warehouseSearch, setWarehouseSearch] = useState("");
+
+  const handleCloseBranch = () => {
+    companyNav.backToList();
+    setIsBranchModalOpen(false);
+    setEditingBranch(null);
+  };
+
+  const handleCloseWarehouse = () => {
+    companyNav.backToList();
+    setIsWarehouseModalOpen(false);
+    setEditingWarehouse(null);
+  };
 
   // Form State for Branch Add/Edit
   const [branchForm, setBranchForm] = useState<Partial<Branch>>({
@@ -201,11 +220,12 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     setTimeout(() => setIsSaved(false), 3000);
   };
 
-  // Open Branch Modal
+  // Open Branch Detail
   const handleOpenBranchModal = (branch?: Branch) => {
     if (branch) {
       setEditingBranch(branch);
       setBranchForm(branch);
+      companyNav.openEdit(branch, branch.id);
     } else {
       setEditingBranch(null);
       setBranchForm({
@@ -228,6 +248,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           fullAddress: "",
         },
       });
+      companyNav.openCreate();
     }
     setIsBranchModalOpen(true);
   };
@@ -262,14 +283,15 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       };
       onAddBranch(newBranch);
     }
-    setIsBranchModalOpen(false);
+    handleCloseBranch();
   };
 
-  // Open Warehouse Modal
+  // Open Warehouse Detail
   const handleOpenWarehouseModal = (wh?: Warehouse) => {
     if (wh) {
       setEditingWarehouse(wh);
       setWarehouseForm(wh);
+      companyNav.openEdit(wh, wh.id);
     } else {
       setEditingWarehouse(null);
       setWarehouseForm({
@@ -294,6 +316,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           fullAddress: "",
         },
       });
+      companyNav.openCreate();
     }
     setIsWarehouseModalOpen(true);
   };
@@ -333,7 +356,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       };
       onAddWarehouse(newWh);
     }
-    setIsWarehouseModalOpen(false);
+    handleCloseWarehouse();
   };
 
   // Filtered Lists
@@ -1650,298 +1673,364 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         </div>
       )}
 
-      {/* BRANCH ADD/EDIT MODAL */}
+      {/* BRANCH ADD/EDIT FULL-PAGE DETAIL */}
       {isBranchModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 space-y-5 border border-purple-200 shadow-2xl my-8">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Store className="w-5 h-5 text-purple-600" />
-                {editingBranch ? "Şube Bilgilerini Düzenle" : "Yeni Şube Ekle"}
-              </h3>
-              <button
-                onClick={() => setIsBranchModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-100">
+          <DetailPageLayout
+            title={editingBranch ? `Şube Bilgilerini Düzenle — ${editingBranch.name}` : "Yeni Şube Ekle"}
+            subtitle="Şube kodu, adı, yetkili müdür, iletişim ve resmi adres detayları"
+            breadcrumbs={[
+              { label: "Şirket Yönetimi", onClick: handleCloseBranch },
+              { label: "Şubeler", onClick: handleCloseBranch },
+              {
+                label: editingBranch ? `${editingBranch.name} (${editingBranch.code})` : "Yeni Şube",
+                active: true,
+              },
+            ]}
+            onBack={handleCloseBranch}
+            statusBadge={
+              <span
+                className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                  branchForm.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"
+                }`}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitBranch} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Şube Kodu *</label>
-                  <input
-                    type="text"
-                    required
-                    value={branchForm.code}
-                    onChange={(e) => setBranchForm({ ...branchForm, code: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Şube Adı *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ör: Kadıköy Şubesi"
-                    value={branchForm.name}
-                    onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Şube Sorumlusu / Müdürü</label>
-                  <input
-                    type="text"
-                    placeholder="ör: Ahmet Yılmaz"
-                    value={branchForm.managerName}
-                    onChange={(e) => setBranchForm({ ...branchForm, managerName: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Telefon</label>
-                  <input
-                    type="text"
-                    placeholder="ör: +90 212 555 0000"
-                    value={branchForm.phone}
-                    onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">E-posta</label>
-                  <input
-                    type="email"
-                    placeholder="ör: kadikoy@muavin.com.tr"
-                    value={branchForm.email}
-                    onChange={(e) => setBranchForm({ ...branchForm, email: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
-                  />
-                </div>
-              </div>
-
-              {/* ADRES BİLGİLERİ */}
-              <AddressSelector
-                title="Şube Adres Detayları"
-                address={
-                  (branchForm.address as AddressDetails) || {
-                    country: "Türkiye",
-                    city: "İstanbul",
-                    district: "Şişli",
-                  }
-                }
-                onChange={(updatedAddress) => setBranchForm({ ...branchForm, address: updatedAddress })}
-              />
-
-              <div className="flex items-center gap-6 pt-2 border-t border-slate-200">
-                <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
-                  <input
-                    type="checkbox"
-                    checked={!!branchForm.isMain}
-                    onChange={(e) => setBranchForm({ ...branchForm, isMain: e.target.checked })}
-                    className="w-4 h-4 text-purple-600 rounded cursor-pointer"
-                  />
-                  <span>Ana Şube Olarak İşaretle</span>
-                </label>
-
-                <div className="flex items-center gap-2">
-                  <label className="font-bold text-slate-700">Durum:</label>
-                  <select
-                    value={branchForm.status}
-                    onChange={(e) =>
-                      setBranchForm({ ...branchForm, status: e.target.value as "active" | "passive" })
-                    }
-                    className="bg-slate-50 border border-slate-200 rounded-xl p-1.5 font-semibold cursor-pointer"
-                  >
-                    <option value="active">Aktif Şube</option>
-                    <option value="passive">Pasif Şube</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+                {branchForm.isMain ? "Ana Şube · " : ""}{branchForm.status === "active" ? "Aktif Şube" : "Pasif Şube"}
+              </span>
+            }
+            headerIcon={<Store className="w-5 h-5 text-purple-600" />}
+            actions={
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsBranchModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                  onClick={handleCloseBranch}
+                  className="px-4 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
                 >
                   Vazgeç
                 </button>
                 <button
-                  type="submit"
-                  className="px-6 py-2 bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold rounded-xl cursor-pointer flex items-center gap-2 shadow-xs"
+                  type="button"
+                  onClick={() => {
+                    const formEl = document.getElementById("branch-form") as HTMLFormElement;
+                    if (formEl) formEl.requestSubmit();
+                  }}
+                  className="px-5 py-2 text-xs font-extrabold text-white bg-[#8252F6] hover:bg-[#703EE5] rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <Save className="w-4 h-4 text-[#EF7D2C]" />
-                  <span>Şubeyi Kaydet</span>
+                  <span>{editingBranch ? "Değişiklikleri Kaydet" : "Şubeyi Kaydet"}</span>
                 </button>
               </div>
-            </form>
-          </div>
+            }
+          >
+            <div className="bg-white rounded-3xl max-w-4xl mx-auto p-6 sm:p-8 space-y-6 border border-purple-200 shadow-sm">
+              <form id="branch-form" onSubmit={handleSubmitBranch} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Şube Kodu *</label>
+                    <input
+                      type="text"
+                      required
+                      value={branchForm.code}
+                      onChange={(e) => setBranchForm({ ...branchForm, code: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Şube Adı *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="ör: Kadıköy Şubesi"
+                      value={branchForm.name}
+                      onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Şube Sorumlusu / Müdürü</label>
+                    <input
+                      type="text"
+                      placeholder="ör: Ahmet Yılmaz"
+                      value={branchForm.managerName}
+                      onChange={(e) => setBranchForm({ ...branchForm, managerName: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Telefon</label>
+                    <input
+                      type="text"
+                      placeholder="ör: +90 212 555 0000"
+                      value={branchForm.phone}
+                      onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">E-posta</label>
+                    <input
+                      type="email"
+                      placeholder="ör: kadikoy@muavin.com.tr"
+                      value={branchForm.email}
+                      onChange={(e) => setBranchForm({ ...branchForm, email: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
+                    />
+                  </div>
+                </div>
+
+                {/* ADRES BİLGİLERİ */}
+                <AddressSelector
+                  title="Şube Adres Detayları"
+                  address={
+                    (branchForm.address as AddressDetails) || {
+                      country: "Türkiye",
+                      city: "İstanbul",
+                      district: "Şişli",
+                    }
+                  }
+                  onChange={(updatedAddress) => setBranchForm({ ...branchForm, address: updatedAddress })}
+                />
+
+                <div className="flex items-center gap-6 pt-2 border-t border-slate-200">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={!!branchForm.isMain}
+                      onChange={(e) => setBranchForm({ ...branchForm, isMain: e.target.checked })}
+                      className="w-4 h-4 text-purple-600 rounded cursor-pointer"
+                    />
+                    <span>Ana Şube Olarak İşaretle</span>
+                  </label>
+
+                  <div className="flex items-center gap-2">
+                    <label className="font-bold text-slate-700">Durum:</label>
+                    <select
+                      value={branchForm.status}
+                      onChange={(e) =>
+                        setBranchForm({ ...branchForm, status: e.target.value as "active" | "passive" })
+                      }
+                      className="bg-slate-50 border border-slate-200 rounded-xl p-1.5 font-semibold cursor-pointer"
+                    >
+                      <option value="active">Aktif Şube</option>
+                      <option value="passive">Pasif Şube</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={handleCloseBranch}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold rounded-xl cursor-pointer flex items-center gap-2 shadow-xs"
+                  >
+                    <Save className="w-4 h-4 text-[#EF7D2C]" />
+                    <span>Şubeyi Kaydet</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </DetailPageLayout>
         </div>
       )}
 
-      {/* WAREHOUSE ADD/EDIT MODAL */}
+      {/* WAREHOUSE ADD/EDIT FULL-PAGE DETAIL */}
       {isWarehouseModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 space-y-5 border border-purple-200 shadow-2xl my-8">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <WarehouseIcon className="w-5 h-5 text-amber-500" />
-                {editingWarehouse ? "Depo Bilgilerini Düzenle" : "Yeni Depo Ekle"}
-              </h3>
-              <button
-                onClick={() => setIsWarehouseModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-100">
+          <DetailPageLayout
+            title={editingWarehouse ? `Depo Bilgilerini Düzenle — ${editingWarehouse.name}` : "Yeni Depo Ekle"}
+            subtitle="Depo kodu, adı, sorumlu yönetici, bağlı şube ve adres bilgileri"
+            breadcrumbs={[
+              { label: "Şirket Yönetimi", onClick: handleCloseWarehouse },
+              { label: "Depolar", onClick: handleCloseWarehouse },
+              {
+                label: editingWarehouse ? `${editingWarehouse.name} (${editingWarehouse.code})` : "Yeni Depo",
+                active: true,
+              },
+            ]}
+            onBack={handleCloseWarehouse}
+            statusBadge={
+              <span
+                className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                  warehouseForm.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"
+                }`}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitWarehouse} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Depo Kodu *</label>
-                  <input
-                    type="text"
-                    required
-                    value={warehouseForm.code}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, code: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Depo Adı *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ör: Gebze Lojistik Depo"
-                    value={warehouseForm.name}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, name: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Bağlı Olduğu Şube *</label>
-                  <select
-                    value={warehouseForm.branchId}
-                    onChange={(e) => {
-                      const selected = branches.find((b) => b.id === e.target.value);
-                      setWarehouseForm({
-                        ...warehouseForm,
-                        branchId: e.target.value,
-                        branchName: selected?.name || "",
-                      });
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-semibold cursor-pointer"
-                  >
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Depo Tipi</label>
-                  <select
-                    value={warehouseForm.type}
-                    onChange={(e) =>
-                      setWarehouseForm({
-                        ...warehouseForm,
-                        type: e.target.value as any,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium cursor-pointer"
-                  >
-                    <option value="main">Ana Depo</option>
-                    <option value="regional">Bölge Deposu</option>
-                    <option value="transit">Transit Lojistik</option>
-                    <option value="cold_storage">Soğuk Hava Deposu</option>
-                    <option value="customs">Antrepo / Serbest Depo</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Kapasite (m²)</label>
-                  <input
-                    type="number"
-                    value={warehouseForm.capacityM2 || 0}
-                    onChange={(e) =>
-                      setWarehouseForm({ ...warehouseForm, capacityM2: Number(e.target.value) })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Depo Sorumlusu</label>
-                  <input
-                    type="text"
-                    placeholder="ör: Hasan Öztürk"
-                    value={warehouseForm.managerName}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, managerName: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">İletişim Telefonu</label>
-                  <input
-                    type="text"
-                    placeholder="ör: +90 262 600 0000"
-                    value={warehouseForm.phone}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, phone: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
-                  />
-                </div>
-              </div>
-
-              {/* ADRES BİLGİLERİ */}
-              <AddressSelector
-                title="Depo Adres Detayları"
-                address={
-                  (warehouseForm.address as AddressDetails) || {
-                    country: "Türkiye",
-                    city: "Kocaeli",
-                    district: "Gebze",
-                  }
-                }
-                onChange={(updatedAddress) => setWarehouseForm({ ...warehouseForm, address: updatedAddress })}
-              />
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+                {warehouseForm.type === "main" ? "Ana Depo · " : ""}{warehouseForm.status === "active" ? "Aktif Depo" : "Pasif Depo"}
+              </span>
+            }
+            headerIcon={<WarehouseIcon className="w-5 h-5 text-amber-500" />}
+            actions={
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsWarehouseModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                  onClick={handleCloseWarehouse}
+                  className="px-4 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
                 >
                   Vazgeç
                 </button>
                 <button
-                  type="submit"
-                  className="px-6 py-2 bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold rounded-xl cursor-pointer flex items-center gap-2 shadow-xs"
+                  type="button"
+                  onClick={() => {
+                    const formEl = document.getElementById("warehouse-form") as HTMLFormElement;
+                    if (formEl) formEl.requestSubmit();
+                  }}
+                  className="px-5 py-2 text-xs font-extrabold text-white bg-amber-500 hover:bg-amber-600 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  <Save className="w-4 h-4 text-[#EF7D2C]" />
-                  <span>Depoyu Kaydet</span>
+                  <Save className="w-4 h-4 text-white" />
+                  <span>{editingWarehouse ? "Değişiklikleri Kaydet" : "Depoyu Kaydet"}</span>
                 </button>
               </div>
-            </form>
-          </div>
+            }
+          >
+            <div className="bg-white rounded-3xl max-w-4xl mx-auto p-6 sm:p-8 space-y-6 border border-purple-200 shadow-sm">
+              <form id="warehouse-form" onSubmit={handleSubmitWarehouse} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Depo Kodu *</label>
+                    <input
+                      type="text"
+                      required
+                      value={warehouseForm.code}
+                      onChange={(e) => setWarehouseForm({ ...warehouseForm, code: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Depo Adı *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="ör: Gebze Lojistik Depo"
+                      value={warehouseForm.name}
+                      onChange={(e) => setWarehouseForm({ ...warehouseForm, name: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Bağlı Olduğu Şube *</label>
+                    <select
+                      value={warehouseForm.branchId}
+                      onChange={(e) => {
+                        const selected = branches.find((b) => b.id === e.target.value);
+                        setWarehouseForm({
+                          ...warehouseForm,
+                          branchId: e.target.value,
+                          branchName: selected?.name || "",
+                        });
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-semibold cursor-pointer"
+                    >
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Depo Tipi</label>
+                    <select
+                      value={warehouseForm.type}
+                      onChange={(e) =>
+                        setWarehouseForm({
+                          ...warehouseForm,
+                          type: e.target.value as any,
+                        })
+                      }
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium cursor-pointer"
+                    >
+                      <option value="main">Ana Depo</option>
+                      <option value="regional">Bölge Deposu</option>
+                      <option value="transit">Transit Lojistik</option>
+                      <option value="cold_storage">Soğuk Hava Deposu</option>
+                      <option value="customs">Antrepo / Serbest Depo</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Kapasite (m²)</label>
+                    <input
+                      type="number"
+                      value={warehouseForm.capacityM2 || 0}
+                      onChange={(e) =>
+                        setWarehouseForm({ ...warehouseForm, capacityM2: Number(e.target.value) })
+                      }
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Depo Sorumlusu</label>
+                    <input
+                      type="text"
+                      placeholder="ör: Hasan Öztürk"
+                      value={warehouseForm.managerName}
+                      onChange={(e) => setWarehouseForm({ ...warehouseForm, managerName: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">İletişim Telefonu</label>
+                    <input
+                      type="text"
+                      placeholder="ör: +90 262 600 0000"
+                      value={warehouseForm.phone}
+                      onChange={(e) => setWarehouseForm({ ...warehouseForm, phone: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5"
+                    />
+                  </div>
+                </div>
+
+                {/* ADRES BİLGİLERİ */}
+                <AddressSelector
+                  title="Depo Adres Detayları"
+                  address={
+                    (warehouseForm.address as AddressDetails) || {
+                      country: "Türkiye",
+                      city: "Kocaeli",
+                      district: "Gebze",
+                    }
+                  }
+                  onChange={(updatedAddress) => setWarehouseForm({ ...warehouseForm, address: updatedAddress })}
+                />
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={handleCloseWarehouse}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold rounded-xl cursor-pointer flex items-center gap-2 shadow-xs"
+                  >
+                    <Save className="w-4 h-4 text-[#EF7D2C]" />
+                    <span>Depoyu Kaydet</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </DetailPageLayout>
         </div>
       )}
     </div>

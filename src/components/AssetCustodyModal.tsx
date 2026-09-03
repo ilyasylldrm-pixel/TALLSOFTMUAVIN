@@ -28,6 +28,8 @@ import {
   Branch,
   Warehouse,
 } from "../types";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 
 interface AssetCustodyModalProps {
   isOpen: boolean;
@@ -49,6 +51,17 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
   warehouses = [],
 }) => {
   if (!isOpen) return null;
+
+  const custodyNav = useDetailNavigation({
+    moduleKey: "asset-custody",
+    initialMode: editingAsset ? "edit" : "create",
+    initialItem: editingAsset,
+  });
+
+  const handleBack = () => {
+    custodyNav.backToList();
+    onClose();
+  };
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -349,74 +362,109 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 sm:p-4 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center font-bold">
-              {category === "vehicle" ? (
-                <Car className="w-5 h-5 text-blue-200" />
-              ) : category === "computer" ? (
-                <Laptop className="w-5 h-5 text-indigo-200" />
-              ) : category === "phone" ? (
-                <Smartphone className="w-5 h-5 text-emerald-200" />
-              ) : category === "tablet" ? (
-                <Tablet className="w-5 h-5 text-amber-200" />
-              ) : (
-                <Package className="w-5 h-5 text-purple-200" />
-              )}
-            </div>
-            <div>
-              <h2 className="text-lg font-bold">
-                {editingAsset ? "Zimmet Kaydını Düzenle" : "Yeni Zimmet / Demirbaş Tahsisi"}
-              </h2>
-              <p className="text-xs text-blue-200">
-                Personel üzerine araç, bilgisayar, cep telefonu, tablet ve donanım zimmetleme formu
-              </p>
-            </div>
-          </div>
+    <DetailPageLayout
+      title={editingAsset ? "Zimmet Kaydını Düzenle" : "Yeni Zimmet / Demirbaş Tahsisi"}
+      subtitle="Personel üzerine araç, bilgisayar, cep telefonu, tablet ve donanım zimmetleme formu"
+      breadcrumbs={[
+        { label: "İnsan Kaynakları & Operasyon", onClick: handleBack },
+        { label: "Demirbaş Zimmet", onClick: handleBack },
+        {
+          label: editingAsset ? (editingAsset.assetName || "Demirbaş Kaydı") : "Yeni Zimmet",
+          active: true,
+        },
+      ]}
+      onBack={handleBack}
+      statusBadge={
+        <span
+          className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+            status === "active"
+              ? "bg-emerald-100 text-emerald-800"
+              : status === "returned"
+              ? "bg-slate-200 text-slate-700"
+              : status === "maintenance"
+              ? "bg-amber-100 text-amber-800"
+              : "bg-rose-100 text-rose-800"
+          }`}
+        >
+          {status === "active"
+            ? "Aktif Zimmet"
+            : status === "returned"
+            ? "İade Edildi"
+            : status === "maintenance"
+            ? "Bakımda"
+            : "Arızalı / Hurda"}
+        </span>
+      }
+      headerIcon={
+        category === "vehicle" ? (
+          <Car className="w-5 h-5 text-blue-600" />
+        ) : category === "computer" ? (
+          <Laptop className="w-5 h-5 text-indigo-600" />
+        ) : category === "phone" ? (
+          <Smartphone className="w-5 h-5 text-emerald-600" />
+        ) : category === "tablet" ? (
+          <Tablet className="w-5 h-5 text-amber-600" />
+        ) : (
+          <Package className="w-5 h-5 text-purple-600" />
+        )
+      }
+      actions={
+        <div className="flex items-center gap-2">
           <button
-            onClick={onClose}
-            className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+            type="button"
+            onClick={handleBack}
+            className="px-4 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
           >
-            <X className="w-5 h-5" />
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const formEl = document.getElementById("asset-custody-form") as HTMLFormElement;
+              if (formEl) formEl.requestSubmit();
+            }}
+            className="px-5 py-2 text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>{editingAsset ? "Kaydet" : "Zimmeti Onayla"}</span>
           </button>
         </div>
-
+      }
+    >
+      <div className="space-y-4">
         {/* Quick Presets for New Assets */}
         {!editingAsset && (
-          <div className="px-6 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs overflow-x-auto shrink-0">
-            <div className="flex items-center space-x-2 text-slate-500 font-medium">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between text-xs overflow-x-auto">
+            <div className="flex items-center space-x-2 text-slate-600 font-bold">
+              <Sparkles className="w-4 h-4 text-amber-500" />
               <span>Hızlı Şablonlar:</span>
             </div>
             <div className="flex items-center space-x-2">
               <button
                 type="button"
                 onClick={() => handleQuickPreset("vehicle_megane")}
-                className="px-2.5 py-1 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-lg text-slate-700 font-medium transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl text-slate-700 font-bold transition-all cursor-pointer"
               >
                 🚗 Şirket Aracı (Megane)
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickPreset("macbook_m3")}
-                className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-lg text-slate-700 font-medium transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-xl text-slate-700 font-bold transition-all cursor-pointer"
               >
                 💻 MacBook Pro M3
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickPreset("iphone15")}
-                className="px-2.5 py-1 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-lg text-slate-700 font-medium transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-xl text-slate-700 font-bold transition-all cursor-pointer"
               >
                 📱 iPhone 15 Pro
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickPreset("ipad_pro")}
-                className="px-2.5 py-1 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-slate-700 font-medium transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-xl text-slate-700 font-bold transition-all cursor-pointer"
               >
                 📟 iPad Pro + Pencil
               </button>
@@ -425,7 +473,11 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
         )}
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 flex-1">
+        <form
+          id="asset-custody-form"
+          onSubmit={handleSubmit}
+          className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6"
+        >
           {/* Section 1: Temel Atama ve Kategori Seçimi */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Personel Seçimi */}
@@ -1261,7 +1313,7 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-200 shrink-0">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleBack}
               className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
             >
               Vazgeç
@@ -1276,6 +1328,6 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </DetailPageLayout>
   );
 };

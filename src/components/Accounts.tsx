@@ -57,6 +57,8 @@ import {
   FileSpreadsheet,
   Upload,
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 
 export type FinanceSubModule = "kasa" | "banka" | "cek" | "senet" | "virman";
 
@@ -272,6 +274,20 @@ export const Accounts: React.FC<AccountsProps> = ({
     if (onSelectFinanceSubTab) {
       onSelectFinanceSubTab(tab);
     }
+  };
+
+  // Full-Page Detail Navigation
+  const detailNav = useDetailNavigation<Account>({
+    moduleKey: "finance",
+  });
+
+  const handleBackToList = () => {
+    detailNav.backToList();
+    setIsAccountModalOpen(false);
+    setIsEditAccountModalOpen(false);
+    setIsTransferModalOpen(false);
+    setReceiptData(null);
+    setEditingAccount(null);
   };
 
   // Modals
@@ -950,7 +966,7 @@ export const Accounts: React.FC<AccountsProps> = ({
     };
 
     onAddAccount(newAcc);
-    setIsAccountModalOpen(false);
+    handleBackToList();
     setAccName("");
     setAccBankName("");
     setAccIban("");
@@ -962,7 +978,9 @@ export const Accounts: React.FC<AccountsProps> = ({
     if (fromAccId === toAccId || transferAmount <= 0) return;
 
     onTransferBetweenAccounts(fromAccId, toAccId, transferAmount, transferDesc);
-    setIsTransferModalOpen(false);
+    handleBackToList();
+    setTransferAmount(0);
+    setTransferDesc("");
   };
 
   const handleSaveCheque = (e: React.FormEvent) => {
@@ -1300,6 +1318,712 @@ export const Accounts: React.FC<AccountsProps> = ({
     }
   };
 
+  // =========================================================================
+  // 1. FULL-PAGE DETAIL VIEW: CREATE ACCOUNT (KASA / BANKA EKLE)
+  // =========================================================================
+  if (detailNav.mode === "create" || isAccountModalOpen) {
+    const isCash = accType === "cash";
+    return (
+      <DetailPageLayout
+        title={`Yeni ${isCash ? "Nakit Kasa Hesabı" : "Banka Vadesiz Mevduat Hesabı"}`}
+        subtitle="Finans ve nakit akışı takibi için yeni kasa veya banka hesabı kartı tanımlayın"
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          { label: activeSubModule === "kasa" ? "Nakit Kasalar" : "Banka Hesapları", onClick: handleBackToList },
+          { label: `Yeni ${isCash ? "Kasa" : "Banka"} Kartı`, active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <span className="px-3 py-1 rounded-full text-xs font-black bg-purple-100 text-purple-800 border border-purple-200">
+            YENİ FİNANS KARTI
+          </span>
+        }
+        headerIcon={<Landmark className="w-5 h-5 text-purple-700" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+            >
+              İptal / Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="account-create-form"
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Hesabı Kaydet</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-3xl mx-auto">
+          <form id="account-create-form" onSubmit={handleSaveAccount} className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-xs space-y-6">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 mb-1 flex items-center gap-2">
+                  <Wallet className="w-5 h-5 text-purple-700" />
+                  <span>Hesap Kartı Bilgileri</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Hesap adı, para birimi ve varsa banka IBAN bilgilerini eksiksiz girin.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Hesap / Kasa Adı *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={isCash ? "Örn: Merkez Nakit Kasası, Dolar Kasası" : "Örn: Garanti Ticari TL, İş Bankası USD"}
+                    value={accName}
+                    onChange={(e) => setAccName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-purple-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Hesap Türü
+                  </label>
+                  <select
+                    value={accType}
+                    onChange={(e) => setAccType(e.target.value as "cash" | "bank")}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="bank">Banka Hesabı (Vadesiz Mevduat)</option>
+                    <option value="cash">Nakit Kasası</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Para Birimi
+                  </label>
+                  <select
+                    value={accCurrency}
+                    onChange={(e) => setAccCurrency(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="TRY">Türk Lirası (₺ - TRY)</option>
+                    <option value="USD">Amerikan Doları ($ - USD)</option>
+                    <option value="EUR">Euro (€ - EUR)</option>
+                    <option value="GBP">İngiliz Sterlini (£ - GBP)</option>
+                  </select>
+                </div>
+
+                {accType === "bank" && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Banka Adı
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Örn: Yapı Kredi, Garanti BBVA, İş Bankası..."
+                        value={accBankName}
+                        onChange={(e) => setAccBankName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        IBAN Numarası
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="TR00 0000 0000 0000 0000 0000 00"
+                        value={accIban}
+                        onChange={(e) => setAccIban(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs font-bold text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Açılış Devir Bakiyesi
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="any"
+                      value={accInitialBalance}
+                      onChange={(e) => setAccInitialBalance(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono font-bold text-sm text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                    />
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 font-bold text-xs text-slate-400">
+                      {accCurrency}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-medium mt-1">
+                    Bu hesaba ait önceki dönemden devreden mevcut nakit bakiyesini girebilirsiniz.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  // =========================================================================
+  // 2. FULL-PAGE DETAIL VIEW: EDIT ACCOUNT (KASA / BANKA DÜZENLE)
+  // =========================================================================
+  if ((detailNav.mode === "edit" || isEditAccountModalOpen) && editingAccount) {
+    return (
+      <DetailPageLayout
+        title={`${editingAccount.name} - Hesap Kartı Düzenle`}
+        subtitle={`${editingAccount.type === "cash" ? "Nakit Kasa" : "Banka Vadesiz Mevduat"} Kartı Bilgileri`}
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          { label: editingAccount.type === "cash" ? "Nakit Kasalar" : "Banka Hesapları", onClick: handleBackToList },
+          { label: editingAccount.name, onClick: handleBackToList },
+          { label: "Düzenle", active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+            Güncel Bakiye: {formatCurrency(editingAccount.balance, editingAccount.currency)}
+          </span>
+        }
+        headerIcon={<Pencil className="w-5 h-5 text-purple-700" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+            >
+              İptal / Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="account-edit-form"
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Değişiklikleri Kaydet</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-3xl mx-auto">
+          <form
+            id="account-edit-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (onUpdateAccount && editingAccount) {
+                onUpdateAccount(editingAccount);
+              }
+              handleBackToList();
+            }}
+            className="space-y-6"
+          >
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-xs space-y-6">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 mb-1 flex items-center gap-2">
+                  <Pencil className="w-5 h-5 text-purple-700" />
+                  <span>Hesap Kartı Bilgilerini Güncelle</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Hesap adı, türü ve banka detaylarını güncelleyebilirsiniz.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Hesap / Kasa Adı *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingAccount.name}
+                    onChange={(e) => setEditingAccount({ ...editingAccount, name: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Hesap Türü</label>
+                  <select
+                    value={editingAccount.type}
+                    onChange={(e) =>
+                      setEditingAccount({
+                        ...editingAccount,
+                        type: e.target.value as "cash" | "bank" | "credit_card" | "pos",
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="cash">Nakit Kasa</option>
+                    <option value="bank">Banka Vadesiz Hesabı</option>
+                    <option value="credit_card">Kredi Kartı Hesabı</option>
+                    <option value="pos">POS Hesabı</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Para Birimi</label>
+                  <select
+                    value={editingAccount.currency || "TRY"}
+                    onChange={(e) => setEditingAccount({ ...editingAccount, currency: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="TRY">TRY (₺)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                  </select>
+                </div>
+
+                {editingAccount.type !== "cash" && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Banka Adı</label>
+                      <input
+                        type="text"
+                        value={editingAccount.bankName || ""}
+                        onChange={(e) => setEditingAccount({ ...editingAccount, bankName: e.target.value })}
+                        placeholder="Örn: Garanti BBVA"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">IBAN Numarası</label>
+                      <input
+                        type="text"
+                        value={editingAccount.iban || ""}
+                        onChange={(e) => setEditingAccount({ ...editingAccount, iban: e.target.value })}
+                        placeholder="TR00 0000 0000 0000 0000 0000 00"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Hesap Numarası</label>
+                      <input
+                        type="text"
+                        value={editingAccount.accountNumber || ""}
+                        onChange={(e) => setEditingAccount({ ...editingAccount, accountNumber: e.target.value })}
+                        placeholder="Örn: 1234567-5001"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Şube Adı</label>
+                      <input
+                        type="text"
+                        value={editingAccount.branchName || ""}
+                        onChange={(e) => setEditingAccount({ ...editingAccount, branchName: e.target.value })}
+                        placeholder="Örn: Levent Şubesi"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  // =========================================================================
+  // 3. FULL-PAGE DETAIL VIEW: VIRMAN / TRANSFER
+  // =========================================================================
+  if (detailNav.mode === "transfer" || isTransferModalOpen) {
+    const fromAcc = accounts.find((a) => a.id === fromAccId);
+    const toAcc = accounts.find((a) => a.id === toAccId);
+    return (
+      <DetailPageLayout
+        title="Hesaplar Arası Virman Transferi"
+        subtitle="Kasa, banka ve cari hesaplar arasında anlık çift taraflı bakiye transferi ve resmi virman fişi"
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          { label: "Virman & Transferler", onClick: handleBackToList },
+          { label: "Yeni Virman Fişi", active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+            Çift Taraflı Virman Kaydı
+          </span>
+        }
+        headerIcon={<ArrowRightLeft className="w-5 h-5 text-purple-700" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+            >
+              İptal / Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="virman-transfer-form"
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Transferi Gerçekleştir</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-3xl mx-auto space-y-6">
+          <form id="virman-transfer-form" onSubmit={handleExecuteTransfer} className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-xs space-y-6">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 mb-1 flex items-center gap-2">
+                  <ArrowRightLeft className="w-5 h-5 text-purple-700" />
+                  <span>Virman & Bakiye Aktarım Formu</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Kaynak ve hedef hesapları belirleyip aktarılacak virman tutarını girin.
+                </p>
+              </div>
+
+              {/* Source and Target Visual Card */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="space-y-1">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-700 flex items-center gap-1">
+                    <ArrowDownLeft className="w-3.5 h-3.5" />
+                    Borçlandırılan (Çıkan Kaynak)
+                  </span>
+                  <div className="font-bold text-sm text-slate-900">
+                    {fromAcc ? `${fromAcc.name} (${formatCurrency(fromAcc.balance, fromAcc.currency)})` : "Seçiniz"}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700 flex items-center gap-1">
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    Alacaklandırılan (Giren Hedef)
+                  </span>
+                  <div className="font-bold text-sm text-slate-900">
+                    {toAcc ? `${toAcc.name} (${formatCurrency(toAcc.balance, toAcc.currency)})` : "Seçiniz"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Borçlu Hesap (Kaynak - Bakiye Düşecek) *
+                  </label>
+                  <select
+                    value={fromAccId}
+                    onChange={(e) => setFromAccId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <optgroup label="🏦 Kasa & Banka Hesapları">
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          [Kasa/Banka] {a.name} ({a.type === "cash" ? "Kasa" : "Banka"}) - Bakiye: ₺
+                          {a.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {contacts.length > 0 && (
+                      <optgroup label="👤 Cari Hesaplar (Müşteriler / Tedarikçiler)">
+                        {contacts.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            [Cari] {c.name} ({c.type === "customer" ? "Müşteri" : "Tedarikçi"}) - Bakiye: ₺
+                            {c.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Alacaklı Hesap (Hedef - Bakiye Eklenecek) *
+                  </label>
+                  <select
+                    value={toAccId}
+                    onChange={(e) => setToAccId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <optgroup label="🏦 Kasa & Banka Hesapları">
+                      {accounts
+                        .filter((a) => a.id !== fromAccId)
+                        .map((a) => (
+                          <option key={a.id} value={a.id}>
+                            [Kasa/Banka] {a.name} ({a.type === "cash" ? "Kasa" : "Banka"}) - Bakiye: ₺
+                            {a.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </option>
+                        ))}
+                    </optgroup>
+                    {contacts.filter((c) => c.id !== fromAccId).length > 0 && (
+                      <optgroup label="👤 Cari Hesaplar (Müşteriler / Tedarikçiler)">
+                        {contacts
+                          .filter((c) => c.id !== fromAccId)
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              [Cari] {c.name} ({c.type === "customer" ? "Müşteri" : "Tedarikçi"}) - Bakiye: ₺
+                              {c.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Transfer Tutarı (TL) *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono font-bold text-sm text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Virman Açıklaması
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Örn: Merkez kasadan Garanti hesabına nakit yatırma"
+                    value={transferDesc}
+                    onChange={(e) => setTransferDesc(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  // =========================================================================
+  // 4. FULL-PAGE DETAIL VIEW: RECEIPT / DEKONT GÖRÜNTÜLEME
+  // =========================================================================
+  if ((detailNav.mode === "receipt" || receiptData !== null) && receiptData) {
+    return (
+      <DetailPageLayout
+        title={receiptData.documentTitle}
+        subtitle={`${receiptData.documentNo} • ${receiptData.date} • ${receiptData.accountName || ""}`}
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          { label: receiptData.accountName || "Finans", onClick: handleBackToList },
+          { label: `Dekont #${receiptData.documentNo}`, active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+            TUTAR: {formatCurrency(receiptData.amount, receiptData.currency)}
+          </span>
+        }
+        headerIcon={<FileCheck2 className="w-5 h-5 text-purple-700" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+            >
+              ← Listeye Dön
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <Printer className="w-4 h-4 text-emerald-400" />
+              <span>Yazdır</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportReceiptPDF}
+              disabled={isPdfGenerating}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <FileCheck2 className="w-4 h-4 text-purple-200" />
+              <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-3xl mx-auto space-y-6">
+          {/* Printable Receipt Paper */}
+          <div
+            id="printable-receipt"
+            style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+            className="bg-white text-slate-900 p-6 sm:p-10 rounded-2xl shadow-xl border border-slate-200 w-full mx-auto space-y-6 font-sans text-xs sm:text-sm"
+          >
+            {/* Corporate Header Section */}
+            <div className="border-b-2 border-indigo-900 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                {companySettings?.logoUrl ? (
+                  <img
+                    src={companySettings.logoUrl}
+                    alt="Firma Logo"
+                    className="w-14 h-14 object-contain rounded-xl border border-slate-200 p-1 bg-white"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div
+                    style={{ backgroundColor: "#312e81", color: "#ffffff" }}
+                    className="w-14 h-14 rounded-xl flex items-center justify-center font-black text-2xl shadow-xs border border-indigo-900 shrink-0"
+                  >
+                    <Landmark className="w-7 h-7 text-indigo-100" />
+                  </div>
+                )}
+                <div className="space-y-0.5">
+                  <div className="font-extrabold text-base sm:text-lg text-slate-950 tracking-tight leading-tight">
+                    {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL FİNANS VE YÖNETİM HİZMETLERİ"}
+                  </div>
+                  <div className="text-[11px] text-slate-600 space-y-0.5">
+                    <div>{companySettings?.address || "Merkez Mah. Büyükdere Cad. No:142 Şişli / İstanbul"}</div>
+                    <div>
+                      Vergi Dairesi: {companySettings?.taxOffice || "Boğaziçi"} • VKN/TCKN: {companySettings?.taxNumber || "1234567890"}
+                    </div>
+                    <div>
+                      Tel: {companySettings?.phone || "0850 123 45 67"} • E-posta: {companySettings?.email || "finans@muavin.com"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{ backgroundColor: "#f8fafc", borderColor: "#cbd5e1" }}
+                className="text-center p-3 rounded-2xl border min-w-[220px] shrink-0"
+              >
+                <span className="text-[11px] font-black text-indigo-950 uppercase tracking-widest block">
+                  RESMİ FİNANS DEKONTU
+                </span>
+                <div
+                  style={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }}
+                  className="font-mono text-xs font-black py-1 px-2 rounded-lg border mt-1"
+                >
+                  {receiptData.documentNo}
+                </div>
+                <div className="text-[11px] text-slate-500 font-semibold mt-1">
+                  Tarih: {receiptData.date} {receiptData.time ? `• ${receiptData.time}` : ""}
+                </div>
+              </div>
+            </div>
+
+            {/* Subtitle / Description */}
+            <div
+              style={{ backgroundColor: "#eef2ff", borderColor: "#c7d2fe" }}
+              className="p-3.5 rounded-xl border flex items-center justify-between gap-2"
+            >
+              <div>
+                <span className="font-extrabold text-indigo-950 text-xs block">
+                  {receiptData.documentTitle}
+                </span>
+                <span className="text-[11px] text-indigo-700 font-medium">
+                  {receiptData.subTitle || "Resmi muhasebe işlem ve bakiye kaydı"}
+                </span>
+              </div>
+              {receiptData.statusText && (
+                <span
+                  style={{ backgroundColor: "#312e81", color: "#ffffff" }}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold tracking-wider uppercase shrink-0"
+                >
+                  {receiptData.statusText}
+                </span>
+              )}
+            </div>
+
+            {/* Details Table / Grid */}
+            <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-200">
+              {receiptData.details.map((d, index) => (
+                <div
+                  key={index}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:px-4 text-xs ${
+                    index % 2 === 0 ? "bg-white" : "bg-slate-50/70"
+                  }`}
+                >
+                  <span className="font-bold text-slate-600 sm:w-1/3">{d.label}</span>
+                  <span className="font-bold text-slate-900 sm:w-2/3 sm:text-right break-words">
+                    {d.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Grand Total Highlight Box */}
+            <div
+              style={{ backgroundColor: "#0f172a", color: "#ffffff" }}
+              className="rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
+            >
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                  İŞLEM TUTARI / BAKİYE
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-indigo-200 italic mt-0.5 block">
+                  # {numberToTurkishWords(receiptData.amount, receiptData.currency)} #
+                </span>
+              </div>
+              <div className="text-left sm:text-right">
+                <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-white block">
+                  {formatCurrency(receiptData.amount, receiptData.currency)}
+                </span>
+              </div>
+            </div>
+
+            {/* Description / Notes if any */}
+            {receiptData.description && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700">
+                <span className="font-bold text-slate-900 block mb-0.5">İşlem Açıklaması:</span>
+                {receiptData.description}
+              </div>
+            )}
+
+            {/* Signatures Zone */}
+            <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-200 text-center">
+              <div className="space-y-12">
+                <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  TESLİM EDEN / ONAYLAYAN
+                </div>
+                <div className="border-t border-dashed border-slate-300 pt-1 text-[11px] text-slate-400">
+                  İmza & Kaşe
+                </div>
+              </div>
+              <div className="space-y-12">
+                <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  TESLİM ALAN / CARİ FİRMA
+                </div>
+                <div className="border-t border-dashed border-slate-300 pt-1 text-[11px] text-slate-400">
+                  İmza & Kaşe
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Notice */}
+            <div className="text-[10px] text-slate-400 text-center pt-2">
+              Bu dekont Muavin ERP Finans Yönetim Sistemi tarafından elektronik ortamda üretilmiştir.
+            </div>
+          </div>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* MODULE HEADER & TOP SUMMARY (Lila Bal Peteği & Geometrik Desen) */}
@@ -1357,7 +2081,10 @@ export const Accounts: React.FC<AccountsProps> = ({
 
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setIsTransferModalOpen(true)}
+              onClick={() => {
+                setIsTransferModalOpen(true);
+                detailNav.openTransfer();
+              }}
               className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-xs"
             >
               <ArrowRightLeft className="w-4 h-4 text-purple-800 font-bold" />
@@ -1405,6 +2132,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                 onClick={() => {
                   setAccType(activeSubModule === "kasa" ? "cash" : "bank");
                   setIsAccountModalOpen(true);
+                  detailNav.openCreate();
                 }}
                 className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all"
               >
@@ -1629,6 +2357,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                             onClick={() => {
                               setEditingAccount(acc);
                               setIsEditAccountModalOpen(true);
+                              detailNav.openEdit(acc, acc.id);
                             }}
                             className="px-2 py-1 rounded-lg bg-amber-200/80 hover:bg-amber-300 text-amber-950 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                             title="Hesabı Düzenle"
@@ -1874,6 +2603,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                             onClick={() => {
                               setEditingAccount(acc);
                               setIsEditAccountModalOpen(true);
+                              detailNav.openEdit(acc, acc.id);
                             }}
                             className="px-2 py-1 rounded-lg bg-blue-200/80 hover:bg-blue-300 text-blue-950 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                             title="Hesabı Düzenle"

@@ -23,6 +23,8 @@ import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { computeInvoiceTotals, formatWithholdingBadge } from "../utils/taxCalculationService";
+import { DetailPageLayout, BreadcrumbItem } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { NavItem } from "./Sidebar";
 import {
   sendMysoftOutgoingInvoice,
@@ -163,10 +165,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [selectedExpenseCategoryFilter, setSelectedExpenseCategoryFilter] = useState<string>("all");
 
-  // Modals
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(
-    !!initialContactIdForNewInvoice
-  );
+  // Navigation & Detail View
+  const detailNav = useDetailNavigation<Invoice>({
+    moduleKey: forcedType === "purchase" ? "purchase-invoices" : forcedType === "sales" ? "sales-invoices" : "invoices",
+    initialMode: initialContactIdForNewInvoice ? "create" : "list",
+  });
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [editingInvoiceNumber, setEditingInvoiceNumber] = useState<string | null>(null);
   const [isAiScannerModalOpen, setIsAiScannerModalOpen] = useState<boolean>(false);
@@ -258,6 +261,25 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [isSavingMysoft, setIsSavingMysoft] = useState(false);
   const [mysoftSaveError, setMysoftSaveError] = useState<string | null>(null);
   const [mysoftSaveNotice, setMysoftSaveNotice] = useState<string | null>(null);
+
+  const handleCloseDetail = useCallback(() => {
+    setEditingInvoiceId(null);
+    setEditingInvoiceNumber(null);
+    setMysoftSaveError(null);
+    detailNav.backToList();
+  }, [detailNav]);
+
+  const isCreateModalOpen = detailNav.isDetailView;
+  const setIsCreateModalOpen = useCallback(
+    (open: boolean) => {
+      if (open) {
+        detailNav.openCreate();
+      } else {
+        handleCloseDetail();
+      }
+    },
+    [detailNav, handleCloseDetail]
+  );
   const [mysoftTenantVkn, setMysoftTenantVkn] = useState<string | undefined>(() =>
     readStoredMysoftTenantVkn() ||
       normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber),
@@ -501,7 +523,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         },
       ]);
     }
-    setIsCreateModalOpen(true);
+    detailNav.openEdit(inv, inv.id);
   };
 
   // Switch invoice profile type and update line items immediately so changes reflect everywhere in real-time
@@ -1293,615 +1315,136 @@ export const Invoices: React.FC<InvoicesProps> = ({
     };
   };
 
-  return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Top Header (Lila Bal Peteği & Geometrik Desen) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
+  // Detail Page Header & Actions
+  const detailTitle = editingInvoiceId
+    ? invType === "sales"
+      ? "Gelir Faturasını Düzenle"
+      : "Gider Faturasını Düzenle"
+    : forcedType === "sales" || invType === "sales"
+    ? formDocKind === "receipt"
+      ? "Yeni Satış (Gelir) Fişi"
+      : "Yeni Gelir Faturası Kes / Hazırla"
+    : forcedType === "purchase" || invType === "purchase"
+    ? formDocKind === "receipt"
+      ? "Yeni Alış (Gider) Fişi"
+      : "Yeni Gider Faturası Kaydet / Hazırla"
+    : "Yeni Fatura Hazırla (Satış / Alış)";
 
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
+  const detailBreadcrumbs: BreadcrumbItem[] = [
+    {
+      label:
+        forcedType === "sales"
+          ? "Satış Faturaları"
+          : forcedType === "purchase"
+          ? "Alış Faturaları"
+          : "Faturalar",
+      onClick: handleCloseDetail,
+    },
+    {
+      label: editingInvoiceId
+        ? `${editingInvoiceNumber || "Fatura"} - Düzenle`
+        : forcedType === "sales" || invType === "sales"
+        ? formDocKind === "receipt"
+          ? "Yeni Satış Fişi"
+          : "Yeni Satış Faturası"
+        : formDocKind === "receipt"
+        ? "Yeni Alış Fişi"
+        : "Yeni Gider Faturası",
+      active: true,
+    },
+  ];
 
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-400/10"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
+  const detailStatusBadge = editingInvoiceId ? (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-100 text-blue-800 border border-blue-200 shadow-2xs">
+      <Edit2 className="w-3.5 h-3.5" /> Düzenleme Modu
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs">
+      <Clock className="w-3.5 h-3.5" /> Taslak Belge
+    </span>
+  );
 
-        <div className="relative z-10">
-          <h2 className="text-lg font-extrabold text-slate-950">
-            {forcedType === "sales"
-               ? "Gelir Faturaları"
-               : forcedType === "purchase"
-               ? "Gider Faturaları"
-               : "Gelir & Gider Faturaları"}
-          </h2>
-          <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-            {forcedType === "sales"
-              ? "Müşterilerinize düzenlediğiniz satış faturaları ve tahsilat takibi."
-              : forcedType === "purchase"
-              ? "Tedarikçilerden gelen alış/gider faturaları ve ödeme takibi."
-              : "Resmi e-Fatura / e-Arşiv uyumlu faturalarınızı oluşturun ve ödeme takibi yapın."}
-          </p>
-        </div>
+  const detailPageActions = (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={handleCloseDetail}
+        className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+      >
+        Vazgeç
+      </button>
+      <button
+        type="button"
+        onClick={() => setIsDraftPreviewOpen(true)}
+        className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+      >
+        <Eye className="w-4 h-4 text-indigo-600" />
+        <span>{formDocKind === "receipt" ? "Fişi Önizle" : "Faturayı Önizle"}</span>
+      </button>
+      <button
+        type="submit"
+        form="invoice-create-form"
+        disabled={isSavingMysoft}
+        className={`px-5 py-2 rounded-xl text-xs font-extrabold text-white shadow-2xs cursor-pointer disabled:opacity-60 flex items-center gap-2 transition-all active:scale-95 ${
+          forcedType === "purchase" || invType === "purchase"
+            ? formDocKind === "receipt"
+              ? "bg-orange-600 hover:bg-orange-700"
+              : "bg-amber-600 hover:bg-amber-700"
+            : formDocKind === "receipt"
+            ? "bg-indigo-600 hover:bg-indigo-700"
+            : "bg-purple-600 hover:bg-purple-700"
+        }`}
+      >
+        {isSavingMysoft && <Loader2 className="w-4 h-4 animate-spin" />}
+        <span>
+          {editingInvoiceId
+            ? "Değişiklikleri Kaydet"
+            : forcedType === "sales" || invType === "sales"
+            ? formDocKind === "receipt"
+              ? "Gelir Fişini Kaydet"
+              : sendToMysoft
+              ? isSavingMysoft
+                ? "Mysoft'a Gönderiliyor..."
+                : "Kaydet & Mysoft'a Kes"
+              : "Gelir Faturasını Kaydet & Kes"
+            : forcedType === "purchase" || invType === "purchase"
+            ? formDocKind === "receipt"
+              ? "Gider Fişini Kaydet"
+              : "Gider Faturasını Kaydet"
+            : "Faturayı Kaydet ve Oluştur"}
+        </span>
+      </button>
+    </div>
+  );
 
-        <div className="relative z-10 flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => setIsCollectAllModalOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-            title="Tüm açık/ödenmemiş faturaları topluca tahsil et"
-          >
-            <CheckCircle2 className="w-4 h-4 text-emerald-100" />
-            <span>Tümünü Tahsil Et</span>
-          </button>
-
-          {forcedType === "sales" ? (
-            <button
-              onClick={() => handleOpenNewInvoiceModal("invoice", "sales")}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ Yeni Gelir Faturası Kes</span>
-            </button>
-          ) : forcedType === "purchase" ? (
-            <>
-              <button
-                onClick={() => setIsAiScannerModalOpen(true)}
-                className="bg-gradient-to-r from-amber-600 via-orange-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all shrink-0 hover:scale-[1.02] active:scale-98 ring-2 ring-amber-300/40"
-                title="Yapay Zeka (AI OCR) ile fatura fotoğrafı veya PDF yükleyip otomatik ayrıştırın"
-              >
-                <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
-                <span>✨ AI Fatura Tara & Ekle</span>
-              </button>
-              <button
-                onClick={() => handleOpenNewInvoiceModal("invoice", "purchase")}
-                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Yeni Gider Faturası</span>
-              </button>
-            </>
-          ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsAiScannerModalOpen(true)}
-                className="bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
-                title="Yapay Zeka ile Fatura Tara"
-              >
-                <Sparkles className="w-4 h-4 text-amber-200" />
-                <span>✨ AI Fatura Tara</span>
-              </button>
-              <button
-                onClick={() => handleOpenNewInvoiceModal("invoice", forcedType || "sales")}
-                className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-              >
-                <Plus className="w-4 h-4 text-purple-800 font-bold" />
-                <span>Yeni Fatura Kes / Kaydet</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Filter Tabs & Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Filter Buttons */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs">
-          {!forcedType ? (
-            <>
-              <button
-                onClick={() => setFilterType("all")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === "all" ? "bg-white text-purple-950 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-                }`}
-              >
-                Tüm Faturalar ({invoices.length})
-              </button>
-              <button
-                onClick={() => setFilterType("sales")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === "sales" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-                }`}
-              >
-                Gelir Faturaları
-              </button>
-              <button
-                onClick={() => setFilterType("purchase")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === "purchase" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-                }`}
-              >
-                Gider Faturaları
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => setFilterType(forcedType)}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                filterType === forcedType ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+  // If Detail View is active (Create / Edit Invoice), render Full Page Detail Layout directly
+  if (detailNav.isDetailView) {
+    return (
+      <div className="animate-fadeIn">
+        <DetailPageLayout
+          title={detailTitle}
+          subtitle="Resmi e-Fatura, e-Arşiv ve ticari fatura oluşturucu"
+          breadcrumbs={detailBreadcrumbs}
+          onBack={handleCloseDetail}
+          statusBadge={detailStatusBadge}
+          headerIcon={
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
+                forcedType === "purchase" || invType === "purchase"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-purple-100 text-purple-700"
               }`}
             >
-              Tümü ({invoices.filter((i) => i.type === forcedType).length})
-            </button>
-          )}
-          <button
-            onClick={() => setFilterType("pending")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "pending" ? "bg-white text-blue-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Bekleyenler
-          </button>
-          <button
-            onClick={() => setFilterType("overdue")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "overdue" ? "bg-white text-amber-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Vadesi Geçenler
-          </button>
-          <button
-            onClick={() => setFilterType("paid")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "paid" ? "bg-white text-emerald-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Ödenmiş
-          </button>
-        </div>
-
-        {/* Search, Year/Month & Export */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          {/* Yıl Filtresi */}
-          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
-            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-            <span className="text-slate-400 font-bold">Yıl:</span>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
-            >
-              <option value="all">Tüm Yıllar</option>
-              {availableYears.map((y) => (
-                <option key={y} value={y.toString()}>{y}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Ay Filtresi */}
-          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
-            <Filter className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-            <span className="text-slate-400 font-bold">Ay:</span>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
-            >
-              <option value="all">Tüm Aylar</option>
-              {TURKISH_MONTHS.map((m) => (
-                <option key={m.id} value={m.id.toString()}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Masraf Kalemi Filtresi (Gider Modülü veya Gider Seçiliyken) */}
-          {(forcedType === "purchase" || filterType === "purchase") && (
-            <div className="flex items-center gap-1.5 bg-white border border-amber-300/80 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
-              <Tag className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span className="text-slate-400 font-bold">Masraf:</span>
-              <select
-                value={selectedExpenseCategoryFilter}
-                onChange={(e) => setSelectedExpenseCategoryFilter(e.target.value)}
-                className="bg-transparent font-extrabold text-amber-900 focus:outline-none cursor-pointer max-w-[150px] truncate"
-              >
-                <option value="all">Tüm Kalemler ({EXPENSE_CATEGORIES.length})</option>
-                {EXPENSE_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
+              <FileText className="w-5 h-5" />
             </div>
-          )}
-
-          {(selectedYear !== "all" || selectedMonth !== "all" || selectedExpenseCategoryFilter !== "all") && (
-            <button
-              onClick={() => {
-                setSelectedYear("all");
-                setSelectedMonth("all");
-                setSelectedExpenseCategoryFilter("all");
-              }}
-              className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-              title="Filtreleri temizle"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span>Temizle</span>
-            </button>
-          )}
-
-          <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Fatura No veya Müşteri ara..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
-            />
-          </div>
-          <ExportButtons getExportData={getInvoicesExportData} size="sm" />
-        </div>
-      </div>
-
-      {/* Invoice Table */}
-      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-        <div className="overflow-x-auto custom-scrollbar w-full">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
-            <thead>
-              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                <th className="pb-2 px-4">Fatura No / Tip</th>
-                <th className="pb-2 px-4">Cari Hesap</th>
-                <th className="pb-2 px-4">Tarih / Vade</th>
-                <th className="pb-2 px-4 text-right">KDV Hariç</th>
-                <th className="pb-2 px-4 text-right">Genel Toplam</th>
-                <th className="pb-2 px-4 text-center">Durum</th>
-                <th className="pb-2 px-4 text-center">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredInvoices.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400 bg-white rounded-xl border border-purple-100/80">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <FileText className="w-8 h-8 text-purple-200" />
-                      <p className="font-semibold text-slate-600">
-                        {forcedType === "sales"
-                          ? docSubTab === "receipts"
-                            ? "Kayıtlı gelir fişi bulunamadı."
-                            : docSubTab === "invoices"
-                            ? "Kayıtlı gelir faturası bulunamadı."
-                            : "Kayıtlı gelir faturası veya fişi bulunamadı."
-                          : forcedType === "purchase"
-                          ? docSubTab === "receipts"
-                            ? "Kayıtlı gider fişi bulunamadı."
-                            : docSubTab === "invoices"
-                            ? "Kayıtlı gider faturası bulunamadı."
-                            : "Kayıtlı gider faturası veya fişi bulunamadı."
-                          : "Kayıtlı fatura bulunamadı."}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {forcedType === "sales"
-                          ? docSubTab === "receipts"
-                            ? "Yukarıdaki '+ Yeni Gelir Fişi Ekle' butonuyla yeni fiş ekleyebilirsiniz."
-                            : "Yukarıdaki '+ Yeni Gelir Faturası Kes' butonuyla yeni fatura oluşturabilirsiniz."
-                          : forcedType === "purchase"
-                          ? docSubTab === "receipts"
-                            ? "Yukarıdaki '+ Yeni Gider Fişi Ekle' butonuyla yeni fiş ekleyebilirsiniz."
-                            : "Yukarıdaki '+ Yeni Gider Faturası Kaydet' butonuyla yeni fatura oluşturabilirsiniz."
-                          : "Yeni fatura eklemek için yukarıdaki butonu kullanabilirsiniz."}
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                displayedInvoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
-                  >
-                    <td className="py-3.5 px-4 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-extrabold text-slate-900 group-hover:text-purple-950 font-mono text-sm transition-colors">
-                        {inv.invoiceNumber}
-                      </div>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        {inv.type === "sales" ? (
-                          inv.docKind === "receipt" ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 group-hover:border-indigo-300">
-                              <FileSpreadsheet className="w-2.5 h-2.5 text-indigo-600" />
-                              Gelir Fişi
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-200 group-hover:border-purple-300">
-                              <FileText className="w-2.5 h-2.5 text-purple-600" />
-                              Gelir Faturası
-                            </span>
-                          )
-                        ) : inv.docKind === "receipt" ? (
-                          <div className="flex flex-wrap items-center gap-1">
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-orange-50 text-orange-700 border border-orange-200 group-hover:border-orange-300">
-                              <FileSpreadsheet className="w-2.5 h-2.5 text-orange-600" />
-                              Gider Fişi
-                            </span>
-                            {(inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory) && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-900 border border-amber-200 group-hover:border-amber-300">
-                                <Tag className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                                <span className="truncate max-w-[130px]">
-                                  {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
-                                </span>
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap items-center gap-1">
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200 group-hover:border-amber-300">
-                              <FileText className="w-2.5 h-2.5 text-amber-600" />
-                              Gider Faturası
-                            </span>
-                            {(inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory) && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-900 border border-amber-200 group-hover:border-amber-300">
-                                <Tag className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                                <span className="truncate max-w-[130px]">
-                                  {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
-                                </span>
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      {/* Cari (Contact) link */}
-                      {onSelectTab ? (
-                        <button
-                          type="button"
-                          onClick={() => onSelectTab("contacts")}
-                          className="text-left font-extrabold text-slate-900 group-hover:text-purple-950 hover:text-purple-700 hover:underline cursor-pointer inline-flex items-center gap-1.5 transition-colors group/carilink text-xs"
-                          title="Cari Hesaplar Listesine Git"
-                        >
-                          <span>{inv.contactName}</span>
-                          <Users className="w-3.5 h-3.5 text-purple-600 opacity-70 group-hover/carilink:opacity-100 group-hover/carilink:scale-110 transition-all shrink-0" />
-                        </button>
-                      ) : (
-                        <div className="font-extrabold text-slate-900 group-hover:text-purple-950 text-xs">
-                          {inv.contactName}
-                        </div>
-                      )}
-
-                      {/* Item / Stock shortcut */}
-                      {inv.items.length > 0 && (
-                        <div className="mt-0.5">
-                          {onSelectTab ? (
-                            <button
-                              type="button"
-                              onClick={() => onSelectTab("products")}
-                              className="text-[10px] text-slate-500 hover:text-purple-700 hover:underline cursor-pointer flex items-center gap-1 transition-colors group/itemlink truncate max-w-[220px]"
-                              title="Stok & Hizmet Listesine Git"
-                            >
-                              <Package className="w-3 h-3 text-purple-500 shrink-0 opacity-70 group-hover/itemlink:opacity-100" />
-                              <span className="truncate">{inv.items[0]?.description}</span>
-                              {inv.items.length > 1 && (
-                                <span className="text-slate-400 text-[9px] shrink-0 font-medium">
-                                  (+{inv.items.length - 1})
-                                </span>
-                              )}
-                            </button>
-                          ) : (
-                            <div className="text-[10px] text-slate-500 truncate max-w-[220px]">
-                              {inv.items[0]?.description}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {inv.taxNumber && (
-                        <div className="text-[10px] font-normal text-slate-400 group-hover:text-purple-700/60 mt-0.5">
-                          VKN: {inv.taxNumber}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-medium text-slate-800 group-hover:text-slate-900">{formatDate(inv.issueDate)}</div>
-                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">Vade: {formatDate(inv.dueDate)}</div>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right font-medium text-slate-700 group-hover:text-slate-900 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      ₺{inv.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right font-black text-sm text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      ₺{inv.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
-                          inv.status === "paid"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200 group-hover:border-emerald-300"
-                            : inv.status === "overdue"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200 group-hover:border-amber-300"
-                            : "bg-blue-50 text-blue-700 border border-blue-200 group-hover:border-blue-300"
-                        }`}
-                      >
-                        {inv.status === "paid" ? (
-                          <>
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            Ödendi
-                          </>
-                        ) : inv.status === "overdue" ? (
-                          <>
-                            <AlertTriangle className="w-3 h-3 text-amber-600" />
-                            Vadesi Geçti
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="w-3 h-3 text-blue-600" />
-                            Bekliyor
-                          </>
-                        )}
-                      </span>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {/* Edit Button */}
-                        <button
-                          onClick={() => handleOpenEditInvoiceModal(inv)}
-                          title={inv.docKind === "receipt" ? "Fişi Düzenle" : "Faturayı Düzenle"}
-                          className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-amber-700" />
-                          <span>Düzenle</span>
-                        </button>
-
-                        {/* Print / View Modal */}
-                        <button
-                          onClick={() => setPrintingInvoice(inv)}
-                          title="Faturayı Görüntüle & e-Fatura Yazdır"
-                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                          <span>Baskı / e-Fatura</span>
-                        </button>
-
-                        {/* Direct WhatsApp Share */}
-                        <button
-                          onClick={() => setWhatsAppInvoice(inv)}
-                          title="Faturayı WhatsApp ile Paylaş"
-                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="hidden xl:inline">WhatsApp</span>
-                        </button>
-
-                        {/* Add Payment / Collection */}
-                        {inv.status !== "paid" && (
-                          <button
-                            onClick={() => {
-                              setPaymentModalInvoice(inv);
-                              setPaymentAmount(inv.remainingAmount);
-                            }}
-                            title="Tahsilat / Ödeme Ekle"
-                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs transition-colors cursor-pointer"
-                          >
-                            <CreditCard className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-
-                        {/* Delete */}
-                        <button
-                          onClick={() => onDeleteInvoice(inv.id)}
-                          title="Faturayı Sil"
-                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredInvoices.length > displayLimit && (
-          <div className="text-center mt-4">
-            <button
-              onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
-            >
-              Daha Fazla Göster ({displayLimit} / {filteredInvoices.length})
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* MODAL: Create New Invoice */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-150">
-          <div
-            className={`bg-white border border-slate-200/90 text-slate-900 rounded-3xl w-full shadow-2xl flex flex-col max-h-[94vh] overflow-hidden my-auto ${
-              showCreatePreviewPanel ? "max-w-7xl" : "max-w-4xl"
-            }`}
-          >
-            {/* STICKY MODAL HEADER with Prominent High-Visibility Close Button */}
-            <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-5 sm:px-6 py-4 border-b border-slate-200/80 flex items-center justify-between shrink-0 shadow-xs">
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
-                    forcedType === "purchase" || invType === "purchase"
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-purple-100 text-purple-700"
-                  }`}
-                >
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2 truncate">
-                    <span>
-                      {editingInvoiceId ? (
-                        invType === "sales"
-                          ? `Gelir Faturasını Düzenle`
-                          : `Gider Faturasını Düzenle`
-                      ) : forcedType === "sales"
-                        ? "Yeni Gelir Faturası Kes / Hazırla"
-                        : forcedType === "purchase"
-                        ? "Yeni Gider Faturası Kaydet / Hazırla"
-                        : "Yeni Fatura Hazırla (Satış / Alış)"}
-                    </span>
-                    {editingInvoiceNumber && (
-                      <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-lg border border-slate-200 shrink-0">
-                        {editingInvoiceNumber}
-                      </span>
-                    )}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-medium truncate">
-                    Resmi e-Fatura, e-Arşiv ve ticari fatura oluşturucu
-                  </p>
-                </div>
-              </div>
-
-              {/* Prominent, Highly Visible Close Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingInvoiceId(null);
-                  setEditingInvoiceNumber(null);
-                  setIsCreateModalOpen(false);
-                }}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-300 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer active:scale-95 group shrink-0"
-                title="Pencereyi Kapat (ESC)"
-              >
-                <X className="w-4 h-4 text-slate-500 group-hover:text-rose-600 transition-transform group-hover:rotate-90" />
-                <span className="font-extrabold">Kapat</span>
-              </button>
-            </div>
-
-            {/* SCROLLABLE MODAL BODY */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-              <div
-                className={
-                  showCreatePreviewPanel
-                    ? "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] gap-6 items-start"
-                    : ""
-                }
-            >
-            <form onSubmit={handleSaveInvoice} className="space-y-5 min-w-0">
+          }
+          actions={detailPageActions}
+          fullWidth={true}
+        >
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            {/* Sol Taraf: Form Alanları ve Kalemler Tablosu (8 Kolon) */}
+            <div className="xl:col-span-8 min-w-0 space-y-6">
+<form id="invoice-create-form" onSubmit={handleSaveInvoice} className="space-y-5 min-w-0">
               {/* AI OCR Scanner Shortcut for Gider Faturaları */}
               {(forcedType === "purchase" || invType === "purchase") && (
                 <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-purple-500/10 p-3 rounded-2xl border border-amber-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
@@ -1926,7 +1469,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setIsCreateModalOpen(false);
                       setIsAiScannerModalOpen(true);
                     }}
                     className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all shrink-0 active:scale-95"
@@ -2749,38 +2291,1013 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               </div>
             </form>
-
-            {showCreatePreviewPanel && (
-              <div className="hidden xl:block sticky top-0 min-h-[420px]">
-                <InvoiceCreatePreviewPanel
-                  invoice={getDraftInvoice()}
-                  companySettings={companySettings}
-                  contact={contacts.find((c) => c.id === contactId)}
-                  mysoftEnabled={sendToMysoft && !editingInvoiceId}
-                  eDocumentLabel={mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
-                  buildMysoftPayload={buildMysoftPreviewPayload}
-                />
-              </div>
-            )}
             </div>
 
-            {showCreatePreviewPanel && (
-              <div className="xl:hidden border-t border-slate-200 pt-4">
-                <InvoiceCreatePreviewPanel
-                  invoice={getDraftInvoice()}
-                  companySettings={companySettings}
-                  contact={contacts.find((c) => c.id === contactId)}
-                  mysoftEnabled={sendToMysoft && !editingInvoiceId}
-                  eDocumentLabel={mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
-                  buildMysoftPayload={buildMysoftPreviewPayload}
-                />
+            {/* Sağ Taraf: Canlı Hesaplama Özeti ve Belge Önizleme (4 Kolon) */}
+            <div className="xl:col-span-4 min-w-0 space-y-6 xl:sticky xl:top-20">
+              {/* Canlı Hesaplama Özeti Kartı */}
+              {(() => {
+                const totals = calculateTotals();
+                return (
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-purple-600" />
+                        <span>Fatura Hesaplama Özeti</span>
+                      </h3>
+                      <span className="text-[11px] font-bold text-slate-500 font-mono">
+                        {items.length} Kalem
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Ara Toplam (KDV Hariç):</span>
+                        <span className="font-mono font-bold text-slate-900">
+                          ₺{totals.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {totals.effectiveTaxableAmount !== totals.subtotal && (
+                        <div className="flex justify-between text-amber-700 bg-amber-50 p-2 rounded-xl border border-amber-200 font-medium">
+                          <span>Özel KDV Matrahı:</span>
+                          <span className="font-mono font-bold">
+                            ₺{totals.effectiveTaxableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between text-slate-600">
+                        <span>Toplam Hesaplanan KDV:</span>
+                        <span className="font-mono font-bold text-slate-900">
+                          ₺{totals.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {totals.totalWithholding > 0 && (
+                        <div className="flex justify-between text-purple-700 font-medium bg-purple-50 p-2 rounded-xl border border-purple-100">
+                          <span className="font-bold">(-) Tevkif Edilen KDV:</span>
+                          <span className="font-mono font-black">
+                            -₺{totals.totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      {totals.totalWithholding > 0 && (
+                        <div className="flex justify-between text-slate-700 text-xs">
+                          <span>Beyan Edilecek KDV:</span>
+                          <span className="font-mono font-bold">
+                            ₺{totals.payableVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="pt-3 border-t border-slate-200">
+                        <div className="flex justify-between items-baseline bg-gradient-to-r from-purple-50 via-fuchsia-50/50 to-purple-50 p-3.5 rounded-xl border border-purple-200">
+                          <div>
+                            <span className="block text-xs font-black text-purple-950 uppercase tracking-tight">Ödenecek Tutar:</span>
+                            <span className="text-[10px] text-purple-700 font-medium">Genel Toplam (KDV Dahil)</span>
+                          </div>
+                          <span className="text-xl font-black font-mono text-purple-950">
+                            ₺{totals.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Canlı Belge Önizlemesi Kartı */}
+              {showCreatePreviewPanel && (
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                      <Eye className="w-3.5 h-3.5 text-purple-600" />
+                      <span>GİB / Mysoft Canlı Belge Şablonu</span>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700">
+                      {mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
+                    </span>
+                  </div>
+                  <InvoiceCreatePreviewPanel
+                    invoice={getDraftInvoice()}
+                    companySettings={companySettings}
+                    contact={contacts.find((c) => c.id === contactId)}
+                    mysoftEnabled={sendToMysoft && !editingInvoiceId}
+                    eDocumentLabel={mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
+                    buildMysoftPayload={buildMysoftPreviewPayload}
+                  />
+                </div>
+              )}
+
+              {/* Sağ Yan Hızlı İşlem Kartı */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+                <button
+                  type="submit"
+                  form="invoice-create-form"
+                  disabled={isSavingMysoft}
+                  className={`w-full py-3 rounded-xl text-xs font-black text-white shadow-2xs cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                    forcedType === "purchase" || invType === "purchase"
+                      ? formDocKind === "receipt"
+                        ? "bg-orange-600 hover:bg-orange-700"
+                        : "bg-amber-600 hover:bg-amber-700"
+                      : formDocKind === "receipt"
+                      ? "bg-indigo-600 hover:bg-indigo-700"
+                      : "bg-purple-600 hover:bg-purple-700"
+                  }`}
+                >
+                  {isSavingMysoft && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>
+                    {editingInvoiceId
+                      ? "Değişiklikleri Güncelle & Kaydet"
+                      : forcedType === "sales" || invType === "sales"
+                      ? formDocKind === "receipt"
+                        ? "Gelir Fişini Kaydet"
+                        : sendToMysoft
+                        ? isSavingMysoft
+                          ? "Mysoft'a Gönderiliyor..."
+                          : "Kaydet & Mysoft'a Kes"
+                        : "Gelir Faturasını Kaydet & Kes"
+                      : forcedType === "purchase" || invType === "purchase"
+                      ? formDocKind === "receipt"
+                        ? "Gider Fişini Kaydet"
+                        : "Gider Faturasını Kaydet"
+                      : "Faturayı Kaydet ve Oluştur"}
+                  </span>
+                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDraftPreviewOpen(true)}
+                    className="py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 text-indigo-600" />
+                    <span>{formDocKind === "receipt" ? "Fişi Önizle" : "Önizle"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseDetail}
+                    className="py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer text-center"
+                  >
+                    Vazgeç / İptal
+                  </button>
+                </div>
               </div>
-            )}
             </div>
           </div>
-        </div>
-      )}
+        </DetailPageLayout>
 
+        {/* Detail Sayfasında Açılabilen Yardımcı Diyaloglar */}
+        {isDraftPreviewOpen && (
+          <InvoicePreviewModal
+            invoice={getDraftInvoice()}
+            companySettings={companySettings}
+            contact={contacts.find((c) => c.id === contactId)}
+            isDraft={true}
+            onClose={() => setIsDraftPreviewOpen(false)}
+            onConfirm={() => {
+              setIsDraftPreviewOpen(false);
+              const dummyEvent = { preventDefault: () => {} } as React.FormEvent;
+              handleSaveInvoice(dummyEvent);
+            }}
+            onSelectTab={onSelectTab}
+          />
+        )}
+
+        {taxModalItem && (
+          <InvoiceTaxSettingsModal
+            isOpen={true}
+            item={taxModalItem}
+            currency="TRY"
+            onClose={() => setTaxModalItem(null)}
+            onApply={(updatedItem) => {
+              setItems((prev) =>
+                prev.map((i) => (i.id === updatedItem.id ? updatedItem : i))
+              );
+              if (updatedItem.withholdingCode && invoiceProfileType === "SATIS") {
+                setInvoiceProfileType("TEVKIFAT");
+              } else if (updatedItem.specialTaxBaseReasonCode && invoiceProfileType === "SATIS") {
+                setInvoiceProfileType("OZELMATRAH");
+              } else if (updatedItem.vatExemptionReasonCode && invoiceProfileType === "SATIS") {
+                setInvoiceProfileType("ISTISNA");
+              }
+            }}
+          />
+        )}
+
+        {isQuickContactFormOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-600" />
+                  <h3 className="font-extrabold text-slate-900 text-sm">Hızlı Yeni Cari Ekle</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsQuickContactFormOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Cari Ünvanı / Adı *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Örn: ABC Lojistik A.Ş."
+                    value={newContactName}
+                    onChange={(e) => setNewContactName(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">VKN / TCKN</label>
+                  <input
+                    type="text"
+                    maxLength={11}
+                    placeholder="10 VKN veya 11 TCKN..."
+                    value={newContactTaxNo}
+                    onChange={(e) => setNewContactTaxNo(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Telefon</label>
+                  <input
+                    type="text"
+                    placeholder="05xx xxx xx xx"
+                    value={newContactPhone}
+                    onChange={(e) => setNewContactPhone(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Cari Tipi</label>
+                  <select
+                    value={newContactType}
+                    onChange={(e) => setNewContactType(e.target.value as "customer" | "vendor" | "both")}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  >
+                    <option value="customer">Müşteri (Satış Yapılan)</option>
+                    <option value="vendor">Tedarikçi (Alış Yapılan)</option>
+                    <option value="both">Müşteri & Tedarikçi</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickContactFormOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200"
+                >
+                  İptal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleQuickCreateContact}
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-sm"
+                >
+                  Cariyi Kaydet & Seç
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isContactPickerOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-white border border-slate-200 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-400" />
+                  <h3 className="font-extrabold text-sm">Cari Hesap Rehberi</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsContactPickerOpen(false)}
+                  className="text-slate-400 hover:text-white p-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-3 border-b border-slate-100 bg-slate-50 flex gap-2 shrink-0">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Cari adı, unvan veya VKN ile ara..."
+                    value={contactPickerSearch}
+                    onChange={(e) => setContactPickerSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsContactPickerOpen(false);
+                    setIsQuickContactFormOpen(true);
+                  }}
+                  className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Yeni Ekle</span>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 divide-y divide-slate-100">
+                {contacts
+                  .filter(
+                    (c) =>
+                      c.name.toLowerCase().includes(contactPickerSearch.toLowerCase()) ||
+                      (c.taxNumber && c.taxNumber.includes(contactPickerSearch))
+                  )
+                  .map((c) => (
+                    <div
+                      key={c.id}
+                      onClick={() => {
+                        handleContactSelectChange(c.id);
+                        setIsContactPickerOpen(false);
+                      }}
+                      className="p-3 hover:bg-purple-50/50 rounded-xl cursor-pointer flex items-center justify-between transition-colors pt-2"
+                    >
+                      <div>
+                        <div className="font-bold text-xs text-slate-900">{c.name}</div>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                          <span>VKN: {c.taxNumber || "—"}</span>
+                          {c.taxOffice && <span>VD: {c.taxOffice}</span>}
+                          {c.phone && <span>Tel: {c.phone}</span>}
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-purple-700 hover:underline">Seç →</span>
+                    </div>
+                  ))}
+              </div>
+              <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsContactPickerOpen(false)}
+                  className="px-4 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl"
+                >
+                  Kapat
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isProductPickerOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-white border border-slate-200 rounded-3xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-purple-400" />
+                  <h3 className="font-extrabold text-sm">Stok & Hizmet Kataloğundan Kalem Seç</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsProductPickerOpen(false)}
+                  className="text-slate-400 hover:text-white p-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-3 border-b border-slate-100 bg-slate-50 flex gap-2 shrink-0">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Ürün adı, barkod veya kod ile ara..."
+                    value={productPickerSearch}
+                    onChange={(e) => setProductPickerSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20"
+                  />
+                </div>
+                <select
+                  value={productCategoryFilter}
+                  onChange={(e) => setProductCategoryFilter(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                >
+                  <option value="all">Tüm Kategoriler</option>
+                  {Array.from(new Set(products.map((p) => p.category).filter(Boolean))).map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {products
+                  .filter((p) => {
+                    const matchesSearch =
+                      p.name.toLowerCase().includes(productPickerSearch.toLowerCase()) ||
+                      (p.code && p.code.toLowerCase().includes(productPickerSearch.toLowerCase())) ||
+                      (p.barcode && p.barcode.includes(productPickerSearch));
+                    const matchesCategory =
+                      productCategoryFilter === "all" || p.category === productCategoryFilter;
+                    return matchesSearch && matchesCategory;
+                  })
+                  .map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        handleSelectProductFromPicker(p);
+                        setIsProductPickerOpen(false);
+                      }}
+                      className="p-3 border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 rounded-xl cursor-pointer flex items-center justify-between transition-all"
+                    >
+                      <div>
+                        <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                          <span>{p.name}</span>
+                          {p.stockType && (
+                            <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded text-[10px] uppercase font-bold">
+                              {p.stockType}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-3 mt-1">
+                          <span>Kod: {p.code || "—"}</span>
+                          {p.barcode && <span>Barkod: {p.barcode}</span>}
+                          <span>Stok: {p.stockQuantity} {p.unit}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono font-bold text-xs text-purple-700">
+                          ₺{invType === "purchase" ? p.buyPrice.toLocaleString("tr-TR") : p.sellPrice.toLocaleString("tr-TR")}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-semibold">+%{p.vatRate ?? 20} KDV</span>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsProductPickerOpen(false)}
+                  className="px-4 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl"
+                >
+                  Kapat
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isAiScannerModalOpen && (
+          <AiExpenseScannerModal
+            isOpen={isAiScannerModalOpen}
+            onClose={() => setIsAiScannerModalOpen(false)}
+            contacts={contacts}
+            accounts={accounts}
+            onSaveInvoiceDirectly={handleSaveInvoiceDirectlyFromAi}
+            onApplyToForm={handleApplyAiDataToForm}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
+      {/* Top Header (Lila Bal Peteği & Geometrik Desen) */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
+            backgroundSize: "20px 35px",
+          }}
+        />
+
+        {/* Dekoratif Geometrik Vektör Şekiller */}
+        <svg
+          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
+          viewBox="0 0 200 200"
+          fill="none"
+        >
+          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
+          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
+          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
+          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
+          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
+          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
+        </svg>
+
+        <svg
+          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-400/10"
+          viewBox="0 0 160 160"
+          fill="none"
+        >
+          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
+          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
+          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
+          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
+        </svg>
+
+        <div className="relative z-10">
+          <h2 className="text-lg font-extrabold text-slate-950">
+            {forcedType === "sales"
+               ? "Gelir Faturaları"
+               : forcedType === "purchase"
+               ? "Gider Faturaları"
+               : "Gelir & Gider Faturaları"}
+          </h2>
+          <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
+            {forcedType === "sales"
+              ? "Müşterilerinize düzenlediğiniz satış faturaları ve tahsilat takibi."
+              : forcedType === "purchase"
+              ? "Tedarikçilerden gelen alış/gider faturaları ve ödeme takibi."
+              : "Resmi e-Fatura / e-Arşiv uyumlu faturalarınızı oluşturun ve ödeme takibi yapın."}
+          </p>
+        </div>
+
+        <div className="relative z-10 flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setIsCollectAllModalOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
+            title="Tüm açık/ödenmemiş faturaları topluca tahsil et"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-100" />
+            <span>Tümünü Tahsil Et</span>
+          </button>
+
+          {forcedType === "sales" ? (
+            <button
+              onClick={() => handleOpenNewInvoiceModal("invoice", "sales")}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Yeni Gelir Faturası Kes</span>
+            </button>
+          ) : forcedType === "purchase" ? (
+            <>
+              <button
+                onClick={() => setIsAiScannerModalOpen(true)}
+                className="bg-gradient-to-r from-amber-600 via-orange-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all shrink-0 hover:scale-[1.02] active:scale-98 ring-2 ring-amber-300/40"
+                title="Yapay Zeka (AI OCR) ile fatura fotoğrafı veya PDF yükleyip otomatik ayrıştırın"
+              >
+                <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
+                <span>✨ AI Fatura Tara & Ekle</span>
+              </button>
+              <button
+                onClick={() => handleOpenNewInvoiceModal("invoice", "purchase")}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Yeni Gider Faturası</span>
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsAiScannerModalOpen(true)}
+                className="bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+                title="Yapay Zeka ile Fatura Tara"
+              >
+                <Sparkles className="w-4 h-4 text-amber-200" />
+                <span>✨ AI Fatura Tara</span>
+              </button>
+              <button
+                onClick={() => handleOpenNewInvoiceModal("invoice", forcedType || "sales")}
+                className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4 text-purple-800 font-bold" />
+                <span>Yeni Fatura Kes / Kaydet</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Filter Tabs & Search */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Filter Buttons */}
+        <div className="flex flex-wrap items-center gap-1.5 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs">
+          {!forcedType ? (
+            <>
+              <button
+                onClick={() => setFilterType("all")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  filterType === "all" ? "bg-white text-purple-950 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+                }`}
+              >
+                Tüm Faturalar ({invoices.length})
+              </button>
+              <button
+                onClick={() => setFilterType("sales")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  filterType === "sales" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+                }`}
+              >
+                Gelir Faturaları
+              </button>
+              <button
+                onClick={() => setFilterType("purchase")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  filterType === "purchase" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+                }`}
+              >
+                Gider Faturaları
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setFilterType(forcedType)}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                filterType === forcedType ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+              }`}
+            >
+              Tümü ({invoices.filter((i) => i.type === forcedType).length})
+            </button>
+          )}
+          <button
+            onClick={() => setFilterType("pending")}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              filterType === "pending" ? "bg-white text-blue-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+            }`}
+          >
+            Bekleyenler
+          </button>
+          <button
+            onClick={() => setFilterType("overdue")}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              filterType === "overdue" ? "bg-white text-amber-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+            }`}
+          >
+            Vadesi Geçenler
+          </button>
+          <button
+            onClick={() => setFilterType("paid")}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              filterType === "paid" ? "bg-white text-emerald-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+            }`}
+          >
+            Ödenmiş
+          </button>
+        </div>
+
+        {/* Search, Year/Month & Export */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          {/* Yıl Filtresi */}
+          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <span className="text-slate-400 font-bold">Yıl:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+            >
+              <option value="all">Tüm Yıllar</option>
+              {availableYears.map((y) => (
+                <option key={y} value={y.toString()}>{y}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Ay Filtresi */}
+          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+            <Filter className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <span className="text-slate-400 font-bold">Ay:</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+            >
+              <option value="all">Tüm Aylar</option>
+              {TURKISH_MONTHS.map((m) => (
+                <option key={m.id} value={m.id.toString()}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Masraf Kalemi Filtresi (Gider Modülü veya Gider Seçiliyken) */}
+          {(forcedType === "purchase" || filterType === "purchase") && (
+            <div className="flex items-center gap-1.5 bg-white border border-amber-300/80 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+              <Tag className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="text-slate-400 font-bold">Masraf:</span>
+              <select
+                value={selectedExpenseCategoryFilter}
+                onChange={(e) => setSelectedExpenseCategoryFilter(e.target.value)}
+                className="bg-transparent font-extrabold text-amber-900 focus:outline-none cursor-pointer max-w-[150px] truncate"
+              >
+                <option value="all">Tüm Kalemler ({EXPENSE_CATEGORIES.length})</option>
+                {EXPENSE_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(selectedYear !== "all" || selectedMonth !== "all" || selectedExpenseCategoryFilter !== "all") && (
+            <button
+              onClick={() => {
+                setSelectedYear("all");
+                setSelectedMonth("all");
+                setSelectedExpenseCategoryFilter("all");
+              }}
+              className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              title="Filtreleri temizle"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Temizle</span>
+            </button>
+          )}
+
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Fatura No veya Müşteri ara..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
+            />
+          </div>
+          <ExportButtons getExportData={getInvoicesExportData} size="sm" />
+        </div>
+      </div>
+
+      {/* Invoice Table */}
+      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+        <div className="overflow-x-auto custom-scrollbar w-full">
+          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
+            <thead>
+              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
+                <th className="pb-2 px-4">Fatura No / Tip</th>
+                <th className="pb-2 px-4">Cari Hesap</th>
+                <th className="pb-2 px-4">Tarih / Vade</th>
+                <th className="pb-2 px-4 text-right">KDV Hariç</th>
+                <th className="pb-2 px-4 text-right">Genel Toplam</th>
+                <th className="pb-2 px-4 text-center">Durum</th>
+                <th className="pb-2 px-4 text-center">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredInvoices.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-10 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <FileText className="w-8 h-8 text-purple-200" />
+                      <p className="font-semibold text-slate-600">
+                        {forcedType === "sales"
+                          ? docSubTab === "receipts"
+                            ? "Kayıtlı gelir fişi bulunamadı."
+                            : docSubTab === "invoices"
+                            ? "Kayıtlı gelir faturası bulunamadı."
+                            : "Kayıtlı gelir faturası veya fişi bulunamadı."
+                          : forcedType === "purchase"
+                          ? docSubTab === "receipts"
+                            ? "Kayıtlı gider fişi bulunamadı."
+                            : docSubTab === "invoices"
+                            ? "Kayıtlı gider faturası bulunamadı."
+                            : "Kayıtlı gider faturası veya fişi bulunamadı."
+                          : "Kayıtlı fatura bulunamadı."}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {forcedType === "sales"
+                          ? docSubTab === "receipts"
+                            ? "Yukarıdaki '+ Yeni Gelir Fişi Ekle' butonuyla yeni fiş ekleyebilirsiniz."
+                            : "Yukarıdaki '+ Yeni Gelir Faturası Kes' butonuyla yeni fatura oluşturabilirsiniz."
+                          : forcedType === "purchase"
+                          ? docSubTab === "receipts"
+                            ? "Yukarıdaki '+ Yeni Gider Fişi Ekle' butonuyla yeni fiş ekleyebilirsiniz."
+                            : "Yukarıdaki '+ Yeni Gider Faturası Kaydet' butonuyla yeni fatura oluşturabilirsiniz."
+                          : "Yeni fatura eklemek için yukarıdaki butonu kullanabilirsiniz."}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                displayedInvoices.map((inv) => (
+                  <tr
+                    key={inv.id}
+                    className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                  >
+                    <td className="py-3.5 px-4 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <div className="font-extrabold text-slate-900 group-hover:text-purple-950 font-mono text-sm transition-colors">
+                        {inv.invoiceNumber}
+                      </div>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {inv.type === "sales" ? (
+                          inv.docKind === "receipt" ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 group-hover:border-indigo-300">
+                              <FileSpreadsheet className="w-2.5 h-2.5 text-indigo-600" />
+                              Gelir Fişi
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-200 group-hover:border-purple-300">
+                              <FileText className="w-2.5 h-2.5 text-purple-600" />
+                              Gelir Faturası
+                            </span>
+                          )
+                        ) : inv.docKind === "receipt" ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-orange-50 text-orange-700 border border-orange-200 group-hover:border-orange-300">
+                              <FileSpreadsheet className="w-2.5 h-2.5 text-orange-600" />
+                              Gider Fişi
+                            </span>
+                            {(inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory) && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-900 border border-amber-200 group-hover:border-amber-300">
+                                <Tag className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                <span className="truncate max-w-[130px]">
+                                  {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200 group-hover:border-amber-300">
+                              <FileText className="w-2.5 h-2.5 text-amber-600" />
+                              Gider Faturası
+                            </span>
+                            {(inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory) && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-900 border border-amber-200 group-hover:border-amber-300">
+                                <Tag className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                <span className="truncate max-w-[130px]">
+                                  {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      {/* Cari (Contact) link */}
+                      {onSelectTab ? (
+                        <button
+                          type="button"
+                          onClick={() => onSelectTab("contacts")}
+                          className="text-left font-extrabold text-slate-900 group-hover:text-purple-950 hover:text-purple-700 hover:underline cursor-pointer inline-flex items-center gap-1.5 transition-colors group/carilink text-xs"
+                          title="Cari Hesaplar Listesine Git"
+                        >
+                          <span>{inv.contactName}</span>
+                          <Users className="w-3.5 h-3.5 text-purple-600 opacity-70 group-hover/carilink:opacity-100 group-hover/carilink:scale-110 transition-all shrink-0" />
+                        </button>
+                      ) : (
+                        <div className="font-extrabold text-slate-900 group-hover:text-purple-950 text-xs">
+                          {inv.contactName}
+                        </div>
+                      )}
+
+                      {/* Item / Stock shortcut */}
+                      {inv.items.length > 0 && (
+                        <div className="mt-0.5">
+                          {onSelectTab ? (
+                            <button
+                              type="button"
+                              onClick={() => onSelectTab("products")}
+                              className="text-[10px] text-slate-500 hover:text-purple-700 hover:underline cursor-pointer flex items-center gap-1 transition-colors group/itemlink truncate max-w-[220px]"
+                              title="Stok & Hizmet Listesine Git"
+                            >
+                              <Package className="w-3 h-3 text-purple-500 shrink-0 opacity-70 group-hover/itemlink:opacity-100" />
+                              <span className="truncate">{inv.items[0]?.description}</span>
+                              {inv.items.length > 1 && (
+                                <span className="text-slate-400 text-[9px] shrink-0 font-medium">
+                                  (+{inv.items.length - 1})
+                                </span>
+                              )}
+                            </button>
+                          ) : (
+                            <div className="text-[10px] text-slate-500 truncate max-w-[220px]">
+                              {inv.items[0]?.description}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {inv.taxNumber && (
+                        <div className="text-[10px] font-normal text-slate-400 group-hover:text-purple-700/60 mt-0.5">
+                          VKN: {inv.taxNumber}
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="py-3.5 px-4 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <div className="font-medium text-slate-800 group-hover:text-slate-900">{formatDate(inv.issueDate)}</div>
+                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">Vade: {formatDate(inv.dueDate)}</div>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-right font-medium text-slate-700 group-hover:text-slate-900 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      ₺{inv.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </td>
+
+                    <td className="py-3.5 px-4 text-right font-black text-sm text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      ₺{inv.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </td>
+
+                    <td className="py-3.5 px-4 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                          inv.status === "paid"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200 group-hover:border-emerald-300"
+                            : inv.status === "overdue"
+                            ? "bg-amber-50 text-amber-700 border border-amber-200 group-hover:border-amber-300"
+                            : "bg-blue-50 text-blue-700 border border-blue-200 group-hover:border-blue-300"
+                        }`}
+                      >
+                        {inv.status === "paid" ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            Ödendi
+                          </>
+                        ) : inv.status === "overdue" ? (
+                          <>
+                            <AlertTriangle className="w-3 h-3 text-amber-600" />
+                            Vadesi Geçti
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-3 h-3 text-blue-600" />
+                            Bekliyor
+                          </>
+                        )}
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {/* Edit Button */}
+                        <button
+                          onClick={() => handleOpenEditInvoiceModal(inv)}
+                          title={inv.docKind === "receipt" ? "Fişi Düzenle" : "Faturayı Düzenle"}
+                          className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Düzenle</span>
+                        </button>
+
+                        {/* Print / View Modal */}
+                        <button
+                          onClick={() => setPrintingInvoice(inv)}
+                          title="Faturayı Görüntüle & e-Fatura Yazdır"
+                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Baskı / e-Fatura</span>
+                        </button>
+
+                        {/* Direct WhatsApp Share */}
+                        <button
+                          onClick={() => setWhatsAppInvoice(inv)}
+                          title="Faturayı WhatsApp ile Paylaş"
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="hidden xl:inline">WhatsApp</span>
+                        </button>
+
+                        {/* Add Payment / Collection */}
+                        {inv.status !== "paid" && (
+                          <button
+                            onClick={() => {
+                              setPaymentModalInvoice(inv);
+                              setPaymentAmount(inv.remainingAmount);
+                            }}
+                            title="Tahsilat / Ödeme Ekle"
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs transition-colors cursor-pointer"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {/* Delete */}
+                        <button
+                          onClick={() => onDeleteInvoice(inv.id)}
+                          title="Faturayı Sil"
+                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredInvoices.length > displayLimit && (
+          <div className="text-center mt-4">
+            <button
+              onClick={() => setDisplayLimit((prev) => prev + 100)}
+              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+            >
+              Daha Fazla Göster ({displayLimit} / {filteredInvoices.length})
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Create / Edit modal was replaced by DetailPageLayout */}
       {/* MODAL: Draft Invoice Preview */}
       {isDraftPreviewOpen && (
         <InvoicePreviewModal

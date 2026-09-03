@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { ETebligatItem, CompanySettings } from "../types";
 import { formatETebligatWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import {
   X,
   Building2,
@@ -37,53 +39,93 @@ export const ETebligatModal: React.FC<ETebligatModalProps> = ({
 }) => {
   const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
 
+  const tebligatNav = useDetailNavigation({
+    moduleKey: "e-tebligat",
+    initialMode: "detail",
+    initialItem: tebligat,
+  });
+
+  const handleBack = () => {
+    tebligatNav.backToList();
+    onClose();
+  };
+
   if (!isOpen || !tebligat) return null;
 
   const isGib = tebligat.authority === "GIB";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in duration-150">
-        {/* Header */}
-        <div
-          className={`p-4 sm:p-5 flex items-center justify-between text-white ${
-            isGib
-              ? "bg-gradient-to-r from-red-700 via-rose-800 to-slate-900"
-              : "bg-gradient-to-r from-emerald-700 via-teal-800 to-slate-900"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-md shrink-0">
-              <Landmark className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-black uppercase tracking-wider bg-black/30 px-2.5 py-0.5 rounded-full border border-white/20">
-                  {isGib ? "GİB e-Tebligat Mazbatası" : "SGK e-Tebligat Mazbatası"}
-                </span>
-                <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-mono">
-                  {tebligat.barcodeNumber}
-                </span>
-              </div>
-              <h2 className="text-base sm:text-lg font-black tracking-tight mt-0.5">
-                {tebligat.documentTitle}
-              </h2>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 group shrink-0"
-            title="Pencereyi Kapat"
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-100">
+      <DetailPageLayout
+        title={tebligat.documentTitle}
+        subtitle={`${isGib ? "Gelir İdaresi Başkanlığı" : "Sosyal Güvenlik Kurumu"} · Barkod: ${tebligat.barcodeNumber} · Tebliğ: ${tebligat.servedDate}`}
+        breadcrumbs={[
+          { label: "E-İşlemler & Portallar", onClick: handleBack },
+          { label: "e-Tebligat", onClick: handleBack },
+          { label: `${tebligat.documentTitle} (Mazbata)`, active: true },
+        ]}
+        onBack={handleBack}
+        statusBadge={
+          <span
+            className={`px-2.5 py-1 rounded-full text-xs font-extrabold ${
+              tebligat.status === "read"
+                ? "bg-emerald-100 text-emerald-800"
+                : tebligat.status === "in_process"
+                ? "bg-amber-100 text-amber-800"
+                : "bg-rose-100 text-rose-800"
+            }`}
           >
-            <X className="w-4 h-4 text-white/80 group-hover:text-white transition-transform group-hover:rotate-90" />
-            <span className="font-extrabold">Kapat</span>
-          </button>
-        </div>
-
-        {/* Content Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-6 text-xs flex-1">
+            {tebligat.status === "read"
+              ? "Okundu & Tebliğ Alındı"
+              : tebligat.status === "in_process"
+              ? "İşlemde"
+              : "Okunmadı / Süre İşliyor"}
+          </span>
+        }
+        headerIcon={<Landmark className={`w-5 h-5 ${isGib ? "text-red-600" : "text-emerald-600"}`} />}
+        actions={
+          <div className="flex items-center gap-2">
+            {onStatusChange && (
+              <button
+                type="button"
+                onClick={() => {
+                  onStatusChange(tebligat.id, tebligat.status === "read" ? "unread" : "read");
+                }}
+                className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs text-xs"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{tebligat.status === "read" ? "Okunmadı Yap" : "Okundu Olarak Onayla"}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsWhatsAppOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs text-xs"
+              title="Yetkiliye WhatsApp Acil Tebligat Uyarısı Gönder"
+            >
+              <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
+              <span>WhatsApp</span>
+            </button>
+            <a
+              href={isGib ? "https://dijital.gib.gov.tr" : "https://etebligat.sgk.gov.tr/"}
+              target="_blank"
+              rel="noreferrer"
+              className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs text-xs"
+            >
+              <span>{isGib ? "GİB Portala Git" : "SGK Portala Git"}</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+            <button
+              type="button"
+              onClick={handleBack}
+              className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-1.5 rounded-xl transition-all cursor-pointer text-xs"
+            >
+              Geri Dön
+            </button>
+          </div>
+        }
+      >
+        <div className="bg-white rounded-3xl max-w-4xl mx-auto p-6 sm:p-8 space-y-6 border border-slate-200 shadow-sm text-xs">
           {/* Official Document Banner */}
           <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-5 space-y-4 font-sans text-slate-800">
             {/* Header Crest */}
@@ -179,67 +221,7 @@ export const ETebligatModal: React.FC<ETebligatModalProps> = ({
             )}
           </div>
         </div>
-
-        {/* Footer Actions */}
-        <div className="p-4 bg-slate-100 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 text-xs">
-          <div className="flex items-center gap-2">
-            {onStatusChange && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onStatusChange(tebligat.id, tebligat.status === "read" ? "unread" : "read");
-                  }}
-                  className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  {tebligat.status === "read" ? "Okunmadı Olarak İşaretle" : "Okundu Olarak İşaretle"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onStatusChange(tebligat.id, "in_process");
-                  }}
-                  className="bg-white hover:bg-slate-50 border border-slate-300 text-amber-800 font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs"
-                >
-                  İşleme Alındı
-                </button>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsWhatsAppOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Yetkiliye WhatsApp Acil Tebligat Uyarısı Gönder"
-            >
-              <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
-              <span>Yetkiliye WhatsApp ile İlet</span>
-            </button>
-
-            <a
-              href={isGib ? "https://dijital.gib.gov.tr" : "https://etebligat.sgk.gov.tr/"}
-              target="_blank"
-              rel="noreferrer"
-              className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <span>{isGib ? "GİB Portalda Gör" : "SGK Portalda Gör"}</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-1.5 rounded-xl transition-all cursor-pointer"
-            >
-              Kapat
-            </button>
-          </div>
-        </div>
-      </div>
+      </DetailPageLayout>
 
       {/* WhatsApp Share Modal */}
       <UniversalWhatsAppModal
