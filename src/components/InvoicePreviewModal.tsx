@@ -3,7 +3,11 @@ import { Invoice, InvoiceItem, CompanySettings, Contact, getContactAccountCode }
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { getCurrencySymbol, formatDate, exportElementToPDF } from "../utils/exportUtils";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
-import { computeInvoiceTotals, formatWithholdingBadge } from "../utils/taxCalculationService";
+import {
+  computeInvoiceTotals,
+  formatWithholdingBadge,
+  generateInvoiceLegalTaxNotes,
+} from "../utils/taxCalculationService";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
   Printer,
@@ -69,6 +73,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
 
   // Recalculate totals accurately using computeInvoiceTotals
   const {
+    grossTotal: computedGrossTotal,
+    totalDiscount: computedTotalDiscount,
     subtotal: computedSubtotal,
     effectiveTaxableAmount,
     totalVat: computedVat,
@@ -78,6 +84,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
     computedItems,
   } = computeInvoiceTotals(items);
 
+  const grossTotal = invoice.grossTotal ?? computedGrossTotal;
+  const totalDiscount = invoice.totalDiscount ?? computedTotalDiscount;
   const subtotal = invoice.subtotal ?? computedSubtotal;
   const totalVat = invoice.totalVat ?? computedVat;
   const totalWithholding = invoice.totalWithholding ?? computedWithholding;
@@ -85,6 +93,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   const payableAmount = invoice.payableAmount ?? computedPayableAmount;
   const paidAmount = invoice.paidAmount ?? 0;
   const remainingAmount = invoice.remainingAmount ?? (payableAmount - paidAmount);
+  const hasDiscounts = totalDiscount > 0 || computedItems.some((i) => (i.discountAmount && i.discountAmount > 0) || (i.discountRate && i.discountRate > 0));
 
   const contactName = invoice.contactName || contact?.name || "Belirtilmemiş Müşteri / Tedarikçi";
   const contactTaxOffice = contact?.taxOffice || invoice.taxNumber || "-";
@@ -233,6 +242,20 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                     ? "e-ARŞİV FATURA"
                     : "ALIŞ (GİDER) FATURASI"}
                 </div>
+                {(invoice.invoiceScenario || invoice.invoiceProfileType) && (
+                  <div className="flex flex-wrap items-center justify-start sm:justify-end gap-1.5 pt-0.5">
+                    {invoice.invoiceScenario && (
+                      <span className="text-[10px] font-mono font-bold bg-purple-50 text-purple-800 px-2 py-0.5 rounded border border-purple-200">
+                        SENARYO: {invoice.invoiceScenario}
+                      </span>
+                    )}
+                    {invoice.invoiceProfileType && (
+                      <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-300">
+                        TİP: {invoice.invoiceProfileType}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="text-xs font-mono font-bold text-slate-900">
                   {invoice.docKind === "receipt" ? "FİŞ NO:" : "FATURA NO:"} {invNumber}
                 </div>
@@ -311,6 +334,12 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                     <th className="py-2.5 px-3 text-center">Miktar</th>
                     <th className="py-2.5 px-3 text-center">Birim</th>
                     <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
+                    {hasDiscounts && (
+                      <>
+                        <th className="py-2.5 px-3 text-right">İskonto</th>
+                        <th className="py-2.5 px-3 text-center">İskonto %</th>
+                      </>
+                    )}
                     <th className="py-2.5 px-3 text-center">KDV %</th>
                     <th className="py-2.5 px-3 text-right">KDV Tutarı</th>
                     <th className="py-2.5 px-3 text-right">Toplam Tutar</th>
@@ -319,7 +348,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                 <tbody className="divide-y divide-slate-200">
                   {computedItems.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-6 text-center text-slate-400 font-medium">
+                      <td colSpan={hasDiscounts ? 10 : 8} className="py-6 text-center text-slate-400 font-medium">
                         Faturada henüz kalem bulunmuyor.
                       </td>
                     </tr>
@@ -363,6 +392,18 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                           {currSymbol}
                           {(item.unitPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </td>
+                        {hasDiscounts && (
+                          <>
+                            <td className="py-3 px-3 text-right font-mono text-rose-700 font-medium">
+                              {item.discountAmount && item.discountAmount > 0
+                                ? `-${currSymbol}${item.discountAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
+                                : "-"}
+                            </td>
+                            <td className="py-3 px-3 text-center font-bold text-rose-700">
+                              {item.discountRate && item.discountRate > 0 ? `%${item.discountRate}` : "-"}
+                            </td>
+                          </>
+                        )}
                         <td className="py-3 px-3 text-center font-bold">%{item.vatRate || 0}</td>
                         <td className="py-3 px-3 text-right font-mono text-slate-700">
                           {currSymbol}
@@ -403,20 +444,63 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   </div>
                 )}
 
+                {(() => {
+                  const legalNotes = generateInvoiceLegalTaxNotes(
+                    invoice.items || [],
+                    invoice.invoiceProfileType,
+                    currSymbol
+                  );
+                  if (legalNotes.length === 0) return null;
+                  return (
+                    <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl text-xs text-purple-950 space-y-1.5">
+                      <span className="text-[10px] font-black uppercase text-purple-900 tracking-wider block">
+                        GİB RESMİ VERGİ BİLGİLERİ VE YASAL ŞERHLER
+                      </span>
+                      <div className="space-y-1">
+                        {legalNotes.map((ln, idx) => (
+                          <div key={idx} className="flex items-start gap-1.5 text-[11px] leading-relaxed">
+                            <span className="font-bold text-purple-700 shrink-0">•</span>
+                            <p>{ln}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {invoice.notes && (
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 space-y-1">
                     <span className="text-[10px] font-bold uppercase text-slate-500 block">
                       FATURA NOTU
                     </span>
-                    <p>{invoice.notes}</p>
+                    <p className="whitespace-pre-line leading-relaxed">{invoice.notes}</p>
                   </div>
                 )}
               </div>
 
               {/* Totals Summary */}
               <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2 text-xs">
+                {totalDiscount > 0 && (
+                  <>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Brüt Tutar (İskonto Öncesi):</span>
+                      <span className="font-mono font-bold">
+                        {currSymbol}
+                        {grossTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-rose-700 bg-rose-50 p-1.5 rounded-lg border border-rose-100 font-medium">
+                      <span className="font-bold">(-) Toplam İskonto:</span>
+                      <span className="font-mono font-bold">
+                        -{currSymbol}
+                        {totalDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 <div className="flex justify-between text-slate-600">
-                  <span>Ara Toplam (Matrah):</span>
+                  <span>{totalDiscount > 0 ? "Ara Toplam (Net Matrah):" : "Ara Toplam (Matrah):"}</span>
                   <span className="font-mono font-bold">
                     {currSymbol}
                     {subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
