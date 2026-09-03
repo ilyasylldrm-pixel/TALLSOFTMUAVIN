@@ -26,6 +26,9 @@ import {
   Calendar,
   CreditCard,
   Zap,
+  Edit2,
+  Clock,
+  CheckCircle,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { NavItem } from "./Sidebar";
@@ -39,6 +42,7 @@ export interface InvoicePreviewModalProps {
   isDraft?: boolean;
   onClose: () => void;
   onConfirm?: () => void;
+  onEdit?: () => void;
   onDownloadPDF?: () => void;
   onPrint?: () => void;
   onSelectTab?: (tab: NavItem) => void;
@@ -53,6 +57,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   isDraft = false,
   onClose,
   onConfirm,
+  onEdit,
   onDownloadPDF,
   onPrint,
   onSelectTab,
@@ -152,6 +157,17 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
       headerIcon={<FileText className="w-5 h-5 text-indigo-600" />}
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          {onEdit && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+            >
+              <Edit2 className="w-4 h-4" />
+              <span>Faturayı Düzenle</span>
+            </button>
+          )}
+
           {onConfirm && isDraft && (
             <button
               type="button"
@@ -159,7 +175,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
             >
               <Check className="w-4 h-4" />
-              <span>Faturayı Onayla</span>
+              <span>Faturayı Onayla & Kaydet</span>
             </button>
           )}
 
@@ -201,10 +217,68 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
         </div>
       }
     >
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* Top ERP Metric Ribbon */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
+          {/* Card 1: Toplam Tutar */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+              Ödenecek Toplam
+            </span>
+            <div className="text-xl font-black text-slate-900 font-mono">
+              {currSymbol}{payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">
+              {items.length} Kalem • KDV Dahil
+            </div>
+          </div>
+
+          {/* Card 2: Tahsilat Durumu */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+              Tahsilat / Bakiye
+            </span>
+            <div className={`text-xl font-black font-mono ${remainingAmount <= 0 ? "text-emerald-600" : "text-amber-600"}`}>
+              {remainingAmount <= 0 ? "Tamamı Ödendi" : `${currSymbol}${remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">
+              {paidAmount > 0 ? `Tahsil Edilen: ${currSymbol}${paidAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "Henüz ödeme alınmadı"}
+            </div>
+          </div>
+
+          {/* Card 3: Tarih & Vade */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+              Fatura / Vade Tarihi
+            </span>
+            <div className="text-sm font-bold text-slate-800">
+              {formatDate(issueDate)}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">
+              Vade: <strong className="text-slate-700">{formatDate(dueDate)}</strong>
+            </div>
+          </div>
+
+          {/* Card 4: Resmi e-Belge & GİB */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+              e-Belge / GİB Durumu
+            </span>
+            <div className="text-sm font-bold text-purple-700 flex items-center gap-1.5">
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
+              <span>{isDraft ? "Taslak Belge" : "GİB Sistemine Kayıtlı"}</span>
+            </div>
+            <div className="text-[10px] font-mono text-slate-400 mt-1 truncate">
+              {invoice.invoiceScenario || "TICARIFATURA"} • {invoice.invoiceProfileType || "SATIS"}
+            </div>
+          </div>
+        </div>
+
+        {/* Paper Container Desk Wrapper */}
+        <div className="bg-slate-200/50 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center print:bg-white print:p-0 print:border-none print:shadow-none">
           <div
             id="invoice-preview-paper"
-            className="bg-white text-slate-900 p-6 sm:p-8 border border-slate-200 rounded-xl space-y-6 print:border-none print:p-0"
+            className="bg-white text-slate-900 p-6 sm:p-10 border border-slate-300/80 rounded-2xl shadow-xl w-full max-w-[850px] space-y-6 print:border-none print:p-0 print:shadow-none print:rounded-none"
           >
             {/* Header / Company Banner */}
             <div className="flex flex-col sm:flex-row items-start justify-between border-b-2 border-slate-900 pb-6 gap-4">
@@ -670,6 +744,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             </div>
           </div>
         </div>
+      </div>
 
       {/* WhatsApp Share Modal */}
       <UniversalWhatsAppModal

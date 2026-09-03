@@ -1519,6 +1519,375 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   // If Detail View is active (Create / Edit Invoice), render Full Page Detail Layout directly
   if (detailNav.isDetailView) {
+    // 1. DRAFT INVOICE PREVIEW
+    if (isDraftPreviewOpen) {
+      return (
+        <InvoicePreviewModal
+          invoice={getDraftInvoice()}
+          companySettings={companySettings}
+          contact={contacts.find((c) => c.id === contactId)}
+          isDraft={true}
+          onClose={() => setIsDraftPreviewOpen(false)}
+          onConfirm={() => {
+            setIsDraftPreviewOpen(false);
+            const dummyEvent = { preventDefault: () => {} } as React.FormEvent;
+            handleSaveInvoice(dummyEvent);
+          }}
+          onSelectTab={onSelectTab}
+        />
+      );
+    }
+
+    // 2. TAX & WITHHOLDING SETTINGS
+    if (taxModalItem) {
+      return (
+        <InvoiceTaxSettingsModal
+          isOpen={true}
+          item={taxModalItem}
+          initialTab={taxModalInitialTab}
+          currency="TRY"
+          onClose={() => {
+            setTaxModalItem(null);
+            setTaxModalInitialTab(undefined);
+          }}
+          onApply={(updatedItem) => {
+            const nextItems = items.map((it) => (it.id === updatedItem.id ? updatedItem : it));
+            setItems(nextItems);
+
+            let nextProfile = invoiceProfileType;
+            if (updatedItem.withholdingCode || (updatedItem.withholdingRate && updatedItem.withholdingRate > 0)) {
+              if (invoiceProfileType === "SATIS") {
+                nextProfile = "TEVKIFAT";
+                setInvoiceProfileType("TEVKIFAT");
+              }
+            } else if (updatedItem.specialTaxBaseCode || (updatedItem.specialTaxBase !== undefined && updatedItem.specialTaxBase !== null)) {
+              if (invoiceProfileType === "SATIS") {
+                nextProfile = "OZELMATRAH";
+                setInvoiceProfileType("OZELMATRAH");
+              }
+            } else if (updatedItem.exemptionCode || updatedItem.vatRate === 0) {
+              if (invoiceProfileType === "SATIS") {
+                nextProfile = "ISTISNA";
+                setInvoiceProfileType("ISTISNA");
+              }
+            }
+
+            const legalNotes = generateInvoiceLegalTaxNotes(nextItems, nextProfile);
+            if (legalNotes.length > 0) {
+              setNotes((prevNotes) => {
+                let n = prevNotes.trim();
+                legalNotes.forEach((ln) => {
+                  if (!n.includes(ln)) {
+                    n = n ? `${n}\n${ln}` : ln;
+                  }
+                });
+                return n;
+              });
+            }
+
+            setTaxModalItem(null);
+            setTaxModalInitialTab(undefined);
+          }}
+        />
+      );
+    }
+
+    // 3. QUICK CONTACT CREATION
+    if (isQuickContactFormOpen) {
+      return (
+        <DetailPageLayout
+          title="Hızlı Yeni Cari Ekle"
+          subtitle="Fatura için yeni müşteri veya tedarikçi kartı oluşturun"
+          breadcrumbs={[
+            { label: "Fatura Düzenle", onClick: () => setIsQuickContactFormOpen(false) },
+            { label: "Hızlı Cari Ekle", active: true },
+          ]}
+          onBack={() => setIsQuickContactFormOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              YENİ CARİ
+            </span>
+          }
+          headerIcon={<Users className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsQuickContactFormOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickCreateContact}
+                className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs transition-colors cursor-pointer active:scale-95"
+              >
+                Cariyi Kaydet & Seç
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-lg mx-auto p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Cari Ünvanı / Adı *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Örn: ABC Lojistik A.Ş."
+                  value={newContactName}
+                  onChange={(e) => setNewContactName(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">VKN / TCKN</label>
+                <input
+                  type="text"
+                  maxLength={11}
+                  placeholder="10 VKN veya 11 TCKN..."
+                  value={newContactTaxNo}
+                  onChange={(e) => setNewContactTaxNo(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Telefon</label>
+                <input
+                  type="text"
+                  placeholder="05XX XXX XX XX"
+                  value={newContactPhone}
+                  onChange={(e) => setNewContactPhone(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Cari Türü</label>
+                <select
+                  value={newContactType}
+                  onChange={(e) => setNewContactType(e.target.value as any)}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                >
+                  <option value="both">Müşteri & Tedarikçi (Her İkisi)</option>
+                  <option value="customer">Yalnızca Müşteri (120)</option>
+                  <option value="vendor">Yalnızca Tedarikçi (320)</option>
+                </select>
+              </div>
+            </div>
+            <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsQuickContactFormOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickCreateContact}
+                className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs cursor-pointer active:scale-95"
+              >
+                Kaydet & Seç
+              </button>
+            </div>
+          </div>
+        </DetailPageLayout>
+      );
+    }
+
+    // 4. CONTACT PICKER
+    if (isContactPickerOpen) {
+      return (
+        <DetailPageLayout
+          title="Cari Hesap Seç ve Faturaya Ekle"
+          subtitle="Faturanız için cari seçin veya hızlıca yeni cari oluşturun"
+          breadcrumbs={[
+            { label: "Fatura Düzenle", onClick: () => setIsContactPickerOpen(false) },
+            { label: "Cari Seçici", active: true },
+          ]}
+          onBack={() => setIsContactPickerOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              CARİ LİSTESİ
+            </span>
+          }
+          headerIcon={<Users className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsContactPickerOpen(false);
+                  setIsQuickContactFormOpen(true);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 cursor-pointer"
+              >
+                + Yeni Cari Oluştur
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsContactPickerOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+              >
+                Vazgeç
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-2xl mx-auto p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="relative">
+              <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Cari adı, vergi no veya telefon ile ara..."
+                value={contactPickerSearch}
+                onChange={(e) => setContactPickerSearch(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400"
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar pr-1">
+              {contacts
+                .filter((c) => {
+                  const s = contactPickerSearch.toLowerCase().trim();
+                  if (!s) return true;
+                  return (
+                    c.name.toLowerCase().includes(s) ||
+                    (c.taxNumber && c.taxNumber.includes(s)) ||
+                    (c.phone && c.phone.includes(s))
+                  );
+                })
+                .map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => {
+                      setContactId(c.id);
+                      setVknSearchInput(c.taxNumber ? c.taxNumber.replace(/\D/g, "") : "");
+                      setIsContactPickerOpen(false);
+                    }}
+                    className="p-3.5 rounded-2xl border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 transition-all cursor-pointer flex items-center justify-between group"
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900 group-hover:text-purple-900">{c.name}</div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        VKN/TCKN: {c.taxNumber || "-"} • Tel: {c.phone || "-"}
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-purple-700 bg-purple-50 group-hover:bg-purple-600 group-hover:text-white px-3 py-1.5 rounded-xl border border-purple-200 transition-colors">
+                      Seç
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </DetailPageLayout>
+      );
+    }
+
+    // 5. PRODUCT PICKER
+    if (isProductPickerOpen) {
+      return (
+        <DetailPageLayout
+          title="Stok & Hizmet Listesinden Seç ve Faturaya Ekle"
+          subtitle="Faturanıza eklemek istediğiniz stok veya hizmeti seçin"
+          breadcrumbs={[
+            { label: "Fatura Düzenle", onClick: () => setIsProductPickerOpen(false) },
+            { label: "Stok & Hizmet Seçici", active: true },
+          ]}
+          onBack={() => setIsProductPickerOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              ÜRÜN REHBERİ
+            </span>
+          }
+          headerIcon={<Package className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsProductPickerOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+              >
+                Vazgeç
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-3xl mx-auto p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Ürün adı, stok kodu veya barkod ile ara..."
+                  value={productPickerSearch}
+                  onChange={(e) => setProductPickerSearch(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400"
+                />
+              </div>
+
+              <select
+                value={productCategoryFilter}
+                onChange={(e) => setProductCategoryFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 w-full sm:w-auto"
+              >
+                <option value="all">Tüm Kategoriler</option>
+                {Array.from(new Set(products.map((p) => p.category).filter(Boolean))).map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar pr-1">
+              {products
+                .filter((p) => {
+                  const s = productPickerSearch.toLowerCase().trim();
+                  const matchesSearch = !s || p.name.toLowerCase().includes(s) || (p.code && p.code.toLowerCase().includes(s)) || (p.barcode && p.barcode.includes(s));
+                  const matchesCat = productCategoryFilter === "all" || p.category === productCategoryFilter;
+                  return matchesSearch && matchesCat;
+                })
+                .map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleSelectProductFromPicker(p)}
+                    className="p-3.5 rounded-2xl border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 transition-all cursor-pointer flex items-center justify-between group"
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900 group-hover:text-purple-900">{p.name}</div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        Kod: {p.code || "-"} • Stok: <strong className={p.stock <= 0 ? "text-rose-600" : "text-emerald-700"}>{p.stock ?? 0} {p.unit || "Adet"}</strong>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono font-bold text-xs text-purple-700">
+                        ₺{invType === "purchase" ? p.buyPrice.toLocaleString("tr-TR") : p.sellPrice.toLocaleString("tr-TR")}
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-semibold">+%{p.vatRate ?? 20} KDV</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </DetailPageLayout>
+      );
+    }
+
+    // 6. AI EXPENSE SCANNER
+    if (isAiScannerModalOpen) {
+      return (
+        <AiExpenseScannerModal
+          isOpen={isAiScannerModalOpen}
+          onClose={() => setIsAiScannerModalOpen(false)}
+          contacts={contacts}
+          accounts={accounts}
+          onSaveInvoiceDirectly={handleSaveInvoiceDirectlyFromAi}
+          onApplyToForm={handleApplyAiDataToForm}
+        />
+      );
+    }
     return (
       <div className="animate-fadeIn">
         <DetailPageLayout
@@ -2750,339 +3119,293 @@ export const Invoices: React.FC<InvoicesProps> = ({
           </div>
         </DetailPageLayout>
 
-        {/* Detail Sayfasında Açılabilen Yardımcı Diyaloglar */}
-        {isDraftPreviewOpen && (
-          <InvoicePreviewModal
-            invoice={getDraftInvoice()}
-            companySettings={companySettings}
-            contact={contacts.find((c) => c.id === contactId)}
-            isDraft={true}
-            onClose={() => setIsDraftPreviewOpen(false)}
-            onConfirm={() => {
-              setIsDraftPreviewOpen(false);
-              const dummyEvent = { preventDefault: () => {} } as React.FormEvent;
-              handleSaveInvoice(dummyEvent);
-            }}
-            onSelectTab={onSelectTab}
-          />
-        )}
-
-        {taxModalItem && (
-          <InvoiceTaxSettingsModal
-            isOpen={true}
-            item={taxModalItem}
-            currency="TRY"
-            onClose={() => setTaxModalItem(null)}
-            onApply={(updatedItem) => {
-              setItems((prev) =>
-                prev.map((i) => (i.id === updatedItem.id ? updatedItem : i))
-              );
-              if (updatedItem.withholdingCode && invoiceProfileType === "SATIS") {
-                setInvoiceProfileType("TEVKIFAT");
-              } else if (updatedItem.specialTaxBaseReasonCode && invoiceProfileType === "SATIS") {
-                setInvoiceProfileType("OZELMATRAH");
-              } else if (updatedItem.vatExemptionReasonCode && invoiceProfileType === "SATIS") {
-                setInvoiceProfileType("ISTISNA");
-              }
-            }}
-          />
-        )}
-
-        {isQuickContactFormOpen && (
-          <DetailPageLayout
-            title="Hızlı Yeni Cari Ekle"
-            subtitle="Fatura için yeni müşteri veya tedarikçi kartı oluşturun"
-            breadcrumbs={[
-              { label: "Fatura Düzenle", onClick: () => setIsQuickContactFormOpen(false) },
-              { label: "Hızlı Cari Ekle", active: true },
-            ]}
-            onBack={() => setIsQuickContactFormOpen(false)}
-            statusBadge={
-              <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
-                YENİ CARİ
-              </span>
-            }
-            headerIcon={<Users className="w-5 h-5 text-purple-600" />}
-            actions={
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsQuickContactFormOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-                >
-                  İptal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleQuickCreateContact}
-                  className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs transition-colors cursor-pointer active:scale-95"
-                >
-                  Cariyi Kaydet & Seç
-                </button>
-              </div>
-            }
-          >
-            <div className="bg-white border border-slate-200 rounded-3xl max-w-lg mx-auto p-6 sm:p-8 shadow-sm space-y-4">
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Cari Ünvanı / Adı *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Örn: ABC Lojistik A.Ş."
-                    value={newContactName}
-                    onChange={(e) => setNewContactName(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">VKN / TCKN</label>
-                  <input
-                    type="text"
-                    maxLength={11}
-                    placeholder="10 VKN veya 11 TCKN..."
-                    value={newContactTaxNo}
-                    onChange={(e) => setNewContactTaxNo(e.target.value.replace(/\D/g, "").slice(0, 11))}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Telefon</label>
-                  <input
-                    type="text"
-                    placeholder="05xx xxx xx xx"
-                    value={newContactPhone}
-                    onChange={(e) => setNewContactPhone(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Cari Tipi</label>
-                  <select
-                    value={newContactType}
-                    onChange={(e) => setNewContactType(e.target.value as "customer" | "vendor" | "both")}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                  >
-                    <option value="customer">Müşteri (Satış Yapılan)</option>
-                    <option value="vendor">Tedarikçi (Alış Yapılan)</option>
-                    <option value="both">Müşteri & Tedarikçi</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsQuickContactFormOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 cursor-pointer"
-                >
-                  İptal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleQuickCreateContact}
-                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-xs cursor-pointer active:scale-95 transition-all"
-                >
-                  Cariyi Kaydet & Seç
-                </button>
-              </div>
-            </div>
-          </DetailPageLayout>
-        )}
-
-        {isContactPickerOpen && (
-          <DetailPageLayout
-            title="Cari Hesap Rehberi"
-            subtitle="Faturanız için kayıtlı carilerden seçim yapın veya yeni cari oluşturun"
-            breadcrumbs={[
-              { label: "Fatura Düzenle", onClick: () => setIsContactPickerOpen(false) },
-              { label: "Cari Rehberi", active: true },
-            ]}
-            onBack={() => setIsContactPickerOpen(false)}
-            statusBadge={
-              <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
-                CARİ REHBERİ
-              </span>
-            }
-            headerIcon={<Users className="w-5 h-5 text-purple-600" />}
-            actions={
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsContactPickerOpen(false);
-                    setIsQuickContactFormOpen(true);
-                  }}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Yeni Cari Ekle</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsContactPickerOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-                >
-                  Kapat
-                </button>
-              </div>
-            }
-          >
-            <div className="bg-white border border-slate-200 rounded-3xl max-w-4xl mx-auto shadow-sm overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-slate-100 bg-slate-50 flex gap-2 shrink-0">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    placeholder="Cari adı, unvan veya VKN ile ara..."
-                    value={contactPickerSearch}
-                    onChange={(e) => setContactPickerSearch(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20"
-                  />
-                </div>
-              </div>
-              <div className="p-4 space-y-2 divide-y divide-slate-100 max-h-[60vh] overflow-y-auto">
-                {contacts
-                  .filter(
-                    (c) =>
-                      c.name.toLowerCase().includes(contactPickerSearch.toLowerCase()) ||
-                      (c.taxNumber && c.taxNumber.includes(contactPickerSearch))
-                  )
-                  .map((c) => (
-                    <div
-                      key={c.id}
-                      onClick={() => {
-                        handleContactSelectChange(c.id);
-                        setIsContactPickerOpen(false);
-                      }}
-                      className="p-3.5 hover:bg-purple-50/50 rounded-2xl cursor-pointer flex items-center justify-between transition-colors pt-2.5"
-                    >
-                      <div>
-                        <div className="font-extrabold text-xs text-slate-900">{c.name}</div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                          <span>VKN: {c.taxNumber || "—"}</span>
-                          {c.taxOffice && <span>VD: {c.taxOffice}</span>}
-                          {c.phone && <span>Tel: {c.phone}</span>}
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold text-purple-700 hover:underline">Seç →</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </DetailPageLayout>
-        )}
-
-        {isProductPickerOpen && (
-          <DetailPageLayout
-            title="Stok & Hizmet Kataloğundan Kalem Seç"
-            subtitle="Ürün veya hizmetlerinizi filtreleyip faturanıza tek tıkla ekleyin"
-            breadcrumbs={[
-              { label: "Fatura Düzenle", onClick: () => setIsProductPickerOpen(false) },
-              { label: "Ürün & Hizmet Seçimi", active: true },
-            ]}
-            onBack={() => setIsProductPickerOpen(false)}
-            statusBadge={
-              <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
-                STOK REHBERİ
-              </span>
-            }
-            headerIcon={<Package className="w-5 h-5 text-purple-600" />}
-            actions={
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsProductPickerOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-                >
-                  Kapat
-                </button>
-              </div>
-            }
-          >
-            <div className="bg-white border border-slate-200 rounded-3xl max-w-4xl mx-auto shadow-sm overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-slate-100 bg-slate-50 flex gap-3 shrink-0">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    placeholder="Ürün adı, barkod veya kod ile ara..."
-                    value={productPickerSearch}
-                    onChange={(e) => setProductPickerSearch(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20"
-                  />
-                </div>
-                <select
-                  value={productCategoryFilter}
-                  onChange={(e) => setProductCategoryFilter(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
-                >
-                  <option value="all">Tüm Kategoriler</option>
-                  {Array.from(new Set(products.map((p) => p.category).filter(Boolean))).map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
-                {products
-                  .filter((p) => {
-                    const matchesSearch =
-                      p.name.toLowerCase().includes(productPickerSearch.toLowerCase()) ||
-                      (p.code && p.code.toLowerCase().includes(productPickerSearch.toLowerCase())) ||
-                      (p.barcode && p.barcode.includes(productPickerSearch));
-                    const matchesCategory =
-                      productCategoryFilter === "all" || p.category === productCategoryFilter;
-                    return matchesSearch && matchesCategory;
-                  })
-                  .map((p) => (
-                    <div
-                      key={p.id}
-                      onClick={() => {
-                        handleSelectProductFromPicker(p);
-                        setIsProductPickerOpen(false);
-                      }}
-                      className="p-3.5 border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 rounded-2xl cursor-pointer flex items-center justify-between transition-all"
-                    >
-                      <div>
-                        <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                          <span>{p.name}</span>
-                          {p.stockType && (
-                            <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded text-[10px] uppercase font-bold">
-                              {p.stockType}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-3 mt-1">
-                          <span>Kod: {p.code || "—"}</span>
-                          {p.barcode && <span>Barkod: {p.barcode}</span>}
-                          <span>Stok: {p.stockQuantity} {p.unit}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-mono font-bold text-xs text-purple-700">
-                          ₺{invType === "purchase" ? p.buyPrice.toLocaleString("tr-TR") : p.sellPrice.toLocaleString("tr-TR")}
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-semibold">+%{p.vatRate ?? 20} KDV</span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </DetailPageLayout>
-        )}
-
-        {isAiScannerModalOpen && (
-          <AiExpenseScannerModal
-            isOpen={isAiScannerModalOpen}
-            onClose={() => setIsAiScannerModalOpen(false)}
-            contacts={contacts}
-            accounts={accounts}
-            onSaveInvoiceDirectly={handleSaveInvoiceDirectlyFromAi}
-            onApplyToForm={handleApplyAiDataToForm}
-          />
-        )}
       </div>
+    );
+  }
+
+  // 1. FULL-PAGE EXISTING INVOICE PREVIEW & DETAIL VIEW
+  if (printingInvoice) {
+    return (
+      <InvoicePreviewModal
+        invoice={printingInvoice}
+        companySettings={companySettings}
+        contact={contacts.find((c) => c.id === printingInvoice.contactId)}
+        onClose={() => setPrintingInvoice(null)}
+        onEdit={() => {
+          const invToEdit = printingInvoice;
+          setPrintingInvoice(null);
+          handleOpenEditInvoiceModal(invToEdit);
+        }}
+        onSelectTab={onSelectTab}
+      />
+    );
+  }
+
+  // 2. FULL-PAGE PAYMENT & COLLECTION VIEW
+  if (paymentModalInvoice) {
+    return (
+      <DetailPageLayout
+        title={paymentModalInvoice.type === "sales" ? "Faturadan Tahsilat Ekle (Kasa / Banka Girişi)" : "Faturaya Ödeme Yap (Kasa / Banka Çıkışı)"}
+        subtitle={`${paymentModalInvoice.contactName} • Fatura No: ${paymentModalInvoice.invoiceNumber} • Kalan Bakiye: ₺${paymentModalInvoice.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
+        breadcrumbs={[
+          { label: "Faturalar", onClick: () => setPaymentModalInvoice(null) },
+          { label: paymentModalInvoice.invoiceNumber, onClick: () => setPaymentModalInvoice(null) },
+          { label: paymentModalInvoice.type === "sales" ? "Tahsilat Al" : "Ödeme Yap", active: true },
+        ]}
+        onBack={() => setPaymentModalInvoice(null)}
+        statusBadge={
+          <span className={`px-3 py-1 rounded-xl text-xs font-bold border ${
+            paymentModalInvoice.type === "sales"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+              : "bg-blue-50 text-blue-800 border-blue-200"
+          }`}>
+            {paymentModalInvoice.type === "sales" ? "GELİR TAHSİLATI" : "GİDER ÖDEMESİ"}
+          </span>
+        }
+        headerIcon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPaymentModalInvoice(null)}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="payment-record-form"
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer active:scale-95 transition-all"
+            >
+              {paymentModalInvoice.type === "sales" ? "Tahsilatı İşle" : "Ödemeyi Kaydet"}
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-xl mx-auto bg-white border border-slate-200 text-slate-900 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500 font-semibold">Cari Hesap:</span>
+              <strong className="text-slate-800 font-bold">{paymentModalInvoice.contactName}</strong>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500 font-semibold">Fatura Numarası:</span>
+              <strong className="font-mono text-slate-800 font-bold">{paymentModalInvoice.invoiceNumber}</strong>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+              <span className="text-slate-500 font-semibold">Fatura Toplamı:</span>
+              <span className="font-bold text-slate-700">₺{paymentModalInvoice.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500 font-semibold">Kalan Ödenecek / Tahsil Edilecek:</span>
+              <span className="font-extrabold text-emerald-700 text-sm">₺{paymentModalInvoice.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          <form id="payment-record-form" onSubmit={handleRecordPayment} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Kasa / Banka Hesabı Seçin *
+              </label>
+              <select
+                value={selectedAccountId}
+                onChange={(e) => setSelectedAccountId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} (Mevcut: ₺{a.balance.toLocaleString("tr-TR")})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Ödenen Tutar (TL) *
+              </label>
+              <input
+                type="number"
+                step="any"
+                required
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900"
+              />
+            </div>
+
+            <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPaymentModalInvoice(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+              >
+                {paymentModalInvoice.type === "sales" ? "Tahsilatı İşle" : "Ödemeyi Kaydet"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  // 3. FULL-PAGE COLLECT ALL INVOICES VIEW
+  if (isCollectAllModalOpen) {
+    return (
+      <DetailPageLayout
+        title="Tüm Faturaları Toplu Tahsil Et & Öde"
+        subtitle="Açık ve vadesi gelen tüm fatura bakiyelerinin tek tıkla kapatılması ve muhasebeleştirilmesi"
+        breadcrumbs={[
+          { label: "Faturalar", onClick: () => setIsCollectAllModalOpen(false) },
+          { label: "Toplu Tahsilat & Tediye", active: true },
+        ]}
+        onBack={() => setIsCollectAllModalOpen(false)}
+        statusBadge={
+          <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+            TOPLU İŞLEM
+          </span>
+        }
+        headerIcon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCollectAllModalOpen(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onCollectAllInvoices) {
+                  onCollectAllInvoices(collectAllAccountId);
+                }
+                setIsCollectAllModalOpen(false);
+              }}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Evet, Hepsini Tahsil Et & Öde</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-xl mx-auto bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 space-y-6">
+          <div className="space-y-4 text-xs text-slate-600">
+            {(() => {
+              const uncollectedInvoices = invoices.filter((i) => i.status !== "cancelled" && i.remainingAmount > 0);
+              const totalAmount = uncollectedInvoices.reduce((acc, i) => acc + i.remainingAmount, 0);
+
+              return (
+                <>
+                  <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-5 space-y-3 text-emerald-950">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">Bekleyen Açık Fatura Sayısı:</span>
+                      <span className="font-bold text-sm text-emerald-700">{uncollectedInvoices.length} Adet</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-emerald-200">
+                      <span className="font-semibold">Kapatılacak Toplam Tutar:</span>
+                      <span className="font-black text-lg text-emerald-800">
+                        ₺{totalAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1.5">
+                      Tahsilat / Ödemenin İşleneceği Kasa / Banka Hesabı *
+                    </label>
+                    <select
+                      value={collectAllAccountId}
+                      onChange={(e) => setCollectAllAccountId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    >
+                      {accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name} ({acc.type === "cash" ? "Kasa" : "Banka"}) - ₺{acc.balance.toLocaleString("tr-TR")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <p className="text-slate-500 text-[11px] leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    Bu işlem sonucunda sistemdeki tüm açık, bekleyen veya kısmi ödenmiş gelir ve gider faturaları <strong>"Ödendi"</strong> statüsüne getirilecek ve kasa/banka hareketleri otomatik olarak muhasebeleştirilecektir.
+                  </p>
+                </>
+              );
+            })()}
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsCollectAllModalOpen(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onCollectAllInvoices) {
+                  onCollectAllInvoices(collectAllAccountId);
+                }
+                setIsCollectAllModalOpen(false);
+              }}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Evet, Hepsini Tahsil Et & Öde</span>
+            </button>
+          </div>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  // 4. FULL-PAGE WHATSAPP SHARE VIEW
+  if (whatsAppInvoice) {
+    return (
+      <UniversalWhatsAppModal
+        isOpen={!!whatsAppInvoice}
+        onClose={() => setWhatsAppInvoice(null)}
+        title="WhatsApp ile Fatura Paylaş"
+        documentTypeLabel={whatsAppInvoice.type === "sales" ? "Satış e-Arşiv Faturası" : "Alış Faturası"}
+        recipientName={whatsAppInvoice.contactName}
+        recipientPhone={contacts.find((c) => c.id === whatsAppInvoice.contactId)?.phone || ""}
+        defaultMessage={formatInvoiceWhatsAppMessage(
+          whatsAppInvoice,
+          companySettings,
+          contacts.find((c) => c.id === whatsAppInvoice.contactId)
+        )}
+        documentFileName={`${whatsAppInvoice.invoiceNumber}_Fatura.pdf`}
+        companySettings={companySettings}
+        onGeneratePdf={async () => {
+          const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+          const expData: ExportData = {
+            filename: `${whatsAppInvoice.invoiceNumber}_Fatura`,
+            title: `${companySettings?.companyName || "Fatura"} - ${whatsAppInvoice.invoiceNumber}`,
+            subtitle: `Cari: ${whatsAppInvoice.contactName} | Tarih: ${formatDate(whatsAppInvoice.issueDate)} | Genel Toplam: ${formatCurrency(whatsAppInvoice.grandTotal)}`,
+            headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV Oranı", "Toplam Tutar"],
+            rows: (whatsAppInvoice.items || []).map((i) => [
+              i.description,
+              i.quantity,
+              i.unit || "Adet",
+              formatCurrency(i.unitPrice),
+              `%${i.vatRate ?? 20}`,
+              formatCurrency(i.totalWithVat),
+            ]),
+          };
+          return generateAutoTableFromExportData(expData);
+        }}
+      />
     );
   }
 
@@ -3624,360 +3947,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
         )}
       </div>
 
-      {/* Create / Edit modal was replaced by DetailPageLayout */}
-      {/* MODAL: Draft Invoice Preview */}
-      {isDraftPreviewOpen && (
-        <InvoicePreviewModal
-          invoice={getDraftInvoice()}
-          companySettings={companySettings}
-          contact={contacts.find((c) => c.id === contactId)}
-          isDraft={true}
-          onClose={() => setIsDraftPreviewOpen(false)}
-          onConfirm={() => {
-            setIsDraftPreviewOpen(false);
-            const dummyEvent = { preventDefault: () => {} } as React.FormEvent;
-            handleSaveInvoice(dummyEvent);
-          }}
-          onSelectTab={onSelectTab}
-        />
-      )}
-
-      {/* MODAL: Kalem Vergi & Tevkifat / Özel Matrah Ayarları Modalı */}
-      {taxModalItem && (
-        <InvoiceTaxSettingsModal
-          isOpen={true}
-          item={taxModalItem}
-          initialTab={taxModalInitialTab}
-          currency="TRY"
-          onClose={() => {
-            setTaxModalItem(null);
-            setTaxModalInitialTab(undefined);
-          }}
-          onApply={(updatedItem) => {
-            const nextItems = items.map((it) => (it.id === updatedItem.id ? updatedItem : it));
-            setItems(nextItems);
-
-            let nextProfile = invoiceProfileType;
-            if (updatedItem.withholdingCode || (updatedItem.withholdingRate && updatedItem.withholdingRate > 0)) {
-              if (invoiceProfileType === "SATIS") {
-                nextProfile = "TEVKIFAT";
-                setInvoiceProfileType("TEVKIFAT");
-              }
-            } else if (updatedItem.specialTaxBaseCode || (updatedItem.specialTaxBase !== undefined && updatedItem.specialTaxBase !== null)) {
-              if (invoiceProfileType === "SATIS") {
-                nextProfile = "OZELMATRAH";
-                setInvoiceProfileType("OZELMATRAH");
-              }
-            } else if (updatedItem.exemptionCode || updatedItem.vatRate === 0) {
-              if (invoiceProfileType === "SATIS") {
-                nextProfile = "ISTISNA";
-                setInvoiceProfileType("ISTISNA");
-              }
-            }
-
-            // GİB Resmi Vergi Notlarını ve Yasal Şerhleri Otomatik Olarak Fatura Notuna Senkronize Et
-            const legalNotes = generateInvoiceLegalTaxNotes(nextItems, nextProfile);
-            if (legalNotes.length > 0) {
-              setNotes((prevNotes) => {
-                let n = prevNotes.trim();
-                legalNotes.forEach((ln) => {
-                  if (!n.includes(ln)) {
-                    n = n ? `${n}\n${ln}` : ln;
-                  }
-                });
-                return n;
-              });
-            }
-
-            setTaxModalItem(null);
-            setTaxModalInitialTab(undefined);
-          }}
-        />
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: Record Payment / Collection */}
-      {paymentModalInvoice && (
-        <DetailPageLayout
-          title={paymentModalInvoice.type === "sales" ? "Faturadan Tahsilat Ekle (Kasa / Banka Girişi)" : "Faturaya Ödeme Yap (Kasa / Banka Çıkışı)"}
-          subtitle={`${paymentModalInvoice.contactName} • Fatura No: ${paymentModalInvoice.invoiceNumber} • Kalan Bakiye: ₺${paymentModalInvoice.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
-          breadcrumbs={[
-            { label: "Faturalar", onClick: () => setPaymentModalInvoice(null) },
-            { label: paymentModalInvoice.invoiceNumber, onClick: () => setPaymentModalInvoice(null) },
-            { label: paymentModalInvoice.type === "sales" ? "Tahsilat Al" : "Ödeme Yap", active: true },
-          ]}
-          onBack={() => setPaymentModalInvoice(null)}
-          statusBadge={
-            <span className={`px-3 py-1 rounded-xl text-xs font-bold border ${
-              paymentModalInvoice.type === "sales"
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                : "bg-blue-50 text-blue-800 border-blue-200"
-            }`}>
-              {paymentModalInvoice.type === "sales" ? "GELİR TAHSİLATI" : "GİDER ÖDEMESİ"}
-            </span>
-          }
-          headerIcon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPaymentModalInvoice(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="submit"
-                form="payment-record-form"
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer active:scale-95 transition-all"
-              >
-                {paymentModalInvoice.type === "sales" ? "Tahsilatı İşle" : "Ödemeyi Kaydet"}
-              </button>
-            </div>
-          }
-        >
-          <div className="max-w-xl mx-auto bg-white border border-slate-200 text-slate-900 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-semibold">Cari Hesap:</span>
-                <strong className="text-slate-800 font-bold">{paymentModalInvoice.contactName}</strong>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-semibold">Fatura Numarası:</span>
-                <strong className="font-mono text-slate-800 font-bold">{paymentModalInvoice.invoiceNumber}</strong>
-              </div>
-              <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                <span className="text-slate-500 font-semibold">Fatura Toplamı:</span>
-                <span className="font-bold text-slate-700">₺{paymentModalInvoice.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-semibold">Kalan Ödenecek / Tahsil Edilecek:</span>
-                <span className="font-extrabold text-emerald-700 text-sm">₺{paymentModalInvoice.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-
-            <form id="payment-record-form" onSubmit={handleRecordPayment} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Kasa / Banka Hesabı Seçin *
-                </label>
-                <select
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900"
-                >
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} (Mevcut: ₺{a.balance.toLocaleString("tr-TR")})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Ödenen Tutar (TL) *
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  required
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900"
-                />
-              </div>
-
-              <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setPaymentModalInvoice(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 cursor-pointer"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                >
-                  {paymentModalInvoice.type === "sales" ? "Tahsilatı İşle" : "Ödemeyi Kaydet"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* WHATSAPP SHARE MODAL */}
-      {whatsAppInvoice && (
-        <UniversalWhatsAppModal
-          isOpen={!!whatsAppInvoice}
-          onClose={() => setWhatsAppInvoice(null)}
-          title="WhatsApp ile Fatura Paylaş"
-          documentTypeLabel={whatsAppInvoice.type === "sales" ? "Satış e-Arşiv Faturası" : "Alış Faturası"}
-          recipientName={whatsAppInvoice.contactName}
-          recipientPhone={contacts.find((c) => c.id === whatsAppInvoice.contactId)?.phone || ""}
-          defaultMessage={formatInvoiceWhatsAppMessage(
-            whatsAppInvoice,
-            companySettings,
-            contacts.find((c) => c.id === whatsAppInvoice.contactId)
-          )}
-          documentFileName={`${whatsAppInvoice.invoiceNumber}_Fatura.pdf`}
-          companySettings={companySettings}
-          onGeneratePdf={async () => {
-            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
-            const expData: ExportData = {
-              filename: `${whatsAppInvoice.invoiceNumber}_Fatura`,
-              title: `${companySettings?.companyName || "Fatura"} - ${whatsAppInvoice.invoiceNumber}`,
-              subtitle: `Cari: ${whatsAppInvoice.contactName} | Tarih: ${formatDate(whatsAppInvoice.issueDate)} | Genel Toplam: ${formatCurrency(whatsAppInvoice.grandTotal)}`,
-              headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV Oranı", "Toplam Tutar"],
-              rows: (whatsAppInvoice.items || []).map((i) => [
-                i.description,
-                i.quantity,
-                i.unit || "Adet",
-                formatCurrency(i.unitPrice),
-                `%${i.vatRate ?? 20}`,
-                formatCurrency(i.totalWithVat),
-              ]),
-            };
-            return generateAutoTableFromExportData(expData);
-          }}
-        />
-      )}
-
-      {/* PRINT MODAL VIEW */}
-      {printingInvoice && (
-        <InvoicePrintModal
-          invoice={printingInvoice}
-          companySettings={companySettings}
-          contact={contacts.find((c) => c.id === printingInvoice.contactId)}
-          onClose={() => setPrintingInvoice(null)}
-          onSelectTab={onSelectTab}
-        />
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: Collect All Invoices */}
-      {isCollectAllModalOpen && (
-        <DetailPageLayout
-          title="Tüm Faturaları Toplu Tahsil Et & Öde"
-          subtitle="Açık ve vadesi gelen tüm fatura bakiyelerinin tek tıkla kapatılması ve muhasebeleştirilmesi"
-          breadcrumbs={[
-            { label: "Faturalar", onClick: () => setIsCollectAllModalOpen(false) },
-            { label: "Toplu Tahsilat & Tediye", active: true },
-          ]}
-          onBack={() => setIsCollectAllModalOpen(false)}
-          statusBadge={
-            <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-              TOPLU İŞLEM
-            </span>
-          }
-          headerIcon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCollectAllModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (onCollectAllInvoices) {
-                    onCollectAllInvoices(collectAllAccountId);
-                  }
-                  setIsCollectAllModalOpen(false);
-                }}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Evet, Hepsini Tahsil Et & Öde</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="max-w-xl mx-auto bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 space-y-6">
-            <div className="space-y-4 text-xs text-slate-600">
-              {(() => {
-                const uncollectedInvoices = invoices.filter((i) => i.status !== "cancelled" && i.remainingAmount > 0);
-                const totalAmount = uncollectedInvoices.reduce((acc, i) => acc + i.remainingAmount, 0);
-
-                return (
-                  <>
-                    <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-5 space-y-3 text-emerald-950">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold">Bekleyen Açık Fatura Sayısı:</span>
-                        <span className="font-bold text-sm text-emerald-700">{uncollectedInvoices.length} Adet</span>
-                      </div>
-                      <div className="flex items-center justify-between pt-2 border-t border-emerald-200">
-                        <span className="font-semibold">Kapatılacak Toplam Tutar:</span>
-                        <span className="font-black text-lg text-emerald-800">
-                          ₺{totalAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-700 font-bold mb-1.5">
-                        Tahsilat / Ödemenin İşleneceği Kasa / Banka Hesabı *
-                      </label>
-                      <select
-                        value={collectAllAccountId}
-                        onChange={(e) => setCollectAllAccountId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                      >
-                        {accounts.map((acc) => (
-                          <option key={acc.id} value={acc.id}>
-                            {acc.name} ({acc.type === "cash" ? "Kasa" : "Banka"}) - ₺{acc.balance.toLocaleString("tr-TR")}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <p className="text-slate-500 text-[11px] leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      Bu işlem sonucunda sistemdeki tüm açık, bekleyen veya kısmi ödenmiş gelir ve gider faturaları <strong>"Ödendi"</strong> statüsüne getirilecek ve kasa/banka hareketleri otomatik olarak muhasebeleştirilecektir.
-                    </p>
-                  </>
-                );
-              })()}
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsCollectAllModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (onCollectAllInvoices) {
-                    onCollectAllInvoices(collectAllAccountId);
-                  }
-                  setIsCollectAllModalOpen(false);
-                }}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Evet, Hepsini Tahsil Et & Öde</span>
-              </button>
-            </div>
-          </div>
-        </DetailPageLayout>
-      )}
-      {/* AI Expense Scanner Modal */}
-      {isAiScannerModalOpen && (
-        <AiExpenseScannerModal
-          isOpen={isAiScannerModalOpen}
-          onClose={() => setIsAiScannerModalOpen(false)}
-          contacts={contacts}
-          accounts={accounts}
-          onSaveInvoiceDirectly={handleSaveInvoiceDirectlyFromAi}
-          onApplyToForm={handleApplyAiDataToForm}
-        />
-      )}
     </div>
   );
 };

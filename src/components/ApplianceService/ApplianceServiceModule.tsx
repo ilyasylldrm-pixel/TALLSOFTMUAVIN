@@ -769,6 +769,1050 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
     setTimeout(() => setCopiedNotification(false), 2000);
   };
 
+  if (aiAssistantRecord) {
+    return (
+        <DetailPageLayout
+          title="Ev Aletleri ve Klima AI Operasyon Asistanı"
+          subtitle={`${aiAssistantRecord.serviceNo} • ${aiAssistantRecord.brand} ${aiAssistantRecord.model} • Müşteri: ${aiAssistantRecord.customerName}`}
+          breadcrumbs={[
+            { label: "Beyaz Eşya & Klima Servis", onClick: () => setAiAssistantRecord(null) },
+            { label: "AI Saha Asistanı", active: true },
+          ]}
+          onBack={() => setAiAssistantRecord(null)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              AI TEKNİK ASİSTAN
+            </span>
+          }
+          headerIcon={<Sparkles className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAiAssistantRecord(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Geri Dön
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl w-full max-w-4xl mx-auto flex flex-col shadow-sm border border-purple-100 overflow-hidden">
+
+            {/* Modal Sekmeleri */}
+            <div className="flex border-b border-slate-200 bg-slate-50 px-5 pt-3 gap-2">
+              <button
+                onClick={() => setAiActiveTab("checklist")}
+                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  aiActiveTab === "checklist"
+                    ? "border-[#8252F6] text-[#8252F6]"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                📋 Saha & Servis Kontrol Listesi
+              </button>
+              <button
+                onClick={() => setAiActiveTab("approval")}
+                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  aiActiveTab === "approval"
+                    ? "border-[#8252F6] text-[#8252F6]"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                💬 Müşteri Fiyat Onay Mesajı
+              </button>
+              <button
+                onClick={() => setAiActiveTab("completion")}
+                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  aiActiveTab === "completion"
+                    ? "border-[#8252F6] text-[#8252F6]"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                📄 Teslimat & Bakım Raporu
+              </button>
+            </div>
+
+            {/* Modal Gövdesi */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              {/* Giriş Parametreleri */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                <div className="text-xs font-bold text-slate-700">Analiz Parametreleri:</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-slate-400">Cihaz:</span>
+                    <input
+                      type="text"
+                      value={aiCustomDevice}
+                      onChange={(e) => setAiCustomDevice(e.target.value)}
+                      className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Müşterinin Bildirdiği Sorun / Arıza:</span>
+                    <input
+                      type="text"
+                      value={aiCustomIssue}
+                      onChange={(e) => setAiCustomIssue(e.target.value)}
+                      className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sekme 1: Saha ve Servis Kontrol Listesi */}
+              {aiActiveTab === "checklist" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-500">
+                      Özel AI teknik servis uzmanı; arıza analizi, yanına alınacak parçalar, el aletleri ve hijyen kurallarını üretir.
+                    </p>
+                    <button
+                      onClick={() => handleRunAiPrompt("field_checklist")}
+                      disabled={aiLoading}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#6938EF] to-[#8252F6] text-white font-bold text-xs shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{aiLoading ? "Analiz Ediliyor..." : "Kontrol Listesi Üret"}</span>
+                    </button>
+                  </div>
+
+                  {aiAssistantRecord.aiOutputs?.fieldChecklist && (
+                    <div className="bg-purple-50/60 rounded-2xl p-4 border border-purple-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-purple-900 uppercase">
+                          Saha ve Servis Kontrol Raporu
+                        </span>
+                        <button
+                          onClick={() => handleCopyToClipboard(aiAssistantRecord.aiOutputs?.fieldChecklist?.formattedText || "")}
+                          className="text-xs font-bold text-[#8252F6] hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>{copiedNotification ? "Kopyalandı!" : "Metni Kopyala"}</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-3 text-xs">
+                        <div className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs">
+                          <h5 className="font-bold text-purple-900 mb-1 flex items-center gap-1">
+                            <span>🔍 Arıza Analizi ve Olası Nedenler</span>
+                          </h5>
+                          <p className="text-slate-700 leading-relaxed">
+                            {aiAssistantRecord.aiOutputs.fieldChecklist.faultAnalysis}
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs">
+                          <h5 className="font-bold text-purple-900 mb-1 flex items-center gap-1">
+                            <span>📦 Yanında Bulundurulması Gereken Yedek Parça ve Sarf Malzemeleri</span>
+                          </h5>
+                          <p className="text-slate-700 leading-relaxed">
+                            {aiAssistantRecord.aiOutputs.fieldChecklist.requiredPartsAndSupplies}
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs">
+                          <h5 className="font-bold text-purple-900 mb-1 flex items-center gap-1">
+                            <span>🛠️ Gerekli El Aletleri ve Test Ekipmanları</span>
+                          </h5>
+                          <p className="text-slate-700 leading-relaxed">
+                            {aiAssistantRecord.aiOutputs.fieldChecklist.requiredToolsAndEquipment}
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-3 rounded-xl border border-rose-100 shadow-2xs">
+                          <h5 className="font-bold text-rose-900 mb-1 flex items-center gap-1">
+                            <span>⚠️ Güvenlik ve Hijyen Kuralları</span>
+                          </h5>
+                          <p className="text-slate-700 leading-relaxed">
+                            {aiAssistantRecord.aiOutputs.fieldChecklist.safetyAndHygieneRules}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sekme 2: Fiyat Onay Mesajı */}
+              {aiActiveTab === "approval" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-500">
+                      Müşteriye WhatsApp / SMS ile iletilecek nazik ve garantili teklif onay metni.
+                    </p>
+                    <button
+                      onClick={() => handleRunAiPrompt("quote_approval_message")}
+                      disabled={aiLoading}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{aiLoading ? "Hazırlanıyor..." : "Mesajı Oluştur"}</span>
+                    </button>
+                  </div>
+
+                  {aiAssistantRecord.aiOutputs?.costApprovalMessage && (
+                    <div className="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-emerald-900 uppercase">
+                          WhatsApp / SMS Teklif Mesajı
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleCopyToClipboard(aiAssistantRecord.aiOutputs?.costApprovalMessage?.messageText || "")}
+                            className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>{copiedNotification ? "Kopyalandı!" : "Kopyala"}</span>
+                          </button>
+                          <a
+                            href={`https://wa.me/${aiAssistantRecord.contactPhone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                              aiAssistantRecord.aiOutputs.costApprovalMessage.messageText
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 shadow-xs hover:bg-emerald-700"
+                          >
+                            <Send className="w-3 h-3" />
+                            <span>WhatsApp'a Gönder</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-3.5 rounded-xl border border-emerald-100 text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">
+                        {aiAssistantRecord.aiOutputs.costApprovalMessage.messageText}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sekme 3: Tamamlama ve Bakım Raporu */}
+              {aiActiveTab === "completion" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-500">
+                      Onarımı biten cihazın teslimat notu ve müşteri için 3 kritik kullanım tavsiyesi.
+                    </p>
+                    <button
+                      onClick={() => handleRunAiPrompt("completion_report")}
+                      disabled={aiLoading}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{aiLoading ? "Hazırlanıyor..." : "Raporu Oluştur"}</span>
+                    </button>
+                  </div>
+
+                  {aiAssistantRecord.aiOutputs?.completionReport && (
+                    <div className="bg-blue-50/60 rounded-2xl p-4 border border-blue-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-blue-900 uppercase">
+                          {aiAssistantRecord.aiOutputs.completionReport.subject}
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-3.5 rounded-xl border border-blue-100 text-xs text-slate-800 space-y-2">
+                        <p>{aiAssistantRecord.aiOutputs.completionReport.summary}</p>
+                        <div className="pt-2 border-t border-slate-100 space-y-1">
+                          <strong className="text-blue-900 block font-bold">Kullanım ve Bakım Tavsiyeleri:</strong>
+                          {aiAssistantRecord.aiOutputs.completionReport.maintenanceTips?.map((tip, idx) => (
+                            <p key={idx} className="text-slate-600 pl-2 border-l-2 border-blue-400">
+                              • {tip}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                Gemini 3.7 Flash modeliyle anında üretilir ve iş emrine kaydedilir.
+              </span>
+              <button
+                onClick={() => setAiAssistantRecord(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 cursor-pointer"
+              >
+                Geri Dön
+              </button>
+            </div>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* FULL-PAGE DETAIL VIEW: 🖨️ A4 / TERMAL YAZICI UYUMLU SERVİS & TESLİM FİŞİ */}
+      {printRecord && (
+        <DetailPageLayout
+          title="Teknik Servis & Teslim Tutanağı Yazdır"
+          subtitle={`${printRecord.serviceNo} • ${printRecord.customerName} • ${printRecord.brand} ${printRecord.model}`}
+          breadcrumbs={[
+            { label: "Beyaz Eşya & Klima Servis", onClick: () => setPrintRecord(null) },
+            { label: "Teslim Tutanağı", active: true },
+          ]}
+          onBack={() => setPrintRecord(null)}
+          statusBadge={
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
+              RESMİ TESLİM FORMU
+            </span>
+          }
+          headerIcon={<Printer className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 rounded-xl bg-[#8252F6] hover:bg-[#703EE5] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Yazdır</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintRecord(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Geri Dön
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl w-full max-w-3xl mx-auto flex flex-col shadow-sm border border-slate-200 overflow-hidden">
+
+            {/* Yazdırma Belge Alanı */}
+            <div className="p-8 overflow-y-auto space-y-6 text-slate-900 bg-white font-sans text-xs" id="printable-service-slip">
+              {/* Başlık ve Firma */}
+              <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight">MUAVİN TEKNİK SERVİS</h2>
+                  <p className="text-[11px] text-slate-600">Beyaz Eşya, İklimlendirme ve Küçük Ev Aletleri Servisi</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Tel: +90 (212) 444 0 999 | E-posta: servis@muavin.com.tr</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-black text-purple-900 bg-purple-100 px-3 py-1 rounded-md inline-block">
+                    {printRecord.serviceNo}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">Tarih: {printRecord.entryDate}</p>
+                  <p className="text-[10px] text-slate-500">Konum: {printRecord.serviceLocation === "on_site" ? "Saha / Adreste" : "Servis Atölyesi"}</p>
+                </div>
+              </div>
+
+              {/* Müşteri ve Cihaz Bilgisi Grid */}
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div className="space-y-1">
+                  <strong className="text-slate-900 block font-bold">MÜŞTERİ BİLGİLERİ</strong>
+                  <p>Ad Soyad / Firma: <strong>{printRecord.contactName}</strong></p>
+                  <p>Telefon: {printRecord.contactPhone}</p>
+                  <p>Adres: {printRecord.serviceAddress || "Servis Merkezine Getirildi"}</p>
+                </div>
+                <div className="space-y-1">
+                  <strong className="text-slate-900 block font-bold">CİHAZ BİLGİLERİ</strong>
+                  <p>Kategori: {categoryConfig[printRecord.category]?.label}</p>
+                  <p>Cihaz / Tür: {deviceTypeLabels[printRecord.deviceType] || printRecord.deviceType}</p>
+                  <p>Marka / Model: <strong>{printRecord.brand} {printRecord.model}</strong></p>
+                  <p>Seri No: {printRecord.serialNumber || "-"}</p>
+                  {printRecord.gasType && printRecord.gasType !== "none" && <p>Gaz Türü: {printRecord.gasType}</p>}
+                </div>
+              </div>
+
+              {/* Arıza ve Yapılan İşlem */}
+              <div className="space-y-2">
+                {/* Teslim Alınan Aksesuarlar & Fiziksel Durum */}
+                <div className="grid grid-cols-2 gap-3 text-[11px]">
+                  <div className="bg-purple-50/50 p-2.5 rounded-lg border border-purple-200">
+                    <strong className="block text-purple-950 mb-0.5 font-bold uppercase text-[10px]">Teslim Alınan Aksesuar & Donanımlar:</strong>
+                    <p className="text-slate-800 font-medium">
+                      {printRecord.accessoriesReceived || "Harici aksesuar teslim alınmadı (Yalnız Cihaz)."}
+                    </p>
+                  </div>
+                  <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200">
+                    <strong className="block text-amber-950 mb-0.5 font-bold uppercase text-[10px]">Cihaz Fiziksel Durumu & Deformasyon:</strong>
+                    <p className="text-slate-800 font-medium">
+                      {printRecord.damagePhysicalCondition ? (
+                        <span className="text-amber-950 font-bold">{printRecord.damagePhysicalCondition}</span>
+                      ) : (
+                        <span className="text-emerald-800 font-bold">Belirgin çizik, kırık veya kusur bulunmamaktadır.</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <strong className="block text-slate-900 mb-0.5">Bildirilen Şikayet / Arıza:</strong>
+                  <p className="text-slate-700">{printRecord.customerProblemDescription}</p>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <strong className="block text-slate-900 mb-0.5">Teknik Servis Teşhis ve Yapılan İşlemler:</strong>
+                  <p className="text-slate-700">{printRecord.technicianReport || "Bakım ve onarım işlemleri gerçekleştirildi."}</p>
+                </div>
+              </div>
+
+              {/* Parça ve İşçilik Tablosu */}
+              <div className="space-y-1">
+                <strong className="block text-slate-900 font-bold">KULLANILAN YEDEK PARÇALAR & İŞÇİLİK</strong>
+                <table className="w-full border-collapse text-left border border-slate-300 text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-300 font-bold">
+                      <th className="p-1.5 border-r border-slate-300">İşlem / Parça Tanımı</th>
+                      <th className="p-1.5 border-r border-slate-300 text-center">Adet/Saat</th>
+                      <th className="p-1.5 border-r border-slate-300 text-right">Birim Fiyat</th>
+                      <th className="p-1.5 border-r border-slate-300 text-center">KDV</th>
+                      <th className="p-1.5 text-right">Toplam</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {printRecord.parts?.map((p) => (
+                      <tr key={p.id} className="border-b border-slate-200">
+                        <td className="p-1.5 border-r border-slate-300 font-medium">{p.partName} (Yedek Parça)</td>
+                        <td className="p-1.5 border-r border-slate-300 text-center">{p.quantity}</td>
+                        <td className="p-1.5 border-r border-slate-300 text-right">{p.unitPrice.toLocaleString("tr-TR")} ₺</td>
+                        <td className="p-1.5 border-r border-slate-300 text-center">%{p.vatRate}</td>
+                        <td className="p-1.5 text-right font-bold">{p.total.toLocaleString("tr-TR")} ₺</td>
+                      </tr>
+                    ))}
+                    {printRecord.labors?.map((l) => (
+                      <tr key={l.id} className="border-b border-slate-200">
+                        <td className="p-1.5 border-r border-slate-300 font-medium">{l.operationName} (İşçilik)</td>
+                        <td className="p-1.5 border-r border-slate-300 text-center">{l.hours}</td>
+                        <td className="p-1.5 border-r border-slate-300 text-right">{l.hourlyRate.toLocaleString("tr-TR")} ₺</td>
+                        <td className="p-1.5 border-r border-slate-300 text-center">%{l.vatRate}</td>
+                        <td className="p-1.5 text-right font-bold">{l.total.toLocaleString("tr-TR")} ₺</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Alt Toplamlar */}
+              <div className="flex justify-end">
+                <div className="w-56 space-y-1 text-right text-xs">
+                  <div className="flex justify-between text-slate-500">
+                    <span>Parça Tutarı:</span>
+                    <span>{printRecord.partsTotal.toLocaleString("tr-TR")} ₺</span>
+                  </div>
+                  <div className="flex justify-between text-slate-500">
+                    <span>İşçilik Tutarı:</span>
+                    <span>{printRecord.laborTotal.toLocaleString("tr-TR")} ₺</span>
+                  </div>
+                  <div className="flex justify-between text-slate-500">
+                    <span>Toplam KDV:</span>
+                    <span>{printRecord.totalVat.toLocaleString("tr-TR")} ₺</span>
+                  </div>
+                  <div className="flex justify-between font-black text-sm text-slate-900 pt-1 border-t border-slate-400">
+                    <span>GENEL TOPLAM:</span>
+                    <span>{printRecord.grandTotal.toLocaleString("tr-TR")} ₺</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Garanti & Güvenlik Şartları */}
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[10px] text-slate-500 space-y-0.5">
+                <p>• Değişen orijinal yedek parçalar montaj tarihinden itibaren 1 yıl garanti kapsamındadır.</p>
+                <p>• Kullanıcı hatası, elektrik voltaj dalgalanmaları veya yetkisiz müdahaleler garanti dışıdır.</p>
+              </div>
+
+              {/* İmza Alanları */}
+              <div className="grid grid-cols-2 gap-8 pt-6 border-t border-slate-300 text-center">
+                <div className="space-y-8">
+                  <p className="font-bold text-slate-900">Teknisyen / Servis Yetkilisi</p>
+                  <p className="text-[10px] text-slate-400">İmza & Kaşe</p>
+                </div>
+                <div className="space-y-8">
+                  <p className="font-bold text-slate-900">Müşteri / Teslim Alan</p>
+                  <p className="text-[10px] text-slate-400">İmza</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* FULL-PAGE DETAIL VIEW: SERVİS KAYDI EKLEME / DÜZENLEME */}
+      {isModalOpen && (
+        <DetailPageLayout
+          title={editingRecord ? `Servis İş Emrini Düzenle - ${editingRecord.serviceNo}` : "Yeni Servis & Saha İş Emri Aç"}
+          subtitle="Beyaz Eşya, İklimlendirme (Klima/Kombi) ve Küçük Ev Aletleri Servis Kaydı"
+          breadcrumbs={[
+            { label: "Beyaz Eşya & Klima Servis", onClick: handleBackToList },
+            { label: editingRecord ? `${editingRecord.serviceNo} - ${editingRecord.customerName}` : "Yeni Servis Kaydı", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {editingRecord ? editingRecord.status : "Yeni Kayıt"}
+            </span>
+          }
+          headerIcon={<Refrigerator className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="appliance-service-form"
+                className="px-5 py-2 bg-[#8252F6] hover:bg-[#703EE5] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>{editingRecord ? "Değişiklikleri Kaydet" : "Servis Kaydını Oluştur"}</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-5xl w-full p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6 mx-auto">
+            <form id="appliance-service-form" onSubmit={handleSaveRecord} className="space-y-6 text-xs">
+              {/* 1. Bölüm: Cihaz ve Kategori Bilgileri */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Refrigerator className="w-4 h-4 text-[#8252F6]" />
+                  <span>1. Cihaz ve Hizmet Türü Bilgileri</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Cihaz Kategorisi *</label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-[#8252F6]"
+                    >
+                      <option value="hvac_climate">❄️ İklimlendirme (Klima / Kombi)</option>
+                      <option value="major_appliance">🧺 Beyaz Eşya</option>
+                      <option value="small_appliance">☕ Küçük Ev & Mutfak Aletleri</option>
+                      <option value="other_appliance">⚡ Diğer Cihaz</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Cihaz Tipi *</label>
+                    <select
+                      value={formData.deviceType}
+                      onChange={(e) => setFormData({ ...formData, deviceType: e.target.value as any })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-[#8252F6]"
+                    >
+                      <optgroup label="İklimlendirme & Isıtma">
+                        <option value="boiler_combi">Kombi (Yoğuşmalı/Konvansiyonel)</option>
+                        <option value="air_conditioner_split">Split Duvar Tipi Klima</option>
+                        <option value="air_conditioner_vrf">VRF / Ticari / Kaset Klima</option>
+                        <option value="water_heater">Şofben / Termosifon</option>
+                        <option value="heat_pump">Isı Pompası</option>
+                      </optgroup>
+                      <optgroup label="Beyaz Eşya">
+                        <option value="refrigerator">Buzdolabı</option>
+                        <option value="washing_machine">Çamaşır Makinesi</option>
+                        <option value="dishwasher">Bulaşık Makinesi</option>
+                        <option value="dryer">Kurutma Makinesi</option>
+                        <option value="oven">Fırın / Ankastre</option>
+                        <option value="cooktop_hob">Ocak / Set Üstü</option>
+                        <option value="freezer">Derin Dondurucu</option>
+                        <option value="range_hood">Davlumbaz / Aspiratör</option>
+                      </optgroup>
+                      <optgroup label="Küçük Ev & Mutfak Aletleri">
+                        <option value="coffee_machine">Kahve / Espresso Makinesi</option>
+                        <option value="vacuum_cleaner">Elektrikli / Dikey Süpürge</option>
+                        <option value="robot_vacuum">Robot Süpürge</option>
+                        <option value="blender_food_processor">Blender / Mutfak Robotu</option>
+                        <option value="airfryer_fryer">Airfryer / Fritöz</option>
+                        <option value="microwave_oven">Mikrodalga Fırın</option>
+                        <option value="toaster_grill">Tost Makinesi / Izgara</option>
+                        <option value="steam_iron">Buhar Kazanlı Ütü</option>
+                        <option value="kettle_tea_maker">Çaycı / Su Isıtıcı</option>
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Hizmet Konumu *</label>
+                    <select
+                      value={formData.serviceLocation}
+                      onChange={(e) => setFormData({ ...formData, serviceLocation: e.target.value as any })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-[#8252F6]"
+                    >
+                      <option value="on_site">🏠 Sahada / Müşteri Adresinde</option>
+                      <option value="workshop">🏢 Atölyede / Servis Merkezinde</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Marka *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.brand}
+                      onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                      placeholder="Örn: Bosch, Daikin, DeLonghi, DemirDöküm"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Model</label>
+                    <input
+                      type="text"
+                      value={formData.model}
+                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                      placeholder="Örn: Nitromix P28, Sensira 12k, Magnifica S"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Seri No / Barkod</label>
+                    <input
+                      type="text"
+                      value={formData.serialNumber}
+                      onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
+                      placeholder="Seri numarası"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Bölüm: Müşteri ve Randevu Bilgileri */}
+              <div className="space-y-3 pt-3 border-t border-slate-200">
+                <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <User className="w-4 h-4 text-[#8252F6]" />
+                  <span>2. Müşteri & Adres / Randevu Bilgileri</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Müşteri Ad Soyad / Ünvan *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.contactName}
+                      onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+                      placeholder="Müşteri adı"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Telefon Numarası *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.contactPhone}
+                      onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                      placeholder="05XX XXX XX XX"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Randevu Tarihi & Saat Dilimi</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="date"
+                        value={formData.appointmentDate}
+                        onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
+                        className="w-1/2 px-2 py-2 rounded-xl border border-slate-200 bg-white"
+                      />
+                      <input
+                        type="text"
+                        value={formData.appointmentTimeSlot}
+                        onChange={(e) => setFormData({ ...formData, appointmentTimeSlot: e.target.value })}
+                        placeholder="10:00 - 12:00"
+                        className="w-1/2 px-2 py-2 rounded-xl border border-slate-200 bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-slate-700 mb-1">Montaj / Hizmet Adresi</label>
+                    <input
+                      type="text"
+                      value={formData.serviceAddress}
+                      onChange={(e) => setFormData({ ...formData, serviceAddress: e.target.value })}
+                      placeholder="Açık adres, bina, daire vb."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Atanan Teknisyen</label>
+                    <input
+                      type="text"
+                      value={formData.assignedTechnician}
+                      onChange={(e) => setFormData({ ...formData, assignedTechnician: e.target.value })}
+                      placeholder="Teknisyen adı"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Bölüm: Arıza ve Teşhis Raporu */}
+              <div className="space-y-3 pt-3 border-t border-slate-200">
+                <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-[#8252F6]" />
+                  <span>3. Şikayet, Arıza Tespiti & Teknik Ölçümler</span>
+                </h4>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Müşterinin Bildirdiği Sorun *</label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={formData.customerProblemDescription}
+                    onChange={(e) => setFormData({ ...formData, customerProblemDescription: e.target.value })}
+                    placeholder="Müşteri şikayeti, hata kodu, su/gaz kaçağı, ses veya ısıtma/soğutmama durumu..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Gaz Türü (İklimlendirme)</label>
+                    <select
+                      value={formData.gasType || "none"}
+                      onChange={(e) => setFormData({ ...formData, gasType: e.target.value as any })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                    >
+                      <option value="none">Gazsız / Gerekmiyor</option>
+                      <option value="R32">R32 (Ekolojik Yeni Nesil)</option>
+                      <option value="R410A">R410A (Split Klima)</option>
+                      <option value="R134a">R134a (Buzdolabı / Soğutucu)</option>
+                      <option value="R600a">R600a (İzobütan No-Frost)</option>
+                      <option value="R290">R290 (Propan)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Basınç Değeri (Bar)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={formData.pressureBar || ""}
+                      onChange={(e) => setFormData({ ...formData, pressureBar: parseFloat(e.target.value) || undefined })}
+                      placeholder="Örn: 1.5 bar (Kombi), 8.5 bar (Klima)"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-5">
+                    <input
+                      type="checkbox"
+                      id="warrantyCheckbox"
+                      checked={formData.isWarrantyActive}
+                      onChange={(e) => setFormData({ ...formData, isWarrantyActive: e.target.checked })}
+                      className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                    />
+                    <label htmlFor="warrantyCheckbox" className="font-bold text-slate-700 cursor-pointer">
+                      Garanti Kapsamında Onarım
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Teknisyen Teşhis & Müdahale Raporu</label>
+                  <textarea
+                    rows={2}
+                    value={formData.technicianReport}
+                    onChange={(e) => setFormData({ ...formData, technicianReport: e.target.value })}
+                    placeholder="Uygulanan testler, parça değişimi, kaçak kontrolü veya gaz dolum detayları..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
+                  />
+                </div>
+
+                {/* Teslim Alınan Aksesuarlar / Malzemeler & Cihaz Fiziksel Deformasyon Durumu */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-purple-100">
+                  <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-200/80">
+                    <label className="block text-xs font-bold text-purple-950 mb-1 flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-purple-700" />
+                      <span>Beraberinde Teslim Alınan Parça & Aksesuarlar</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.accessoriesReceived || ""}
+                      onChange={(e) => setFormData({ ...formData, accessoriesReceived: e.target.value })}
+                      placeholder="Örn: Uzaktan Kumanda, Şarj Adaptörü, Güç Kablosu, Filtre, Boru..."
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Teslim alma tutanağında eksiksiz belirtilir.
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/80">
+                    <label className="block text-xs font-bold text-amber-950 mb-1 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Cihaz / Ürün Çizik, Kırık & Deformasyon Durumu</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.damagePhysicalCondition || ""}
+                      onChange={(e) => setFormData({ ...formData, damagePhysicalCondition: e.target.value })}
+                      placeholder="Örn: Ön panelde kılcal çizikler, kapakta hafif sararma, sağ köşede sürtme..."
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Kayıt anındaki fiziksel kusurlar teslim alma tutanağına yazılır.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Bölüm: Parça ve İşçilik Yönetimi */}
+              <div className="space-y-4 pt-3 border-t border-slate-200">
+                <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-[#8252F6]" />
+                  <span>4. Yedek Parça ve İşçilik Kalemleri</span>
+                </h4>
+
+                {/* Parça Ekleme Satırı */}
+                <div className="bg-purple-50/50 p-3.5 rounded-2xl border border-purple-100 space-y-2">
+                  <span className="font-bold text-purple-900 block">Yedek Parça Ekle:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
+                    <input
+                      type="text"
+                      value={newPartName}
+                      onChange={(e) => setNewPartName(e.target.value)}
+                      placeholder="Parça Adı (Örn: NTC Sensör, Pompa, Conta)"
+                      className="sm:col-span-2 px-3 py-1.5 rounded-xl border border-purple-200 bg-white"
+                    />
+                    <select
+                      value={newPartCategory}
+                      onChange={(e) => setNewPartCategory(e.target.value as any)}
+                      className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white font-semibold text-xs"
+                    >
+                      <option value="thermostat_sensor">Termostat / Sensör</option>
+                      <option value="resistance_heating">Rezistans / Isıtıcı</option>
+                      <option value="pump_motor">Pompa / Motor</option>
+                      <option value="gasket_seal">Conta / Keçe / O-Ring</option>
+                      <option value="compressor_gas">Kompresör / Gaz / Vana</option>
+                      <option value="electronic_board">Elektronik Kart / Ekran</option>
+                      <option value="filter_boiler">Filtre / Eşanjör / Kazan</option>
+                      <option value="gear_mechanical">Mekanik / Dişli / Bıçak</option>
+                      <option value="other">Diğer</option>
+                    </select>
+                    <input
+                      type="number"
+                      value={newPartQty}
+                      onChange={(e) => setNewPartQty(parseInt(e.target.value) || 1)}
+                      placeholder="Adet"
+                      className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white"
+                    />
+                    <input
+                      type="number"
+                      value={newPartPrice || ""}
+                      onChange={(e) => setNewPartPrice(parseFloat(e.target.value) || 0)}
+                      placeholder="Birim Fiyat (₺)"
+                      className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddPart}
+                      className="px-3 py-1.5 rounded-xl bg-purple-700 text-white font-bold hover:bg-purple-800 transition-all cursor-pointer"
+                    >
+                      + Parça Ekle
+                    </button>
+                  </div>
+
+                  {/* Eklenen Parçalar Tablosu */}
+                  {formData.parts && formData.parts.length > 0 && (
+                    <div className="mt-2 space-y-1 divide-y divide-purple-100 bg-white p-2 rounded-xl border border-purple-100">
+                      {formData.parts.map((p) => (
+                        <div key={p.id} className="pt-1 flex items-center justify-between text-xs">
+                          <span>{p.partName} ({p.quantity} Adet × {p.unitPrice} ₺)</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold">{p.total} ₺</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePart(p.id)}
+                              className="text-rose-500 hover:text-rose-700 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* İşçilik Ekleme Satırı */}
+                <div className="bg-blue-50/50 p-3.5 rounded-2xl border border-blue-100 space-y-2">
+                  <span className="font-bold text-blue-900 block">Teknik İşçilik Ekle:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
+                    <input
+                      type="text"
+                      value={newLaborName}
+                      onChange={(e) => setNewLaborName(e.target.value)}
+                      placeholder="İşlem Adı (Örn: Gaz Kaçak Tespiti & Şarjı)"
+                      className="sm:col-span-3 px-3 py-1.5 rounded-xl border border-blue-200 bg-white"
+                    />
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={newLaborHours}
+                      onChange={(e) => setNewLaborHours(parseFloat(e.target.value) || 1)}
+                      placeholder="Saat"
+                      className="px-2 py-1.5 rounded-xl border border-blue-200 bg-white"
+                    />
+                    <input
+                      type="number"
+                      value={newLaborRate || ""}
+                      onChange={(e) => setNewLaborRate(parseFloat(e.target.value) || 0)}
+                      placeholder="Saat Ücreti (₺)"
+                      className="px-2 py-1.5 rounded-xl border border-blue-200 bg-white font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddLabor}
+                      className="px-3 py-1.5 rounded-xl bg-blue-700 text-white font-bold hover:bg-blue-800 transition-all cursor-pointer"
+                    >
+                      + İşçilik Ekle
+                    </button>
+                  </div>
+
+                  {/* Eklenen İşçilikler Tablosu */}
+                  {formData.labors && formData.labors.length > 0 && (
+                    <div className="mt-2 space-y-1 divide-y divide-blue-100 bg-white p-2 rounded-xl border border-blue-100">
+                      {formData.labors.map((l) => (
+                        <div key={l.id} className="pt-1 flex items-center justify-between text-xs">
+                          <span>{l.operationName} ({l.hours} Saat × {l.hourlyRate} ₺)</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold">{l.total} ₺</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveLabor(l.id)}
+                              className="text-rose-500 hover:text-rose-700 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Toplam Özeti */}
+                <div className="bg-slate-900 text-white p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-6">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">PARÇA TOPLAMI</span>
+                      <span className="font-bold text-sm">{(formData.partsTotal || 0).toLocaleString("tr-TR")} ₺</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">İŞÇİLİK TOPLAMI</span>
+                      <span className="font-bold text-sm">{(formData.laborTotal || 0).toLocaleString("tr-TR")} ₺</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">HESAPLANAN KDV</span>
+                      <span className="font-bold text-sm">{(formData.totalVat || 0).toLocaleString("tr-TR")} ₺</span>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-purple-300 block text-[10px] font-bold">GENEL TOPLAM (KDV DAHİL)</span>
+                    <span className="text-xl font-black text-white">
+                      {(formData.grandTotal || 0).toLocaleString("tr-TR")} ₺
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Aksiyon Butonları */}
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
+                >
+                  {editingRecord ? "Değişiklikleri Kaydet" : "Servis Kaydını Oluştur"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* EV ALETLERİ & KLİMA SERVİS FATURALANDIRMA MODALI */}
+      {isInvoicingModalOpen && invoicingRecord && (
+        <ServiceInvoicingModal
+          isOpen={isInvoicingModalOpen}
+          onClose={() => {
+            setIsInvoicingModalOpen(false);
+            setInvoicingRecord(null);
+          }}
+          serviceType="appliance"
+          serviceRecord={invoicingRecord}
+          contacts={contacts}
+          onAddInvoice={(invoice) => {
+            if (onAddInvoice) {
+              onAddInvoice(invoice);
+            }
+          }}
+          onAddContact={(contact) => {
+            if (onAddContact) {
+              onAddContact(contact);
+            }
+          }}
+          onServiceInvoiced={handleServiceInvoiced}
+          onOpenDeliveryModal={(record) => {
+            handleOpenDeliveryModal(record as ApplianceServiceRecord);
+          }}
+        />
+    );
+  }
+
+      {/* WHATSAPP BİLGİLENDİRME MODALI */}
+      {isWhatsAppModalOpen && whatsAppRecord && (
+        <ServiceWhatsAppModal
+          isOpen={isWhatsAppModalOpen}
+          onClose={() => {
+            setIsWhatsAppModalOpen(false);
+            setWhatsAppRecord(null);
+          }}
+          serviceType="appliance"
+          serviceRecord={whatsAppRecord}
+          defaultTemplateType={whatsAppTemplateType}
+          companySettings={companySettings}
+        />
+    );
+  }
+
+      {/* ÜRÜN & CİHAZ TESLİM TUTANAĞI MODALI */}
+      {isDeliveryModalOpen && deliveryRecord && (
+        <ServiceDeliveryModal
+          isOpen={isDeliveryModalOpen}
+          onClose={() => {
+            setIsDeliveryModalOpen(false);
+            setDeliveryRecord(null);
+          }}
+          serviceType="appliance"
+          serviceRecord={deliveryRecord}
+          companySettings={companySettings}
+          onOpenInvoicing={(rec) => {
+            setIsDeliveryModalOpen(false);
+            handleOpenInvoicing(rec as ApplianceServiceRecord);
+          }}
+          onOpenWhatsApp={(rec) => {
+            setIsDeliveryModalOpen(false);
+            handleOpenWhatsApp(rec as ApplianceServiceRecord, "completed");
+          }}
+          onMarkDelivered={handleMarkDelivered}
+        />
+    );
+  }
+
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* 🟣 FINANS YÖNETİMİ UYUMLU LİLA & BAL PETEĞİ BAŞLIK BANNERI */}
@@ -1692,1042 +2736,6 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
         </>
       )}
 
-      {/* FULL-PAGE DETAIL VIEW: 🔮 AI SAHA & OPERASYON ASİSTANI */}
-      {aiAssistantRecord && (
-        <DetailPageLayout
-          title="Ev Aletleri ve Klima AI Operasyon Asistanı"
-          subtitle={`${aiAssistantRecord.serviceNo} • ${aiAssistantRecord.brand} ${aiAssistantRecord.model} • Müşteri: ${aiAssistantRecord.customerName}`}
-          breadcrumbs={[
-            { label: "Beyaz Eşya & Klima Servis", onClick: () => setAiAssistantRecord(null) },
-            { label: "AI Saha Asistanı", active: true },
-          ]}
-          onBack={() => setAiAssistantRecord(null)}
-          statusBadge={
-            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
-              AI TEKNİK ASİSTAN
-            </span>
-          }
-          headerIcon={<Sparkles className="w-5 h-5 text-purple-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setAiAssistantRecord(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Geri Dön
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl w-full max-w-4xl mx-auto flex flex-col shadow-sm border border-purple-100 overflow-hidden">
-
-            {/* Modal Sekmeleri */}
-            <div className="flex border-b border-slate-200 bg-slate-50 px-5 pt-3 gap-2">
-              <button
-                onClick={() => setAiActiveTab("checklist")}
-                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
-                  aiActiveTab === "checklist"
-                    ? "border-[#8252F6] text-[#8252F6]"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                📋 Saha & Servis Kontrol Listesi
-              </button>
-              <button
-                onClick={() => setAiActiveTab("approval")}
-                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
-                  aiActiveTab === "approval"
-                    ? "border-[#8252F6] text-[#8252F6]"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                💬 Müşteri Fiyat Onay Mesajı
-              </button>
-              <button
-                onClick={() => setAiActiveTab("completion")}
-                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
-                  aiActiveTab === "completion"
-                    ? "border-[#8252F6] text-[#8252F6]"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                📄 Teslimat & Bakım Raporu
-              </button>
-            </div>
-
-            {/* Modal Gövdesi */}
-            <div className="p-6 overflow-y-auto space-y-4 flex-1">
-              {/* Giriş Parametreleri */}
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                <div className="text-xs font-bold text-slate-700">Analiz Parametreleri:</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-slate-400">Cihaz:</span>
-                    <input
-                      type="text"
-                      value={aiCustomDevice}
-                      onChange={(e) => setAiCustomDevice(e.target.value)}
-                      className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Müşterinin Bildirdiği Sorun / Arıza:</span>
-                    <input
-                      type="text"
-                      value={aiCustomIssue}
-                      onChange={(e) => setAiCustomIssue(e.target.value)}
-                      className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Sekme 1: Saha ve Servis Kontrol Listesi */}
-              {aiActiveTab === "checklist" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-500">
-                      Özel AI teknik servis uzmanı; arıza analizi, yanına alınacak parçalar, el aletleri ve hijyen kurallarını üretir.
-                    </p>
-                    <button
-                      onClick={() => handleRunAiPrompt("field_checklist")}
-                      disabled={aiLoading}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#6938EF] to-[#8252F6] text-white font-bold text-xs shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>{aiLoading ? "Analiz Ediliyor..." : "Kontrol Listesi Üret"}</span>
-                    </button>
-                  </div>
-
-                  {aiAssistantRecord.aiOutputs?.fieldChecklist && (
-                    <div className="bg-purple-50/60 rounded-2xl p-4 border border-purple-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-purple-900 uppercase">
-                          Saha ve Servis Kontrol Raporu
-                        </span>
-                        <button
-                          onClick={() => handleCopyToClipboard(aiAssistantRecord.aiOutputs?.fieldChecklist?.formattedText || "")}
-                          className="text-xs font-bold text-[#8252F6] hover:underline flex items-center gap-1 cursor-pointer"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>{copiedNotification ? "Kopyalandı!" : "Metni Kopyala"}</span>
-                        </button>
-                      </div>
-
-                      <div className="space-y-3 text-xs">
-                        <div className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs">
-                          <h5 className="font-bold text-purple-900 mb-1 flex items-center gap-1">
-                            <span>🔍 Arıza Analizi ve Olası Nedenler</span>
-                          </h5>
-                          <p className="text-slate-700 leading-relaxed">
-                            {aiAssistantRecord.aiOutputs.fieldChecklist.faultAnalysis}
-                          </p>
-                        </div>
-
-                        <div className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs">
-                          <h5 className="font-bold text-purple-900 mb-1 flex items-center gap-1">
-                            <span>📦 Yanında Bulundurulması Gereken Yedek Parça ve Sarf Malzemeleri</span>
-                          </h5>
-                          <p className="text-slate-700 leading-relaxed">
-                            {aiAssistantRecord.aiOutputs.fieldChecklist.requiredPartsAndSupplies}
-                          </p>
-                        </div>
-
-                        <div className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs">
-                          <h5 className="font-bold text-purple-900 mb-1 flex items-center gap-1">
-                            <span>🛠️ Gerekli El Aletleri ve Test Ekipmanları</span>
-                          </h5>
-                          <p className="text-slate-700 leading-relaxed">
-                            {aiAssistantRecord.aiOutputs.fieldChecklist.requiredToolsAndEquipment}
-                          </p>
-                        </div>
-
-                        <div className="bg-white p-3 rounded-xl border border-rose-100 shadow-2xs">
-                          <h5 className="font-bold text-rose-900 mb-1 flex items-center gap-1">
-                            <span>⚠️ Güvenlik ve Hijyen Kuralları</span>
-                          </h5>
-                          <p className="text-slate-700 leading-relaxed">
-                            {aiAssistantRecord.aiOutputs.fieldChecklist.safetyAndHygieneRules}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Sekme 2: Fiyat Onay Mesajı */}
-              {aiActiveTab === "approval" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-500">
-                      Müşteriye WhatsApp / SMS ile iletilecek nazik ve garantili teklif onay metni.
-                    </p>
-                    <button
-                      onClick={() => handleRunAiPrompt("quote_approval_message")}
-                      disabled={aiLoading}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>{aiLoading ? "Hazırlanıyor..." : "Mesajı Oluştur"}</span>
-                    </button>
-                  </div>
-
-                  {aiAssistantRecord.aiOutputs?.costApprovalMessage && (
-                    <div className="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-emerald-900 uppercase">
-                          WhatsApp / SMS Teklif Mesajı
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleCopyToClipboard(aiAssistantRecord.aiOutputs?.costApprovalMessage?.messageText || "")}
-                            className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>{copiedNotification ? "Kopyalandı!" : "Kopyala"}</span>
-                          </button>
-                          <a
-                            href={`https://wa.me/${aiAssistantRecord.contactPhone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-                              aiAssistantRecord.aiOutputs.costApprovalMessage.messageText
-                            )}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 shadow-xs hover:bg-emerald-700"
-                          >
-                            <Send className="w-3 h-3" />
-                            <span>WhatsApp'a Gönder</span>
-                          </a>
-                        </div>
-                      </div>
-
-                      <div className="bg-white p-3.5 rounded-xl border border-emerald-100 text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">
-                        {aiAssistantRecord.aiOutputs.costApprovalMessage.messageText}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Sekme 3: Tamamlama ve Bakım Raporu */}
-              {aiActiveTab === "completion" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-500">
-                      Onarımı biten cihazın teslimat notu ve müşteri için 3 kritik kullanım tavsiyesi.
-                    </p>
-                    <button
-                      onClick={() => handleRunAiPrompt("completion_report")}
-                      disabled={aiLoading}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>{aiLoading ? "Hazırlanıyor..." : "Raporu Oluştur"}</span>
-                    </button>
-                  </div>
-
-                  {aiAssistantRecord.aiOutputs?.completionReport && (
-                    <div className="bg-blue-50/60 rounded-2xl p-4 border border-blue-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-blue-900 uppercase">
-                          {aiAssistantRecord.aiOutputs.completionReport.subject}
-                        </span>
-                      </div>
-
-                      <div className="bg-white p-3.5 rounded-xl border border-blue-100 text-xs text-slate-800 space-y-2">
-                        <p>{aiAssistantRecord.aiOutputs.completionReport.summary}</p>
-                        <div className="pt-2 border-t border-slate-100 space-y-1">
-                          <strong className="text-blue-900 block font-bold">Kullanım ve Bakım Tavsiyeleri:</strong>
-                          {aiAssistantRecord.aiOutputs.completionReport.maintenanceTips?.map((tip, idx) => (
-                            <p key={idx} className="text-slate-600 pl-2 border-l-2 border-blue-400">
-                              • {tip}
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-[11px] text-slate-400">
-                Gemini 3.7 Flash modeliyle anında üretilir ve iş emrine kaydedilir.
-              </span>
-              <button
-                onClick={() => setAiAssistantRecord(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 cursor-pointer"
-              >
-                Geri Dön
-              </button>
-            </div>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: 🖨️ A4 / TERMAL YAZICI UYUMLU SERVİS & TESLİM FİŞİ */}
-      {printRecord && (
-        <DetailPageLayout
-          title="Teknik Servis & Teslim Tutanağı Yazdır"
-          subtitle={`${printRecord.serviceNo} • ${printRecord.customerName} • ${printRecord.brand} ${printRecord.model}`}
-          breadcrumbs={[
-            { label: "Beyaz Eşya & Klima Servis", onClick: () => setPrintRecord(null) },
-            { label: "Teslim Tutanağı", active: true },
-          ]}
-          onBack={() => setPrintRecord(null)}
-          statusBadge={
-            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
-              RESMİ TESLİM FORMU
-            </span>
-          }
-          headerIcon={<Printer className="w-5 h-5 text-purple-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="px-4 py-2 rounded-xl bg-[#8252F6] hover:bg-[#703EE5] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Yazdır</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintRecord(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Geri Dön
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl w-full max-w-3xl mx-auto flex flex-col shadow-sm border border-slate-200 overflow-hidden">
-
-            {/* Yazdırma Belge Alanı */}
-            <div className="p-8 overflow-y-auto space-y-6 text-slate-900 bg-white font-sans text-xs" id="printable-service-slip">
-              {/* Başlık ve Firma */}
-              <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
-                <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight">MUAVİN TEKNİK SERVİS</h2>
-                  <p className="text-[11px] text-slate-600">Beyaz Eşya, İklimlendirme ve Küçük Ev Aletleri Servisi</p>
-                  <p className="text-[10px] text-slate-500 mt-1">Tel: +90 (212) 444 0 999 | E-posta: servis@muavin.com.tr</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-black text-purple-900 bg-purple-100 px-3 py-1 rounded-md inline-block">
-                    {printRecord.serviceNo}
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1">Tarih: {printRecord.entryDate}</p>
-                  <p className="text-[10px] text-slate-500">Konum: {printRecord.serviceLocation === "on_site" ? "Saha / Adreste" : "Servis Atölyesi"}</p>
-                </div>
-              </div>
-
-              {/* Müşteri ve Cihaz Bilgisi Grid */}
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <div className="space-y-1">
-                  <strong className="text-slate-900 block font-bold">MÜŞTERİ BİLGİLERİ</strong>
-                  <p>Ad Soyad / Firma: <strong>{printRecord.contactName}</strong></p>
-                  <p>Telefon: {printRecord.contactPhone}</p>
-                  <p>Adres: {printRecord.serviceAddress || "Servis Merkezine Getirildi"}</p>
-                </div>
-                <div className="space-y-1">
-                  <strong className="text-slate-900 block font-bold">CİHAZ BİLGİLERİ</strong>
-                  <p>Kategori: {categoryConfig[printRecord.category]?.label}</p>
-                  <p>Cihaz / Tür: {deviceTypeLabels[printRecord.deviceType] || printRecord.deviceType}</p>
-                  <p>Marka / Model: <strong>{printRecord.brand} {printRecord.model}</strong></p>
-                  <p>Seri No: {printRecord.serialNumber || "-"}</p>
-                  {printRecord.gasType && printRecord.gasType !== "none" && <p>Gaz Türü: {printRecord.gasType}</p>}
-                </div>
-              </div>
-
-              {/* Arıza ve Yapılan İşlem */}
-              <div className="space-y-2">
-                {/* Teslim Alınan Aksesuarlar & Fiziksel Durum */}
-                <div className="grid grid-cols-2 gap-3 text-[11px]">
-                  <div className="bg-purple-50/50 p-2.5 rounded-lg border border-purple-200">
-                    <strong className="block text-purple-950 mb-0.5 font-bold uppercase text-[10px]">Teslim Alınan Aksesuar & Donanımlar:</strong>
-                    <p className="text-slate-800 font-medium">
-                      {printRecord.accessoriesReceived || "Harici aksesuar teslim alınmadı (Yalnız Cihaz)."}
-                    </p>
-                  </div>
-                  <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200">
-                    <strong className="block text-amber-950 mb-0.5 font-bold uppercase text-[10px]">Cihaz Fiziksel Durumu & Deformasyon:</strong>
-                    <p className="text-slate-800 font-medium">
-                      {printRecord.damagePhysicalCondition ? (
-                        <span className="text-amber-950 font-bold">{printRecord.damagePhysicalCondition}</span>
-                      ) : (
-                        <span className="text-emerald-800 font-bold">Belirgin çizik, kırık veya kusur bulunmamaktadır.</span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <strong className="block text-slate-900 mb-0.5">Bildirilen Şikayet / Arıza:</strong>
-                  <p className="text-slate-700">{printRecord.customerProblemDescription}</p>
-                </div>
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <strong className="block text-slate-900 mb-0.5">Teknik Servis Teşhis ve Yapılan İşlemler:</strong>
-                  <p className="text-slate-700">{printRecord.technicianReport || "Bakım ve onarım işlemleri gerçekleştirildi."}</p>
-                </div>
-              </div>
-
-              {/* Parça ve İşçilik Tablosu */}
-              <div className="space-y-1">
-                <strong className="block text-slate-900 font-bold">KULLANILAN YEDEK PARÇALAR & İŞÇİLİK</strong>
-                <table className="w-full border-collapse text-left border border-slate-300 text-[11px]">
-                  <thead>
-                    <tr className="bg-slate-100 border-b border-slate-300 font-bold">
-                      <th className="p-1.5 border-r border-slate-300">İşlem / Parça Tanımı</th>
-                      <th className="p-1.5 border-r border-slate-300 text-center">Adet/Saat</th>
-                      <th className="p-1.5 border-r border-slate-300 text-right">Birim Fiyat</th>
-                      <th className="p-1.5 border-r border-slate-300 text-center">KDV</th>
-                      <th className="p-1.5 text-right">Toplam</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {printRecord.parts?.map((p) => (
-                      <tr key={p.id} className="border-b border-slate-200">
-                        <td className="p-1.5 border-r border-slate-300 font-medium">{p.partName} (Yedek Parça)</td>
-                        <td className="p-1.5 border-r border-slate-300 text-center">{p.quantity}</td>
-                        <td className="p-1.5 border-r border-slate-300 text-right">{p.unitPrice.toLocaleString("tr-TR")} ₺</td>
-                        <td className="p-1.5 border-r border-slate-300 text-center">%{p.vatRate}</td>
-                        <td className="p-1.5 text-right font-bold">{p.total.toLocaleString("tr-TR")} ₺</td>
-                      </tr>
-                    ))}
-                    {printRecord.labors?.map((l) => (
-                      <tr key={l.id} className="border-b border-slate-200">
-                        <td className="p-1.5 border-r border-slate-300 font-medium">{l.operationName} (İşçilik)</td>
-                        <td className="p-1.5 border-r border-slate-300 text-center">{l.hours}</td>
-                        <td className="p-1.5 border-r border-slate-300 text-right">{l.hourlyRate.toLocaleString("tr-TR")} ₺</td>
-                        <td className="p-1.5 border-r border-slate-300 text-center">%{l.vatRate}</td>
-                        <td className="p-1.5 text-right font-bold">{l.total.toLocaleString("tr-TR")} ₺</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Alt Toplamlar */}
-              <div className="flex justify-end">
-                <div className="w-56 space-y-1 text-right text-xs">
-                  <div className="flex justify-between text-slate-500">
-                    <span>Parça Tutarı:</span>
-                    <span>{printRecord.partsTotal.toLocaleString("tr-TR")} ₺</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>İşçilik Tutarı:</span>
-                    <span>{printRecord.laborTotal.toLocaleString("tr-TR")} ₺</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>Toplam KDV:</span>
-                    <span>{printRecord.totalVat.toLocaleString("tr-TR")} ₺</span>
-                  </div>
-                  <div className="flex justify-between font-black text-sm text-slate-900 pt-1 border-t border-slate-400">
-                    <span>GENEL TOPLAM:</span>
-                    <span>{printRecord.grandTotal.toLocaleString("tr-TR")} ₺</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Garanti & Güvenlik Şartları */}
-              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[10px] text-slate-500 space-y-0.5">
-                <p>• Değişen orijinal yedek parçalar montaj tarihinden itibaren 1 yıl garanti kapsamındadır.</p>
-                <p>• Kullanıcı hatası, elektrik voltaj dalgalanmaları veya yetkisiz müdahaleler garanti dışıdır.</p>
-              </div>
-
-              {/* İmza Alanları */}
-              <div className="grid grid-cols-2 gap-8 pt-6 border-t border-slate-300 text-center">
-                <div className="space-y-8">
-                  <p className="font-bold text-slate-900">Teknisyen / Servis Yetkilisi</p>
-                  <p className="text-[10px] text-slate-400">İmza & Kaşe</p>
-                </div>
-                <div className="space-y-8">
-                  <p className="font-bold text-slate-900">Müşteri / Teslim Alan</p>
-                  <p className="text-[10px] text-slate-400">İmza</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: SERVİS KAYDI EKLEME / DÜZENLEME */}
-      {isModalOpen && (
-        <DetailPageLayout
-          title={editingRecord ? `Servis İş Emrini Düzenle - ${editingRecord.serviceNo}` : "Yeni Servis & Saha İş Emri Aç"}
-          subtitle="Beyaz Eşya, İklimlendirme (Klima/Kombi) ve Küçük Ev Aletleri Servis Kaydı"
-          breadcrumbs={[
-            { label: "Beyaz Eşya & Klima Servis", onClick: handleBackToList },
-            { label: editingRecord ? `${editingRecord.serviceNo} - ${editingRecord.customerName}` : "Yeni Servis Kaydı", active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-              {editingRecord ? editingRecord.status : "Yeni Kayıt"}
-            </span>
-          }
-          headerIcon={<Refrigerator className="w-5 h-5 text-purple-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="submit"
-                form="appliance-service-form"
-                className="px-5 py-2 bg-[#8252F6] hover:bg-[#703EE5] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-              >
-                <span>{editingRecord ? "Değişiklikleri Kaydet" : "Servis Kaydını Oluştur"}</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-5xl w-full p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6 mx-auto">
-            <form id="appliance-service-form" onSubmit={handleSaveRecord} className="space-y-6 text-xs">
-              {/* 1. Bölüm: Cihaz ve Kategori Bilgileri */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Refrigerator className="w-4 h-4 text-[#8252F6]" />
-                  <span>1. Cihaz ve Hizmet Türü Bilgileri</span>
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Cihaz Kategorisi *</label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-[#8252F6]"
-                    >
-                      <option value="hvac_climate">❄️ İklimlendirme (Klima / Kombi)</option>
-                      <option value="major_appliance">🧺 Beyaz Eşya</option>
-                      <option value="small_appliance">☕ Küçük Ev & Mutfak Aletleri</option>
-                      <option value="other_appliance">⚡ Diğer Cihaz</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Cihaz Tipi *</label>
-                    <select
-                      value={formData.deviceType}
-                      onChange={(e) => setFormData({ ...formData, deviceType: e.target.value as any })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-[#8252F6]"
-                    >
-                      <optgroup label="İklimlendirme & Isıtma">
-                        <option value="boiler_combi">Kombi (Yoğuşmalı/Konvansiyonel)</option>
-                        <option value="air_conditioner_split">Split Duvar Tipi Klima</option>
-                        <option value="air_conditioner_vrf">VRF / Ticari / Kaset Klima</option>
-                        <option value="water_heater">Şofben / Termosifon</option>
-                        <option value="heat_pump">Isı Pompası</option>
-                      </optgroup>
-                      <optgroup label="Beyaz Eşya">
-                        <option value="refrigerator">Buzdolabı</option>
-                        <option value="washing_machine">Çamaşır Makinesi</option>
-                        <option value="dishwasher">Bulaşık Makinesi</option>
-                        <option value="dryer">Kurutma Makinesi</option>
-                        <option value="oven">Fırın / Ankastre</option>
-                        <option value="cooktop_hob">Ocak / Set Üstü</option>
-                        <option value="freezer">Derin Dondurucu</option>
-                        <option value="range_hood">Davlumbaz / Aspiratör</option>
-                      </optgroup>
-                      <optgroup label="Küçük Ev & Mutfak Aletleri">
-                        <option value="coffee_machine">Kahve / Espresso Makinesi</option>
-                        <option value="vacuum_cleaner">Elektrikli / Dikey Süpürge</option>
-                        <option value="robot_vacuum">Robot Süpürge</option>
-                        <option value="blender_food_processor">Blender / Mutfak Robotu</option>
-                        <option value="airfryer_fryer">Airfryer / Fritöz</option>
-                        <option value="microwave_oven">Mikrodalga Fırın</option>
-                        <option value="toaster_grill">Tost Makinesi / Izgara</option>
-                        <option value="steam_iron">Buhar Kazanlı Ütü</option>
-                        <option value="kettle_tea_maker">Çaycı / Su Isıtıcı</option>
-                      </optgroup>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Hizmet Konumu *</label>
-                    <select
-                      value={formData.serviceLocation}
-                      onChange={(e) => setFormData({ ...formData, serviceLocation: e.target.value as any })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-[#8252F6]"
-                    >
-                      <option value="on_site">🏠 Sahada / Müşteri Adresinde</option>
-                      <option value="workshop">🏢 Atölyede / Servis Merkezinde</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Marka *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.brand}
-                      onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                      placeholder="Örn: Bosch, Daikin, DeLonghi, DemirDöküm"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Model</label>
-                    <input
-                      type="text"
-                      value={formData.model}
-                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                      placeholder="Örn: Nitromix P28, Sensira 12k, Magnifica S"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Seri No / Barkod</label>
-                    <input
-                      type="text"
-                      value={formData.serialNumber}
-                      onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
-                      placeholder="Seri numarası"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. Bölüm: Müşteri ve Randevu Bilgileri */}
-              <div className="space-y-3 pt-3 border-t border-slate-200">
-                <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <User className="w-4 h-4 text-[#8252F6]" />
-                  <span>2. Müşteri & Adres / Randevu Bilgileri</span>
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Müşteri Ad Soyad / Ünvan *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.contactName}
-                      onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
-                      placeholder="Müşteri adı"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Telefon Numarası *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.contactPhone}
-                      onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                      placeholder="05XX XXX XX XX"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Randevu Tarihi & Saat Dilimi</label>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="date"
-                        value={formData.appointmentDate}
-                        onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
-                        className="w-1/2 px-2 py-2 rounded-xl border border-slate-200 bg-white"
-                      />
-                      <input
-                        type="text"
-                        value={formData.appointmentTimeSlot}
-                        onChange={(e) => setFormData({ ...formData, appointmentTimeSlot: e.target.value })}
-                        placeholder="10:00 - 12:00"
-                        className="w-1/2 px-2 py-2 rounded-xl border border-slate-200 bg-white"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-700 mb-1">Montaj / Hizmet Adresi</label>
-                    <input
-                      type="text"
-                      value={formData.serviceAddress}
-                      onChange={(e) => setFormData({ ...formData, serviceAddress: e.target.value })}
-                      placeholder="Açık adres, bina, daire vb."
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Atanan Teknisyen</label>
-                    <input
-                      type="text"
-                      value={formData.assignedTechnician}
-                      onChange={(e) => setFormData({ ...formData, assignedTechnician: e.target.value })}
-                      placeholder="Teknisyen adı"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Bölüm: Arıza ve Teşhis Raporu */}
-              <div className="space-y-3 pt-3 border-t border-slate-200">
-                <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 text-[#8252F6]" />
-                  <span>3. Şikayet, Arıza Tespiti & Teknik Ölçümler</span>
-                </h4>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Müşterinin Bildirdiği Sorun *</label>
-                  <textarea
-                    required
-                    rows={2}
-                    value={formData.customerProblemDescription}
-                    onChange={(e) => setFormData({ ...formData, customerProblemDescription: e.target.value })}
-                    placeholder="Müşteri şikayeti, hata kodu, su/gaz kaçağı, ses veya ısıtma/soğutmama durumu..."
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Gaz Türü (İklimlendirme)</label>
-                    <select
-                      value={formData.gasType || "none"}
-                      onChange={(e) => setFormData({ ...formData, gasType: e.target.value as any })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                    >
-                      <option value="none">Gazsız / Gerekmiyor</option>
-                      <option value="R32">R32 (Ekolojik Yeni Nesil)</option>
-                      <option value="R410A">R410A (Split Klima)</option>
-                      <option value="R134a">R134a (Buzdolabı / Soğutucu)</option>
-                      <option value="R600a">R600a (İzobütan No-Frost)</option>
-                      <option value="R290">R290 (Propan)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Basınç Değeri (Bar)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={formData.pressureBar || ""}
-                      onChange={(e) => setFormData({ ...formData, pressureBar: parseFloat(e.target.value) || undefined })}
-                      placeholder="Örn: 1.5 bar (Kombi), 8.5 bar (Klima)"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-5">
-                    <input
-                      type="checkbox"
-                      id="warrantyCheckbox"
-                      checked={formData.isWarrantyActive}
-                      onChange={(e) => setFormData({ ...formData, isWarrantyActive: e.target.checked })}
-                      className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
-                    />
-                    <label htmlFor="warrantyCheckbox" className="font-bold text-slate-700 cursor-pointer">
-                      Garanti Kapsamında Onarım
-                    </label>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Teknisyen Teşhis & Müdahale Raporu</label>
-                  <textarea
-                    rows={2}
-                    value={formData.technicianReport}
-                    onChange={(e) => setFormData({ ...formData, technicianReport: e.target.value })}
-                    placeholder="Uygulanan testler, parça değişimi, kaçak kontrolü veya gaz dolum detayları..."
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                  />
-                </div>
-
-                {/* Teslim Alınan Aksesuarlar / Malzemeler & Cihaz Fiziksel Deformasyon Durumu */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-purple-100">
-                  <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-200/80">
-                    <label className="block text-xs font-bold text-purple-950 mb-1 flex items-center gap-1.5">
-                      <Package className="w-3.5 h-3.5 text-purple-700" />
-                      <span>Beraberinde Teslim Alınan Parça & Aksesuarlar</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.accessoriesReceived || ""}
-                      onChange={(e) => setFormData({ ...formData, accessoriesReceived: e.target.value })}
-                      placeholder="Örn: Uzaktan Kumanda, Şarj Adaptörü, Güç Kablosu, Filtre, Boru..."
-                      className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
-                    />
-                    <span className="text-[10px] text-slate-500 mt-1 block">
-                      Teslim alma tutanağında eksiksiz belirtilir.
-                    </span>
-                  </div>
-
-                  <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/80">
-                    <label className="block text-xs font-bold text-amber-950 mb-1 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
-                      <span>Cihaz / Ürün Çizik, Kırık & Deformasyon Durumu</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.damagePhysicalCondition || ""}
-                      onChange={(e) => setFormData({ ...formData, damagePhysicalCondition: e.target.value })}
-                      placeholder="Örn: Ön panelde kılcal çizikler, kapakta hafif sararma, sağ köşede sürtme..."
-                      className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
-                    />
-                    <span className="text-[10px] text-slate-500 mt-1 block">
-                      Kayıt anındaki fiziksel kusurlar teslim alma tutanağına yazılır.
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. Bölüm: Parça ve İşçilik Yönetimi */}
-              <div className="space-y-4 pt-3 border-t border-slate-200">
-                <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-[#8252F6]" />
-                  <span>4. Yedek Parça ve İşçilik Kalemleri</span>
-                </h4>
-
-                {/* Parça Ekleme Satırı */}
-                <div className="bg-purple-50/50 p-3.5 rounded-2xl border border-purple-100 space-y-2">
-                  <span className="font-bold text-purple-900 block">Yedek Parça Ekle:</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
-                    <input
-                      type="text"
-                      value={newPartName}
-                      onChange={(e) => setNewPartName(e.target.value)}
-                      placeholder="Parça Adı (Örn: NTC Sensör, Pompa, Conta)"
-                      className="sm:col-span-2 px-3 py-1.5 rounded-xl border border-purple-200 bg-white"
-                    />
-                    <select
-                      value={newPartCategory}
-                      onChange={(e) => setNewPartCategory(e.target.value as any)}
-                      className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white font-semibold text-xs"
-                    >
-                      <option value="thermostat_sensor">Termostat / Sensör</option>
-                      <option value="resistance_heating">Rezistans / Isıtıcı</option>
-                      <option value="pump_motor">Pompa / Motor</option>
-                      <option value="gasket_seal">Conta / Keçe / O-Ring</option>
-                      <option value="compressor_gas">Kompresör / Gaz / Vana</option>
-                      <option value="electronic_board">Elektronik Kart / Ekran</option>
-                      <option value="filter_boiler">Filtre / Eşanjör / Kazan</option>
-                      <option value="gear_mechanical">Mekanik / Dişli / Bıçak</option>
-                      <option value="other">Diğer</option>
-                    </select>
-                    <input
-                      type="number"
-                      value={newPartQty}
-                      onChange={(e) => setNewPartQty(parseInt(e.target.value) || 1)}
-                      placeholder="Adet"
-                      className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white"
-                    />
-                    <input
-                      type="number"
-                      value={newPartPrice || ""}
-                      onChange={(e) => setNewPartPrice(parseFloat(e.target.value) || 0)}
-                      placeholder="Birim Fiyat (₺)"
-                      className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white font-bold"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddPart}
-                      className="px-3 py-1.5 rounded-xl bg-purple-700 text-white font-bold hover:bg-purple-800 transition-all cursor-pointer"
-                    >
-                      + Parça Ekle
-                    </button>
-                  </div>
-
-                  {/* Eklenen Parçalar Tablosu */}
-                  {formData.parts && formData.parts.length > 0 && (
-                    <div className="mt-2 space-y-1 divide-y divide-purple-100 bg-white p-2 rounded-xl border border-purple-100">
-                      {formData.parts.map((p) => (
-                        <div key={p.id} className="pt-1 flex items-center justify-between text-xs">
-                          <span>{p.partName} ({p.quantity} Adet × {p.unitPrice} ₺)</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold">{p.total} ₺</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemovePart(p.id)}
-                              className="text-rose-500 hover:text-rose-700 cursor-pointer"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* İşçilik Ekleme Satırı */}
-                <div className="bg-blue-50/50 p-3.5 rounded-2xl border border-blue-100 space-y-2">
-                  <span className="font-bold text-blue-900 block">Teknik İşçilik Ekle:</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
-                    <input
-                      type="text"
-                      value={newLaborName}
-                      onChange={(e) => setNewLaborName(e.target.value)}
-                      placeholder="İşlem Adı (Örn: Gaz Kaçak Tespiti & Şarjı)"
-                      className="sm:col-span-3 px-3 py-1.5 rounded-xl border border-blue-200 bg-white"
-                    />
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={newLaborHours}
-                      onChange={(e) => setNewLaborHours(parseFloat(e.target.value) || 1)}
-                      placeholder="Saat"
-                      className="px-2 py-1.5 rounded-xl border border-blue-200 bg-white"
-                    />
-                    <input
-                      type="number"
-                      value={newLaborRate || ""}
-                      onChange={(e) => setNewLaborRate(parseFloat(e.target.value) || 0)}
-                      placeholder="Saat Ücreti (₺)"
-                      className="px-2 py-1.5 rounded-xl border border-blue-200 bg-white font-bold"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddLabor}
-                      className="px-3 py-1.5 rounded-xl bg-blue-700 text-white font-bold hover:bg-blue-800 transition-all cursor-pointer"
-                    >
-                      + İşçilik Ekle
-                    </button>
-                  </div>
-
-                  {/* Eklenen İşçilikler Tablosu */}
-                  {formData.labors && formData.labors.length > 0 && (
-                    <div className="mt-2 space-y-1 divide-y divide-blue-100 bg-white p-2 rounded-xl border border-blue-100">
-                      {formData.labors.map((l) => (
-                        <div key={l.id} className="pt-1 flex items-center justify-between text-xs">
-                          <span>{l.operationName} ({l.hours} Saat × {l.hourlyRate} ₺)</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold">{l.total} ₺</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveLabor(l.id)}
-                              className="text-rose-500 hover:text-rose-700 cursor-pointer"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Toplam Özeti */}
-                <div className="bg-slate-900 text-white p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-6">
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">PARÇA TOPLAMI</span>
-                      <span className="font-bold text-sm">{(formData.partsTotal || 0).toLocaleString("tr-TR")} ₺</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">İŞÇİLİK TOPLAMI</span>
-                      <span className="font-bold text-sm">{(formData.laborTotal || 0).toLocaleString("tr-TR")} ₺</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">HESAPLANAN KDV</span>
-                      <span className="font-bold text-sm">{(formData.totalVat || 0).toLocaleString("tr-TR")} ₺</span>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-purple-300 block text-[10px] font-bold">GENEL TOPLAM (KDV DAHİL)</span>
-                    <span className="text-xl font-black text-white">
-                      {(formData.grandTotal || 0).toLocaleString("tr-TR")} ₺
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Form Aksiyon Butonları */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={handleBackToList}
-                  className="px-5 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                >
-                  Vazgeç
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
-                >
-                  {editingRecord ? "Değişiklikleri Kaydet" : "Servis Kaydını Oluştur"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* EV ALETLERİ & KLİMA SERVİS FATURALANDIRMA MODALI */}
-      {isInvoicingModalOpen && invoicingRecord && (
-        <ServiceInvoicingModal
-          isOpen={isInvoicingModalOpen}
-          onClose={() => {
-            setIsInvoicingModalOpen(false);
-            setInvoicingRecord(null);
-          }}
-          serviceType="appliance"
-          serviceRecord={invoicingRecord}
-          contacts={contacts}
-          onAddInvoice={(invoice) => {
-            if (onAddInvoice) {
-              onAddInvoice(invoice);
-            }
-          }}
-          onAddContact={(contact) => {
-            if (onAddContact) {
-              onAddContact(contact);
-            }
-          }}
-          onServiceInvoiced={handleServiceInvoiced}
-          onOpenDeliveryModal={(record) => {
-            handleOpenDeliveryModal(record as ApplianceServiceRecord);
-          }}
-        />
-      )}
-
-      {/* WHATSAPP BİLGİLENDİRME MODALI */}
-      {isWhatsAppModalOpen && whatsAppRecord && (
-        <ServiceWhatsAppModal
-          isOpen={isWhatsAppModalOpen}
-          onClose={() => {
-            setIsWhatsAppModalOpen(false);
-            setWhatsAppRecord(null);
-          }}
-          serviceType="appliance"
-          serviceRecord={whatsAppRecord}
-          defaultTemplateType={whatsAppTemplateType}
-          companySettings={companySettings}
-        />
-      )}
-
-      {/* ÜRÜN & CİHAZ TESLİM TUTANAĞI MODALI */}
-      {isDeliveryModalOpen && deliveryRecord && (
-        <ServiceDeliveryModal
-          isOpen={isDeliveryModalOpen}
-          onClose={() => {
-            setIsDeliveryModalOpen(false);
-            setDeliveryRecord(null);
-          }}
-          serviceType="appliance"
-          serviceRecord={deliveryRecord}
-          companySettings={companySettings}
-          onOpenInvoicing={(rec) => {
-            setIsDeliveryModalOpen(false);
-            handleOpenInvoicing(rec as ApplianceServiceRecord);
-          }}
-          onOpenWhatsApp={(rec) => {
-            setIsDeliveryModalOpen(false);
-            handleOpenWhatsApp(rec as ApplianceServiceRecord, "completed");
-          }}
-          onMarkDelivered={handleMarkDelivered}
-        />
-      )}
     </div>
   );
 };

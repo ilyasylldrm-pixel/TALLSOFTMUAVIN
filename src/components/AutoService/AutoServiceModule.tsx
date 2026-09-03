@@ -468,6 +468,490 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
     }
   };
 
+  if (isModalOpen) {
+    return (
+        <DetailPageLayout
+          title={modalMode === "create" ? "Yeni Araç Servis Kabulü & İş Emri" : `İş Emrini Düzenle (${formData.serviceNo})`}
+          subtitle="Araç plakası, müşteri şikayeti, yedek parçalar ve ustalık işçilikleri"
+          breadcrumbs={[
+            { label: "Oto Servis Yönetimi", onClick: handleBackToList },
+            { label: modalMode === "create" ? "Yeni Servis Kabulü" : `${formData.plate} - ${formData.serviceNo}`, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {formData.plate || "Yeni Araç"}
+            </span>
+          }
+          headerIcon={<Car className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRecord}
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>{modalMode === "create" ? "İş Emrini Kaydet" : "Değişiklikleri Güncelle"}</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-200/80 shadow-sm max-w-4xl mx-auto space-y-6">
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+              {/* Row 1: Vehicle & Customer */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Araç Plakası *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.plateNumber}
+                    onChange={(e) => setFormData({ ...formData, plateNumber: e.target.value.toUpperCase() })}
+                    placeholder="34 ABC 123"
+                    className="w-full px-3 py-2 rounded-xl border border-purple-200 font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Araç Marka & Model *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      required
+                      value={formData.brand}
+                      onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                      placeholder="Renault"
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
+                    />
+                    <input
+                      type="text"
+                      value={formData.model}
+                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                      placeholder="Megane 1.5 dCi"
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Model Yılı & KM</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      value={formData.modelYear}
+                      onChange={(e) => setFormData({ ...formData, modelYear: Number(e.target.value) })}
+                      placeholder="2021"
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
+                    />
+                    <input
+                      type="number"
+                      value={formData.currentKm}
+                      onChange={(e) => setFormData({ ...formData, currentKm: Number(e.target.value) })}
+                      placeholder="65000"
+                      className="w-full px-3 py-2 rounded-xl border border-purple-200 font-mono font-bold focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Customer Contact */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Müşteri / Cari Adı *</label>
+                  <input
+                    type="text"
+                    value={formData.contactName}
+                    onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+                    placeholder="Müşteri Ad Soyad veya Firma"
+                    className="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">İletişim Telefonu *</label>
+                  <input
+                    type="text"
+                    value={formData.contactPhone}
+                    onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                    placeholder="0532 000 00 00"
+                    className="w-full px-3 py-2 rounded-xl border border-purple-200 font-bold focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div className="md:col-span-3 bg-purple-50/50 p-3.5 rounded-2xl border border-purple-200/70 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-extrabold text-purple-950 flex items-center gap-1.5 text-xs">
+                      <Clock className="w-3.5 h-3.5 text-purple-700" />
+                      <span>Servis Durum Yönetimi & İş Akışı Adımı</span>
+                    </label>
+                    <span className="text-[11px] text-purple-700 font-semibold">Tıklayarak durumu anında değiştirin</span>
+                  </div>
+
+                  {/* Görsel Hızlı Durum Butonları */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {autoStatusOptions.map((opt) => {
+                      const isSelected = formData.status === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, status: opt.value })}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            isSelected
+                              ? `${opt.bg} ${opt.color} ring-2 ring-purple-600 shadow-xs scale-105`
+                              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${opt.dot}`} />
+                          <span>{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 3: Complaints & Diagnosis */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Müşteri Şikayeti</label>
+                  <textarea
+                    rows={3}
+                    value={formData.customerComplaint}
+                    onChange={(e) => setFormData({ ...formData, customerComplaint: e.target.value })}
+                    placeholder="Müşterinin belirttiği şikayetler..."
+                    className="w-full p-2.5 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Atölye Teşhisi & Yapılacaklar</label>
+                  <textarea
+                    rows={3}
+                    value={formData.workshopDiagnosis}
+                    onChange={(e) => setFormData({ ...formData, workshopDiagnosis: e.target.value })}
+                    placeholder="Usta teşhisi ve kontrol notları..."
+                    className="w-full p-2.5 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              {/* Row 3.5: Teslim Alınan Eşyalar/Aksesuarlar & Çizik/Deformasyon Durumu */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 bg-purple-50/40 rounded-2xl border border-purple-200/70">
+                <div>
+                  <label className="block text-xs font-bold text-purple-950 mb-1 flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-purple-700" />
+                    <span>Araçla Beraberinde Getirilen / Teslim Alınanlar</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.accessoriesReceived || ""}
+                    onChange={(e) => setFormData({ ...formData, accessoriesReceived: e.target.value })}
+                    placeholder="Örn: Ruhsat, Yedek Anahtar, Şarj Kablosu, Stepne, Kriko, Yangın Tüpü..."
+                    className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Teslim alma tutanağında eksiksiz olarak müşteriye ve servise ibraz edilir.
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-amber-950 mb-1 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Araç Kaporta / Boya Çizik, Göçük & Deformasyon Durumu</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.damagePhysicalCondition || ""}
+                    onChange={(e) => setFormData({ ...formData, damagePhysicalCondition: e.target.value })}
+                    placeholder="Örn: Sağ ön çamurlukta çizik, arka tamponda sürtme izi, sol kapıda hafif göçük..."
+                    className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Teslim alırken mevcut olan fiziksel kusurlar tutanakta kayıt altına alınır.
+                  </span>
+                </div>
+              </div>
+
+              {/* Row 4: Parts Management */}
+              <div className="border border-purple-200/80 rounded-2xl p-4 bg-purple-50/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-extrabold text-purple-950 text-xs uppercase flex items-center gap-1.5">
+                    <Wrench className="w-4 h-4 text-purple-700" />
+                    Kullanılacak Yedek Parçalar
+                  </h4>
+                  <span className="font-mono font-bold text-purple-900">
+                    Parça Toplamı: ₺{(formData.parts || []).reduce((acc, p) => acc + p.total, 0).toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
+                  <input
+                    type="text"
+                    value={newPartName}
+                    onChange={(e) => setNewPartName(e.target.value)}
+                    placeholder="Parça Adı (Örn: Ön Fren Balatası)"
+                    className="sm:col-span-2 px-3 py-1.5 rounded-xl border border-purple-200 bg-white"
+                  />
+                  <select
+                    value={newPartType}
+                    onChange={(e) => setNewPartType(e.target.value as any)}
+                    className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white font-semibold"
+                  >
+                    <option value="original">Orijinal</option>
+                    <option value="oem">OEM</option>
+                    <option value="aftermarket">Yan Sanayi</option>
+                  </select>
+                  <input
+                    type="number"
+                    value={newPartQty}
+                    onChange={(e) => setNewPartQty(Number(e.target.value))}
+                    placeholder="Adet"
+                    className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white text-center font-bold"
+                  />
+                  <input
+                    type="number"
+                    value={newPartPrice || ""}
+                    onChange={(e) => setNewPartPrice(Number(e.target.value))}
+                    placeholder="Birim Fiyat ₺"
+                    className="px-3 py-1.5 rounded-xl border border-purple-200 bg-white font-mono font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddPart}
+                    className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold cursor-pointer transition-colors"
+                  >
+                    + Parça Ekle
+                  </button>
+                </div>
+
+                {formData.parts && formData.parts.length > 0 && (
+                  <div className="border border-purple-100 rounded-xl overflow-hidden bg-white">
+                    <table className="w-full text-left">
+                      <thead className="bg-purple-50 text-[11px] font-bold text-purple-950">
+                        <tr>
+                          <th className="p-2">Parça</th>
+                          <th className="p-2">Tür</th>
+                          <th className="p-2 text-center">Adet</th>
+                          <th className="p-2 text-right">Birim Fiyat</th>
+                          <th className="p-2 text-right">Tutar</th>
+                          <th className="p-2 text-center">Sil</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {formData.parts.map((p) => (
+                          <tr key={p.id}>
+                            <td className="p-2 font-semibold text-slate-900">{p.partName}</td>
+                            <td className="p-2 text-slate-500 capitalize">{p.partType}</td>
+                            <td className="p-2 text-center font-mono">{p.quantity}</td>
+                            <td className="p-2 text-right font-mono">₺{p.unitPrice.toFixed(2)}</td>
+                            <td className="p-2 text-right font-bold font-mono">₺{p.total.toFixed(2)}</td>
+                            <td className="p-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePart(p.id)}
+                                className="text-rose-600 hover:text-rose-800 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Row 5: Labor Management */}
+              <div className="border border-purple-200/80 rounded-2xl p-4 bg-purple-50/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-extrabold text-purple-950 text-xs uppercase flex items-center gap-1.5">
+                    <Wrench className="w-4 h-4 text-purple-700" />
+                    Ustalık & İşçilik Kalemleri
+                  </h4>
+                  <span className="font-mono font-bold text-purple-900">
+                    İşçilik Toplamı: ₺{(formData.labors || []).reduce((acc, l) => acc + l.total, 0).toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                  <input
+                    type="text"
+                    value={newLaborName}
+                    onChange={(e) => setNewLaborName(e.target.value)}
+                    placeholder="İşlem Adı (Örn: Fren Disk ve Balata Değişimi)"
+                    className="sm:col-span-2 px-3 py-1.5 rounded-xl border border-purple-200 bg-white"
+                  />
+                  <input
+                    type="number"
+                    value={newLaborHours}
+                    onChange={(e) => setNewLaborHours(Number(e.target.value))}
+                    placeholder="Saat"
+                    className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white text-center font-bold"
+                  />
+                  <input
+                    type="number"
+                    value={newLaborRate || ""}
+                    onChange={(e) => setNewLaborRate(Number(e.target.value))}
+                    placeholder="Saat Ücreti ₺"
+                    className="px-3 py-1.5 rounded-xl border border-purple-200 bg-white font-mono font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddLabor}
+                    className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold cursor-pointer transition-colors"
+                  >
+                    + İşçilik Ekle
+                  </button>
+                </div>
+
+                {formData.labors && formData.labors.length > 0 && (
+                  <div className="border border-purple-100 rounded-xl overflow-hidden bg-white">
+                    <table className="w-full text-left">
+                      <thead className="bg-purple-50 text-[11px] font-bold text-purple-950">
+                        <tr>
+                          <th className="p-2">İşlem</th>
+                          <th className="p-2 text-center">Saat</th>
+                          <th className="p-2 text-right">Saat Ücreti</th>
+                          <th className="p-2 text-right">Tutar</th>
+                          <th className="p-2 text-center">Sil</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {formData.labors.map((l) => (
+                          <tr key={l.id}>
+                            <td className="p-2 font-semibold text-slate-900">{l.operationName}</td>
+                            <td className="p-2 text-center font-mono">{l.hours} Saat</td>
+                            <td className="p-2 text-right font-mono">₺{l.hourlyRate.toFixed(2)}</td>
+                            <td className="p-2 text-right font-bold font-mono">₺{l.total.toFixed(2)}</td>
+                            <td className="p-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLabor(l.id)}
+                                className="text-rose-600 hover:text-rose-800 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Customer Approval Checkbox */}
+              <div className="flex items-center gap-2 p-3 bg-purple-50/40 rounded-xl border border-purple-200">
+                <input
+                  type="checkbox"
+                  id="custApproval"
+                  checked={formData.isApprovedByCustomer || false}
+                  onChange={(e) => setFormData({ ...formData, isApprovedByCustomer: e.target.checked })}
+                  className="w-4 h-4 text-purple-600 rounded cursor-pointer"
+                />
+                <label htmlFor="custApproval" className="font-bold text-purple-950 cursor-pointer">
+                  Müşteriden WhatsApp / SMS veya Şifahi Maliyet Onayı Alındı
+                </label>
+              </div>
+            </div>
+
+            {/* Form Footer */}
+            <div className="p-4 bg-slate-50 border-t border-purple-200/60 rounded-2xl flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRecord}
+                className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                {modalMode === "create" ? "İş Emrini Kaydet" : "Değişiklikleri Güncelle"}
+              </button>
+            </div>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* SERVİS FATURALANDIRMA MODALI */}
+      {isInvoicingModalOpen && invoicingRecord && (
+        <ServiceInvoicingModal
+          isOpen={isInvoicingModalOpen}
+          onClose={() => {
+            setIsInvoicingModalOpen(false);
+            setInvoicingRecord(null);
+          }}
+          serviceType="auto"
+          serviceRecord={invoicingRecord}
+          contacts={contacts}
+          onAddInvoice={(invoice) => {
+            if (onAddInvoice) {
+              onAddInvoice(invoice);
+            }
+          }}
+          onAddContact={(contact) => {
+            if (onAddContact) {
+              onAddContact(contact);
+            }
+          }}
+          onServiceInvoiced={handleServiceInvoiced}
+          onOpenDeliveryModal={(record) => {
+            handleOpenDeliveryModal(record as AutoServiceRecord);
+          }}
+        />
+    );
+  }
+
+  if (isWhatsAppModalOpen && whatsAppRecord) {
+    return (
+        <ServiceWhatsAppModal
+          isOpen={isWhatsAppModalOpen}
+          onClose={() => {
+            setIsWhatsAppModalOpen(false);
+            setWhatsAppRecord(null);
+          }}
+          serviceType="auto"
+          serviceRecord={whatsAppRecord}
+          defaultTemplateType={whatsAppTemplateType}
+          companySettings={companySettings}
+        />
+    );
+  }
+
+  if (isDeliveryModalOpen && deliveryRecord) {
+    return (
+        <ServiceDeliveryModal
+          isOpen={isDeliveryModalOpen}
+          onClose={() => {
+            setIsDeliveryModalOpen(false);
+            setDeliveryRecord(null);
+          }}
+          serviceType="auto"
+          serviceRecord={deliveryRecord}
+          companySettings={companySettings}
+          onOpenInvoicing={(rec) => {
+            setIsDeliveryModalOpen(false);
+            handleOpenInvoicing(rec as AutoServiceRecord);
+          }}
+          onOpenWhatsApp={(rec) => {
+            setIsDeliveryModalOpen(false);
+            handleOpenWhatsApp(rec as AutoServiceRecord, "completed");
+          }}
+          onMarkDelivered={handleMarkDelivered}
+        />
+    );
+  }
+
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* MODULE HEADER & TOP SUMMARY (Lila Bal Peteği & Geometrik Desen - Finans Yönetimi Teması) */}
@@ -1904,484 +2388,6 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
         </div>
       )}
 
-      {/* FULL-PAGE DETAIL VIEW: CREATE / EDIT SERVICE RECORD */}
-      {isModalOpen && (
-        <DetailPageLayout
-          title={modalMode === "create" ? "Yeni Araç Servis Kabulü & İş Emri" : `İş Emrini Düzenle (${formData.serviceNo})`}
-          subtitle="Araç plakası, müşteri şikayeti, yedek parçalar ve ustalık işçilikleri"
-          breadcrumbs={[
-            { label: "Oto Servis Yönetimi", onClick: handleBackToList },
-            { label: modalMode === "create" ? "Yeni Servis Kabulü" : `${formData.plate} - ${formData.serviceNo}`, active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-              {formData.plate || "Yeni Araç"}
-            </span>
-          }
-          headerIcon={<Car className="w-5 h-5 text-purple-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveRecord}
-                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-              >
-                <span>{modalMode === "create" ? "İş Emrini Kaydet" : "Değişiklikleri Güncelle"}</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-200/80 shadow-sm max-w-4xl mx-auto space-y-6">
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
-              {/* Row 1: Vehicle & Customer */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">Araç Plakası *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.plateNumber}
-                    onChange={(e) => setFormData({ ...formData, plateNumber: e.target.value.toUpperCase() })}
-                    placeholder="34 ABC 123"
-                    className="w-full px-3 py-2 rounded-xl border border-purple-200 font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 uppercase"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">Araç Marka & Model *</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      required
-                      value={formData.brand}
-                      onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                      placeholder="Renault"
-                      className="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
-                    />
-                    <input
-                      type="text"
-                      value={formData.model}
-                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                      placeholder="Megane 1.5 dCi"
-                      className="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">Model Yılı & KM</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="number"
-                      value={formData.modelYear}
-                      onChange={(e) => setFormData({ ...formData, modelYear: Number(e.target.value) })}
-                      placeholder="2021"
-                      className="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
-                    />
-                    <input
-                      type="number"
-                      value={formData.currentKm}
-                      onChange={(e) => setFormData({ ...formData, currentKm: Number(e.target.value) })}
-                      placeholder="65000"
-                      className="w-full px-3 py-2 rounded-xl border border-purple-200 font-mono font-bold focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 2: Customer Contact */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">Müşteri / Cari Adı *</label>
-                  <input
-                    type="text"
-                    value={formData.contactName}
-                    onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
-                    placeholder="Müşteri Ad Soyad veya Firma"
-                    className="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">İletişim Telefonu *</label>
-                  <input
-                    type="text"
-                    value={formData.contactPhone}
-                    onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                    placeholder="0532 000 00 00"
-                    className="w-full px-3 py-2 rounded-xl border border-purple-200 font-bold focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div className="md:col-span-3 bg-purple-50/50 p-3.5 rounded-2xl border border-purple-200/70 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="font-extrabold text-purple-950 flex items-center gap-1.5 text-xs">
-                      <Clock className="w-3.5 h-3.5 text-purple-700" />
-                      <span>Servis Durum Yönetimi & İş Akışı Adımı</span>
-                    </label>
-                    <span className="text-[11px] text-purple-700 font-semibold">Tıklayarak durumu anında değiştirin</span>
-                  </div>
-
-                  {/* Görsel Hızlı Durum Butonları */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {autoStatusOptions.map((opt) => {
-                      const isSelected = formData.status === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setFormData({ ...formData, status: opt.value })}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                            isSelected
-                              ? `${opt.bg} ${opt.color} ring-2 ring-purple-600 shadow-xs scale-105`
-                              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                          }`}
-                        >
-                          <span className={`w-2 h-2 rounded-full ${opt.dot}`} />
-                          <span>{opt.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 3: Complaints & Diagnosis */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">Müşteri Şikayeti</label>
-                  <textarea
-                    rows={3}
-                    value={formData.customerComplaint}
-                    onChange={(e) => setFormData({ ...formData, customerComplaint: e.target.value })}
-                    placeholder="Müşterinin belirttiği şikayetler..."
-                    className="w-full p-2.5 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">Atölye Teşhisi & Yapılacaklar</label>
-                  <textarea
-                    rows={3}
-                    value={formData.workshopDiagnosis}
-                    onChange={(e) => setFormData({ ...formData, workshopDiagnosis: e.target.value })}
-                    placeholder="Usta teşhisi ve kontrol notları..."
-                    className="w-full p-2.5 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-              </div>
-
-              {/* Row 3.5: Teslim Alınan Eşyalar/Aksesuarlar & Çizik/Deformasyon Durumu */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 bg-purple-50/40 rounded-2xl border border-purple-200/70">
-                <div>
-                  <label className="block text-xs font-bold text-purple-950 mb-1 flex items-center gap-1.5">
-                    <Package className="w-3.5 h-3.5 text-purple-700" />
-                    <span>Araçla Beraberinde Getirilen / Teslim Alınanlar</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.accessoriesReceived || ""}
-                    onChange={(e) => setFormData({ ...formData, accessoriesReceived: e.target.value })}
-                    placeholder="Örn: Ruhsat, Yedek Anahtar, Şarj Kablosu, Stepne, Kriko, Yangın Tüpü..."
-                    className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
-                  />
-                  <span className="text-[10px] text-slate-500 mt-1 block">
-                    Teslim alma tutanağında eksiksiz olarak müşteriye ve servise ibraz edilir.
-                  </span>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-amber-950 mb-1 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Araç Kaporta / Boya Çizik, Göçük & Deformasyon Durumu</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.damagePhysicalCondition || ""}
-                    onChange={(e) => setFormData({ ...formData, damagePhysicalCondition: e.target.value })}
-                    placeholder="Örn: Sağ ön çamurlukta çizik, arka tamponda sürtme izi, sol kapıda hafif göçük..."
-                    className="w-full px-3 py-2 rounded-xl border border-purple-200 bg-white text-xs font-medium focus:ring-2 focus:ring-purple-500"
-                  />
-                  <span className="text-[10px] text-slate-500 mt-1 block">
-                    Teslim alırken mevcut olan fiziksel kusurlar tutanakta kayıt altına alınır.
-                  </span>
-                </div>
-              </div>
-
-              {/* Row 4: Parts Management */}
-              <div className="border border-purple-200/80 rounded-2xl p-4 bg-purple-50/20 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-extrabold text-purple-950 text-xs uppercase flex items-center gap-1.5">
-                    <Wrench className="w-4 h-4 text-purple-700" />
-                    Kullanılacak Yedek Parçalar
-                  </h4>
-                  <span className="font-mono font-bold text-purple-900">
-                    Parça Toplamı: ₺{(formData.parts || []).reduce((acc, p) => acc + p.total, 0).toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
-                  <input
-                    type="text"
-                    value={newPartName}
-                    onChange={(e) => setNewPartName(e.target.value)}
-                    placeholder="Parça Adı (Örn: Ön Fren Balatası)"
-                    className="sm:col-span-2 px-3 py-1.5 rounded-xl border border-purple-200 bg-white"
-                  />
-                  <select
-                    value={newPartType}
-                    onChange={(e) => setNewPartType(e.target.value as any)}
-                    className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white font-semibold"
-                  >
-                    <option value="original">Orijinal</option>
-                    <option value="oem">OEM</option>
-                    <option value="aftermarket">Yan Sanayi</option>
-                  </select>
-                  <input
-                    type="number"
-                    value={newPartQty}
-                    onChange={(e) => setNewPartQty(Number(e.target.value))}
-                    placeholder="Adet"
-                    className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white text-center font-bold"
-                  />
-                  <input
-                    type="number"
-                    value={newPartPrice || ""}
-                    onChange={(e) => setNewPartPrice(Number(e.target.value))}
-                    placeholder="Birim Fiyat ₺"
-                    className="px-3 py-1.5 rounded-xl border border-purple-200 bg-white font-mono font-bold"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddPart}
-                    className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold cursor-pointer transition-colors"
-                  >
-                    + Parça Ekle
-                  </button>
-                </div>
-
-                {formData.parts && formData.parts.length > 0 && (
-                  <div className="border border-purple-100 rounded-xl overflow-hidden bg-white">
-                    <table className="w-full text-left">
-                      <thead className="bg-purple-50 text-[11px] font-bold text-purple-950">
-                        <tr>
-                          <th className="p-2">Parça</th>
-                          <th className="p-2">Tür</th>
-                          <th className="p-2 text-center">Adet</th>
-                          <th className="p-2 text-right">Birim Fiyat</th>
-                          <th className="p-2 text-right">Tutar</th>
-                          <th className="p-2 text-center">Sil</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-xs">
-                        {formData.parts.map((p) => (
-                          <tr key={p.id}>
-                            <td className="p-2 font-semibold text-slate-900">{p.partName}</td>
-                            <td className="p-2 text-slate-500 capitalize">{p.partType}</td>
-                            <td className="p-2 text-center font-mono">{p.quantity}</td>
-                            <td className="p-2 text-right font-mono">₺{p.unitPrice.toFixed(2)}</td>
-                            <td className="p-2 text-right font-bold font-mono">₺{p.total.toFixed(2)}</td>
-                            <td className="p-2 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePart(p.id)}
-                                className="text-rose-600 hover:text-rose-800 cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Row 5: Labor Management */}
-              <div className="border border-purple-200/80 rounded-2xl p-4 bg-purple-50/20 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-extrabold text-purple-950 text-xs uppercase flex items-center gap-1.5">
-                    <Wrench className="w-4 h-4 text-purple-700" />
-                    Ustalık & İşçilik Kalemleri
-                  </h4>
-                  <span className="font-mono font-bold text-purple-900">
-                    İşçilik Toplamı: ₺{(formData.labors || []).reduce((acc, l) => acc + l.total, 0).toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
-                  <input
-                    type="text"
-                    value={newLaborName}
-                    onChange={(e) => setNewLaborName(e.target.value)}
-                    placeholder="İşlem Adı (Örn: Fren Disk ve Balata Değişimi)"
-                    className="sm:col-span-2 px-3 py-1.5 rounded-xl border border-purple-200 bg-white"
-                  />
-                  <input
-                    type="number"
-                    value={newLaborHours}
-                    onChange={(e) => setNewLaborHours(Number(e.target.value))}
-                    placeholder="Saat"
-                    className="px-2 py-1.5 rounded-xl border border-purple-200 bg-white text-center font-bold"
-                  />
-                  <input
-                    type="number"
-                    value={newLaborRate || ""}
-                    onChange={(e) => setNewLaborRate(Number(e.target.value))}
-                    placeholder="Saat Ücreti ₺"
-                    className="px-3 py-1.5 rounded-xl border border-purple-200 bg-white font-mono font-bold"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddLabor}
-                    className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold cursor-pointer transition-colors"
-                  >
-                    + İşçilik Ekle
-                  </button>
-                </div>
-
-                {formData.labors && formData.labors.length > 0 && (
-                  <div className="border border-purple-100 rounded-xl overflow-hidden bg-white">
-                    <table className="w-full text-left">
-                      <thead className="bg-purple-50 text-[11px] font-bold text-purple-950">
-                        <tr>
-                          <th className="p-2">İşlem</th>
-                          <th className="p-2 text-center">Saat</th>
-                          <th className="p-2 text-right">Saat Ücreti</th>
-                          <th className="p-2 text-right">Tutar</th>
-                          <th className="p-2 text-center">Sil</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-xs">
-                        {formData.labors.map((l) => (
-                          <tr key={l.id}>
-                            <td className="p-2 font-semibold text-slate-900">{l.operationName}</td>
-                            <td className="p-2 text-center font-mono">{l.hours} Saat</td>
-                            <td className="p-2 text-right font-mono">₺{l.hourlyRate.toFixed(2)}</td>
-                            <td className="p-2 text-right font-bold font-mono">₺{l.total.toFixed(2)}</td>
-                            <td className="p-2 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLabor(l.id)}
-                                className="text-rose-600 hover:text-rose-800 cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Customer Approval Checkbox */}
-              <div className="flex items-center gap-2 p-3 bg-purple-50/40 rounded-xl border border-purple-200">
-                <input
-                  type="checkbox"
-                  id="custApproval"
-                  checked={formData.isApprovedByCustomer || false}
-                  onChange={(e) => setFormData({ ...formData, isApprovedByCustomer: e.target.checked })}
-                  className="w-4 h-4 text-purple-600 rounded cursor-pointer"
-                />
-                <label htmlFor="custApproval" className="font-bold text-purple-950 cursor-pointer">
-                  Müşteriden WhatsApp / SMS veya Şifahi Maliyet Onayı Alındı
-                </label>
-              </div>
-            </div>
-
-            {/* Form Footer */}
-            <div className="p-4 bg-slate-50 border-t border-purple-200/60 rounded-2xl flex items-center justify-between">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveRecord}
-                className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-              >
-                {modalMode === "create" ? "İş Emrini Kaydet" : "Değişiklikleri Güncelle"}
-              </button>
-            </div>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* SERVİS FATURALANDIRMA MODALI */}
-      {isInvoicingModalOpen && invoicingRecord && (
-        <ServiceInvoicingModal
-          isOpen={isInvoicingModalOpen}
-          onClose={() => {
-            setIsInvoicingModalOpen(false);
-            setInvoicingRecord(null);
-          }}
-          serviceType="auto"
-          serviceRecord={invoicingRecord}
-          contacts={contacts}
-          onAddInvoice={(invoice) => {
-            if (onAddInvoice) {
-              onAddInvoice(invoice);
-            }
-          }}
-          onAddContact={(contact) => {
-            if (onAddContact) {
-              onAddContact(contact);
-            }
-          }}
-          onServiceInvoiced={handleServiceInvoiced}
-          onOpenDeliveryModal={(record) => {
-            handleOpenDeliveryModal(record as AutoServiceRecord);
-          }}
-        />
-      )}
-
-      {/* WHATSAPP BİLGİLENDİRME MODALI */}
-      {isWhatsAppModalOpen && whatsAppRecord && (
-        <ServiceWhatsAppModal
-          isOpen={isWhatsAppModalOpen}
-          onClose={() => {
-            setIsWhatsAppModalOpen(false);
-            setWhatsAppRecord(null);
-          }}
-          serviceType="auto"
-          serviceRecord={whatsAppRecord}
-          defaultTemplateType={whatsAppTemplateType}
-          companySettings={companySettings}
-        />
-      )}
-
-      {/* ÜRÜN & ARAÇ TESLİM TUTANAĞI MODALI */}
-      {isDeliveryModalOpen && deliveryRecord && (
-        <ServiceDeliveryModal
-          isOpen={isDeliveryModalOpen}
-          onClose={() => {
-            setIsDeliveryModalOpen(false);
-            setDeliveryRecord(null);
-          }}
-          serviceType="auto"
-          serviceRecord={deliveryRecord}
-          companySettings={companySettings}
-          onOpenInvoicing={(rec) => {
-            setIsDeliveryModalOpen(false);
-            handleOpenInvoicing(rec as AutoServiceRecord);
-          }}
-          onOpenWhatsApp={(rec) => {
-            setIsDeliveryModalOpen(false);
-            handleOpenWhatsApp(rec as AutoServiceRecord, "completed");
-          }}
-          onMarkDelivered={handleMarkDelivered}
-        />
-      )}
     </div>
   );
 };

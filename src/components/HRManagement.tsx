@@ -1214,6 +1214,2648 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     }
   };
 
+  if (isAddEmployeeOpen) {
+    return (
+        <DetailPageLayout
+          title="Yeni Personel Kartı Oluştur"
+          subtitle="Çalışanın kişisel, özlük ve maaş bilgilerini eksiksiz girin"
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Yeni Personel Kartı", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              Yeni Kayıt
+            </span>
+          }
+          headerIcon={<UserPlus className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="add-employee-form"
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Kaydet ve Kartı Aç</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
+            <form id="add-employee-form" onSubmit={handleCreateEmployeeSubmit} className="space-y-4">
+              {/* Photo Upload Header */}
+              <div className="flex items-center gap-4 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <div className="relative w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-2 border-purple-400 shrink-0 shadow-xs">
+                  {newEmpForm.photoUrl ? (
+                    <img src={newEmpForm.photoUrl} alt="Vesikalık" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-8 h-8 text-slate-400" />
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">Personel Vesikalık Fotoğrafı</label>
+                  <div className="flex items-center gap-2">
+                    <label className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-xs">
+                      <Camera className="w-3.5 h-3.5" />
+                      Fotoğraf Yükle
+                      <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                    </label>
+                    {newEmpForm.photoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setNewEmpForm({ ...newEmpForm, photoUrl: "" })}
+                        className="text-xs text-rose-600 hover:text-rose-800 font-semibold px-2 py-1 cursor-pointer"
+                      >
+                        Fotoğrafı Kaldır
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">PNG, JPG veya WEBP formatında profil fotoğrafı yükleyebilirsiniz.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Ad Soyad *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ör: Ahmet Yılmaz"
+                    value={newEmpForm.fullName}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, fullName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">T.C. Kimlik No (TCKN) *</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={11}
+                    placeholder="11 haneli TCKN"
+                    value={newEmpForm.tckn}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, tckn: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-mono text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Telefon Numarası</label>
+                  <input
+                    type="tel"
+                    placeholder="0532 000 00 00"
+                    value={newEmpForm.phone}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, phone: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">E-Posta Adresi</label>
+                  <input
+                    type="email"
+                    placeholder="ör: ahmet@sirket.com"
+                    value={newEmpForm.email}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, email: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Cinsiyet</label>
+                  <select
+                    value={newEmpForm.gender || "Erkek"}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, gender: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900 cursor-pointer"
+                  >
+                    <option value="Erkek">Erkek ♂</option>
+                    <option value="Kadın">Kadın ♀</option>
+                  </select>
+                </div>
+
+                {/* Birth Date with 18 Year Old Warning */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Doğum Tarihi</label>
+                  <input
+                    type="date"
+                    value={newEmpForm.birthDate}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, birthDate: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900"
+                  />
+                  {newEmpForm.birthDate && calculateAge(newEmpForm.birthDate) !== null && (
+                    calculateAge(newEmpForm.birthDate)! < 18 ? (
+                      <div className="mt-2.5 bg-rose-50 border border-rose-300 p-3 rounded-xl flex items-start gap-2.5 text-rose-900 text-xs shadow-xs animate-pulse">
+                        <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-extrabold block text-rose-900 text-xs">⚠️ UYARI: Çalışan 18 Yaşından Küçüktür! ({calculateAge(newEmpForm.birthDate)} Yaşında)</span>
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-rose-800">
+                            4857 Sayılı İş Kanunu uyarınca 18 yaşını doldurmamış çocuk ve genç işçilerin çalıştırılmasında veli/vasi muvafakatnamesi, sağlık raporu ve yasal çalışma süresi sınırlarına (günlük azami 7-8 saat) uyulması zorunludur.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-emerald-700 mt-1 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Hesaplanan Yaş: {calculateAge(newEmpForm.birthDate)} yaşında (Reşit)
+                      </p>
+                    )
+                  )}
+                </div>
+
+                {/* Home Address */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Ev / İkametgah Adresi</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Mahalle, cadde, sokak, dış kapı/daire no, ilçe ve il bilgisi..."
+                    value={newEmpForm.homeAddress}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, homeAddress: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-medium text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Unvan / Görevi</label>
+                  <input
+                    type="text"
+                    placeholder="ör: Kıdemli Muhasebe Uzmanı"
+                    value={newEmpForm.title}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, title: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Departman</label>
+                  <select
+                    value={newEmpForm.department}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, department: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold cursor-pointer"
+                  >
+                    <option value="Yazılım & IT">Yazılım & IT</option>
+                    <option value="Muhasebe & Finans">Muhasebe & Finans</option>
+                    <option value="Satış & Pazarlama">Satış & Pazarlama</option>
+                    <option value="İnsan Kaynakları">İnsan Kaynakları</option>
+                    <option value="Operasyon & Lojistik">Operasyon & Lojistik</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Bağlı Olduğu Şube</label>
+                  <select
+                    value={newEmpForm.branchId || ""}
+                    onChange={(e) => {
+                      const selectedBr = branches.find((b) => b.id === e.target.value);
+                      setNewEmpForm({
+                        ...newEmpForm,
+                        branchId: e.target.value,
+                        branchName: selectedBr ? selectedBr.name : "",
+                      });
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900 cursor-pointer"
+                  >
+                    <option value="">-- Şube Seçiniz (Opsiyonel / Merkez) --</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Çalıştığı / Sorumlu Olduğu Depo</label>
+                  <select
+                    value={newEmpForm.warehouseId || ""}
+                    onChange={(e) => {
+                      const selectedWh = warehouses.find((w) => w.id === e.target.value);
+                      setNewEmpForm({
+                        ...newEmpForm,
+                        warehouseId: e.target.value,
+                        warehouseName: selectedWh ? selectedWh.name : "",
+                        ...(selectedWh && selectedWh.branchId ? {
+                          branchId: selectedWh.branchId,
+                          branchName: selectedWh.branchName || branches.find((b) => b.id === selectedWh.branchId)?.name || "",
+                        } : {}),
+                      });
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900 cursor-pointer"
+                  >
+                    <option value="">-- Depo Seçiniz (Opsiyonel) --</option>
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name} ({w.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-purple-900 mb-1">Görev Yaptığı Proje (Maliyet Ataması)</label>
+                  <select
+                    value={newEmpForm.projectId || ""}
+                    onChange={(e) => {
+                      const selectedPrj = costProjects.find((p) => p.id === e.target.value);
+                      setNewEmpForm({
+                        ...newEmpForm,
+                        projectId: e.target.value,
+                        projectName: selectedPrj ? selectedPrj.name : "",
+                      });
+                    }}
+                    className="w-full bg-purple-50/50 border border-purple-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900 cursor-pointer focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">-- Proje Seçiniz (Yok / Genel Merkez) --</option>
+                    {costProjects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} - {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Maaş Tipi & Tutarı (₺)</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={newEmpForm.salaryType}
+                      onChange={(e) => setNewEmpForm({ ...newEmpForm, salaryType: e.target.value as any })}
+                      className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold cursor-pointer w-28"
+                    >
+                      <option value="net">Net</option>
+                      <option value="gross">Brüt</option>
+                    </select>
+                    <input
+                      type="number"
+                      required
+                      value={newEmpForm.salaryAmount}
+                      onChange={(e) => setNewEmpForm({ ...newEmpForm, salaryAmount: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">İşe Giriş Tarihi</label>
+                  <input
+                    type="date"
+                    value={newEmpForm.startDate}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, startDate: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Banka & IBAN</label>
+                  <input
+                    type="text"
+                    placeholder="TR00 0000 0000 0000 0000 0000 00"
+                    value={newEmpForm.iban}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, iban: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">SGK Meslek Kodu ve Adı (Resmi SGK Listesi)</label>
+                  <select
+                    value={newEmpForm.sgkOccupationCode}
+                    onChange={(e) => {
+                      const selectedCode = e.target.value;
+                      const found = sgkOccupations.find((o) => o.code === selectedCode);
+                      setNewEmpForm({
+                        ...newEmpForm,
+                        sgkOccupationCode: selectedCode,
+                        title: found ? found.name : newEmpForm.title,
+                      });
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 cursor-pointer"
+                  >
+                    <option value="">-- SGK Meslek Seçin --</option>
+                    {sgkOccupations.map((occ) => (
+                      <option key={occ.code} value={occ.code}>
+                        {occ.code} - {occ.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Optional Exit/Termination Section */}
+                <div className="sm:col-span-2 bg-amber-50/60 p-4 rounded-2xl border border-amber-200 space-y-3">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                    <LogOut className="w-4 h-4 text-amber-600" />
+                    <span>İşten Çıkış / Fesih Bilgileri (Ayrılan Personel İçin)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">İşten Çıkış Tarihi</label>
+                      <input
+                        type="date"
+                        value={newEmpForm.endDate}
+                        onChange={(e) => setNewEmpForm({ ...newEmpForm, endDate: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">SGK İşten Çıkış Kodu ve Nedeni</label>
+                      <select
+                        value={newEmpForm.terminationCode}
+                        onChange={(e) => {
+                          const code = e.target.value;
+                          const found = sgkTerminationReasons.find((r) => r.code === code);
+                          setNewEmpForm({
+                            ...newEmpForm,
+                            terminationCode: code,
+                            terminationReason: found ? found.reason : "",
+                          });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold cursor-pointer"
+                      >
+                        <option value="">-- SGK Çıkış Kodu Seçin --</option>
+                        {sgkTerminationReasons.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            Kod {item.code}: {item.reason.length > 55 ? item.reason.slice(0, 55) + "..." : item.reason}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {newEmpForm.terminationReason && (
+                    <div className="bg-white p-2.5 rounded-xl border border-amber-200 text-xs text-amber-900 font-medium">
+                      <span className="font-bold block">Seçilen Fesih Açıklaması:</span>
+                      Kod {newEmpForm.terminationCode} — {newEmpForm.terminationReason}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs transition-all shadow-md cursor-pointer"
+                >
+                  Kaydet ve Kartı Aç
+                </button>
+              </div>
+            </form>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* FULL-PAGE DETAIL VIEW: BORDRO & PUANTAJ HESAPLAMA */}
+      {editingPayrollEmp && (
+        <DetailPageLayout
+          title={`Bordro & Puantaj Hesaplama - ${editingPayrollEmp.fullName}`}
+          subtitle={`${payrollMonth} Dönemi • ${editingPayrollEmp.department} (${editingPayrollEmp.title}) • TC: ${editingPayrollEmp.tckn || "—"}`}
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Bordrolar", onClick: handleBackToList },
+            { label: editingPayrollEmp.fullName, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {payrollMonth} Dönemi
+            </span>
+          }
+          headerIcon={<Calculator className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
+              {/* Alfabetik Sıra ve Gezinme Butonları */}
+              {(() => {
+                const sortedAlphabetical = [...employees].sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"));
+                const currIdx = sortedAlphabetical.findIndex((e) => e.id === editingPayrollEmp.id);
+                const prevEmp = currIdx > 0 ? sortedAlphabetical[currIdx - 1] : null;
+                const nextEmp = currIdx !== -1 && currIdx + 1 < sortedAlphabetical.length ? sortedAlphabetical[currIdx + 1] : null;
+
+                return (
+                  <div className="flex items-center gap-1 bg-purple-50 p-1 rounded-xl border border-purple-200 text-xs">
+                    <button
+                      type="button"
+                      disabled={!prevEmp}
+                      onClick={() => prevEmp && handleOpenEditPayroll(prevEmp)}
+                      className="px-2.5 py-1 rounded-lg text-purple-900 font-bold hover:bg-purple-200/70 disabled:opacity-30 transition-all flex items-center gap-1 text-[11px] cursor-pointer disabled:cursor-not-allowed"
+                      title={prevEmp ? `Önceki: ${prevEmp.fullName}` : "İlk personel"}
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Önceki</span>
+                    </button>
+
+                    <span className="px-2 py-0.5 text-[11px] font-black text-purple-950 bg-white rounded-md border border-purple-200/80 shadow-2xs">
+                      {currIdx !== -1 ? currIdx + 1 : 1} / {sortedAlphabetical.length}
+                    </span>
+
+                    <button
+                      type="button"
+                      disabled={!nextEmp}
+                      onClick={() => nextEmp && handleOpenEditPayroll(nextEmp)}
+                      className="px-2.5 py-1 rounded-lg text-purple-900 font-bold hover:bg-purple-200/70 disabled:opacity-30 transition-all flex items-center gap-1 text-[11px] cursor-pointer disabled:cursor-not-allowed"
+                      title={nextEmp ? `Sonraki: ${nextEmp.fullName}` : "Son personel"}
+                    >
+                      <span className="hidden sm:inline">Sonraki</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })()}
+
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl w-full p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6 max-w-7xl mx-auto">
+
+            {/* Auto-Transfer Info Banners */}
+            {(() => {
+              const autoAdv = getAutoAdvanceForEmployee(editingPayrollEmp.id);
+              const autoLvs = getAutoLeavesForEmployee(editingPayrollEmp.id);
+              return (
+                <div className="space-y-2">
+                  {autoAdv.totalAdvance > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-900 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                        <div>
+                          <span className="font-bold block">Avans Yönetiminden Aktarıldı:</span>
+                          <span>Personelin onaylı {formatTRY(autoAdv.totalAdvance)} tutarında avansı bulundu ve kesintilere aktarıldı.</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingPayrollForm((prev) => ({ ...prev, advanceDeduction: autoAdv.totalAdvance }))}
+                        className="text-[11px] font-bold text-amber-800 underline hover:text-amber-950 cursor-pointer"
+                      >
+                        Yeniden Aktar
+                      </button>
+                    </div>
+                  )}
+
+                  {autoLvs.unpaidDays > 0 && (
+                    <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3 text-xs text-rose-900 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-rose-600 shrink-0" />
+                        <div>
+                          <span className="font-bold block">İzin Yönetiminden Aktarıldı:</span>
+                          <span>Personelin onaylı {autoLvs.unpaidDays} gün ücretsiz izni bulundu ve eksik gün kesintisine aktarıldı.</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingPayrollForm((prev) => ({ ...prev, unpaidLeaveDays: autoLvs.unpaidDays }))}
+                        className="text-[11px] font-bold text-rose-800 underline hover:text-rose-950 cursor-pointer"
+                      >
+                        Yeniden Aktar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ---------------------------------------------------- */}
+            {/* PUANTAJ TAKVİMİ & GÜN DAĞILIMI BÖLÜMÜ (2 SATIR DÜZENİ) */}
+            {/* ---------------------------------------------------- */}
+            {(() => {
+              const [pYearStr, pMonthStr] = payrollMonth.split("-");
+              const pYear = parseInt(pYearStr, 10) || 2026;
+              const pMonth = parseInt(pMonthStr, 10) || 7;
+              const daysInMonth = new Date(pYear, pMonth, 0).getDate();
+              const monthNamesTr = [
+                "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+                "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+              ];
+              const dayNamesShortTr = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
+
+              const currentPuantaj = editingPayrollForm.puantajDays || generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
+              const curSalaryType = editingPayrollForm.salaryType ?? editingPayrollEmp.salaryType;
+              const curBaseSalary = editingPayrollForm.baseSalary ?? editingPayrollEmp.salaryAmount;
+              const curBaseGross = curSalaryType === "gross" ? curBaseSalary : curBaseSalary * 1.38;
+              const stats = calculatePuantajStats(currentPuantaj, daysInMonth, curBaseGross);
+
+              const handleDayCodeChange = (dayNum: number, newCode: PuantajCode) => {
+                const existing = currentPuantaj[dayNum] || { code: "N" };
+                const updatedDay: DayPuantajDetail = {
+                  ...existing,
+                  code: newCode,
+                };
+                const updated = {
+                  ...currentPuantaj,
+                  [dayNum]: updatedDay,
+                };
+                const newStats = calculatePuantajStats(updated, daysInMonth, curBaseGross);
+                setEditingPayrollForm((prev) => ({
+                  ...prev,
+                  puantajDays: updated,
+                  unpaidLeaveDays: newStats.unpaidDays,
+                  overtimePay: newStats.calculatedOvertimePay,
+                  overtimeNormalHours: newStats.overtimeNormalHours,
+                  overtimeWeekendHours: newStats.overtimeWeekendHours,
+                  overtimeHolidayDays: newStats.overtimeHolidayDays,
+                  overtimeHolidayHours: newStats.overtimeHolidayHours,
+                }));
+              };
+
+              const handleDayOvertimeChange = (dayNum: number, hours: number) => {
+                const existing = currentPuantaj[dayNum] || { code: "N" };
+                const updatedDay: DayPuantajDetail = {
+                  ...existing,
+                  overtimeHours: hours > 0 ? hours : undefined,
+                };
+                const updated = {
+                  ...currentPuantaj,
+                  [dayNum]: updatedDay,
+                };
+                const newStats = calculatePuantajStats(updated, daysInMonth, curBaseGross);
+                setEditingPayrollForm((prev) => ({
+                  ...prev,
+                  puantajDays: updated,
+                  overtimePay: newStats.calculatedOvertimePay,
+                  overtimeNormalHours: newStats.overtimeNormalHours,
+                  overtimeWeekendHours: newStats.overtimeWeekendHours,
+                  overtimeHolidayDays: newStats.overtimeHolidayDays,
+                  overtimeHolidayHours: newStats.overtimeHolidayHours,
+                }));
+              };
+
+              const handleToggleHolidayFullDayOvertime = (dayNum: number) => {
+                const existing = currentPuantaj[dayNum] || { code: "N" };
+                const updatedDay: DayPuantajDetail = {
+                  ...existing,
+                  isHolidayOvertime: !existing.isHolidayOvertime,
+                };
+                const updated = {
+                  ...currentPuantaj,
+                  [dayNum]: updatedDay,
+                };
+                const newStats = calculatePuantajStats(updated, daysInMonth, curBaseGross);
+                setEditingPayrollForm((prev) => ({
+                  ...prev,
+                  puantajDays: updated,
+                  overtimePay: newStats.calculatedOvertimePay,
+                  overtimeNormalHours: newStats.overtimeNormalHours,
+                  overtimeWeekendHours: newStats.overtimeWeekendHours,
+                  overtimeHolidayDays: newStats.overtimeHolidayDays,
+                  overtimeHolidayHours: newStats.overtimeHolidayHours,
+                }));
+              };
+
+              const handleCycleDayCode = (dayNum: number) => {
+                const codeOrder: PuantajCode[] = ["N", "HT", "RT", "Yİ", "Üİ", "Dİ", "R", "M"];
+                const raw = currentPuantaj[dayNum];
+                const currentCode: PuantajCode = typeof raw === "string" ? raw : raw ? raw.code : "N";
+                const nextIdx = (codeOrder.indexOf(currentCode) + 1) % codeOrder.length;
+                handleDayCodeChange(dayNum, codeOrder[nextIdx]);
+              };
+
+              const handleResetToAutoPuantaj = () => {
+                const fresh = generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
+                const newStats = calculatePuantajStats(fresh, daysInMonth, curBaseGross);
+                setEditingPayrollForm((prev) => ({
+                  ...prev,
+                  puantajDays: fresh,
+                  unpaidLeaveDays: newStats.unpaidDays,
+                  overtimePay: newStats.calculatedOvertimePay,
+                  overtimeNormalHours: newStats.overtimeNormalHours,
+                  overtimeWeekendHours: newStats.overtimeWeekendHours,
+                  overtimeHolidayDays: newStats.overtimeHolidayDays,
+                  overtimeHolidayHours: newStats.overtimeHolidayHours,
+                }));
+              };
+
+              // 2 Satıra bölme (1. Satır: 1 - 15/16. gün, 2. Satır: kalan günler)
+              const halfCount = Math.ceil(daysInMonth / 2);
+              const row1Days = Array.from({ length: halfCount }, (_, i) => i + 1);
+              const row2Days = Array.from({ length: daysInMonth - halfCount }, (_, i) => halfCount + i + 1);
+
+              const renderDayCard = (dayNum: number) => {
+                const d = new Date(pYear, pMonth - 1, dayNum);
+                const dayOfWeek = d.getDay();
+                const dayName = dayNamesShortTr[dayOfWeek];
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                const raw = currentPuantaj[dayNum];
+                const code: PuantajCode = typeof raw === "string" ? raw : raw ? raw.code : "N";
+                const otHours = typeof raw === "object" && raw ? (raw.overtimeHours || 0) : 0;
+                const isHolOt = typeof raw === "object" && raw ? Boolean(raw.isHolidayOvertime) : false;
+                const cfg = PUANTAJ_CODE_CONFIG[code] || PUANTAJ_CODE_CONFIG["N"];
+                const holiday = getTurkishOfficialHoliday(pYear, pMonth, dayNum);
+
+                const isSpecialDay = code === "RT" || code === "HT";
+
+                return (
+                  <div
+                    key={dayNum}
+                    className={`group relative flex flex-col justify-between p-1.5 rounded-xl border transition-all hover:shadow-md ${cfg.bgClass} ${cfg.borderClass} min-w-[54px]`}
+                  >
+                    {/* Üst Kısım: Gün Adı & Gün Numarası */}
+                    <div className="w-full flex items-center justify-between text-[10px] font-bold text-slate-500 border-b border-black/5 pb-0.5 mb-1">
+                      <span className={isWeekend ? "text-purple-700 font-extrabold" : "text-slate-600"}>
+                        {dayName}
+                      </span>
+                      <span className="font-black text-slate-900 text-[11px] bg-white/90 px-1 rounded shadow-2xs">
+                        {dayNum}
+                      </span>
+                    </div>
+
+                    {/* Orta Kısım: Kod Rozeti & Tıklama ile Değiştirme */}
+                    <div
+                      onClick={() => handleCycleDayCode(dayNum)}
+                      className={`w-full py-1 rounded-lg font-black text-xs flex items-center justify-center shadow-2xs cursor-pointer select-none transition-transform active:scale-95 hover:opacity-90 ${cfg.badgeClass}`}
+                      title={`${dayNum} ${monthNamesTr[pMonth - 1]} (${dayName}) - ${cfg.label}. Tıklayarak kodu değiştirin.`}
+                    >
+                      {code}
+                    </div>
+
+                    {/* Tatil / Açıklama Metni */}
+                    <div className="w-full truncate text-[8.5px] font-extrabold text-slate-700 mt-0.5 text-center">
+                      {holiday ? (
+                        <span className="text-red-700 font-black truncate block" title={holiday}>
+                          {holiday.length > 7 ? holiday.slice(0, 6) + ".." : holiday}
+                        </span>
+                      ) : (
+                        <span className="truncate block opacity-80">{cfg.label}</span>
+                      )}
+                    </div>
+
+                    {/* Alt Kısım: Fazla Mesai Saati Girişi & Tam Gün Tatil Çalışması */}
+                    <div className="mt-1 pt-1 border-t border-black/5 flex flex-col gap-1">
+                      {/* Saatlik Mesai Giriş Alanı */}
+                      <div className="flex items-center gap-0.5 justify-center" title="Bu güne ait fazla mesai saati (örn: 2 veya 3.5)">
+                        <Clock className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="24"
+                          value={otHours > 0 ? otHours : ""}
+                          placeholder="0s"
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            handleDayOvertimeChange(dayNum, isNaN(val) ? 0 : val);
+                          }}
+                          className="w-9 h-5 text-[10px] font-black text-center bg-white border border-slate-300 rounded px-0.5 focus:outline-none focus:ring-1 focus:ring-purple-500 text-slate-900 placeholder:text-slate-300 shadow-2xs"
+                        />
+                      </div>
+
+                      {/* Tatil veya Hafta Tatilinde Tam Gün Çalışma Butonu */}
+                      {isSpecialDay && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleHolidayFullDayOvertime(dayNum)}
+                          className={`w-full text-[8px] font-black py-0.5 px-0.5 rounded transition-all cursor-pointer text-center leading-tight shadow-2xs ${
+                            isHolOt
+                              ? "bg-amber-600 text-white ring-1 ring-amber-700 font-black"
+                              : "bg-white/80 border border-slate-200 text-slate-600 hover:bg-amber-50 hover:text-amber-900"
+                          }`}
+                          title={code === "RT" ? "4857 Sayılı Kanun Md. 47: Resmi tatil günü tam gün çalışma (+1 yevmiye)" : "Hafta tatili tam gün çalışma"}
+                        >
+                          {isHolOt ? "✓ Mesaili" : "+ Tam Gün"}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Açılır Kod Seçici */}
+                    <select
+                      value={code}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleDayCodeChange(dayNum, e.target.value as PuantajCode);
+                      }}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full pointer-events-none"
+                      title="Puantaj Kodunu Değiştir"
+                      tabIndex={-1}
+                    >
+                      {(Object.keys(PUANTAJ_CODE_CONFIG) as PuantajCode[]).map((c) => (
+                        <option key={c} value={c}>
+                          {dayNum} {monthNamesTr[pMonth - 1]} ({dayName}) : {c} - {PUANTAJ_CODE_CONFIG[c].label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              };
+
+              return (
+                <div className="bg-purple-50/40 rounded-3xl border border-purple-200/80 p-4 sm:p-5 space-y-4 shadow-2xs">
+                  {/* Puantaj Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-200/60 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-purple-700 text-white flex items-center justify-center shadow-xs">
+                        <CalendarDays className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                          Puantaj Takvimi & Fazla Mesai Çizelgesi (2 Satır Görünüm)
+                          <span className="bg-purple-100 text-purple-900 text-[11px] font-bold px-2 py-0.5 rounded-md border border-purple-300">
+                            {monthNamesTr[pMonth - 1]} {pYear} ({daysInMonth} Gün)
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-slate-600 font-medium">
+                          Kutucuğa tıklayarak puantaj kodunu değiştirebilir, altındaki kutudan o güne ait <strong>fazla mesai saatini</strong> girebilirsiniz.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleResetToAutoPuantaj}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-purple-200 text-purple-900 text-xs font-bold hover:bg-purple-50 hover:border-purple-300 transition-all cursor-pointer shadow-2xs"
+                      title="Resmi tatil ve onaylı izinlere göre puantajı yeniden oluşturur"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Puantajı Otomatik Yenile
+                    </button>
+                  </div>
+
+                  {/* PUANTAJ KODLARI & AÇIKLAMA LEJANTI (LEGEND) */}
+                  <div className="bg-white rounded-2xl border border-purple-100 p-3 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase text-purple-950 tracking-wider">
+                        Puantaj Kodları ve Renk Anlamları
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400 hidden sm:inline">
+                        Koda tıklayarak veya kart üzerinden tek tıkla değiştirebilirsiniz
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+                      {(Object.keys(PUANTAJ_CODE_CONFIG) as PuantajCode[]).map((c) => {
+                        const cfg = PUANTAJ_CODE_CONFIG[c];
+                        let count = 0;
+                        if (c === "N") count = stats.countN;
+                        else if (c === "HT") count = stats.countHT;
+                        else if (c === "RT") count = stats.countRT;
+                        else if (c === "Yİ") count = stats.countYI;
+                        else if (c === "Üİ") count = stats.countUI;
+                        else if (c === "Dİ") count = stats.countDI;
+                        else if (c === "R") count = stats.countR;
+                        else if (c === "M") count = stats.countM;
+
+                        return (
+                          <div
+                            key={c}
+                            className={`flex items-center justify-between p-2 rounded-xl border text-xs font-bold transition-all ${cfg.bgClass} ${cfg.borderClass} ${cfg.textClass}`}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`w-6 h-6 rounded-lg font-black text-xs flex items-center justify-center shrink-0 shadow-2xs ${cfg.badgeClass}`}>
+                                {c}
+                              </span>
+                              <div className="truncate">
+                                <span className="block text-[11px] font-black truncate">{cfg.label}</span>
+                              </div>
+                            </div>
+                            <span className="text-xs font-black px-1.5 py-0.5 rounded-md bg-white/80 border border-black/5 shadow-2xs shrink-0">
+                              {count}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* PUANTAJ TAKVİM GÜNLERİ IZGARASI - İKİ SATIR OLARAK DÜZENLENDİ */}
+                  <div className="bg-white rounded-2xl border border-purple-200/70 p-3.5 shadow-2xs space-y-3 overflow-x-auto">
+                    {/* Satır 1: Ayın 1. Yarısı (1 - 15/16. Gün) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-black text-purple-950 px-1 border-b border-purple-100 pb-1">
+                        <span>1. Satır · 1 - {halfCount} {monthNamesTr[pMonth - 1]}</span>
+                        <span className="text-slate-400 font-semibold text-[10px]">İlk Yarı</span>
+                      </div>
+                      <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-16 gap-1.5">
+                        {row1Days.map((dayNum) => renderDayCard(dayNum))}
+                      </div>
+                    </div>
+
+                    {/* Satır 2: Ayın 2. Yarısı (16/17 - 30/31. Gün) */}
+                    <div className="space-y-1.5 pt-2 border-t border-purple-100">
+                      <div className="flex items-center justify-between text-[11px] font-black text-purple-950 px-1 border-b border-purple-100 pb-1">
+                        <span>2. Satır · {halfCount + 1} - {daysInMonth} {monthNamesTr[pMonth - 1]}</span>
+                        <span className="text-slate-400 font-semibold text-[10px]">İkinci Yarı</span>
+                      </div>
+                      <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-16 gap-1.5">
+                        {row2Days.map((dayNum) => renderDayCard(dayNum))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PUANTAJ ÖZET HAKEDİŞ İCMALİ */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 text-xs">
+                    <div className="bg-white p-2.5 rounded-xl border border-emerald-200 text-emerald-950 shadow-2xs">
+                      <span className="block text-[10px] font-bold text-emerald-700 uppercase">Normal Çalışma (N)</span>
+                      <span className="text-base font-black text-emerald-900">{stats.countN} Gün</span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-purple-200 text-purple-950 shadow-2xs">
+                      <span className="block text-[10px] font-bold text-purple-700 uppercase">Hafta Tatili (HT)</span>
+                      <span className="text-base font-black text-purple-900">{stats.countHT} Gün</span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-red-200 text-red-950 shadow-2xs">
+                      <span className="block text-[10px] font-bold text-red-700 uppercase">Resmi Tatil (RT)</span>
+                      <span className="text-base font-black text-red-900">{stats.countRT} Gün</span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-teal-200 text-teal-950 shadow-2xs">
+                      <span className="block text-[10px] font-bold text-teal-700 uppercase">Ücretli İzin (Yİ+Üİ)</span>
+                      <span className="text-base font-black text-teal-900">{stats.countYI + stats.countUI} Gün</span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-sky-200 text-sky-950 shadow-2xs">
+                      <span className="block text-[10px] font-bold text-sky-700 uppercase">Doğum İzni (Dİ)</span>
+                      <span className="text-base font-black text-sky-900">{stats.countDI} Gün</span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-rose-200 text-rose-950 shadow-2xs">
+                      <span className="block text-[10px] font-bold text-rose-700 uppercase">Eksik Gün (M+R)</span>
+                      <span className="text-base font-black text-rose-900">{stats.unpaidDays} Gün</span>
+                    </div>
+
+                    <div className="bg-purple-900 text-white p-2.5 rounded-xl border border-purple-950 shadow-2xs">
+                      <span className="block text-[10px] font-bold text-purple-200 uppercase">SGK Prim Günü</span>
+                      <span className="text-base font-black text-white">{stats.sgkDays} / 30 Gün</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <form onSubmit={handleSaveEditPayroll} className="space-y-4">
+              {/* Form Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-semibold">
+                {/* Salary Type & Amount */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Maaş Anlaşma Tipi & Temel Ücret</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={editingPayrollForm.salaryType || "net"}
+                      onChange={(e) => {
+                        const newType = e.target.value as any;
+                        const curSal = editingPayrollForm.baseSalary ?? 0;
+                        const newGross = newType === "gross" ? curSal : curSal * 1.38;
+                        const [pYearStr, pMonthStr] = payrollMonth.split("-");
+                        const pYear = parseInt(pYearStr, 10) || 2026;
+                        const pMonth = parseInt(pMonthStr, 10) || 7;
+                        const daysInMonth = new Date(pYear, pMonth, 0).getDate();
+                        const curPuantaj = editingPayrollForm.puantajDays || generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
+                        const newStats = calculatePuantajStats(curPuantaj, daysInMonth, newGross);
+                        setEditingPayrollForm({
+                          ...editingPayrollForm,
+                          salaryType: newType,
+                          overtimePay: newStats.calculatedOvertimePay,
+                        });
+                      }}
+                      className="bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-800 focus:outline-none focus:border-purple-500 cursor-pointer"
+                    >
+                      <option value="net">NET</option>
+                      <option value="gross">BRÜT</option>
+                    </select>
+                    <input
+                      type="number"
+                      required
+                      value={editingPayrollForm.baseSalary ?? 0}
+                      onChange={(e) => {
+                        const newSal = Number(e.target.value);
+                        const curType = editingPayrollForm.salaryType || "net";
+                        const newGross = curType === "gross" ? newSal : newSal * 1.38;
+                        const [pYearStr, pMonthStr] = payrollMonth.split("-");
+                        const pYear = parseInt(pYearStr, 10) || 2026;
+                        const pMonth = parseInt(pMonthStr, 10) || 7;
+                        const daysInMonth = new Date(pYear, pMonth, 0).getDate();
+                        const curPuantaj = editingPayrollForm.puantajDays || generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
+                        const newStats = calculatePuantajStats(curPuantaj, daysInMonth, newGross);
+                        setEditingPayrollForm({
+                          ...editingPayrollForm,
+                          baseSalary: newSal,
+                          overtimePay: newStats.calculatedOvertimePay,
+                        });
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Bonus / Prim / İkramiye */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Prim / İkramiye (₺)</label>
+                  <input
+                    type="number"
+                    value={editingPayrollForm.bonusAmount ?? 0}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, bonusAmount: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                {/* Overtime Pay & TC Labor Law Details (4857 Sayılı Kanun) */}
+                {(() => {
+                  const curSalType = editingPayrollForm.salaryType ?? "net";
+                  const curBaseSal = editingPayrollForm.baseSalary ?? 0;
+                  const curBaseGross = curSalType === "gross" ? curBaseSal : curBaseSal * 1.38;
+                  const [pYearStr, pMonthStr] = payrollMonth.split("-");
+                  const pYear = parseInt(pYearStr, 10) || 2026;
+                  const pMonth = parseInt(pMonthStr, 10) || 7;
+                  const daysInMonth = new Date(pYear, pMonth, 0).getDate();
+                  const curPuantaj = editingPayrollForm.puantajDays || generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
+                  const otStats = calculatePuantajStats(curPuantaj, daysInMonth, curBaseGross);
+
+                  return (
+                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 bg-gradient-to-br from-purple-50/80 via-fuchsia-50/40 to-slate-50 p-4 rounded-2xl border border-purple-200/90 space-y-3 shadow-2xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-200/60 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-purple-700" />
+                          <div>
+                            <label className="block font-black text-purple-950 uppercase text-xs">
+                              Fazla Mesai Tutarı & Yasal Dağılımı (4857 Sayılı İş Kanunu)
+                            </label>
+                            <span className="text-[10px] text-purple-800 font-medium">
+                              T.C. İş Kanunu Esasları: Saatlik Brüt = Brüt/225 · Günlük Yevmiye = Brüt/30 · Hafta İçi %50 Zamlı · Hafta Tatili/Resmi Tatil %100 Zamlı
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-slate-600">Toplam Mesai Tutarı (₺):</span>
+                          <input
+                            type="number"
+                            value={editingPayrollForm.overtimePay ?? 0}
+                            onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, overtimePay: Number(e.target.value) })}
+                            className="w-32 bg-white border border-purple-300 rounded-xl p-1.5 font-black text-purple-950 text-sm focus:outline-none focus:border-purple-600 shadow-2xs text-right"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+
+                      {/* GÜN VE SAAT AYRI AYRI DETAYLI GÖSTERİM KARTLARI */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                        {/* 1. Hafta İçi Mesai Saati */}
+                        <div className="bg-white p-2.5 rounded-xl border border-emerald-200 shadow-2xs space-y-1">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-emerald-800 uppercase">
+                            <span>Hafta İçi Mesai</span>
+                            <span className="bg-emerald-100 text-emerald-900 px-1 py-0.2 rounded text-[9px]">%50 Zamlı</span>
+                          </div>
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-base font-black text-emerald-950">{otStats.overtimeNormalHours} Saat</span>
+                            <span className="text-xs font-black text-emerald-700">{formatTRY(otStats.normalOvertimePay)}</span>
+                          </div>
+                          <div className="text-[9px] text-slate-500 font-medium">
+                            Saat Başı: {formatTRY(otStats.hourlyGross * 1.5)}
+                          </div>
+                        </div>
+
+                        {/* 2. Hafta Tatili Mesai Saati */}
+                        <div className="bg-white p-2.5 rounded-xl border border-purple-200 shadow-2xs space-y-1">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-purple-800 uppercase">
+                            <span>Hafta Tatili Mesai</span>
+                            <span className="bg-purple-100 text-purple-900 px-1 py-0.2 rounded text-[9px]">%100 Zamlı</span>
+                          </div>
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-base font-black text-purple-950">{otStats.overtimeWeekendHours} Saat</span>
+                            <span className="text-xs font-black text-purple-700">{formatTRY(otStats.weekendOvertimePay)}</span>
+                          </div>
+                          <div className="text-[9px] text-slate-500 font-medium">
+                            Saat Başı: {formatTRY(otStats.hourlyGross * 2.0)}
+                          </div>
+                        </div>
+
+                        {/* 3. Resmi Tatil Saatlik Mesai */}
+                        <div className="bg-white p-2.5 rounded-xl border border-amber-200 shadow-2xs space-y-1">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-amber-800 uppercase">
+                            <span>Resmi Tatil (Saat)</span>
+                            <span className="bg-amber-100 text-amber-900 px-1 py-0.2 rounded text-[9px]">%100 Zamlı</span>
+                          </div>
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-base font-black text-amber-950">{otStats.overtimeHolidayHours} Saat</span>
+                            <span className="text-xs font-black text-amber-700">{formatTRY(otStats.holidayHoursOvertimePay)}</span>
+                          </div>
+                          <div className="text-[9px] text-slate-500 font-medium">
+                            Saat Başı: {formatTRY(otStats.hourlyGross * 2.0)}
+                          </div>
+                        </div>
+
+                        {/* 4. Resmi Tatil Tam Gün Çalışma (Gün Bazlı) */}
+                        <div className="bg-white p-2.5 rounded-xl border border-red-200 shadow-2xs space-y-1">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-red-800 uppercase">
+                            <span>Resmi Tatil (Gün)</span>
+                            <span className="bg-red-100 text-red-900 px-1 py-0.2 rounded text-[9px]">1 Tam Yevmiye</span>
+                          </div>
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-base font-black text-red-950">{otStats.overtimeHolidayDays} Gün</span>
+                            <span className="text-xs font-black text-red-700">{formatTRY(otStats.holidayDaysOvertimePay)}</span>
+                          </div>
+                          <div className="text-[9px] text-slate-500 font-medium">
+                            Günlük Yevmiye: {formatTRY(otStats.dailyGross)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Toplam Fazla Mesai İcmali */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 bg-purple-900/10 border border-purple-200 p-2.5 rounded-xl text-xs text-purple-950 font-bold">
+                        <div className="flex items-center gap-3">
+                          <span>Toplam Süre: <span className="text-purple-900 font-black">{otStats.totalOvertimeHours} Saat</span> + <span className="text-red-900 font-black">{otStats.overtimeHolidayDays} Gün</span></span>
+                          <span className="text-slate-400">|</span>
+                          <span>Birim Saatlik Brüt: <span className="text-slate-800 font-black">{formatTRY(otStats.hourlyGross)}</span></span>
+                          <span className="text-slate-400">|</span>
+                          <span>Günlük Brüt: <span className="text-slate-800 font-black">{formatTRY(otStats.dailyGross)}</span></span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPayrollForm((prev) => ({
+                              ...prev,
+                              overtimePay: otStats.calculatedOvertimePay,
+                              overtimeNormalHours: otStats.overtimeNormalHours,
+                              overtimeWeekendHours: otStats.overtimeWeekendHours,
+                              overtimeHolidayDays: otStats.overtimeHolidayDays,
+                              overtimeHolidayHours: otStats.overtimeHolidayHours,
+                            }));
+                          }}
+                          className="text-[11px] font-black bg-purple-700 text-white px-2.5 py-1 rounded-lg hover:bg-purple-800 transition-all cursor-pointer shadow-2xs"
+                        >
+                          Otomatik Tutarı Aktar ({formatTRY(otStats.calculatedOvertimePay)})
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Food Allowance */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Yemek Yardımı (₺)</label>
+                  <input
+                    type="number"
+                    value={editingPayrollForm.foodAllowance ?? 0}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, foodAllowance: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {/* Road Allowance */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Yol / Ulaşım Yardımı (₺)</label>
+                  <input
+                    type="number"
+                    value={editingPayrollForm.roadAllowance ?? 0}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, roadAllowance: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {/* Advance Deduction (Entegre) */}
+                <div className="bg-amber-50/60 p-3.5 rounded-2xl border border-amber-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-bold text-amber-900 uppercase text-[11px]">Avans Kesintisi (₺)</label>
+                    <span className="text-[10px] text-amber-700 font-bold">Avans Yönetimi Entegre</span>
+                  </div>
+                  <input
+                    type="number"
+                    value={editingPayrollForm.advanceDeduction ?? 0}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, advanceDeduction: Number(e.target.value) })}
+                    className="w-full bg-white border border-amber-300 rounded-xl p-2 font-black text-amber-900 text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Unpaid Leave Days (Entegre & Puantaj ile Otomatik) */}
+                <div className="bg-rose-50/60 p-3.5 rounded-2xl border border-rose-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-bold text-rose-900 uppercase text-[11px]">Ücretsiz İzin / Eksik Gün (Gün)</label>
+                    <span className="text-[10px] text-rose-700 font-bold">Puantaj Takvimi Entegre</span>
+                  </div>
+                  <input
+                    type="number"
+                    value={editingPayrollForm.unpaidLeaveDays ?? 0}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, unpaidLeaveDays: Number(e.target.value) })}
+                    className="w-full bg-white border border-rose-300 rounded-xl p-2 font-black text-rose-900 text-sm focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                {/* BES Kesintisi */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                  <label className="block font-bold text-slate-800 uppercase text-[11px]">BES Kesintisi (₺)</label>
+                  <input
+                    type="number"
+                    value={editingPayrollForm.besDeduction ?? 0}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, besDeduction: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {/* İcra Kesintisi */}
+                <div className="bg-red-50/60 p-3.5 rounded-2xl border border-red-200 space-y-2">
+                  <label className="block font-bold text-red-900 uppercase text-[11px]">İcra Kesintisi (₺)</label>
+                  <input
+                    type="number"
+                    value={editingPayrollForm.executionDeduction ?? 0}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, executionDeduction: Number(e.target.value) })}
+                    className="w-full bg-white border border-red-300 rounded-xl p-2 font-black text-red-900 text-sm focus:outline-none focus:border-red-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                {/* Nafaka Kesintisi */}
+                <div className="bg-purple-50/60 p-3.5 rounded-2xl border border-purple-200 space-y-2">
+                  <label className="block font-bold text-purple-900 uppercase text-[11px]">Nafaka Kesintisi (₺)</label>
+                  <input
+                    type="number"
+                    value={editingPayrollForm.alimonyDeduction ?? 0}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, alimonyDeduction: Number(e.target.value) })}
+                    className="w-full bg-white border border-purple-300 rounded-xl p-2 font-black text-purple-900 text-sm focus:outline-none focus:border-purple-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                {/* Diğer Kesintiler */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Diğer Kesintiler (₺)</label>
+                  <input
+                    type="number"
+                    value={editingPayrollForm.otherDeductions ?? 0}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, otherDeductions: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              {/* Calculated Live Breakdown Summary */}
+              {(() => {
+                const baseSal = editingPayrollForm.baseSalary ?? 0;
+                const salType = editingPayrollForm.salaryType ?? "net";
+                const bonus = editingPayrollForm.bonusAmount ?? 0;
+                const overtime = editingPayrollForm.overtimePay ?? 0;
+                const food = editingPayrollForm.foodAllowance ?? 0;
+                const road = editingPayrollForm.roadAllowance ?? 0;
+                const advDeduct = editingPayrollForm.advanceDeduction ?? 0;
+                const lvsDays = editingPayrollForm.unpaidLeaveDays ?? 0;
+
+                const baseGross = salType === "gross" ? baseSal : baseSal * 1.38;
+                const unpaidLeaveDeduction = Math.round((baseGross / 30) * lvsDays);
+                const grossSal = Math.max(0, baseGross + bonus + overtime + food + road - unpaidLeaveDeduction);
+
+                const sgkEmp = Math.round(grossSal * 0.14);
+                const unempEmp = Math.round(grossSal * 0.01);
+                const taxBase = Math.round(grossSal - (sgkEmp + unempEmp));
+                const incTax = Math.round(Math.max(0, taxBase * 0.15 - 2950));
+                const stamp = Math.round(grossSal * 0.00759);
+                const netHak = Math.round(grossSal - (sgkEmp + unempEmp + incTax + stamp));
+                const besDed = editingPayrollForm.besDeduction ?? 0;
+                const execDed = editingPayrollForm.executionDeduction ?? 0;
+                const aliDed = editingPayrollForm.alimonyDeduction ?? 0;
+                const othDed = editingPayrollForm.otherDeductions ?? 0;
+                const payableNet = Math.max(0, netHak - advDeduct - besDed - execDed - aliDed - othDed);
+
+                return (
+                  <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] uppercase font-bold text-purple-300 block">Canlı Bordro Hakediş Özeti</span>
+                      {(execDed > 0 || aliDed > 0 || othDed > 0) && (
+                        <span className="text-[10px] bg-red-500/30 text-red-200 border border-red-400/40 px-2 py-0.5 rounded-full font-bold">
+                          Özel Kesintiler Mevcut (-{formatTRY(execDed + aliDed + othDed)})
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Hesaplanan Brüt</span>
+                        <span className="font-bold text-white text-sm sm:text-base">{formatTRY(grossSal)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Eksik Gün Kesintisi ({lvsDays} Gün)</span>
+                        <span className="font-bold text-rose-300 text-sm sm:text-base">{formatTRY(unpaidLeaveDeduction)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">SGK + Vergi Kesintisi</span>
+                        <span className="font-bold text-amber-300 text-sm sm:text-base">{formatTRY(sgkEmp + unempEmp + incTax + stamp)}</span>
+                      </div>
+                      <div>
+                        <span className="text-emerald-400 block text-[10px] font-bold">NET ÖDENECEK MAAŞ</span>
+                        <span className="font-black text-emerald-300 text-base sm:text-lg">{formatTRY(payableNet)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const autoAdv = getAutoAdvanceForEmployee(editingPayrollEmp.id);
+                    const autoLvs = getAutoLeavesForEmployee(editingPayrollEmp.id);
+                    const freshPuantaj = generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
+                    const [yearStr, monthStr] = payrollMonth.split("-");
+                    const year = parseInt(yearStr, 10) || 2026;
+                    const month = parseInt(monthStr, 10) || 7;
+                    const daysInMonth = new Date(year, month, 0).getDate();
+                    const freshStats = calculatePuantajStats(freshPuantaj, daysInMonth);
+
+                    setEditingPayrollForm({
+                      salaryType: editingPayrollEmp.salaryType,
+                      baseSalary: editingPayrollEmp.salaryAmount,
+                      bonusAmount: 0,
+                      overtimePay: 0,
+                      foodAllowance: editingPayrollEmp.foodAllowance || 0,
+                      roadAllowance: editingPayrollEmp.roadAllowance || 0,
+                      advanceDeduction: autoAdv.totalAdvance,
+                      unpaidLeaveDays: freshStats.unpaidDays > 0 ? freshStats.unpaidDays : autoLvs.unpaidDays,
+                      besDeduction: editingPayrollEmp.hasBes ? Math.round((editingPayrollEmp.salaryAmount * (editingPayrollEmp.salaryType === "net" ? 1.38 : 1)) * 0.03) : 0,
+                      executionDeduction: 0,
+                      alimonyDeduction: 0,
+                      otherDeductions: 0,
+                      notes: "",
+                      puantajDays: freshPuantaj,
+                    });
+                  }}
+                  className="px-3 py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                >
+                  Varsayılanlara Sıfırla
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBackToList}
+                    className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Vazgeç
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEditPayroll(undefined, false)}
+                    className="px-3.5 py-2 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-950 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                    title="Sadece bu personeli kaydet ve pencereyi kapat"
+                  >
+                    Kaydet ve Kapat
+                  </button>
+
+                  {(() => {
+                    const sortedAlphabetical = [...employees].sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"));
+                    const currIdx = sortedAlphabetical.findIndex((e) => e.id === editingPayrollEmp.id);
+                    const nextEmp = currIdx !== -1 && currIdx + 1 < sortedAlphabetical.length ? sortedAlphabetical[currIdx + 1] : null;
+
+                    return (
+                      <button
+                        type="submit"
+                        className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-md cursor-pointer transition-all flex items-center gap-2"
+                        title={
+                          nextEmp
+                            ? `Kaydet ve alfabetik sıradaki sonraki personel (${nextEmp.fullName}) için bordroyu aç`
+                            : "Bordroyu kaydet ve tamamla"
+                        }
+                      >
+                        <span>{nextEmp ? `Kaydet & Sıradakine Geç (${nextEmp.fullName.split(" ")[0]})` : "Kaydet ve Tamamla"}</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    );
+                  })()}
+                </div>
+              </div>
+            </form>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* FULL-PAGE DETAIL VIEW: BORDRO PUSULASI */}
+      {selectedPayrollRecord && (
+        <DetailPageLayout
+          title={`Ücret Hesap Pusulası - ${selectedPayrollRecord.employeeName}`}
+          subtitle={`Bordro Dönemi: ${selectedPayrollRecord.monthYear} • Departman: ${selectedPayrollRecord.department} • Net Maaş: ${formatTRY(selectedPayrollRecord.payableNetSalary)}`}
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Bordrolar", onClick: handleBackToList },
+            { label: `${selectedPayrollRecord.employeeName} (${selectedPayrollRecord.monthYear})`, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-emerald-50 text-emerald-700 border-emerald-200">
+              {formatTRY(selectedPayrollRecord.payableNetSalary)}
+            </span>
+          }
+          headerIcon={<Receipt className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Printer className="w-4 h-4" /> <span>Yazdır / PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Geri Dön
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+
+            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-semibold">
+              <div className="flex justify-between py-1 border-b border-slate-200">
+                <span className="text-slate-500">Personel Adı Soyadı:</span>
+                <span className="font-bold text-slate-900">{selectedPayrollRecord.employeeName}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200">
+                <span className="text-slate-500">Departman:</span>
+                <span className="font-bold text-slate-800">{selectedPayrollRecord.department}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200">
+                <span className="text-slate-500">Temel Brüt Ücret:</span>
+                <span className="font-bold text-slate-900">{formatTRY(selectedPayrollRecord.grossSalary)}</span>
+              </div>
+
+              {Boolean(selectedPayrollRecord.bonusAmount) && (
+                <div className="flex justify-between py-1 border-b border-slate-200 text-emerald-700">
+                  <span>+ Prim / İkramiye:</span>
+                  <span className="font-bold">+{formatTRY(selectedPayrollRecord.bonusAmount || 0)}</span>
+                </div>
+              )}
+
+              {Boolean(selectedPayrollRecord.overtimePay) && (
+                <div className="border-b border-slate-200 py-1 text-emerald-700 space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="font-bold">+ Fazla Mesai Toplamı:</span>
+                    <span className="font-black">+{formatTRY(selectedPayrollRecord.overtimePay || 0)}</span>
+                  </div>
+                  {(Boolean(selectedPayrollRecord.overtimeNormalHours) ||
+                    Boolean(selectedPayrollRecord.overtimeWeekendHours) ||
+                    Boolean(selectedPayrollRecord.overtimeHolidayHours) ||
+                    Boolean(selectedPayrollRecord.overtimeHolidayDays)) && (
+                    <div className="text-[10px] text-emerald-800 bg-emerald-50/70 p-1.5 rounded-lg space-y-0.5 font-semibold">
+                      {Boolean(selectedPayrollRecord.overtimeNormalHours) && (
+                        <div className="flex justify-between">
+                          <span>· Hafta İçi (%50 zamlı):</span>
+                          <span>{selectedPayrollRecord.overtimeNormalHours} Saat</span>
+                        </div>
+                      )}
+                      {Boolean(selectedPayrollRecord.overtimeWeekendHours) && (
+                        <div className="flex justify-between">
+                          <span>· Hafta Tatili (%100 zamlı):</span>
+                          <span>{selectedPayrollRecord.overtimeWeekendHours} Saat</span>
+                        </div>
+                      )}
+                      {Boolean(selectedPayrollRecord.overtimeHolidayHours) && (
+                        <div className="flex justify-between">
+                          <span>· Resmi Tatil Saat (%100 zamlı):</span>
+                          <span>{selectedPayrollRecord.overtimeHolidayHours} Saat</span>
+                        </div>
+                      )}
+                      {Boolean(selectedPayrollRecord.overtimeHolidayDays) && (
+                        <div className="flex justify-between">
+                          <span>· Resmi Tatil Tam Gün (1 Yevmiye):</span>
+                          <span>{selectedPayrollRecord.overtimeHolidayDays} Gün</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-between py-1 border-b border-slate-200">
+                <span className="text-slate-500">SGK İşçi Payı (%14):</span>
+                <span className="text-slate-800">{formatTRY(selectedPayrollRecord.sgkEmployeeShare)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200">
+                <span className="text-slate-500">İşsizlik Sigortası İşçi (%1):</span>
+                <span className="text-slate-800">{formatTRY(selectedPayrollRecord.unemploymentEmployeeShare)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200">
+                <span className="text-slate-500">Gelir Vergisi:</span>
+                <span className="text-slate-800">{formatTRY(selectedPayrollRecord.incomeTax)}</span>
+              </div>
+
+              {Boolean(selectedPayrollRecord.advanceDeduction) && (
+                <div className="flex justify-between py-1 border-b border-slate-200 text-amber-800 bg-amber-50/50 px-2 py-1 rounded-lg">
+                  <span>- Avans Kesintisi (Entegre):</span>
+                  <span className="font-bold">-{formatTRY(selectedPayrollRecord.advanceDeduction || 0)}</span>
+                </div>
+              )}
+
+              {Boolean(selectedPayrollRecord.unpaidLeaveDays) && (
+                <div className="flex justify-between py-1 border-b border-slate-200 text-rose-800 bg-rose-50/50 px-2 py-1 rounded-lg">
+                  <span>- Ücretsiz İzin Kesintisi ({selectedPayrollRecord.unpaidLeaveDays} Gün):</span>
+                  <span className="font-bold">-{formatTRY(selectedPayrollRecord.unpaidLeaveDeduction || 0)}</span>
+                </div>
+              )}
+
+              {Boolean(selectedPayrollRecord.besDeduction) && (
+                <div className="flex justify-between py-1 border-b border-slate-200 text-slate-700">
+                  <span>- BES Kesintisi:</span>
+                  <span className="font-bold">-{formatTRY(selectedPayrollRecord.besDeduction || 0)}</span>
+                </div>
+              )}
+
+              {Boolean(selectedPayrollRecord.executionDeduction) && (
+                <div className="flex justify-between py-1 border-b border-slate-200 text-red-800 bg-red-50/50 px-2 py-1 rounded-lg">
+                  <span className="font-bold">- İcra Kesintisi:</span>
+                  <span className="font-extrabold">-{formatTRY(selectedPayrollRecord.executionDeduction || 0)}</span>
+                </div>
+              )}
+
+              {Boolean(selectedPayrollRecord.alimonyDeduction) && (
+                <div className="flex justify-between py-1 border-b border-slate-200 text-purple-800 bg-purple-50/50 px-2 py-1 rounded-lg">
+                  <span className="font-bold">- Nafaka Kesintisi:</span>
+                  <span className="font-extrabold">-{formatTRY(selectedPayrollRecord.alimonyDeduction || 0)}</span>
+                </div>
+              )}
+
+              {Boolean(selectedPayrollRecord.otherDeductions) && (
+                <div className="flex justify-between py-1 border-b border-slate-200 text-slate-800 bg-slate-100/70 px-2 py-1 rounded-lg">
+                  <span>- Diğer Kesintiler:</span>
+                  <span className="font-bold">-{formatTRY(selectedPayrollRecord.otherDeductions || 0)}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between py-2 border-b border-slate-300 font-black text-sm text-emerald-800 bg-emerald-50 px-3 rounded-xl mt-2">
+                <span>NET ÖDENECEK MAAŞ:</span>
+                <span>{formatTRY(selectedPayrollRecord.payableNetSalary)}</span>
+              </div>
+              <div className="flex justify-between py-1 pt-1">
+                <span className="text-slate-500">Toplam İşveren Maliyeti:</span>
+                <span className="font-bold text-purple-900">{formatTRY(selectedPayrollRecord.totalEmployerCost)}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold rounded-xl text-xs cursor-pointer"
+              >
+                Geri Dön
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.print();
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Printer className="w-4 h-4" /> Yazdır / PDF
+              </button>
+            </div>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* FULL-PAGE DETAIL VIEW: IZIN TALEBI */}
+      {isAddLeaveOpen && (
+        <DetailPageLayout
+          title="Yeni İzin Talebi Oluştur"
+          subtitle="Yıllık ücretli izin, analık, babalık, mazeret ve ücretsiz izin kayıtları"
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "İzin Talepleri", onClick: handleBackToList },
+            { label: "Yeni İzin", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              Yeni Talep
+            </span>
+          }
+          headerIcon={<Calendar className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="add-leave-form"
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>Talebi Oluştur</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+            <form id="add-leave-form" onSubmit={handleCreateLeaveSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Personel Seçin *</label>
+                <select
+                  value={newLeaveForm.employeeId}
+                  onChange={(e) => {
+                    const empId = e.target.value;
+                    const emp = employees.find((x) => x.id === empId);
+                    setNewLeaveForm((prev) => ({
+                      ...prev,
+                      employeeId: empId,
+                      // If selecting male and currently female maternity, adjust or vice versa
+                      type: prev.type,
+                    }));
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 cursor-pointer"
+                >
+                  {[...employees]
+                    .sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"))
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.fullName} ({emp.gender === "Kadın" ? "Kadın ♀" : "Erkek ♂"} · {emp.department} - {emp.title})
+                      </option>
+                    ))}
+                </select>
+
+                {(() => {
+                  const selEmp = employees.find((e) => e.id === newLeaveForm.employeeId) || employees[0];
+                  if (!selEmp) return null;
+                  return (
+                    <div className="mt-1.5 flex items-center gap-2 text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+                      <span>Seçilen Çalışan:</span>
+                      <strong className="text-slate-900">{selEmp.fullName}</strong>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                        selEmp.gender === "Kadın"
+                          ? "bg-pink-100 text-pink-800 border-pink-200"
+                          : "bg-blue-100 text-blue-800 border-blue-200"
+                      }`}>
+                        {selEmp.gender === "Kadın" ? "Kadın ♀" : "Erkek ♂"}
+                      </span>
+                      <span className="text-slate-400">·</span>
+                      <span className="text-purple-700 font-bold">{selEmp.department}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Hızlı İzin Şablonları */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Hızlı Yasal İzin Şablonları</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
+                      const end = addDaysToDate(start, 5);
+                      setNewLeaveForm({
+                        ...newLeaveForm,
+                        type: "Babalık İzni (Erkek Doğum İzni)",
+                        daysCount: 5,
+                        startDate: start,
+                        endDate: end,
+                        reason: "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Eşi Doğum Yapan Erkek Personel Babalık İzni",
+                      });
+                    }}
+                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
+                      newLeaveForm.type === "Babalık İzni (Erkek Doğum İzni)"
+                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                        : "bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-200"
+                    }`}
+                  >
+                    <span>🍼</span>
+                    <span>Babalık İzni (Erkek Doğum - 5 Gün)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
+                      const end = addDaysToDate(start, 112);
+                      setNewLeaveForm({
+                        ...newLeaveForm,
+                        type: "Analık / Doğum İzni",
+                        daysCount: 112,
+                        startDate: start,
+                        endDate: end,
+                        reason: "4857 Sayılı İş Kanunu Md. 74 Uyarınca Kadın Personel Doğum (Analık) İzni",
+                      });
+                    }}
+                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
+                      newLeaveForm.type === "Analık / Doğum İzni"
+                        ? "bg-pink-600 text-white border-pink-600 shadow-xs"
+                        : "bg-pink-50 hover:bg-pink-100 text-pink-900 border-pink-200"
+                    }`}
+                  >
+                    <span>🤰</span>
+                    <span>Analık İzni (Kadın - 16 Hafta)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
+                      const end = addDaysToDate(start, 3);
+                      setNewLeaveForm({
+                        ...newLeaveForm,
+                        type: "Evlilik İzni",
+                        daysCount: 3,
+                        startDate: start,
+                        endDate: end,
+                        reason: "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Evlilik İzni (3 Gün Ücretli)",
+                      });
+                    }}
+                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
+                      newLeaveForm.type === "Evlilik İzni"
+                        ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                        : "bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200"
+                    }`}
+                  >
+                    <span>💍</span>
+                    <span>Evlilik (3 Gün)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
+                      const end = addDaysToDate(start, 3);
+                      setNewLeaveForm({
+                        ...newLeaveForm,
+                        type: "Vefat İzni",
+                        daysCount: 3,
+                        startDate: start,
+                        endDate: end,
+                        reason: "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Vefat İzni (3 Gün Ücretli)",
+                      });
+                    }}
+                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
+                      newLeaveForm.type === "Vefat İzni"
+                        ? "bg-slate-700 text-white border-slate-700 shadow-xs"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+                    }`}
+                  >
+                    <span>🕊️</span>
+                    <span>Vefat (3 Gün)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
+                      const end = addDaysToDate(start, 5);
+                      setNewLeaveForm({
+                        ...newLeaveForm,
+                        type: "Yıllık İzin",
+                        daysCount: 5,
+                        startDate: start,
+                        endDate: end,
+                        reason: "Yıllık Ücretli İzin Kullanımı",
+                      });
+                    }}
+                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
+                      newLeaveForm.type === "Yıllık İzin"
+                        ? "bg-teal-600 text-white border-teal-600 shadow-xs"
+                        : "bg-teal-50 hover:bg-teal-100 text-teal-900 border-teal-200"
+                    }`}
+                  >
+                    <span>🏖️</span>
+                    <span>Yıllık İzin</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">İzin Türü *</label>
+                <select
+                  value={newLeaveForm.type || "Yıllık İzin"}
+                  onChange={(e) => {
+                    const selected = e.target.value as any;
+                    const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
+                    let days = Number(newLeaveForm.daysCount) || 1;
+                    let autoReason = newLeaveForm.reason;
+
+                    if (selected === "Babalık İzni (Erkek Doğum İzni)") {
+                      days = 5;
+                      autoReason = "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Eşi Doğum Yapan Erkek Personel Babalık İzni";
+                    } else if (selected === "Analık / Doğum İzni") {
+                      days = 112;
+                      autoReason = "4857 Sayılı İş Kanunu Md. 74 Uyarınca Kadın Personel Doğum (Analık) İzni";
+                    } else if (selected === "Evlilik İzni") {
+                      days = 3;
+                      autoReason = "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Evlilik İzni";
+                    } else if (selected === "Vefat İzni") {
+                      days = 3;
+                      autoReason = "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Vefat İzni";
+                    }
+
+                    const end = addDaysToDate(start, days);
+                    setNewLeaveForm({
+                      ...newLeaveForm,
+                      type: selected,
+                      daysCount: days,
+                      endDate: end,
+                      reason: autoReason,
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-purple-900 cursor-pointer"
+                >
+                  <option value="Babalık İzni (Erkek Doğum İzni)">🍼 Babalık İzni (Erkek Doğum İzni - 5 Gün Ücretli)</option>
+                  <option value="Analık / Doğum İzni">🤰 Analık / Doğum İzni (Kadın Personel - 16 Hafta / 112 Gün)</option>
+                  <option value="Yıllık İzin">🏖️ Yıllık İzin (Ücretli İzin)</option>
+                  <option value="Evlilik İzni">💍 Evlilik İzni (3 Gün Ücretli)</option>
+                  <option value="Vefat İzni">🕊️ Vefat İzni (3 Gün Ücretli)</option>
+                  <option value="Ücretli İzin">📋 Ücretli İzin (Mazeret / İdari İzin)</option>
+                  <option value="Ücretsiz İzin">⏳ Ücretsiz İzin (Maaş Kesintili)</option>
+                  <option value="Mazeretsiz İzin">🚫 Mazeretsiz İzin (Maaş Kesintili)</option>
+                  <option value="Sıhhi İzin">🩺 Sıhhi İzin (Rapor - 2 Güne Kadar Ücretli)</option>
+                  <option value="Hastalık/Rapor">🏥 Hastalık / SGK İstirahat Raporu</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Başlangıç Tarihi *</label>
+                  <input
+                    type="date"
+                    required
+                    value={newLeaveForm.startDate}
+                    onChange={(e) => {
+                      const newStart = e.target.value;
+                      const days = Number(newLeaveForm.daysCount) || 1;
+                      const newEnd = addDaysToDate(newStart, days);
+                      setNewLeaveForm({
+                        ...newLeaveForm,
+                        startDate: newStart,
+                        endDate: newEnd,
+                      });
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Bitiş Tarihi *</label>
+                  <input
+                    type="date"
+                    required
+                    value={newLeaveForm.endDate}
+                    onChange={(e) => {
+                      const newEnd = e.target.value;
+                      const start = newLeaveForm.startDate || newEnd;
+                      const diff = calculateDaysDiff(start, newEnd);
+                      setNewLeaveForm({
+                        ...newLeaveForm,
+                        endDate: newEnd,
+                        daysCount: diff,
+                      });
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">İzin Gün Sayısı *</label>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  value={newLeaveForm.daysCount}
+                  onChange={(e) => {
+                    const days = Math.max(1, Number(e.target.value) || 1);
+                    const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
+                    const end = addDaysToDate(start, days);
+                    setNewLeaveForm({
+                      ...newLeaveForm,
+                      daysCount: days,
+                      endDate: end,
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-extrabold text-slate-900"
+                />
+              </div>
+
+              {/* Dynamic Calculation Notice Box with Law Reference */}
+              {(() => {
+                const selectedType = newLeaveForm.type || "Yıllık İzin";
+                const days = Number(newLeaveForm.daysCount) || 1;
+                const selEmp = employees.find((e) => e.id === newLeaveForm.employeeId) || employees[0];
+                const isMale = selEmp?.gender !== "Kadın";
+
+                if (selectedType.toLowerCase().includes("babalık") || selectedType.toLowerCase().includes("erkek doğum")) {
+                  return (
+                    <div className="bg-blue-50 border border-blue-300 rounded-2xl p-3 text-xs text-blue-950 font-medium space-y-1.5 shadow-xs">
+                      <div className="flex items-center gap-1.5 font-black text-blue-900 text-xs">
+                        <span className="text-base">🍼</span>
+                        <span>4857 Sayılı İş Kanunu Ek Md. 2: Erkek Personel Babalık İzni</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-blue-900">
+                        Eşi doğum yapan <strong>erkek personele 5 gün yasal ücretli babalık izni</strong> verilir. Bu süre boyunca çalışanın <strong>maaşından, priminden veya yıllık izin bakiyesinden hiçbir kesinti yapılmaz</strong>.
+                      </p>
+                      {isMale ? (
+                        <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-emerald-800 bg-emerald-100/80 px-2 py-1 rounded-lg border border-emerald-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                          <span>Seçilen Personel: Erkek ♂ (5 Günlük yasal babalık izni bordroya tam ücretli yansıtılacaktır)</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-900 bg-amber-100/90 px-2 py-1 rounded-lg border border-amber-300">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span>Bilgilendirme: Seçilen personel kadın olarak kayıtlıdır. Doğum yapacak kadın çalışanlar için 'Analık / Doğum İzni (16 Hafta)' türü tavsiye edilir.</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                if (selectedType.toLowerCase().includes("analık") || (selectedType.toLowerCase().includes("doğum") && !selectedType.toLowerCase().includes("erkek"))) {
+                  return (
+                    <div className="bg-pink-50 border border-pink-300 rounded-2xl p-3 text-xs text-pink-950 font-medium space-y-1.5 shadow-xs">
+                      <div className="flex items-center gap-1.5 font-black text-pink-900 text-xs">
+                        <span className="text-base">🤰</span>
+                        <span>4857 Sayılı İş Kanunu Md. 74: Kadın Personel Analık / Doğum İzni</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-pink-900">
+                        Kadın işçilere doğumdan önce 8 ve doğumdan sonra 8 hafta olmak üzere toplam <strong>16 hafta (112 gün) yasal analık izni</strong> kullandırılır. SGK geçici iş göremezlik ödeneği kapsamındadır.
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (selectedType === "Ücretsiz İzin" || selectedType === "Mazeretsiz İzin") {
+                  return (
+                    <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3 text-xs text-rose-950 font-medium space-y-1 shadow-xs">
+                      <div className="flex items-center gap-1.5 font-black text-rose-900">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>Maaştan Gün Sayısına Göre Kesinti Yapılır ({days} Gün)</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-rose-800">
+                        <strong>{selectedType}</strong> talebi onaylandığında kullanılan <strong>{days} günün tamamı</strong> ay sonu bordrosunda eksik gün olarak maaştan otomatik düşülecektir.
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (selectedType === "Sıhhi İzin") {
+                  const deductedDays = days > 2 ? days - 2 : 0;
+                  if (days > 2) {
+                    return (
+                      <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 text-xs text-amber-950 font-medium space-y-1 shadow-xs">
+                        <div className="flex items-center gap-1.5 font-black text-amber-900">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>Maaştan Kesinti Yapılır (2 Günü Aşan {deductedDays} Gün)</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-amber-900">
+                          Sıhhi izin 2 günden fazla ({days} gün) olduğu için ilk 2 gün ücretli sayılacak, 2 günü aşan <strong>{deductedDays} gün</strong> bordroda eksik gün olarak maaştan düşülecektir.
+                        </p>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-xs text-emerald-950 font-medium space-y-1 shadow-xs">
+                        <div className="flex items-center gap-1.5 font-black text-emerald-900">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Maaş Kesintisi Yok (2 Gün ve Altı)</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-emerald-800">
+                          Sıhhi izin 2 gün veya daha az olduğu için işveren tarafından ücretli izin sayılır, maaştan kesinti yapılmaz.
+                        </p>
+                      </div>
+                    );
+                  }
+                }
+
+                return (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-xs text-emerald-950 font-medium space-y-1 shadow-xs">
+                    <div className="flex items-center gap-1.5 font-black text-emerald-900">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Ücretli İzin (Maaş Kesintisi Yapılmaz)</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-emerald-800">
+                      <strong>{selectedType}</strong> kapsamında kullanılan gün sayısı tam maaş ödemesine tabidir, bordroda kesinti yapılmaz.
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Açıklama / İzin Nedeni</label>
+                <input
+                  type="text"
+                  placeholder="ör: Eşi doğum yaptı (4857 S.K. Ek Md. 2), doktor raporu vb."
+                  value={newLeaveForm.reason || ""}
+                  onChange={(e) => setNewLeaveForm({ ...newLeaveForm, reason: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-medium text-slate-900"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md cursor-pointer"
+                >
+                  Talebi Oluştur
+                </button>
+              </div>
+            </form>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* FULL-PAGE DETAIL VIEW: AVANS TALEBI */}
+      {isAddAdvanceOpen && (
+        <DetailPageLayout
+          title="Yeni Avans & Masraf Talebi"
+          subtitle="Personel maaş avansı, harcırah ve iş seyahati masraf talepleri"
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Avans & Kesintiler", onClick: handleBackToList },
+            { label: "Yeni Avans", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              Yeni Avans Talebi
+            </span>
+          }
+          headerIcon={<CreditCard className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="add-advance-form"
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>Avansı Kaydet</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+            <form id="add-advance-form" onSubmit={handleCreateAdvanceSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Personel</label>
+                <select
+                  value={newAdvanceForm.employeeId}
+                  onChange={(e) => setNewAdvanceForm({ ...newAdvanceForm, employeeId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold cursor-pointer"
+                >
+                  {[...employees]
+                    .sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"))
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.fullName}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Talep Türü</label>
+                <select
+                  value={newAdvanceForm.type}
+                  onChange={(e) => setNewAdvanceForm({ ...newAdvanceForm, type: e.target.value as any })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold cursor-pointer"
+                >
+                  <option value="Avans">Maaş Avansı</option>
+                  <option value="Masraf Avansı">Masraf Avansı (Saha / İş Avansı)</option>
+                  <option value="Masraf">İş Masrafı (Fatura / Fişli)</option>
+                  <option value="Prim">Performans Primi</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Tutar (₺)</label>
+                <input
+                  type="number"
+                  required
+                  value={newAdvanceForm.amount}
+                  onChange={(e) => setNewAdvanceForm({ ...newAdvanceForm, amount: Number(e.target.value) })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Açıklama / Nedeni</label>
+                <input
+                  type="text"
+                  placeholder="ör: Şehir dışı müşteri ziyareti konaklama masrafı"
+                  value={newAdvanceForm.description}
+                  onChange={(e) => setNewAdvanceForm({ ...newAdvanceForm, description: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md cursor-pointer"
+                >
+                  Avansı Kaydet
+                </button>
+              </div>
+            </form>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* FULL-PAGE DETAIL VIEW: OZLUK DETAYI VIEW */}
+      {selectedEmployeeForDetail && (
+        <DetailPageLayout
+          title={`${selectedEmployeeForDetail.fullName} - Personel Özlük Dosyası`}
+          subtitle={`${selectedEmployeeForDetail.department} • ${selectedEmployeeForDetail.title} • TCKN: ${selectedEmployeeForDetail.tckn || "—"}`}
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Personeller", onClick: handleBackToList },
+            { label: selectedEmployeeForDetail.fullName, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span
+              className={`px-3 py-1 text-xs font-bold rounded-xl border ${
+                selectedEmployeeForDetail.status === "active"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-slate-100 text-slate-700 border-slate-200"
+              }`}
+            >
+              {selectedEmployeeForDetail.status === "active" ? "Aktif Çalışan" : "Ayrıldı"}
+            </span>
+          }
+          headerIcon={<User className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const emp = selectedEmployeeForDetail;
+                  setSelectedEmployeeForDetail(null);
+                  handleOpenEditPayroll(emp);
+                }}
+                className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs transition-all flex items-center gap-1.5"
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                <span>Bordro Düzenle</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Geri Dön
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-14 h-14 rounded-full bg-purple-600 text-white font-black flex items-center justify-center text-xl shadow-md border-2 border-purple-200 overflow-hidden shrink-0">
+                  {selectedEmployeeForDetail.photoUrl ? (
+                    <img src={selectedEmployeeForDetail.photoUrl} alt={selectedEmployeeForDetail.fullName} className="w-full h-full object-cover" />
+                  ) : (
+                    selectedEmployeeForDetail.fullName.split(" ").map((n) => n[0]).join("")
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-lg">{selectedEmployeeForDetail.fullName}</h3>
+                  <p className="text-xs text-purple-700 font-bold">{selectedEmployeeForDetail.title} · {selectedEmployeeForDetail.department}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {selectedEmployeeForDetail.gender && (
+                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                        selectedEmployeeForDetail.gender === "Kadın"
+                          ? "bg-pink-100 text-pink-800 border-pink-200"
+                          : "bg-blue-100 text-blue-800 border-blue-200"
+                      }`}>
+                        {selectedEmployeeForDetail.gender === "Kadın" ? "Kadın ♀" : "Erkek ♂"}
+                      </span>
+                    )}
+                    {selectedEmployeeForDetail.status === "active" && (
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-200">Aktif Çalışan</span>
+                    )}
+                    {selectedEmployeeForDetail.status === "terminated" && (
+                      <span className="bg-rose-100 text-rose-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-rose-200">İşten Ayrıldı</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedEmployeeForDetail(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3.5 text-xs font-semibold">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-slate-500 block text-[11px]">T.C. Kimlik No</span>
+                <span className="font-mono text-slate-900 font-bold text-sm">{selectedEmployeeForDetail.tckn}</span>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-slate-500 block text-[11px]">İşe Giriş Tarihi</span>
+                <span className="text-slate-900 font-bold">{formatDate(selectedEmployeeForDetail.startDate)}</span>
+              </div>
+
+              <div className="bg-indigo-50/70 p-3 rounded-xl border border-indigo-200/80">
+                <span className="text-indigo-800 block text-[11px] font-bold">Bağlı Şube</span>
+                <span className="text-indigo-950 font-extrabold flex items-center gap-1.5 mt-0.5">
+                  <Store className="w-4 h-4 text-indigo-600" />
+                  {selectedEmployeeForDetail.branchName || "Genel / Merkez"}
+                </span>
+              </div>
+
+              <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200/80">
+                <span className="text-amber-800 block text-[11px] font-bold">Görevli Depo</span>
+                <span className="text-amber-950 font-extrabold flex items-center gap-1.5 mt-0.5">
+                  <WarehouseIcon className="w-4 h-4 text-amber-600" />
+                  {selectedEmployeeForDetail.warehouseName || "Atanmış Depo Yok"}
+                </span>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-slate-500 block text-[11px]">Telefon & E-Posta</span>
+                <span className="text-slate-900 font-bold block">{selectedEmployeeForDetail.phone || "—"}</span>
+                <span className="text-slate-500 text-[10px]">{selectedEmployeeForDetail.email || "—"}</span>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-slate-500 block text-[11px]">Doğum Tarihi & Yaş</span>
+                <span className="text-slate-900 font-bold">
+                  {selectedEmployeeForDetail.birthDate ? (
+                    <>
+                      {selectedEmployeeForDetail.birthDate} ({calculateAge(selectedEmployeeForDetail.birthDate)} Yaş)
+                      {calculateAge(selectedEmployeeForDetail.birthDate)! < 18 && (
+                        <span className="block text-rose-600 font-bold text-[10px] mt-0.5">⚠️ 18 Yaş Altı (Genç İşçi)</span>
+                      )}
+                    </>
+                  ) : "Belirtilmedi"}
+                </span>
+              </div>
+
+              <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-slate-500 block text-[11px]">Ev / İkametgah Adresi</span>
+                <span className="text-slate-900 font-medium">{selectedEmployeeForDetail.homeAddress || "Adres kaydı bulunmuyor."}</span>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-slate-500 block text-[11px]">Maaş Anlaşması</span>
+                <span className="text-slate-900 font-bold">{formatTRY(selectedEmployeeForDetail.salaryAmount)} ({selectedEmployeeForDetail.salaryType.toUpperCase()})</span>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-slate-500 block text-[11px]">SGK Meslek Kodu</span>
+                <span className="font-mono text-slate-900 font-bold block">
+                  {selectedEmployeeForDetail.sgkOccupationCode || "Belirtilmedi"}
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  {sgkOccupations.find((o) => o.code === selectedEmployeeForDetail.sgkOccupationCode)?.name || selectedEmployeeForDetail.title}
+                </span>
+              </div>
+
+              <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-slate-500 block text-[11px]">Banka IBAN ({selectedEmployeeForDetail.bankName})</span>
+                <span className="font-mono text-slate-900 font-bold">{selectedEmployeeForDetail.iban || "—"}</span>
+              </div>
+
+              {/* Termination Details if existed */}
+              {(selectedEmployeeForDetail.endDate || selectedEmployeeForDetail.terminationCode) && (
+                <div className="col-span-2 bg-amber-50 p-3 rounded-xl border border-amber-300 text-amber-900">
+                  <span className="font-bold text-xs block text-amber-950 mb-1">
+                    İşten Çıkış / SGK Fesih Kaydı:
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-amber-800 text-[10px] block">Çıkış Tarihi:</span>
+                      <span className="font-bold">{selectedEmployeeForDetail.endDate || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-amber-800 text-[10px] block">SGK Fesih Kodu:</span>
+                      <span className="font-bold font-mono">Kod {selectedEmployeeForDetail.terminationCode || "—"}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-amber-800 text-[10px] block">SGK Fesih Nedeni:</span>
+                      <span className="font-semibold">{selectedEmployeeForDetail.terminationReason || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="col-span-2 bg-purple-50/60 p-3 rounded-xl border border-purple-200">
+                <span className="text-purple-900 font-bold block">Acil Durum İletişim Kişisi</span>
+                <span className="text-slate-800">{selectedEmployeeForDetail.emergencyContact || "Belirtilmedi"} — {selectedEmployeeForDetail.emergencyPhone}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="bg-slate-100 text-slate-700 font-bold px-5 py-2 rounded-xl text-xs hover:bg-slate-200 transition-all cursor-pointer"
+              >
+                Geri Dön
+              </button>
+            </div>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* DETAIL VIEW: YASAL KESİNTİ (İCRA & NAFAKA) EKLE / DÜZENLE */}
+      {isAddLegalDeductionOpen && (
+        <DetailPageLayout
+          title={editingLegalDeduction ? "Yasal Kesinti Dosyasını Düzenle" : "Yeni Yasal Kesinti Kaydı Ekle"}
+          subtitle="İcra, Nafaka ve Diğer Resmi Kesintilerin Yönetimi"
+          breadcrumbs={[
+            {
+              label: "İnsan Kaynakları",
+              onClick: () => {
+                setIsAddLegalDeductionOpen(false);
+                setEditingLegalDeduction(null);
+              },
+            },
+            { label: "Yasal Kesinti", active: true },
+          ]}
+          onBack={() => {
+            setIsAddLegalDeductionOpen(false);
+            setEditingLegalDeduction(null);
+          }}
+          statusBadge={
+            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+              RESMİ KESİNTİ
+            </span>
+          }
+          headerIcon={<Scale className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddLegalDeductionOpen(false);
+                  setEditingLegalDeduction(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Vazgeç
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-2xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
+
+            <form onSubmit={handleSaveLegalDeductionSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Personel Seçin</label>
+                  <select
+                    required
+                    value={legalForm.employeeId}
+                    onChange={(e) => setLegalForm({ ...legalForm, employeeId: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 cursor-pointer"
+                  >
+                    <option value="">-- Personel Seçin --</option>
+                    {[...employees]
+                      .sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"))
+                      .map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.fullName} ({emp.department})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Kesinti Türü</label>
+                  <select
+                    value={legalForm.type}
+                    onChange={(e) => setLegalForm({ ...legalForm, type: e.target.value as any })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold cursor-pointer"
+                  >
+                    <option value="İcra Kesintisi">İcra Kesintisi</option>
+                    <option value="Nafaka Kesintisi">Nafaka Kesintisi</option>
+                    <option value="Diğer Yasal Kesinti">Diğer Yasal Kesinti</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Hesaplama Mantığı</label>
+                  <select
+                    value={legalForm.calculationType}
+                    onChange={(e) => setLegalForm({ ...legalForm, calculationType: e.target.value as any })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold cursor-pointer"
+                  >
+                    <option value="quarter_salary">Maaşın 1/4'ü (%25)</option>
+                    <option value="fixed">Sabit Aylık Tutar (₺)</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">İcra / Mahkeme Dosya Numarası</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ör: İstanbul 8. İcra Dairesi 2025/11204 Esas"
+                    value={legalForm.fileNumber}
+                    onChange={(e) => setLegalForm({ ...legalForm, fileNumber: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Alacaklı / Kurum Unvanı</label>
+                  <input
+                    type="text"
+                    placeholder="ör: Garanti BBVA A.Ş. Vekili"
+                    value={legalForm.creditorName}
+                    onChange={(e) => setLegalForm({ ...legalForm, creditorName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Yatırılacağı IBAN Numarası</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="TR00 0000 0000 0000 0000 0000 00"
+                    value={legalForm.iban}
+                    onChange={(e) => setLegalForm({ ...legalForm, iban: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Toplam Borç Tutarı (₺) <span className="text-[10px] text-slate-400 font-normal">(Nafakada 0 bırakın)</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={legalForm.totalDebtAmount}
+                    onChange={(e) => setLegalForm({ ...legalForm, totalDebtAmount: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Şimdiye Kadar Ödenen (₺)</label>
+                  <input
+                    type="number"
+                    value={legalForm.paidAmount}
+                    onChange={(e) => setLegalForm({ ...legalForm, paidAmount: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Aylık Sabit Kesinti Tutarı (₺)</label>
+                  <input
+                    type="number"
+                    value={legalForm.monthlyAmount}
+                    onChange={(e) => setLegalForm({ ...legalForm, monthlyAmount: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-purple-700"
+                    placeholder="1/4 maaş dışında sabitse girin"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Durum / Sıralama</label>
+                  <select
+                    value={legalForm.status}
+                    onChange={(e) => setLegalForm({ ...legalForm, status: e.target.value as any })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold cursor-pointer"
+                  >
+                    <option value="active">1. Sıra (Aktif Kesilen)</option>
+                    <option value="queued">Sırada Bekliyor (Sıradaki Dosya)</option>
+                    <option value="completed">Borç Bitti / Tamamlandı</option>
+                    <option value="passive">Pasif / Durduruldu</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Açıklama / Notlar</label>
+                  <input
+                    type="text"
+                    placeholder="ör: Maaş haczi müzekkeresi tarih ve karar nosu"
+                    value={legalForm.notes}
+                    onChange={(e) => setLegalForm({ ...legalForm, notes: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddLegalDeductionOpen(false);
+                    setEditingLegalDeduction(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md cursor-pointer"
+                >
+                  {editingLegalDeduction ? "Değişiklikleri Kaydet" : "Kesinti Kaydını Oluştur"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* DETAIL VIEW: ÖDEME İŞLE & BORÇ DÜŞÜŞÜ */}
+      {isPaymentModalOpen && paymentModalDeduction && (
+        <DetailPageLayout
+          title="İcra / Yasal Kesinti Ödemesi İşle"
+          subtitle={`${paymentModalDeduction.employeeName} • Dosya No: ${paymentModalDeduction.fileNumber}`}
+          breadcrumbs={[
+            {
+              label: "İnsan Kaynakları",
+              onClick: () => {
+                setIsPaymentModalOpen(false);
+                setPaymentModalDeduction(null);
+              },
+            },
+            { label: "Kesinti Ödemesi", active: true },
+          ]}
+          onBack={() => {
+            setIsPaymentModalOpen(false);
+            setPaymentModalDeduction(null);
+          }}
+          statusBadge={
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
+              İCRA ÖDEMESİ
+            </span>
+          }
+          headerIcon={<DollarSign className="w-5 h-5 text-emerald-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPaymentModalOpen(false);
+                  setPaymentModalDeduction(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Vazgeç
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
+
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2 text-xs font-semibold">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Dosya No:</span>
+                <span className="font-mono font-bold text-slate-900">{paymentModalDeduction.fileNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">IBAN:</span>
+                <span className="font-mono text-indigo-700 font-bold">{paymentModalDeduction.iban}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Toplam Borç:</span>
+                <span className="font-bold text-slate-900">{formatTRY(paymentModalDeduction.totalDebtAmount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Mevcut Ödenen:</span>
+                <span className="font-bold text-emerald-700">{formatTRY(paymentModalDeduction.paidAmount)}</span>
+              </div>
+              <div className="flex justify-between text-rose-800 pt-1 border-t border-slate-200 font-bold">
+                <span>Kalan Borç Bakiye:</span>
+                <span>{formatTRY(Math.max(0, paymentModalDeduction.totalDebtAmount - paymentModalDeduction.paidAmount))}</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleExecutePaymentModalSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Şimdi Düşülecek / Yatırılacak Ödeme Tutarı (₺)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  value={paymentAmountInput}
+                  onChange={(e) => setPaymentAmountInput(Number(e.target.value))}
+                  className="w-full bg-white border border-purple-300 rounded-xl p-3 font-black text-slate-900 text-base focus:outline-none focus:border-purple-600"
+                />
+              </div>
+
+              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-[11px] text-amber-900 font-medium">
+                ⚡ <strong>Otomasyon Bilgisi:</strong> Eğer bu ödeme ile kalan borç tamamen kapanırsa, bu dosya otomatik olarak <strong>"Borç Bitti"</strong> olarak işaretlenir, kesinti kaldırılır ve varsa sıradaki icra kesintisi otomatik olarak 1. sıraya alınarak aktifleşir!
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPaymentModalOpen(false);
+                    setPaymentModalDeduction(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <DollarSign className="w-4 h-4" />
+                  Ödemeyi Uygula & Borç Düşüşü Yap
+                </button>
+              </div>
+            </form>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* MODAL: RESMİ İZİN, DEVAMSIZLIK & AVANS FORMLARI YAZDIRMA & DÜZENLEME */}
+      {isFormsModalOpen && (
+        <HRDocumentFormsModal
+          isOpen={isFormsModalOpen}
+          onClose={() => {
+            setIsFormsModalOpen(false);
+            setFormsModalLeaveRequest(undefined);
+            setFormsModalAdvanceRequest(undefined);
+          }}
+          employees={employees}
+          companySettings={companySettings}
+          advanceRequests={advanceRequests}
+          initialEmployeeId={formsModalEmployeeId}
+          initialFormType={formsModalType}
+          leaveRequest={formsModalLeaveRequest}
+          advanceRequest={formsModalAdvanceRequest}
+        />
+    );
+  }
+
+      {/* MODAL: RESMİ BORDRO VE MAAŞ PUSULASI YAZDIRMA (AYLIK & TÜM YIL) */}
+      {isPayrollPrintModalOpen && (
+        <PayrollPrintModal
+          isOpen={isPayrollPrintModalOpen}
+          onClose={() => {
+            setIsPayrollPrintModalOpen(false);
+            setPayrollPrintSelectedEmpId(undefined);
+          }}
+          employees={employees}
+          companySettings={companySettings}
+          selectedMonth={payrollMonth}
+          initialEmployeeId={payrollPrintSelectedEmpId}
+          initialMode={payrollPrintInitialMode}
+          payrollCustomizations={payrollCustomizations}
+          advanceRequests={advanceRequests}
+          leaveRequests={leaveRequests}
+          legalDeductions={legalDeductions}
+        />
+    );
+  }
+
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* HEADER BANNER */}
@@ -3179,2636 +5821,6 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         />
       )}
 
-      {/* FULL-PAGE DETAIL VIEW: YENI PERSONEL EKLE */}
-      {isAddEmployeeOpen && (
-        <DetailPageLayout
-          title="Yeni Personel Kartı Oluştur"
-          subtitle="Çalışanın kişisel, özlük ve maaş bilgilerini eksiksiz girin"
-          breadcrumbs={[
-            { label: "İnsan Kaynakları", onClick: handleBackToList },
-            { label: "Yeni Personel Kartı", active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-              Yeni Kayıt
-            </span>
-          }
-          headerIcon={<UserPlus className="w-5 h-5 text-purple-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="submit"
-                form="add-employee-form"
-                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Kaydet ve Kartı Aç</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
-            <form id="add-employee-form" onSubmit={handleCreateEmployeeSubmit} className="space-y-4">
-              {/* Photo Upload Header */}
-              <div className="flex items-center gap-4 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-                <div className="relative w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-2 border-purple-400 shrink-0 shadow-xs">
-                  {newEmpForm.photoUrl ? (
-                    <img src={newEmpForm.photoUrl} alt="Vesikalık" className="w-full h-full object-cover" />
-                  ) : (
-                    <User className="w-8 h-8 text-slate-400" />
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">Personel Vesikalık Fotoğrafı</label>
-                  <div className="flex items-center gap-2">
-                    <label className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-xs">
-                      <Camera className="w-3.5 h-3.5" />
-                      Fotoğraf Yükle
-                      <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                    </label>
-                    {newEmpForm.photoUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setNewEmpForm({ ...newEmpForm, photoUrl: "" })}
-                        className="text-xs text-rose-600 hover:text-rose-800 font-semibold px-2 py-1 cursor-pointer"
-                      >
-                        Fotoğrafı Kaldır
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">PNG, JPG veya WEBP formatında profil fotoğrafı yükleyebilirsiniz.</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Ad Soyad *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ör: Ahmet Yılmaz"
-                    value={newEmpForm.fullName}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, fullName: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">T.C. Kimlik No (TCKN) *</label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={11}
-                    placeholder="11 haneli TCKN"
-                    value={newEmpForm.tckn}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, tckn: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-mono text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Telefon Numarası</label>
-                  <input
-                    type="tel"
-                    placeholder="0532 000 00 00"
-                    value={newEmpForm.phone}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, phone: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">E-Posta Adresi</label>
-                  <input
-                    type="email"
-                    placeholder="ör: ahmet@sirket.com"
-                    value={newEmpForm.email}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, email: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Cinsiyet</label>
-                  <select
-                    value={newEmpForm.gender || "Erkek"}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, gender: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900 cursor-pointer"
-                  >
-                    <option value="Erkek">Erkek ♂</option>
-                    <option value="Kadın">Kadın ♀</option>
-                  </select>
-                </div>
-
-                {/* Birth Date with 18 Year Old Warning */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Doğum Tarihi</label>
-                  <input
-                    type="date"
-                    value={newEmpForm.birthDate}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, birthDate: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900"
-                  />
-                  {newEmpForm.birthDate && calculateAge(newEmpForm.birthDate) !== null && (
-                    calculateAge(newEmpForm.birthDate)! < 18 ? (
-                      <div className="mt-2.5 bg-rose-50 border border-rose-300 p-3 rounded-xl flex items-start gap-2.5 text-rose-900 text-xs shadow-xs animate-pulse">
-                        <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                        <div>
-                          <span className="font-extrabold block text-rose-900 text-xs">⚠️ UYARI: Çalışan 18 Yaşından Küçüktür! ({calculateAge(newEmpForm.birthDate)} Yaşında)</span>
-                          <p className="mt-0.5 text-[11px] leading-relaxed text-rose-800">
-                            4857 Sayılı İş Kanunu uyarınca 18 yaşını doldurmamış çocuk ve genç işçilerin çalıştırılmasında veli/vasi muvafakatnamesi, sağlık raporu ve yasal çalışma süresi sınırlarına (günlük azami 7-8 saat) uyulması zorunludur.
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-emerald-700 mt-1 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        Hesaplanan Yaş: {calculateAge(newEmpForm.birthDate)} yaşında (Reşit)
-                      </p>
-                    )
-                  )}
-                </div>
-
-                {/* Home Address */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Ev / İkametgah Adresi</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Mahalle, cadde, sokak, dış kapı/daire no, ilçe ve il bilgisi..."
-                    value={newEmpForm.homeAddress}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, homeAddress: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-medium text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Unvan / Görevi</label>
-                  <input
-                    type="text"
-                    placeholder="ör: Kıdemli Muhasebe Uzmanı"
-                    value={newEmpForm.title}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, title: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Departman</label>
-                  <select
-                    value={newEmpForm.department}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, department: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold cursor-pointer"
-                  >
-                    <option value="Yazılım & IT">Yazılım & IT</option>
-                    <option value="Muhasebe & Finans">Muhasebe & Finans</option>
-                    <option value="Satış & Pazarlama">Satış & Pazarlama</option>
-                    <option value="İnsan Kaynakları">İnsan Kaynakları</option>
-                    <option value="Operasyon & Lojistik">Operasyon & Lojistik</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Bağlı Olduğu Şube</label>
-                  <select
-                    value={newEmpForm.branchId || ""}
-                    onChange={(e) => {
-                      const selectedBr = branches.find((b) => b.id === e.target.value);
-                      setNewEmpForm({
-                        ...newEmpForm,
-                        branchId: e.target.value,
-                        branchName: selectedBr ? selectedBr.name : "",
-                      });
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900 cursor-pointer"
-                  >
-                    <option value="">-- Şube Seçiniz (Opsiyonel / Merkez) --</option>
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Çalıştığı / Sorumlu Olduğu Depo</label>
-                  <select
-                    value={newEmpForm.warehouseId || ""}
-                    onChange={(e) => {
-                      const selectedWh = warehouses.find((w) => w.id === e.target.value);
-                      setNewEmpForm({
-                        ...newEmpForm,
-                        warehouseId: e.target.value,
-                        warehouseName: selectedWh ? selectedWh.name : "",
-                        ...(selectedWh && selectedWh.branchId ? {
-                          branchId: selectedWh.branchId,
-                          branchName: selectedWh.branchName || branches.find((b) => b.id === selectedWh.branchId)?.name || "",
-                        } : {}),
-                      });
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900 cursor-pointer"
-                  >
-                    <option value="">-- Depo Seçiniz (Opsiyonel) --</option>
-                    {warehouses.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name} ({w.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-purple-900 mb-1">Görev Yaptığı Proje (Maliyet Ataması)</label>
-                  <select
-                    value={newEmpForm.projectId || ""}
-                    onChange={(e) => {
-                      const selectedPrj = costProjects.find((p) => p.id === e.target.value);
-                      setNewEmpForm({
-                        ...newEmpForm,
-                        projectId: e.target.value,
-                        projectName: selectedPrj ? selectedPrj.name : "",
-                      });
-                    }}
-                    className="w-full bg-purple-50/50 border border-purple-200 rounded-xl p-2.5 text-sm font-semibold text-slate-900 cursor-pointer focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">-- Proje Seçiniz (Yok / Genel Merkez) --</option>
-                    {costProjects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.code} - {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Maaş Tipi & Tutarı (₺)</label>
-                  <div className="flex gap-2">
-                    <select
-                      value={newEmpForm.salaryType}
-                      onChange={(e) => setNewEmpForm({ ...newEmpForm, salaryType: e.target.value as any })}
-                      className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold cursor-pointer w-28"
-                    >
-                      <option value="net">Net</option>
-                      <option value="gross">Brüt</option>
-                    </select>
-                    <input
-                      type="number"
-                      required
-                      value={newEmpForm.salaryAmount}
-                      onChange={(e) => setNewEmpForm({ ...newEmpForm, salaryAmount: Number(e.target.value) })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-900"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">İşe Giriş Tarihi</label>
-                  <input
-                    type="date"
-                    value={newEmpForm.startDate}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, startDate: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Banka & IBAN</label>
-                  <input
-                    type="text"
-                    placeholder="TR00 0000 0000 0000 0000 0000 00"
-                    value={newEmpForm.iban}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, iban: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">SGK Meslek Kodu ve Adı (Resmi SGK Listesi)</label>
-                  <select
-                    value={newEmpForm.sgkOccupationCode}
-                    onChange={(e) => {
-                      const selectedCode = e.target.value;
-                      const found = sgkOccupations.find((o) => o.code === selectedCode);
-                      setNewEmpForm({
-                        ...newEmpForm,
-                        sgkOccupationCode: selectedCode,
-                        title: found ? found.name : newEmpForm.title,
-                      });
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 cursor-pointer"
-                  >
-                    <option value="">-- SGK Meslek Seçin --</option>
-                    {sgkOccupations.map((occ) => (
-                      <option key={occ.code} value={occ.code}>
-                        {occ.code} - {occ.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Optional Exit/Termination Section */}
-                <div className="sm:col-span-2 bg-amber-50/60 p-4 rounded-2xl border border-amber-200 space-y-3">
-                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                    <LogOut className="w-4 h-4 text-amber-600" />
-                    <span>İşten Çıkış / Fesih Bilgileri (Ayrılan Personel İçin)</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">İşten Çıkış Tarihi</label>
-                      <input
-                        type="date"
-                        value={newEmpForm.endDate}
-                        onChange={(e) => setNewEmpForm({ ...newEmpForm, endDate: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">SGK İşten Çıkış Kodu ve Nedeni</label>
-                      <select
-                        value={newEmpForm.terminationCode}
-                        onChange={(e) => {
-                          const code = e.target.value;
-                          const found = sgkTerminationReasons.find((r) => r.code === code);
-                          setNewEmpForm({
-                            ...newEmpForm,
-                            terminationCode: code,
-                            terminationReason: found ? found.reason : "",
-                          });
-                        }}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold cursor-pointer"
-                      >
-                        <option value="">-- SGK Çıkış Kodu Seçin --</option>
-                        {sgkTerminationReasons.map((item) => (
-                          <option key={item.code} value={item.code}>
-                            Kod {item.code}: {item.reason.length > 55 ? item.reason.slice(0, 55) + "..." : item.reason}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {newEmpForm.terminationReason && (
-                    <div className="bg-white p-2.5 rounded-xl border border-amber-200 text-xs text-amber-900 font-medium">
-                      <span className="font-bold block">Seçilen Fesih Açıklaması:</span>
-                      Kod {newEmpForm.terminationCode} — {newEmpForm.terminationReason}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleBackToList}
-                  className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 cursor-pointer"
-                >
-                  Vazgeç
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs transition-all shadow-md cursor-pointer"
-                >
-                  Kaydet ve Kartı Aç
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: BORDRO & PUANTAJ HESAPLAMA */}
-      {editingPayrollEmp && (
-        <DetailPageLayout
-          title={`Bordro & Puantaj Hesaplama - ${editingPayrollEmp.fullName}`}
-          subtitle={`${payrollMonth} Dönemi • ${editingPayrollEmp.department} (${editingPayrollEmp.title}) • TC: ${editingPayrollEmp.tckn || "—"}`}
-          breadcrumbs={[
-            { label: "İnsan Kaynakları", onClick: handleBackToList },
-            { label: "Bordrolar", onClick: handleBackToList },
-            { label: editingPayrollEmp.fullName, active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-              {payrollMonth} Dönemi
-            </span>
-          }
-          headerIcon={<Calculator className="w-5 h-5 text-purple-700" />}
-          actions={
-            <div className="flex items-center gap-2">
-              {/* Alfabetik Sıra ve Gezinme Butonları */}
-              {(() => {
-                const sortedAlphabetical = [...employees].sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"));
-                const currIdx = sortedAlphabetical.findIndex((e) => e.id === editingPayrollEmp.id);
-                const prevEmp = currIdx > 0 ? sortedAlphabetical[currIdx - 1] : null;
-                const nextEmp = currIdx !== -1 && currIdx + 1 < sortedAlphabetical.length ? sortedAlphabetical[currIdx + 1] : null;
-
-                return (
-                  <div className="flex items-center gap-1 bg-purple-50 p-1 rounded-xl border border-purple-200 text-xs">
-                    <button
-                      type="button"
-                      disabled={!prevEmp}
-                      onClick={() => prevEmp && handleOpenEditPayroll(prevEmp)}
-                      className="px-2.5 py-1 rounded-lg text-purple-900 font-bold hover:bg-purple-200/70 disabled:opacity-30 transition-all flex items-center gap-1 text-[11px] cursor-pointer disabled:cursor-not-allowed"
-                      title={prevEmp ? `Önceki: ${prevEmp.fullName}` : "İlk personel"}
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Önceki</span>
-                    </button>
-
-                    <span className="px-2 py-0.5 text-[11px] font-black text-purple-950 bg-white rounded-md border border-purple-200/80 shadow-2xs">
-                      {currIdx !== -1 ? currIdx + 1 : 1} / {sortedAlphabetical.length}
-                    </span>
-
-                    <button
-                      type="button"
-                      disabled={!nextEmp}
-                      onClick={() => nextEmp && handleOpenEditPayroll(nextEmp)}
-                      className="px-2.5 py-1 rounded-lg text-purple-900 font-bold hover:bg-purple-200/70 disabled:opacity-30 transition-all flex items-center gap-1 text-[11px] cursor-pointer disabled:cursor-not-allowed"
-                      title={nextEmp ? `Sonraki: ${nextEmp.fullName}` : "Son personel"}
-                    >
-                      <span className="hidden sm:inline">Sonraki</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                );
-              })()}
-
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Vazgeç
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl w-full p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6 max-w-7xl mx-auto">
-
-            {/* Auto-Transfer Info Banners */}
-            {(() => {
-              const autoAdv = getAutoAdvanceForEmployee(editingPayrollEmp.id);
-              const autoLvs = getAutoLeavesForEmployee(editingPayrollEmp.id);
-              return (
-                <div className="space-y-2">
-                  {autoAdv.totalAdvance > 0 && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-900 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
-                        <div>
-                          <span className="font-bold block">Avans Yönetiminden Aktarıldı:</span>
-                          <span>Personelin onaylı {formatTRY(autoAdv.totalAdvance)} tutarında avansı bulundu ve kesintilere aktarıldı.</span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setEditingPayrollForm((prev) => ({ ...prev, advanceDeduction: autoAdv.totalAdvance }))}
-                        className="text-[11px] font-bold text-amber-800 underline hover:text-amber-950 cursor-pointer"
-                      >
-                        Yeniden Aktar
-                      </button>
-                    </div>
-                  )}
-
-                  {autoLvs.unpaidDays > 0 && (
-                    <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3 text-xs text-rose-900 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-rose-600 shrink-0" />
-                        <div>
-                          <span className="font-bold block">İzin Yönetiminden Aktarıldı:</span>
-                          <span>Personelin onaylı {autoLvs.unpaidDays} gün ücretsiz izni bulundu ve eksik gün kesintisine aktarıldı.</span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setEditingPayrollForm((prev) => ({ ...prev, unpaidLeaveDays: autoLvs.unpaidDays }))}
-                        className="text-[11px] font-bold text-rose-800 underline hover:text-rose-950 cursor-pointer"
-                      >
-                        Yeniden Aktar
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* ---------------------------------------------------- */}
-            {/* PUANTAJ TAKVİMİ & GÜN DAĞILIMI BÖLÜMÜ (2 SATIR DÜZENİ) */}
-            {/* ---------------------------------------------------- */}
-            {(() => {
-              const [pYearStr, pMonthStr] = payrollMonth.split("-");
-              const pYear = parseInt(pYearStr, 10) || 2026;
-              const pMonth = parseInt(pMonthStr, 10) || 7;
-              const daysInMonth = new Date(pYear, pMonth, 0).getDate();
-              const monthNamesTr = [
-                "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
-                "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
-              ];
-              const dayNamesShortTr = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
-
-              const currentPuantaj = editingPayrollForm.puantajDays || generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
-              const curSalaryType = editingPayrollForm.salaryType ?? editingPayrollEmp.salaryType;
-              const curBaseSalary = editingPayrollForm.baseSalary ?? editingPayrollEmp.salaryAmount;
-              const curBaseGross = curSalaryType === "gross" ? curBaseSalary : curBaseSalary * 1.38;
-              const stats = calculatePuantajStats(currentPuantaj, daysInMonth, curBaseGross);
-
-              const handleDayCodeChange = (dayNum: number, newCode: PuantajCode) => {
-                const existing = currentPuantaj[dayNum] || { code: "N" };
-                const updatedDay: DayPuantajDetail = {
-                  ...existing,
-                  code: newCode,
-                };
-                const updated = {
-                  ...currentPuantaj,
-                  [dayNum]: updatedDay,
-                };
-                const newStats = calculatePuantajStats(updated, daysInMonth, curBaseGross);
-                setEditingPayrollForm((prev) => ({
-                  ...prev,
-                  puantajDays: updated,
-                  unpaidLeaveDays: newStats.unpaidDays,
-                  overtimePay: newStats.calculatedOvertimePay,
-                  overtimeNormalHours: newStats.overtimeNormalHours,
-                  overtimeWeekendHours: newStats.overtimeWeekendHours,
-                  overtimeHolidayDays: newStats.overtimeHolidayDays,
-                  overtimeHolidayHours: newStats.overtimeHolidayHours,
-                }));
-              };
-
-              const handleDayOvertimeChange = (dayNum: number, hours: number) => {
-                const existing = currentPuantaj[dayNum] || { code: "N" };
-                const updatedDay: DayPuantajDetail = {
-                  ...existing,
-                  overtimeHours: hours > 0 ? hours : undefined,
-                };
-                const updated = {
-                  ...currentPuantaj,
-                  [dayNum]: updatedDay,
-                };
-                const newStats = calculatePuantajStats(updated, daysInMonth, curBaseGross);
-                setEditingPayrollForm((prev) => ({
-                  ...prev,
-                  puantajDays: updated,
-                  overtimePay: newStats.calculatedOvertimePay,
-                  overtimeNormalHours: newStats.overtimeNormalHours,
-                  overtimeWeekendHours: newStats.overtimeWeekendHours,
-                  overtimeHolidayDays: newStats.overtimeHolidayDays,
-                  overtimeHolidayHours: newStats.overtimeHolidayHours,
-                }));
-              };
-
-              const handleToggleHolidayFullDayOvertime = (dayNum: number) => {
-                const existing = currentPuantaj[dayNum] || { code: "N" };
-                const updatedDay: DayPuantajDetail = {
-                  ...existing,
-                  isHolidayOvertime: !existing.isHolidayOvertime,
-                };
-                const updated = {
-                  ...currentPuantaj,
-                  [dayNum]: updatedDay,
-                };
-                const newStats = calculatePuantajStats(updated, daysInMonth, curBaseGross);
-                setEditingPayrollForm((prev) => ({
-                  ...prev,
-                  puantajDays: updated,
-                  overtimePay: newStats.calculatedOvertimePay,
-                  overtimeNormalHours: newStats.overtimeNormalHours,
-                  overtimeWeekendHours: newStats.overtimeWeekendHours,
-                  overtimeHolidayDays: newStats.overtimeHolidayDays,
-                  overtimeHolidayHours: newStats.overtimeHolidayHours,
-                }));
-              };
-
-              const handleCycleDayCode = (dayNum: number) => {
-                const codeOrder: PuantajCode[] = ["N", "HT", "RT", "Yİ", "Üİ", "Dİ", "R", "M"];
-                const raw = currentPuantaj[dayNum];
-                const currentCode: PuantajCode = typeof raw === "string" ? raw : raw ? raw.code : "N";
-                const nextIdx = (codeOrder.indexOf(currentCode) + 1) % codeOrder.length;
-                handleDayCodeChange(dayNum, codeOrder[nextIdx]);
-              };
-
-              const handleResetToAutoPuantaj = () => {
-                const fresh = generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
-                const newStats = calculatePuantajStats(fresh, daysInMonth, curBaseGross);
-                setEditingPayrollForm((prev) => ({
-                  ...prev,
-                  puantajDays: fresh,
-                  unpaidLeaveDays: newStats.unpaidDays,
-                  overtimePay: newStats.calculatedOvertimePay,
-                  overtimeNormalHours: newStats.overtimeNormalHours,
-                  overtimeWeekendHours: newStats.overtimeWeekendHours,
-                  overtimeHolidayDays: newStats.overtimeHolidayDays,
-                  overtimeHolidayHours: newStats.overtimeHolidayHours,
-                }));
-              };
-
-              // 2 Satıra bölme (1. Satır: 1 - 15/16. gün, 2. Satır: kalan günler)
-              const halfCount = Math.ceil(daysInMonth / 2);
-              const row1Days = Array.from({ length: halfCount }, (_, i) => i + 1);
-              const row2Days = Array.from({ length: daysInMonth - halfCount }, (_, i) => halfCount + i + 1);
-
-              const renderDayCard = (dayNum: number) => {
-                const d = new Date(pYear, pMonth - 1, dayNum);
-                const dayOfWeek = d.getDay();
-                const dayName = dayNamesShortTr[dayOfWeek];
-                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                const raw = currentPuantaj[dayNum];
-                const code: PuantajCode = typeof raw === "string" ? raw : raw ? raw.code : "N";
-                const otHours = typeof raw === "object" && raw ? (raw.overtimeHours || 0) : 0;
-                const isHolOt = typeof raw === "object" && raw ? Boolean(raw.isHolidayOvertime) : false;
-                const cfg = PUANTAJ_CODE_CONFIG[code] || PUANTAJ_CODE_CONFIG["N"];
-                const holiday = getTurkishOfficialHoliday(pYear, pMonth, dayNum);
-
-                const isSpecialDay = code === "RT" || code === "HT";
-
-                return (
-                  <div
-                    key={dayNum}
-                    className={`group relative flex flex-col justify-between p-1.5 rounded-xl border transition-all hover:shadow-md ${cfg.bgClass} ${cfg.borderClass} min-w-[54px]`}
-                  >
-                    {/* Üst Kısım: Gün Adı & Gün Numarası */}
-                    <div className="w-full flex items-center justify-between text-[10px] font-bold text-slate-500 border-b border-black/5 pb-0.5 mb-1">
-                      <span className={isWeekend ? "text-purple-700 font-extrabold" : "text-slate-600"}>
-                        {dayName}
-                      </span>
-                      <span className="font-black text-slate-900 text-[11px] bg-white/90 px-1 rounded shadow-2xs">
-                        {dayNum}
-                      </span>
-                    </div>
-
-                    {/* Orta Kısım: Kod Rozeti & Tıklama ile Değiştirme */}
-                    <div
-                      onClick={() => handleCycleDayCode(dayNum)}
-                      className={`w-full py-1 rounded-lg font-black text-xs flex items-center justify-center shadow-2xs cursor-pointer select-none transition-transform active:scale-95 hover:opacity-90 ${cfg.badgeClass}`}
-                      title={`${dayNum} ${monthNamesTr[pMonth - 1]} (${dayName}) - ${cfg.label}. Tıklayarak kodu değiştirin.`}
-                    >
-                      {code}
-                    </div>
-
-                    {/* Tatil / Açıklama Metni */}
-                    <div className="w-full truncate text-[8.5px] font-extrabold text-slate-700 mt-0.5 text-center">
-                      {holiday ? (
-                        <span className="text-red-700 font-black truncate block" title={holiday}>
-                          {holiday.length > 7 ? holiday.slice(0, 6) + ".." : holiday}
-                        </span>
-                      ) : (
-                        <span className="truncate block opacity-80">{cfg.label}</span>
-                      )}
-                    </div>
-
-                    {/* Alt Kısım: Fazla Mesai Saati Girişi & Tam Gün Tatil Çalışması */}
-                    <div className="mt-1 pt-1 border-t border-black/5 flex flex-col gap-1">
-                      {/* Saatlik Mesai Giriş Alanı */}
-                      <div className="flex items-center gap-0.5 justify-center" title="Bu güne ait fazla mesai saati (örn: 2 veya 3.5)">
-                        <Clock className="w-2.5 h-2.5 text-slate-500 shrink-0" />
-                        <input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          max="24"
-                          value={otHours > 0 ? otHours : ""}
-                          placeholder="0s"
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            handleDayOvertimeChange(dayNum, isNaN(val) ? 0 : val);
-                          }}
-                          className="w-9 h-5 text-[10px] font-black text-center bg-white border border-slate-300 rounded px-0.5 focus:outline-none focus:ring-1 focus:ring-purple-500 text-slate-900 placeholder:text-slate-300 shadow-2xs"
-                        />
-                      </div>
-
-                      {/* Tatil veya Hafta Tatilinde Tam Gün Çalışma Butonu */}
-                      {isSpecialDay && (
-                        <button
-                          type="button"
-                          onClick={() => handleToggleHolidayFullDayOvertime(dayNum)}
-                          className={`w-full text-[8px] font-black py-0.5 px-0.5 rounded transition-all cursor-pointer text-center leading-tight shadow-2xs ${
-                            isHolOt
-                              ? "bg-amber-600 text-white ring-1 ring-amber-700 font-black"
-                              : "bg-white/80 border border-slate-200 text-slate-600 hover:bg-amber-50 hover:text-amber-900"
-                          }`}
-                          title={code === "RT" ? "4857 Sayılı Kanun Md. 47: Resmi tatil günü tam gün çalışma (+1 yevmiye)" : "Hafta tatili tam gün çalışma"}
-                        >
-                          {isHolOt ? "✓ Mesaili" : "+ Tam Gün"}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Açılır Kod Seçici */}
-                    <select
-                      value={code}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleDayCodeChange(dayNum, e.target.value as PuantajCode);
-                      }}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full pointer-events-none"
-                      title="Puantaj Kodunu Değiştir"
-                      tabIndex={-1}
-                    >
-                      {(Object.keys(PUANTAJ_CODE_CONFIG) as PuantajCode[]).map((c) => (
-                        <option key={c} value={c}>
-                          {dayNum} {monthNamesTr[pMonth - 1]} ({dayName}) : {c} - {PUANTAJ_CODE_CONFIG[c].label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              };
-
-              return (
-                <div className="bg-purple-50/40 rounded-3xl border border-purple-200/80 p-4 sm:p-5 space-y-4 shadow-2xs">
-                  {/* Puantaj Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-200/60 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-purple-700 text-white flex items-center justify-center shadow-xs">
-                        <CalendarDays className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
-                          Puantaj Takvimi & Fazla Mesai Çizelgesi (2 Satır Görünüm)
-                          <span className="bg-purple-100 text-purple-900 text-[11px] font-bold px-2 py-0.5 rounded-md border border-purple-300">
-                            {monthNamesTr[pMonth - 1]} {pYear} ({daysInMonth} Gün)
-                          </span>
-                        </h4>
-                        <p className="text-[11px] text-slate-600 font-medium">
-                          Kutucuğa tıklayarak puantaj kodunu değiştirebilir, altındaki kutudan o güne ait <strong>fazla mesai saatini</strong> girebilirsiniz.
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleResetToAutoPuantaj}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-purple-200 text-purple-900 text-xs font-bold hover:bg-purple-50 hover:border-purple-300 transition-all cursor-pointer shadow-2xs"
-                      title="Resmi tatil ve onaylı izinlere göre puantajı yeniden oluşturur"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      Puantajı Otomatik Yenile
-                    </button>
-                  </div>
-
-                  {/* PUANTAJ KODLARI & AÇIKLAMA LEJANTI (LEGEND) */}
-                  <div className="bg-white rounded-2xl border border-purple-100 p-3 shadow-2xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold uppercase text-purple-950 tracking-wider">
-                        Puantaj Kodları ve Renk Anlamları
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-400 hidden sm:inline">
-                        Koda tıklayarak veya kart üzerinden tek tıkla değiştirebilirsiniz
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-                      {(Object.keys(PUANTAJ_CODE_CONFIG) as PuantajCode[]).map((c) => {
-                        const cfg = PUANTAJ_CODE_CONFIG[c];
-                        let count = 0;
-                        if (c === "N") count = stats.countN;
-                        else if (c === "HT") count = stats.countHT;
-                        else if (c === "RT") count = stats.countRT;
-                        else if (c === "Yİ") count = stats.countYI;
-                        else if (c === "Üİ") count = stats.countUI;
-                        else if (c === "Dİ") count = stats.countDI;
-                        else if (c === "R") count = stats.countR;
-                        else if (c === "M") count = stats.countM;
-
-                        return (
-                          <div
-                            key={c}
-                            className={`flex items-center justify-between p-2 rounded-xl border text-xs font-bold transition-all ${cfg.bgClass} ${cfg.borderClass} ${cfg.textClass}`}
-                          >
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className={`w-6 h-6 rounded-lg font-black text-xs flex items-center justify-center shrink-0 shadow-2xs ${cfg.badgeClass}`}>
-                                {c}
-                              </span>
-                              <div className="truncate">
-                                <span className="block text-[11px] font-black truncate">{cfg.label}</span>
-                              </div>
-                            </div>
-                            <span className="text-xs font-black px-1.5 py-0.5 rounded-md bg-white/80 border border-black/5 shadow-2xs shrink-0">
-                              {count}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* PUANTAJ TAKVİM GÜNLERİ IZGARASI - İKİ SATIR OLARAK DÜZENLENDİ */}
-                  <div className="bg-white rounded-2xl border border-purple-200/70 p-3.5 shadow-2xs space-y-3 overflow-x-auto">
-                    {/* Satır 1: Ayın 1. Yarısı (1 - 15/16. Gün) */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px] font-black text-purple-950 px-1 border-b border-purple-100 pb-1">
-                        <span>1. Satır · 1 - {halfCount} {monthNamesTr[pMonth - 1]}</span>
-                        <span className="text-slate-400 font-semibold text-[10px]">İlk Yarı</span>
-                      </div>
-                      <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-16 gap-1.5">
-                        {row1Days.map((dayNum) => renderDayCard(dayNum))}
-                      </div>
-                    </div>
-
-                    {/* Satır 2: Ayın 2. Yarısı (16/17 - 30/31. Gün) */}
-                    <div className="space-y-1.5 pt-2 border-t border-purple-100">
-                      <div className="flex items-center justify-between text-[11px] font-black text-purple-950 px-1 border-b border-purple-100 pb-1">
-                        <span>2. Satır · {halfCount + 1} - {daysInMonth} {monthNamesTr[pMonth - 1]}</span>
-                        <span className="text-slate-400 font-semibold text-[10px]">İkinci Yarı</span>
-                      </div>
-                      <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-16 gap-1.5">
-                        {row2Days.map((dayNum) => renderDayCard(dayNum))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* PUANTAJ ÖZET HAKEDİŞ İCMALİ */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 text-xs">
-                    <div className="bg-white p-2.5 rounded-xl border border-emerald-200 text-emerald-950 shadow-2xs">
-                      <span className="block text-[10px] font-bold text-emerald-700 uppercase">Normal Çalışma (N)</span>
-                      <span className="text-base font-black text-emerald-900">{stats.countN} Gün</span>
-                    </div>
-
-                    <div className="bg-white p-2.5 rounded-xl border border-purple-200 text-purple-950 shadow-2xs">
-                      <span className="block text-[10px] font-bold text-purple-700 uppercase">Hafta Tatili (HT)</span>
-                      <span className="text-base font-black text-purple-900">{stats.countHT} Gün</span>
-                    </div>
-
-                    <div className="bg-white p-2.5 rounded-xl border border-red-200 text-red-950 shadow-2xs">
-                      <span className="block text-[10px] font-bold text-red-700 uppercase">Resmi Tatil (RT)</span>
-                      <span className="text-base font-black text-red-900">{stats.countRT} Gün</span>
-                    </div>
-
-                    <div className="bg-white p-2.5 rounded-xl border border-teal-200 text-teal-950 shadow-2xs">
-                      <span className="block text-[10px] font-bold text-teal-700 uppercase">Ücretli İzin (Yİ+Üİ)</span>
-                      <span className="text-base font-black text-teal-900">{stats.countYI + stats.countUI} Gün</span>
-                    </div>
-
-                    <div className="bg-white p-2.5 rounded-xl border border-sky-200 text-sky-950 shadow-2xs">
-                      <span className="block text-[10px] font-bold text-sky-700 uppercase">Doğum İzni (Dİ)</span>
-                      <span className="text-base font-black text-sky-900">{stats.countDI} Gün</span>
-                    </div>
-
-                    <div className="bg-white p-2.5 rounded-xl border border-rose-200 text-rose-950 shadow-2xs">
-                      <span className="block text-[10px] font-bold text-rose-700 uppercase">Eksik Gün (M+R)</span>
-                      <span className="text-base font-black text-rose-900">{stats.unpaidDays} Gün</span>
-                    </div>
-
-                    <div className="bg-purple-900 text-white p-2.5 rounded-xl border border-purple-950 shadow-2xs">
-                      <span className="block text-[10px] font-bold text-purple-200 uppercase">SGK Prim Günü</span>
-                      <span className="text-base font-black text-white">{stats.sgkDays} / 30 Gün</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            <form onSubmit={handleSaveEditPayroll} className="space-y-4">
-              {/* Form Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-semibold">
-                {/* Salary Type & Amount */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Maaş Anlaşma Tipi & Temel Ücret</label>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={editingPayrollForm.salaryType || "net"}
-                      onChange={(e) => {
-                        const newType = e.target.value as any;
-                        const curSal = editingPayrollForm.baseSalary ?? 0;
-                        const newGross = newType === "gross" ? curSal : curSal * 1.38;
-                        const [pYearStr, pMonthStr] = payrollMonth.split("-");
-                        const pYear = parseInt(pYearStr, 10) || 2026;
-                        const pMonth = parseInt(pMonthStr, 10) || 7;
-                        const daysInMonth = new Date(pYear, pMonth, 0).getDate();
-                        const curPuantaj = editingPayrollForm.puantajDays || generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
-                        const newStats = calculatePuantajStats(curPuantaj, daysInMonth, newGross);
-                        setEditingPayrollForm({
-                          ...editingPayrollForm,
-                          salaryType: newType,
-                          overtimePay: newStats.calculatedOvertimePay,
-                        });
-                      }}
-                      className="bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-800 focus:outline-none focus:border-purple-500 cursor-pointer"
-                    >
-                      <option value="net">NET</option>
-                      <option value="gross">BRÜT</option>
-                    </select>
-                    <input
-                      type="number"
-                      required
-                      value={editingPayrollForm.baseSalary ?? 0}
-                      onChange={(e) => {
-                        const newSal = Number(e.target.value);
-                        const curType = editingPayrollForm.salaryType || "net";
-                        const newGross = curType === "gross" ? newSal : newSal * 1.38;
-                        const [pYearStr, pMonthStr] = payrollMonth.split("-");
-                        const pYear = parseInt(pYearStr, 10) || 2026;
-                        const pMonth = parseInt(pMonthStr, 10) || 7;
-                        const daysInMonth = new Date(pYear, pMonth, 0).getDate();
-                        const curPuantaj = editingPayrollForm.puantajDays || generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
-                        const newStats = calculatePuantajStats(curPuantaj, daysInMonth, newGross);
-                        setEditingPayrollForm({
-                          ...editingPayrollForm,
-                          baseSalary: newSal,
-                          overtimePay: newStats.calculatedOvertimePay,
-                        });
-                      }}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Bonus / Prim / İkramiye */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Prim / İkramiye (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.bonusAmount ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, bonusAmount: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                    placeholder="0"
-                  />
-                </div>
-
-                {/* Overtime Pay & TC Labor Law Details (4857 Sayılı Kanun) */}
-                {(() => {
-                  const curSalType = editingPayrollForm.salaryType ?? "net";
-                  const curBaseSal = editingPayrollForm.baseSalary ?? 0;
-                  const curBaseGross = curSalType === "gross" ? curBaseSal : curBaseSal * 1.38;
-                  const [pYearStr, pMonthStr] = payrollMonth.split("-");
-                  const pYear = parseInt(pYearStr, 10) || 2026;
-                  const pMonth = parseInt(pMonthStr, 10) || 7;
-                  const daysInMonth = new Date(pYear, pMonth, 0).getDate();
-                  const curPuantaj = editingPayrollForm.puantajDays || generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
-                  const otStats = calculatePuantajStats(curPuantaj, daysInMonth, curBaseGross);
-
-                  return (
-                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 bg-gradient-to-br from-purple-50/80 via-fuchsia-50/40 to-slate-50 p-4 rounded-2xl border border-purple-200/90 space-y-3 shadow-2xs">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-200/60 pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-purple-700" />
-                          <div>
-                            <label className="block font-black text-purple-950 uppercase text-xs">
-                              Fazla Mesai Tutarı & Yasal Dağılımı (4857 Sayılı İş Kanunu)
-                            </label>
-                            <span className="text-[10px] text-purple-800 font-medium">
-                              T.C. İş Kanunu Esasları: Saatlik Brüt = Brüt/225 · Günlük Yevmiye = Brüt/30 · Hafta İçi %50 Zamlı · Hafta Tatili/Resmi Tatil %100 Zamlı
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold text-slate-600">Toplam Mesai Tutarı (₺):</span>
-                          <input
-                            type="number"
-                            value={editingPayrollForm.overtimePay ?? 0}
-                            onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, overtimePay: Number(e.target.value) })}
-                            className="w-32 bg-white border border-purple-300 rounded-xl p-1.5 font-black text-purple-950 text-sm focus:outline-none focus:border-purple-600 shadow-2xs text-right"
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
-
-                      {/* GÜN VE SAAT AYRI AYRI DETAYLI GÖSTERİM KARTLARI */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                        {/* 1. Hafta İçi Mesai Saati */}
-                        <div className="bg-white p-2.5 rounded-xl border border-emerald-200 shadow-2xs space-y-1">
-                          <div className="flex items-center justify-between text-[10px] font-bold text-emerald-800 uppercase">
-                            <span>Hafta İçi Mesai</span>
-                            <span className="bg-emerald-100 text-emerald-900 px-1 py-0.2 rounded text-[9px]">%50 Zamlı</span>
-                          </div>
-                          <div className="flex items-baseline justify-between">
-                            <span className="text-base font-black text-emerald-950">{otStats.overtimeNormalHours} Saat</span>
-                            <span className="text-xs font-black text-emerald-700">{formatTRY(otStats.normalOvertimePay)}</span>
-                          </div>
-                          <div className="text-[9px] text-slate-500 font-medium">
-                            Saat Başı: {formatTRY(otStats.hourlyGross * 1.5)}
-                          </div>
-                        </div>
-
-                        {/* 2. Hafta Tatili Mesai Saati */}
-                        <div className="bg-white p-2.5 rounded-xl border border-purple-200 shadow-2xs space-y-1">
-                          <div className="flex items-center justify-between text-[10px] font-bold text-purple-800 uppercase">
-                            <span>Hafta Tatili Mesai</span>
-                            <span className="bg-purple-100 text-purple-900 px-1 py-0.2 rounded text-[9px]">%100 Zamlı</span>
-                          </div>
-                          <div className="flex items-baseline justify-between">
-                            <span className="text-base font-black text-purple-950">{otStats.overtimeWeekendHours} Saat</span>
-                            <span className="text-xs font-black text-purple-700">{formatTRY(otStats.weekendOvertimePay)}</span>
-                          </div>
-                          <div className="text-[9px] text-slate-500 font-medium">
-                            Saat Başı: {formatTRY(otStats.hourlyGross * 2.0)}
-                          </div>
-                        </div>
-
-                        {/* 3. Resmi Tatil Saatlik Mesai */}
-                        <div className="bg-white p-2.5 rounded-xl border border-amber-200 shadow-2xs space-y-1">
-                          <div className="flex items-center justify-between text-[10px] font-bold text-amber-800 uppercase">
-                            <span>Resmi Tatil (Saat)</span>
-                            <span className="bg-amber-100 text-amber-900 px-1 py-0.2 rounded text-[9px]">%100 Zamlı</span>
-                          </div>
-                          <div className="flex items-baseline justify-between">
-                            <span className="text-base font-black text-amber-950">{otStats.overtimeHolidayHours} Saat</span>
-                            <span className="text-xs font-black text-amber-700">{formatTRY(otStats.holidayHoursOvertimePay)}</span>
-                          </div>
-                          <div className="text-[9px] text-slate-500 font-medium">
-                            Saat Başı: {formatTRY(otStats.hourlyGross * 2.0)}
-                          </div>
-                        </div>
-
-                        {/* 4. Resmi Tatil Tam Gün Çalışma (Gün Bazlı) */}
-                        <div className="bg-white p-2.5 rounded-xl border border-red-200 shadow-2xs space-y-1">
-                          <div className="flex items-center justify-between text-[10px] font-bold text-red-800 uppercase">
-                            <span>Resmi Tatil (Gün)</span>
-                            <span className="bg-red-100 text-red-900 px-1 py-0.2 rounded text-[9px]">1 Tam Yevmiye</span>
-                          </div>
-                          <div className="flex items-baseline justify-between">
-                            <span className="text-base font-black text-red-950">{otStats.overtimeHolidayDays} Gün</span>
-                            <span className="text-xs font-black text-red-700">{formatTRY(otStats.holidayDaysOvertimePay)}</span>
-                          </div>
-                          <div className="text-[9px] text-slate-500 font-medium">
-                            Günlük Yevmiye: {formatTRY(otStats.dailyGross)}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Toplam Fazla Mesai İcmali */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 bg-purple-900/10 border border-purple-200 p-2.5 rounded-xl text-xs text-purple-950 font-bold">
-                        <div className="flex items-center gap-3">
-                          <span>Toplam Süre: <span className="text-purple-900 font-black">{otStats.totalOvertimeHours} Saat</span> + <span className="text-red-900 font-black">{otStats.overtimeHolidayDays} Gün</span></span>
-                          <span className="text-slate-400">|</span>
-                          <span>Birim Saatlik Brüt: <span className="text-slate-800 font-black">{formatTRY(otStats.hourlyGross)}</span></span>
-                          <span className="text-slate-400">|</span>
-                          <span>Günlük Brüt: <span className="text-slate-800 font-black">{formatTRY(otStats.dailyGross)}</span></span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingPayrollForm((prev) => ({
-                              ...prev,
-                              overtimePay: otStats.calculatedOvertimePay,
-                              overtimeNormalHours: otStats.overtimeNormalHours,
-                              overtimeWeekendHours: otStats.overtimeWeekendHours,
-                              overtimeHolidayDays: otStats.overtimeHolidayDays,
-                              overtimeHolidayHours: otStats.overtimeHolidayHours,
-                            }));
-                          }}
-                          className="text-[11px] font-black bg-purple-700 text-white px-2.5 py-1 rounded-lg hover:bg-purple-800 transition-all cursor-pointer shadow-2xs"
-                        >
-                          Otomatik Tutarı Aktar ({formatTRY(otStats.calculatedOvertimePay)})
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Food Allowance */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Yemek Yardımı (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.foodAllowance ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, foodAllowance: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                {/* Road Allowance */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Yol / Ulaşım Yardımı (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.roadAllowance ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, roadAllowance: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                {/* Advance Deduction (Entegre) */}
-                <div className="bg-amber-50/60 p-3.5 rounded-2xl border border-amber-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block font-bold text-amber-900 uppercase text-[11px]">Avans Kesintisi (₺)</label>
-                    <span className="text-[10px] text-amber-700 font-bold">Avans Yönetimi Entegre</span>
-                  </div>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.advanceDeduction ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, advanceDeduction: Number(e.target.value) })}
-                    className="w-full bg-white border border-amber-300 rounded-xl p-2 font-black text-amber-900 text-sm focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                {/* Unpaid Leave Days (Entegre & Puantaj ile Otomatik) */}
-                <div className="bg-rose-50/60 p-3.5 rounded-2xl border border-rose-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block font-bold text-rose-900 uppercase text-[11px]">Ücretsiz İzin / Eksik Gün (Gün)</label>
-                    <span className="text-[10px] text-rose-700 font-bold">Puantaj Takvimi Entegre</span>
-                  </div>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.unpaidLeaveDays ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, unpaidLeaveDays: Number(e.target.value) })}
-                    className="w-full bg-white border border-rose-300 rounded-xl p-2 font-black text-rose-900 text-sm focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-
-                {/* BES Kesintisi */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">BES Kesintisi (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.besDeduction ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, besDeduction: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                {/* İcra Kesintisi */}
-                <div className="bg-red-50/60 p-3.5 rounded-2xl border border-red-200 space-y-2">
-                  <label className="block font-bold text-red-900 uppercase text-[11px]">İcra Kesintisi (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.executionDeduction ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, executionDeduction: Number(e.target.value) })}
-                    className="w-full bg-white border border-red-300 rounded-xl p-2 font-black text-red-900 text-sm focus:outline-none focus:border-red-500"
-                    placeholder="0"
-                  />
-                </div>
-
-                {/* Nafaka Kesintisi */}
-                <div className="bg-purple-50/60 p-3.5 rounded-2xl border border-purple-200 space-y-2">
-                  <label className="block font-bold text-purple-900 uppercase text-[11px]">Nafaka Kesintisi (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.alimonyDeduction ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, alimonyDeduction: Number(e.target.value) })}
-                    className="w-full bg-white border border-purple-300 rounded-xl p-2 font-black text-purple-900 text-sm focus:outline-none focus:border-purple-500"
-                    placeholder="0"
-                  />
-                </div>
-
-                {/* Diğer Kesintiler */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Diğer Kesintiler (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.otherDeductions ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, otherDeductions: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              {/* Calculated Live Breakdown Summary */}
-              {(() => {
-                const baseSal = editingPayrollForm.baseSalary ?? 0;
-                const salType = editingPayrollForm.salaryType ?? "net";
-                const bonus = editingPayrollForm.bonusAmount ?? 0;
-                const overtime = editingPayrollForm.overtimePay ?? 0;
-                const food = editingPayrollForm.foodAllowance ?? 0;
-                const road = editingPayrollForm.roadAllowance ?? 0;
-                const advDeduct = editingPayrollForm.advanceDeduction ?? 0;
-                const lvsDays = editingPayrollForm.unpaidLeaveDays ?? 0;
-
-                const baseGross = salType === "gross" ? baseSal : baseSal * 1.38;
-                const unpaidLeaveDeduction = Math.round((baseGross / 30) * lvsDays);
-                const grossSal = Math.max(0, baseGross + bonus + overtime + food + road - unpaidLeaveDeduction);
-
-                const sgkEmp = Math.round(grossSal * 0.14);
-                const unempEmp = Math.round(grossSal * 0.01);
-                const taxBase = Math.round(grossSal - (sgkEmp + unempEmp));
-                const incTax = Math.round(Math.max(0, taxBase * 0.15 - 2950));
-                const stamp = Math.round(grossSal * 0.00759);
-                const netHak = Math.round(grossSal - (sgkEmp + unempEmp + incTax + stamp));
-                const besDed = editingPayrollForm.besDeduction ?? 0;
-                const execDed = editingPayrollForm.executionDeduction ?? 0;
-                const aliDed = editingPayrollForm.alimonyDeduction ?? 0;
-                const othDed = editingPayrollForm.otherDeductions ?? 0;
-                const payableNet = Math.max(0, netHak - advDeduct - besDed - execDed - aliDed - othDed);
-
-                return (
-                  <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase font-bold text-purple-300 block">Canlı Bordro Hakediş Özeti</span>
-                      {(execDed > 0 || aliDed > 0 || othDed > 0) && (
-                        <span className="text-[10px] bg-red-500/30 text-red-200 border border-red-400/40 px-2 py-0.5 rounded-full font-bold">
-                          Özel Kesintiler Mevcut (-{formatTRY(execDed + aliDed + othDed)})
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">Hesaplanan Brüt</span>
-                        <span className="font-bold text-white text-sm sm:text-base">{formatTRY(grossSal)}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">Eksik Gün Kesintisi ({lvsDays} Gün)</span>
-                        <span className="font-bold text-rose-300 text-sm sm:text-base">{formatTRY(unpaidLeaveDeduction)}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">SGK + Vergi Kesintisi</span>
-                        <span className="font-bold text-amber-300 text-sm sm:text-base">{formatTRY(sgkEmp + unempEmp + incTax + stamp)}</span>
-                      </div>
-                      <div>
-                        <span className="text-emerald-400 block text-[10px] font-bold">NET ÖDENECEK MAAŞ</span>
-                        <span className="font-black text-emerald-300 text-base sm:text-lg">{formatTRY(payableNet)}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const autoAdv = getAutoAdvanceForEmployee(editingPayrollEmp.id);
-                    const autoLvs = getAutoLeavesForEmployee(editingPayrollEmp.id);
-                    const freshPuantaj = generateDefaultPuantaj(editingPayrollEmp.id, payrollMonth, leaveRequests);
-                    const [yearStr, monthStr] = payrollMonth.split("-");
-                    const year = parseInt(yearStr, 10) || 2026;
-                    const month = parseInt(monthStr, 10) || 7;
-                    const daysInMonth = new Date(year, month, 0).getDate();
-                    const freshStats = calculatePuantajStats(freshPuantaj, daysInMonth);
-
-                    setEditingPayrollForm({
-                      salaryType: editingPayrollEmp.salaryType,
-                      baseSalary: editingPayrollEmp.salaryAmount,
-                      bonusAmount: 0,
-                      overtimePay: 0,
-                      foodAllowance: editingPayrollEmp.foodAllowance || 0,
-                      roadAllowance: editingPayrollEmp.roadAllowance || 0,
-                      advanceDeduction: autoAdv.totalAdvance,
-                      unpaidLeaveDays: freshStats.unpaidDays > 0 ? freshStats.unpaidDays : autoLvs.unpaidDays,
-                      besDeduction: editingPayrollEmp.hasBes ? Math.round((editingPayrollEmp.salaryAmount * (editingPayrollEmp.salaryType === "net" ? 1.38 : 1)) * 0.03) : 0,
-                      executionDeduction: 0,
-                      alimonyDeduction: 0,
-                      otherDeductions: 0,
-                      notes: "",
-                      puantajDays: freshPuantaj,
-                    });
-                  }}
-                  className="px-3 py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                >
-                  Varsayılanlara Sıfırla
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleBackToList}
-                    className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                  >
-                    Vazgeç
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleSaveEditPayroll(undefined, false)}
-                    className="px-3.5 py-2 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-950 text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                    title="Sadece bu personeli kaydet ve pencereyi kapat"
-                  >
-                    Kaydet ve Kapat
-                  </button>
-
-                  {(() => {
-                    const sortedAlphabetical = [...employees].sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"));
-                    const currIdx = sortedAlphabetical.findIndex((e) => e.id === editingPayrollEmp.id);
-                    const nextEmp = currIdx !== -1 && currIdx + 1 < sortedAlphabetical.length ? sortedAlphabetical[currIdx + 1] : null;
-
-                    return (
-                      <button
-                        type="submit"
-                        className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-md cursor-pointer transition-all flex items-center gap-2"
-                        title={
-                          nextEmp
-                            ? `Kaydet ve alfabetik sıradaki sonraki personel (${nextEmp.fullName}) için bordroyu aç`
-                            : "Bordroyu kaydet ve tamamla"
-                        }
-                      >
-                        <span>{nextEmp ? `Kaydet & Sıradakine Geç (${nextEmp.fullName.split(" ")[0]})` : "Kaydet ve Tamamla"}</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    );
-                  })()}
-                </div>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: BORDRO PUSULASI */}
-      {selectedPayrollRecord && (
-        <DetailPageLayout
-          title={`Ücret Hesap Pusulası - ${selectedPayrollRecord.employeeName}`}
-          subtitle={`Bordro Dönemi: ${selectedPayrollRecord.monthYear} • Departman: ${selectedPayrollRecord.department} • Net Maaş: ${formatTRY(selectedPayrollRecord.payableNetSalary)}`}
-          breadcrumbs={[
-            { label: "İnsan Kaynakları", onClick: handleBackToList },
-            { label: "Bordrolar", onClick: handleBackToList },
-            { label: `${selectedPayrollRecord.employeeName} (${selectedPayrollRecord.monthYear})`, active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-emerald-50 text-emerald-700 border-emerald-200">
-              {formatTRY(selectedPayrollRecord.payableNetSalary)}
-            </span>
-          }
-          headerIcon={<Receipt className="w-5 h-5 text-purple-700" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
-              >
-                <Printer className="w-4 h-4" /> <span>Yazdır / PDF</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Geri Dön
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
-
-            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-semibold">
-              <div className="flex justify-between py-1 border-b border-slate-200">
-                <span className="text-slate-500">Personel Adı Soyadı:</span>
-                <span className="font-bold text-slate-900">{selectedPayrollRecord.employeeName}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200">
-                <span className="text-slate-500">Departman:</span>
-                <span className="font-bold text-slate-800">{selectedPayrollRecord.department}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200">
-                <span className="text-slate-500">Temel Brüt Ücret:</span>
-                <span className="font-bold text-slate-900">{formatTRY(selectedPayrollRecord.grossSalary)}</span>
-              </div>
-
-              {Boolean(selectedPayrollRecord.bonusAmount) && (
-                <div className="flex justify-between py-1 border-b border-slate-200 text-emerald-700">
-                  <span>+ Prim / İkramiye:</span>
-                  <span className="font-bold">+{formatTRY(selectedPayrollRecord.bonusAmount || 0)}</span>
-                </div>
-              )}
-
-              {Boolean(selectedPayrollRecord.overtimePay) && (
-                <div className="border-b border-slate-200 py-1 text-emerald-700 space-y-0.5">
-                  <div className="flex justify-between">
-                    <span className="font-bold">+ Fazla Mesai Toplamı:</span>
-                    <span className="font-black">+{formatTRY(selectedPayrollRecord.overtimePay || 0)}</span>
-                  </div>
-                  {(Boolean(selectedPayrollRecord.overtimeNormalHours) ||
-                    Boolean(selectedPayrollRecord.overtimeWeekendHours) ||
-                    Boolean(selectedPayrollRecord.overtimeHolidayHours) ||
-                    Boolean(selectedPayrollRecord.overtimeHolidayDays)) && (
-                    <div className="text-[10px] text-emerald-800 bg-emerald-50/70 p-1.5 rounded-lg space-y-0.5 font-semibold">
-                      {Boolean(selectedPayrollRecord.overtimeNormalHours) && (
-                        <div className="flex justify-between">
-                          <span>· Hafta İçi (%50 zamlı):</span>
-                          <span>{selectedPayrollRecord.overtimeNormalHours} Saat</span>
-                        </div>
-                      )}
-                      {Boolean(selectedPayrollRecord.overtimeWeekendHours) && (
-                        <div className="flex justify-between">
-                          <span>· Hafta Tatili (%100 zamlı):</span>
-                          <span>{selectedPayrollRecord.overtimeWeekendHours} Saat</span>
-                        </div>
-                      )}
-                      {Boolean(selectedPayrollRecord.overtimeHolidayHours) && (
-                        <div className="flex justify-between">
-                          <span>· Resmi Tatil Saat (%100 zamlı):</span>
-                          <span>{selectedPayrollRecord.overtimeHolidayHours} Saat</span>
-                        </div>
-                      )}
-                      {Boolean(selectedPayrollRecord.overtimeHolidayDays) && (
-                        <div className="flex justify-between">
-                          <span>· Resmi Tatil Tam Gün (1 Yevmiye):</span>
-                          <span>{selectedPayrollRecord.overtimeHolidayDays} Gün</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex justify-between py-1 border-b border-slate-200">
-                <span className="text-slate-500">SGK İşçi Payı (%14):</span>
-                <span className="text-slate-800">{formatTRY(selectedPayrollRecord.sgkEmployeeShare)}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200">
-                <span className="text-slate-500">İşsizlik Sigortası İşçi (%1):</span>
-                <span className="text-slate-800">{formatTRY(selectedPayrollRecord.unemploymentEmployeeShare)}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200">
-                <span className="text-slate-500">Gelir Vergisi:</span>
-                <span className="text-slate-800">{formatTRY(selectedPayrollRecord.incomeTax)}</span>
-              </div>
-
-              {Boolean(selectedPayrollRecord.advanceDeduction) && (
-                <div className="flex justify-between py-1 border-b border-slate-200 text-amber-800 bg-amber-50/50 px-2 py-1 rounded-lg">
-                  <span>- Avans Kesintisi (Entegre):</span>
-                  <span className="font-bold">-{formatTRY(selectedPayrollRecord.advanceDeduction || 0)}</span>
-                </div>
-              )}
-
-              {Boolean(selectedPayrollRecord.unpaidLeaveDays) && (
-                <div className="flex justify-between py-1 border-b border-slate-200 text-rose-800 bg-rose-50/50 px-2 py-1 rounded-lg">
-                  <span>- Ücretsiz İzin Kesintisi ({selectedPayrollRecord.unpaidLeaveDays} Gün):</span>
-                  <span className="font-bold">-{formatTRY(selectedPayrollRecord.unpaidLeaveDeduction || 0)}</span>
-                </div>
-              )}
-
-              {Boolean(selectedPayrollRecord.besDeduction) && (
-                <div className="flex justify-between py-1 border-b border-slate-200 text-slate-700">
-                  <span>- BES Kesintisi:</span>
-                  <span className="font-bold">-{formatTRY(selectedPayrollRecord.besDeduction || 0)}</span>
-                </div>
-              )}
-
-              {Boolean(selectedPayrollRecord.executionDeduction) && (
-                <div className="flex justify-between py-1 border-b border-slate-200 text-red-800 bg-red-50/50 px-2 py-1 rounded-lg">
-                  <span className="font-bold">- İcra Kesintisi:</span>
-                  <span className="font-extrabold">-{formatTRY(selectedPayrollRecord.executionDeduction || 0)}</span>
-                </div>
-              )}
-
-              {Boolean(selectedPayrollRecord.alimonyDeduction) && (
-                <div className="flex justify-between py-1 border-b border-slate-200 text-purple-800 bg-purple-50/50 px-2 py-1 rounded-lg">
-                  <span className="font-bold">- Nafaka Kesintisi:</span>
-                  <span className="font-extrabold">-{formatTRY(selectedPayrollRecord.alimonyDeduction || 0)}</span>
-                </div>
-              )}
-
-              {Boolean(selectedPayrollRecord.otherDeductions) && (
-                <div className="flex justify-between py-1 border-b border-slate-200 text-slate-800 bg-slate-100/70 px-2 py-1 rounded-lg">
-                  <span>- Diğer Kesintiler:</span>
-                  <span className="font-bold">-{formatTRY(selectedPayrollRecord.otherDeductions || 0)}</span>
-                </div>
-              )}
-
-              <div className="flex justify-between py-2 border-b border-slate-300 font-black text-sm text-emerald-800 bg-emerald-50 px-3 rounded-xl mt-2">
-                <span>NET ÖDENECEK MAAŞ:</span>
-                <span>{formatTRY(selectedPayrollRecord.payableNetSalary)}</span>
-              </div>
-              <div className="flex justify-between py-1 pt-1">
-                <span className="text-slate-500">Toplam İşveren Maliyeti:</span>
-                <span className="font-bold text-purple-900">{formatTRY(selectedPayrollRecord.totalEmployerCost)}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold rounded-xl text-xs cursor-pointer"
-              >
-                Geri Dön
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  window.print();
-                }}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
-              >
-                <Printer className="w-4 h-4" /> Yazdır / PDF
-              </button>
-            </div>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: IZIN TALEBI */}
-      {isAddLeaveOpen && (
-        <DetailPageLayout
-          title="Yeni İzin Talebi Oluştur"
-          subtitle="Yıllık ücretli izin, analık, babalık, mazeret ve ücretsiz izin kayıtları"
-          breadcrumbs={[
-            { label: "İnsan Kaynakları", onClick: handleBackToList },
-            { label: "İzin Talepleri", onClick: handleBackToList },
-            { label: "Yeni İzin", active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-              Yeni Talep
-            </span>
-          }
-          headerIcon={<Calendar className="w-5 h-5 text-purple-700" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="submit"
-                form="add-leave-form"
-                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-              >
-                <span>Talebi Oluştur</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
-            <form id="add-leave-form" onSubmit={handleCreateLeaveSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Personel Seçin *</label>
-                <select
-                  value={newLeaveForm.employeeId}
-                  onChange={(e) => {
-                    const empId = e.target.value;
-                    const emp = employees.find((x) => x.id === empId);
-                    setNewLeaveForm((prev) => ({
-                      ...prev,
-                      employeeId: empId,
-                      // If selecting male and currently female maternity, adjust or vice versa
-                      type: prev.type,
-                    }));
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 cursor-pointer"
-                >
-                  {[...employees]
-                    .sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"))
-                    .map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.fullName} ({emp.gender === "Kadın" ? "Kadın ♀" : "Erkek ♂"} · {emp.department} - {emp.title})
-                      </option>
-                    ))}
-                </select>
-
-                {(() => {
-                  const selEmp = employees.find((e) => e.id === newLeaveForm.employeeId) || employees[0];
-                  if (!selEmp) return null;
-                  return (
-                    <div className="mt-1.5 flex items-center gap-2 text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-                      <span>Seçilen Çalışan:</span>
-                      <strong className="text-slate-900">{selEmp.fullName}</strong>
-                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                        selEmp.gender === "Kadın"
-                          ? "bg-pink-100 text-pink-800 border-pink-200"
-                          : "bg-blue-100 text-blue-800 border-blue-200"
-                      }`}>
-                        {selEmp.gender === "Kadın" ? "Kadın ♀" : "Erkek ♂"}
-                      </span>
-                      <span className="text-slate-400">·</span>
-                      <span className="text-purple-700 font-bold">{selEmp.department}</span>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Hızlı İzin Şablonları */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Hızlı Yasal İzin Şablonları</label>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
-                      const end = addDaysToDate(start, 5);
-                      setNewLeaveForm({
-                        ...newLeaveForm,
-                        type: "Babalık İzni (Erkek Doğum İzni)",
-                        daysCount: 5,
-                        startDate: start,
-                        endDate: end,
-                        reason: "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Eşi Doğum Yapan Erkek Personel Babalık İzni",
-                      });
-                    }}
-                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
-                      newLeaveForm.type === "Babalık İzni (Erkek Doğum İzni)"
-                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                        : "bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-200"
-                    }`}
-                  >
-                    <span>🍼</span>
-                    <span>Babalık İzni (Erkek Doğum - 5 Gün)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
-                      const end = addDaysToDate(start, 112);
-                      setNewLeaveForm({
-                        ...newLeaveForm,
-                        type: "Analık / Doğum İzni",
-                        daysCount: 112,
-                        startDate: start,
-                        endDate: end,
-                        reason: "4857 Sayılı İş Kanunu Md. 74 Uyarınca Kadın Personel Doğum (Analık) İzni",
-                      });
-                    }}
-                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
-                      newLeaveForm.type === "Analık / Doğum İzni"
-                        ? "bg-pink-600 text-white border-pink-600 shadow-xs"
-                        : "bg-pink-50 hover:bg-pink-100 text-pink-900 border-pink-200"
-                    }`}
-                  >
-                    <span>🤰</span>
-                    <span>Analık İzni (Kadın - 16 Hafta)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
-                      const end = addDaysToDate(start, 3);
-                      setNewLeaveForm({
-                        ...newLeaveForm,
-                        type: "Evlilik İzni",
-                        daysCount: 3,
-                        startDate: start,
-                        endDate: end,
-                        reason: "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Evlilik İzni (3 Gün Ücretli)",
-                      });
-                    }}
-                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
-                      newLeaveForm.type === "Evlilik İzni"
-                        ? "bg-purple-600 text-white border-purple-600 shadow-xs"
-                        : "bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200"
-                    }`}
-                  >
-                    <span>💍</span>
-                    <span>Evlilik (3 Gün)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
-                      const end = addDaysToDate(start, 3);
-                      setNewLeaveForm({
-                        ...newLeaveForm,
-                        type: "Vefat İzni",
-                        daysCount: 3,
-                        startDate: start,
-                        endDate: end,
-                        reason: "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Vefat İzni (3 Gün Ücretli)",
-                      });
-                    }}
-                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
-                      newLeaveForm.type === "Vefat İzni"
-                        ? "bg-slate-700 text-white border-slate-700 shadow-xs"
-                        : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
-                    }`}
-                  >
-                    <span>🕊️</span>
-                    <span>Vefat (3 Gün)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
-                      const end = addDaysToDate(start, 5);
-                      setNewLeaveForm({
-                        ...newLeaveForm,
-                        type: "Yıllık İzin",
-                        daysCount: 5,
-                        startDate: start,
-                        endDate: end,
-                        reason: "Yıllık Ücretli İzin Kullanımı",
-                      });
-                    }}
-                    className={`text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer ${
-                      newLeaveForm.type === "Yıllık İzin"
-                        ? "bg-teal-600 text-white border-teal-600 shadow-xs"
-                        : "bg-teal-50 hover:bg-teal-100 text-teal-900 border-teal-200"
-                    }`}
-                  >
-                    <span>🏖️</span>
-                    <span>Yıllık İzin</span>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">İzin Türü *</label>
-                <select
-                  value={newLeaveForm.type || "Yıllık İzin"}
-                  onChange={(e) => {
-                    const selected = e.target.value as any;
-                    const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
-                    let days = Number(newLeaveForm.daysCount) || 1;
-                    let autoReason = newLeaveForm.reason;
-
-                    if (selected === "Babalık İzni (Erkek Doğum İzni)") {
-                      days = 5;
-                      autoReason = "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Eşi Doğum Yapan Erkek Personel Babalık İzni";
-                    } else if (selected === "Analık / Doğum İzni") {
-                      days = 112;
-                      autoReason = "4857 Sayılı İş Kanunu Md. 74 Uyarınca Kadın Personel Doğum (Analık) İzni";
-                    } else if (selected === "Evlilik İzni") {
-                      days = 3;
-                      autoReason = "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Evlilik İzni";
-                    } else if (selected === "Vefat İzni") {
-                      days = 3;
-                      autoReason = "4857 Sayılı İş Kanunu Ek Md. 2 Uyarınca Vefat İzni";
-                    }
-
-                    const end = addDaysToDate(start, days);
-                    setNewLeaveForm({
-                      ...newLeaveForm,
-                      type: selected,
-                      daysCount: days,
-                      endDate: end,
-                      reason: autoReason,
-                    });
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-purple-900 cursor-pointer"
-                >
-                  <option value="Babalık İzni (Erkek Doğum İzni)">🍼 Babalık İzni (Erkek Doğum İzni - 5 Gün Ücretli)</option>
-                  <option value="Analık / Doğum İzni">🤰 Analık / Doğum İzni (Kadın Personel - 16 Hafta / 112 Gün)</option>
-                  <option value="Yıllık İzin">🏖️ Yıllık İzin (Ücretli İzin)</option>
-                  <option value="Evlilik İzni">💍 Evlilik İzni (3 Gün Ücretli)</option>
-                  <option value="Vefat İzni">🕊️ Vefat İzni (3 Gün Ücretli)</option>
-                  <option value="Ücretli İzin">📋 Ücretli İzin (Mazeret / İdari İzin)</option>
-                  <option value="Ücretsiz İzin">⏳ Ücretsiz İzin (Maaş Kesintili)</option>
-                  <option value="Mazeretsiz İzin">🚫 Mazeretsiz İzin (Maaş Kesintili)</option>
-                  <option value="Sıhhi İzin">🩺 Sıhhi İzin (Rapor - 2 Güne Kadar Ücretli)</option>
-                  <option value="Hastalık/Rapor">🏥 Hastalık / SGK İstirahat Raporu</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Başlangıç Tarihi *</label>
-                  <input
-                    type="date"
-                    required
-                    value={newLeaveForm.startDate}
-                    onChange={(e) => {
-                      const newStart = e.target.value;
-                      const days = Number(newLeaveForm.daysCount) || 1;
-                      const newEnd = addDaysToDate(newStart, days);
-                      setNewLeaveForm({
-                        ...newLeaveForm,
-                        startDate: newStart,
-                        endDate: newEnd,
-                      });
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Bitiş Tarihi *</label>
-                  <input
-                    type="date"
-                    required
-                    value={newLeaveForm.endDate}
-                    onChange={(e) => {
-                      const newEnd = e.target.value;
-                      const start = newLeaveForm.startDate || newEnd;
-                      const diff = calculateDaysDiff(start, newEnd);
-                      setNewLeaveForm({
-                        ...newLeaveForm,
-                        endDate: newEnd,
-                        daysCount: diff,
-                      });
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">İzin Gün Sayısı *</label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  value={newLeaveForm.daysCount}
-                  onChange={(e) => {
-                    const days = Math.max(1, Number(e.target.value) || 1);
-                    const start = newLeaveForm.startDate || new Date().toISOString().split("T")[0];
-                    const end = addDaysToDate(start, days);
-                    setNewLeaveForm({
-                      ...newLeaveForm,
-                      daysCount: days,
-                      endDate: end,
-                    });
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-extrabold text-slate-900"
-                />
-              </div>
-
-              {/* Dynamic Calculation Notice Box with Law Reference */}
-              {(() => {
-                const selectedType = newLeaveForm.type || "Yıllık İzin";
-                const days = Number(newLeaveForm.daysCount) || 1;
-                const selEmp = employees.find((e) => e.id === newLeaveForm.employeeId) || employees[0];
-                const isMale = selEmp?.gender !== "Kadın";
-
-                if (selectedType.toLowerCase().includes("babalık") || selectedType.toLowerCase().includes("erkek doğum")) {
-                  return (
-                    <div className="bg-blue-50 border border-blue-300 rounded-2xl p-3 text-xs text-blue-950 font-medium space-y-1.5 shadow-xs">
-                      <div className="flex items-center gap-1.5 font-black text-blue-900 text-xs">
-                        <span className="text-base">🍼</span>
-                        <span>4857 Sayılı İş Kanunu Ek Md. 2: Erkek Personel Babalık İzni</span>
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-blue-900">
-                        Eşi doğum yapan <strong>erkek personele 5 gün yasal ücretli babalık izni</strong> verilir. Bu süre boyunca çalışanın <strong>maaşından, priminden veya yıllık izin bakiyesinden hiçbir kesinti yapılmaz</strong>.
-                      </p>
-                      {isMale ? (
-                        <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-emerald-800 bg-emerald-100/80 px-2 py-1 rounded-lg border border-emerald-300">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                          <span>Seçilen Personel: Erkek ♂ (5 Günlük yasal babalık izni bordroya tam ücretli yansıtılacaktır)</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-900 bg-amber-100/90 px-2 py-1 rounded-lg border border-amber-300">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                          <span>Bilgilendirme: Seçilen personel kadın olarak kayıtlıdır. Doğum yapacak kadın çalışanlar için 'Analık / Doğum İzni (16 Hafta)' türü tavsiye edilir.</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                if (selectedType.toLowerCase().includes("analık") || (selectedType.toLowerCase().includes("doğum") && !selectedType.toLowerCase().includes("erkek"))) {
-                  return (
-                    <div className="bg-pink-50 border border-pink-300 rounded-2xl p-3 text-xs text-pink-950 font-medium space-y-1.5 shadow-xs">
-                      <div className="flex items-center gap-1.5 font-black text-pink-900 text-xs">
-                        <span className="text-base">🤰</span>
-                        <span>4857 Sayılı İş Kanunu Md. 74: Kadın Personel Analık / Doğum İzni</span>
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-pink-900">
-                        Kadın işçilere doğumdan önce 8 ve doğumdan sonra 8 hafta olmak üzere toplam <strong>16 hafta (112 gün) yasal analık izni</strong> kullandırılır. SGK geçici iş göremezlik ödeneği kapsamındadır.
-                      </p>
-                    </div>
-                  );
-                }
-
-                if (selectedType === "Ücretsiz İzin" || selectedType === "Mazeretsiz İzin") {
-                  return (
-                    <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3 text-xs text-rose-950 font-medium space-y-1 shadow-xs">
-                      <div className="flex items-center gap-1.5 font-black text-rose-900">
-                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span>Maaştan Gün Sayısına Göre Kesinti Yapılır ({days} Gün)</span>
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-rose-800">
-                        <strong>{selectedType}</strong> talebi onaylandığında kullanılan <strong>{days} günün tamamı</strong> ay sonu bordrosunda eksik gün olarak maaştan otomatik düşülecektir.
-                      </p>
-                    </div>
-                  );
-                }
-
-                if (selectedType === "Sıhhi İzin") {
-                  const deductedDays = days > 2 ? days - 2 : 0;
-                  if (days > 2) {
-                    return (
-                      <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 text-xs text-amber-950 font-medium space-y-1 shadow-xs">
-                        <div className="flex items-center gap-1.5 font-black text-amber-900">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span>Maaştan Kesinti Yapılır (2 Günü Aşan {deductedDays} Gün)</span>
-                        </div>
-                        <p className="text-[11px] leading-relaxed text-amber-900">
-                          Sıhhi izin 2 günden fazla ({days} gün) olduğu için ilk 2 gün ücretli sayılacak, 2 günü aşan <strong>{deductedDays} gün</strong> bordroda eksik gün olarak maaştan düşülecektir.
-                        </p>
-                      </div>
-                    );
-                  } else {
-                    return (
-                      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-xs text-emerald-950 font-medium space-y-1 shadow-xs">
-                        <div className="flex items-center gap-1.5 font-black text-emerald-900">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>Maaş Kesintisi Yok (2 Gün ve Altı)</span>
-                        </div>
-                        <p className="text-[11px] leading-relaxed text-emerald-800">
-                          Sıhhi izin 2 gün veya daha az olduğu için işveren tarafından ücretli izin sayılır, maaştan kesinti yapılmaz.
-                        </p>
-                      </div>
-                    );
-                  }
-                }
-
-                return (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-xs text-emerald-950 font-medium space-y-1 shadow-xs">
-                    <div className="flex items-center gap-1.5 font-black text-emerald-900">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Ücretli İzin (Maaş Kesintisi Yapılmaz)</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-emerald-800">
-                      <strong>{selectedType}</strong> kapsamında kullanılan gün sayısı tam maaş ödemesine tabidir, bordroda kesinti yapılmaz.
-                    </p>
-                  </div>
-                );
-              })()}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Açıklama / İzin Nedeni</label>
-                <input
-                  type="text"
-                  placeholder="ör: Eşi doğum yaptı (4857 S.K. Ek Md. 2), doktor raporu vb."
-                  value={newLeaveForm.reason || ""}
-                  onChange={(e) => setNewLeaveForm({ ...newLeaveForm, reason: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-medium text-slate-900"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleBackToList}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                >
-                  Vazgeç
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md cursor-pointer"
-                >
-                  Talebi Oluştur
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: AVANS TALEBI */}
-      {isAddAdvanceOpen && (
-        <DetailPageLayout
-          title="Yeni Avans & Masraf Talebi"
-          subtitle="Personel maaş avansı, harcırah ve iş seyahati masraf talepleri"
-          breadcrumbs={[
-            { label: "İnsan Kaynakları", onClick: handleBackToList },
-            { label: "Avans & Kesintiler", onClick: handleBackToList },
-            { label: "Yeni Avans", active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-              Yeni Avans Talebi
-            </span>
-          }
-          headerIcon={<CreditCard className="w-5 h-5 text-purple-700" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="submit"
-                form="add-advance-form"
-                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-              >
-                <span>Avansı Kaydet</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
-            <form id="add-advance-form" onSubmit={handleCreateAdvanceSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Personel</label>
-                <select
-                  value={newAdvanceForm.employeeId}
-                  onChange={(e) => setNewAdvanceForm({ ...newAdvanceForm, employeeId: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold cursor-pointer"
-                >
-                  {[...employees]
-                    .sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"))
-                    .map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.fullName}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Talep Türü</label>
-                <select
-                  value={newAdvanceForm.type}
-                  onChange={(e) => setNewAdvanceForm({ ...newAdvanceForm, type: e.target.value as any })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold cursor-pointer"
-                >
-                  <option value="Avans">Maaş Avansı</option>
-                  <option value="Masraf Avansı">Masraf Avansı (Saha / İş Avansı)</option>
-                  <option value="Masraf">İş Masrafı (Fatura / Fişli)</option>
-                  <option value="Prim">Performans Primi</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Tutar (₺)</label>
-                <input
-                  type="number"
-                  required
-                  value={newAdvanceForm.amount}
-                  onChange={(e) => setNewAdvanceForm({ ...newAdvanceForm, amount: Number(e.target.value) })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Açıklama / Nedeni</label>
-                <input
-                  type="text"
-                  placeholder="ör: Şehir dışı müşteri ziyareti konaklama masrafı"
-                  value={newAdvanceForm.description}
-                  onChange={(e) => setNewAdvanceForm({ ...newAdvanceForm, description: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleBackToList}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                >
-                  Vazgeç
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md cursor-pointer"
-                >
-                  Avansı Kaydet
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: OZLUK DETAYI VIEW */}
-      {selectedEmployeeForDetail && (
-        <DetailPageLayout
-          title={`${selectedEmployeeForDetail.fullName} - Personel Özlük Dosyası`}
-          subtitle={`${selectedEmployeeForDetail.department} • ${selectedEmployeeForDetail.title} • TCKN: ${selectedEmployeeForDetail.tckn || "—"}`}
-          breadcrumbs={[
-            { label: "İnsan Kaynakları", onClick: handleBackToList },
-            { label: "Personeller", onClick: handleBackToList },
-            { label: selectedEmployeeForDetail.fullName, active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span
-              className={`px-3 py-1 text-xs font-bold rounded-xl border ${
-                selectedEmployeeForDetail.status === "active"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-slate-100 text-slate-700 border-slate-200"
-              }`}
-            >
-              {selectedEmployeeForDetail.status === "active" ? "Aktif Çalışan" : "Ayrıldı"}
-            </span>
-          }
-          headerIcon={<User className="w-5 h-5 text-purple-700" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const emp = selectedEmployeeForDetail;
-                  setSelectedEmployeeForDetail(null);
-                  handleOpenEditPayroll(emp);
-                }}
-                className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs transition-all flex items-center gap-1.5"
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                <span>Bordro Düzenle</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Geri Dön
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-3.5">
-                <div className="w-14 h-14 rounded-full bg-purple-600 text-white font-black flex items-center justify-center text-xl shadow-md border-2 border-purple-200 overflow-hidden shrink-0">
-                  {selectedEmployeeForDetail.photoUrl ? (
-                    <img src={selectedEmployeeForDetail.photoUrl} alt={selectedEmployeeForDetail.fullName} className="w-full h-full object-cover" />
-                  ) : (
-                    selectedEmployeeForDetail.fullName.split(" ").map((n) => n[0]).join("")
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-900 text-lg">{selectedEmployeeForDetail.fullName}</h3>
-                  <p className="text-xs text-purple-700 font-bold">{selectedEmployeeForDetail.title} · {selectedEmployeeForDetail.department}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {selectedEmployeeForDetail.gender && (
-                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
-                        selectedEmployeeForDetail.gender === "Kadın"
-                          ? "bg-pink-100 text-pink-800 border-pink-200"
-                          : "bg-blue-100 text-blue-800 border-blue-200"
-                      }`}>
-                        {selectedEmployeeForDetail.gender === "Kadın" ? "Kadın ♀" : "Erkek ♂"}
-                      </span>
-                    )}
-                    {selectedEmployeeForDetail.status === "active" && (
-                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-200">Aktif Çalışan</span>
-                    )}
-                    {selectedEmployeeForDetail.status === "terminated" && (
-                      <span className="bg-rose-100 text-rose-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-rose-200">İşten Ayrıldı</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedEmployeeForDetail(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3.5 text-xs font-semibold">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-500 block text-[11px]">T.C. Kimlik No</span>
-                <span className="font-mono text-slate-900 font-bold text-sm">{selectedEmployeeForDetail.tckn}</span>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-500 block text-[11px]">İşe Giriş Tarihi</span>
-                <span className="text-slate-900 font-bold">{formatDate(selectedEmployeeForDetail.startDate)}</span>
-              </div>
-
-              <div className="bg-indigo-50/70 p-3 rounded-xl border border-indigo-200/80">
-                <span className="text-indigo-800 block text-[11px] font-bold">Bağlı Şube</span>
-                <span className="text-indigo-950 font-extrabold flex items-center gap-1.5 mt-0.5">
-                  <Store className="w-4 h-4 text-indigo-600" />
-                  {selectedEmployeeForDetail.branchName || "Genel / Merkez"}
-                </span>
-              </div>
-
-              <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200/80">
-                <span className="text-amber-800 block text-[11px] font-bold">Görevli Depo</span>
-                <span className="text-amber-950 font-extrabold flex items-center gap-1.5 mt-0.5">
-                  <WarehouseIcon className="w-4 h-4 text-amber-600" />
-                  {selectedEmployeeForDetail.warehouseName || "Atanmış Depo Yok"}
-                </span>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-500 block text-[11px]">Telefon & E-Posta</span>
-                <span className="text-slate-900 font-bold block">{selectedEmployeeForDetail.phone || "—"}</span>
-                <span className="text-slate-500 text-[10px]">{selectedEmployeeForDetail.email || "—"}</span>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-500 block text-[11px]">Doğum Tarihi & Yaş</span>
-                <span className="text-slate-900 font-bold">
-                  {selectedEmployeeForDetail.birthDate ? (
-                    <>
-                      {selectedEmployeeForDetail.birthDate} ({calculateAge(selectedEmployeeForDetail.birthDate)} Yaş)
-                      {calculateAge(selectedEmployeeForDetail.birthDate)! < 18 && (
-                        <span className="block text-rose-600 font-bold text-[10px] mt-0.5">⚠️ 18 Yaş Altı (Genç İşçi)</span>
-                      )}
-                    </>
-                  ) : "Belirtilmedi"}
-                </span>
-              </div>
-
-              <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-500 block text-[11px]">Ev / İkametgah Adresi</span>
-                <span className="text-slate-900 font-medium">{selectedEmployeeForDetail.homeAddress || "Adres kaydı bulunmuyor."}</span>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-500 block text-[11px]">Maaş Anlaşması</span>
-                <span className="text-slate-900 font-bold">{formatTRY(selectedEmployeeForDetail.salaryAmount)} ({selectedEmployeeForDetail.salaryType.toUpperCase()})</span>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-500 block text-[11px]">SGK Meslek Kodu</span>
-                <span className="font-mono text-slate-900 font-bold block">
-                  {selectedEmployeeForDetail.sgkOccupationCode || "Belirtilmedi"}
-                </span>
-                <span className="text-[10px] text-slate-500">
-                  {sgkOccupations.find((o) => o.code === selectedEmployeeForDetail.sgkOccupationCode)?.name || selectedEmployeeForDetail.title}
-                </span>
-              </div>
-
-              <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-slate-500 block text-[11px]">Banka IBAN ({selectedEmployeeForDetail.bankName})</span>
-                <span className="font-mono text-slate-900 font-bold">{selectedEmployeeForDetail.iban || "—"}</span>
-              </div>
-
-              {/* Termination Details if existed */}
-              {(selectedEmployeeForDetail.endDate || selectedEmployeeForDetail.terminationCode) && (
-                <div className="col-span-2 bg-amber-50 p-3 rounded-xl border border-amber-300 text-amber-900">
-                  <span className="font-bold text-xs block text-amber-950 mb-1">
-                    İşten Çıkış / SGK Fesih Kaydı:
-                  </span>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-amber-800 text-[10px] block">Çıkış Tarihi:</span>
-                      <span className="font-bold">{selectedEmployeeForDetail.endDate || "—"}</span>
-                    </div>
-                    <div>
-                      <span className="text-amber-800 text-[10px] block">SGK Fesih Kodu:</span>
-                      <span className="font-bold font-mono">Kod {selectedEmployeeForDetail.terminationCode || "—"}</span>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-amber-800 text-[10px] block">SGK Fesih Nedeni:</span>
-                      <span className="font-semibold">{selectedEmployeeForDetail.terminationReason || "—"}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="col-span-2 bg-purple-50/60 p-3 rounded-xl border border-purple-200">
-                <span className="text-purple-900 font-bold block">Acil Durum İletişim Kişisi</span>
-                <span className="text-slate-800">{selectedEmployeeForDetail.emergencyContact || "Belirtilmedi"} — {selectedEmployeeForDetail.emergencyPhone}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="bg-slate-100 text-slate-700 font-bold px-5 py-2 rounded-xl text-xs hover:bg-slate-200 transition-all cursor-pointer"
-              >
-                Geri Dön
-              </button>
-            </div>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* DETAIL VIEW: YASAL KESİNTİ (İCRA & NAFAKA) EKLE / DÜZENLE */}
-      {isAddLegalDeductionOpen && (
-        <DetailPageLayout
-          title={editingLegalDeduction ? "Yasal Kesinti Dosyasını Düzenle" : "Yeni Yasal Kesinti Kaydı Ekle"}
-          subtitle="İcra, Nafaka ve Diğer Resmi Kesintilerin Yönetimi"
-          breadcrumbs={[
-            {
-              label: "İnsan Kaynakları",
-              onClick: () => {
-                setIsAddLegalDeductionOpen(false);
-                setEditingLegalDeduction(null);
-              },
-            },
-            { label: "Yasal Kesinti", active: true },
-          ]}
-          onBack={() => {
-            setIsAddLegalDeductionOpen(false);
-            setEditingLegalDeduction(null);
-          }}
-          statusBadge={
-            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
-              RESMİ KESİNTİ
-            </span>
-          }
-          headerIcon={<Scale className="w-5 h-5 text-indigo-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAddLegalDeductionOpen(false);
-                  setEditingLegalDeduction(null);
-                }}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-2xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
-
-            <form onSubmit={handleSaveLegalDeductionSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Personel Seçin</label>
-                  <select
-                    required
-                    value={legalForm.employeeId}
-                    onChange={(e) => setLegalForm({ ...legalForm, employeeId: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 cursor-pointer"
-                  >
-                    <option value="">-- Personel Seçin --</option>
-                    {[...employees]
-                      .sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"))
-                      .map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.fullName} ({emp.department})
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Kesinti Türü</label>
-                  <select
-                    value={legalForm.type}
-                    onChange={(e) => setLegalForm({ ...legalForm, type: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold cursor-pointer"
-                  >
-                    <option value="İcra Kesintisi">İcra Kesintisi</option>
-                    <option value="Nafaka Kesintisi">Nafaka Kesintisi</option>
-                    <option value="Diğer Yasal Kesinti">Diğer Yasal Kesinti</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Hesaplama Mantığı</label>
-                  <select
-                    value={legalForm.calculationType}
-                    onChange={(e) => setLegalForm({ ...legalForm, calculationType: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold cursor-pointer"
-                  >
-                    <option value="quarter_salary">Maaşın 1/4'ü (%25)</option>
-                    <option value="fixed">Sabit Aylık Tutar (₺)</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">İcra / Mahkeme Dosya Numarası</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ör: İstanbul 8. İcra Dairesi 2025/11204 Esas"
-                    value={legalForm.fileNumber}
-                    onChange={(e) => setLegalForm({ ...legalForm, fileNumber: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Alacaklı / Kurum Unvanı</label>
-                  <input
-                    type="text"
-                    placeholder="ör: Garanti BBVA A.Ş. Vekili"
-                    value={legalForm.creditorName}
-                    onChange={(e) => setLegalForm({ ...legalForm, creditorName: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Yatırılacağı IBAN Numarası</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="TR00 0000 0000 0000 0000 0000 00"
-                    value={legalForm.iban}
-                    onChange={(e) => setLegalForm({ ...legalForm, iban: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Toplam Borç Tutarı (₺) <span className="text-[10px] text-slate-400 font-normal">(Nafakada 0 bırakın)</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={legalForm.totalDebtAmount}
-                    onChange={(e) => setLegalForm({ ...legalForm, totalDebtAmount: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Şimdiye Kadar Ödenen (₺)</label>
-                  <input
-                    type="number"
-                    value={legalForm.paidAmount}
-                    onChange={(e) => setLegalForm({ ...legalForm, paidAmount: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Aylık Sabit Kesinti Tutarı (₺)</label>
-                  <input
-                    type="number"
-                    value={legalForm.monthlyAmount}
-                    onChange={(e) => setLegalForm({ ...legalForm, monthlyAmount: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-purple-700"
-                    placeholder="1/4 maaş dışında sabitse girin"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Durum / Sıralama</label>
-                  <select
-                    value={legalForm.status}
-                    onChange={(e) => setLegalForm({ ...legalForm, status: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold cursor-pointer"
-                  >
-                    <option value="active">1. Sıra (Aktif Kesilen)</option>
-                    <option value="queued">Sırada Bekliyor (Sıradaki Dosya)</option>
-                    <option value="completed">Borç Bitti / Tamamlandı</option>
-                    <option value="passive">Pasif / Durduruldu</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Açıklama / Notlar</label>
-                  <input
-                    type="text"
-                    placeholder="ör: Maaş haczi müzekkeresi tarih ve karar nosu"
-                    value={legalForm.notes}
-                    onChange={(e) => setLegalForm({ ...legalForm, notes: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddLegalDeductionOpen(false);
-                    setEditingLegalDeduction(null);
-                  }}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                >
-                  Vazgeç
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md cursor-pointer"
-                >
-                  {editingLegalDeduction ? "Değişiklikleri Kaydet" : "Kesinti Kaydını Oluştur"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* DETAIL VIEW: ÖDEME İŞLE & BORÇ DÜŞÜŞÜ */}
-      {isPaymentModalOpen && paymentModalDeduction && (
-        <DetailPageLayout
-          title="İcra / Yasal Kesinti Ödemesi İşle"
-          subtitle={`${paymentModalDeduction.employeeName} • Dosya No: ${paymentModalDeduction.fileNumber}`}
-          breadcrumbs={[
-            {
-              label: "İnsan Kaynakları",
-              onClick: () => {
-                setIsPaymentModalOpen(false);
-                setPaymentModalDeduction(null);
-              },
-            },
-            { label: "Kesinti Ödemesi", active: true },
-          ]}
-          onBack={() => {
-            setIsPaymentModalOpen(false);
-            setPaymentModalDeduction(null);
-          }}
-          statusBadge={
-            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
-              İCRA ÖDEMESİ
-            </span>
-          }
-          headerIcon={<DollarSign className="w-5 h-5 text-emerald-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPaymentModalOpen(false);
-                  setPaymentModalDeduction(null);
-                }}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
-
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2 text-xs font-semibold">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Dosya No:</span>
-                <span className="font-mono font-bold text-slate-900">{paymentModalDeduction.fileNumber}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">IBAN:</span>
-                <span className="font-mono text-indigo-700 font-bold">{paymentModalDeduction.iban}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Toplam Borç:</span>
-                <span className="font-bold text-slate-900">{formatTRY(paymentModalDeduction.totalDebtAmount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Mevcut Ödenen:</span>
-                <span className="font-bold text-emerald-700">{formatTRY(paymentModalDeduction.paidAmount)}</span>
-              </div>
-              <div className="flex justify-between text-rose-800 pt-1 border-t border-slate-200 font-bold">
-                <span>Kalan Borç Bakiye:</span>
-                <span>{formatTRY(Math.max(0, paymentModalDeduction.totalDebtAmount - paymentModalDeduction.paidAmount))}</span>
-              </div>
-            </div>
-
-            <form onSubmit={handleExecutePaymentModalSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Şimdi Düşülecek / Yatırılacak Ödeme Tutarı (₺)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  value={paymentAmountInput}
-                  onChange={(e) => setPaymentAmountInput(Number(e.target.value))}
-                  className="w-full bg-white border border-purple-300 rounded-xl p-3 font-black text-slate-900 text-base focus:outline-none focus:border-purple-600"
-                />
-              </div>
-
-              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-[11px] text-amber-900 font-medium">
-                ⚡ <strong>Otomasyon Bilgisi:</strong> Eğer bu ödeme ile kalan borç tamamen kapanırsa, bu dosya otomatik olarak <strong>"Borç Bitti"</strong> olarak işaretlenir, kesinti kaldırılır ve varsa sıradaki icra kesintisi otomatik olarak 1. sıraya alınarak aktifleşir!
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPaymentModalOpen(false);
-                    setPaymentModalDeduction(null);
-                  }}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                >
-                  Vazgeç
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
-                >
-                  <DollarSign className="w-4 h-4" />
-                  Ödemeyi Uygula & Borç Düşüşü Yap
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* MODAL: RESMİ İZİN, DEVAMSIZLIK & AVANS FORMLARI YAZDIRMA & DÜZENLEME */}
-      {isFormsModalOpen && (
-        <HRDocumentFormsModal
-          isOpen={isFormsModalOpen}
-          onClose={() => {
-            setIsFormsModalOpen(false);
-            setFormsModalLeaveRequest(undefined);
-            setFormsModalAdvanceRequest(undefined);
-          }}
-          employees={employees}
-          companySettings={companySettings}
-          advanceRequests={advanceRequests}
-          initialEmployeeId={formsModalEmployeeId}
-          initialFormType={formsModalType}
-          leaveRequest={formsModalLeaveRequest}
-          advanceRequest={formsModalAdvanceRequest}
-        />
-      )}
-
-      {/* MODAL: RESMİ BORDRO VE MAAŞ PUSULASI YAZDIRMA (AYLIK & TÜM YIL) */}
-      {isPayrollPrintModalOpen && (
-        <PayrollPrintModal
-          isOpen={isPayrollPrintModalOpen}
-          onClose={() => {
-            setIsPayrollPrintModalOpen(false);
-            setPayrollPrintSelectedEmpId(undefined);
-          }}
-          employees={employees}
-          companySettings={companySettings}
-          selectedMonth={payrollMonth}
-          initialEmployeeId={payrollPrintSelectedEmpId}
-          initialMode={payrollPrintInitialMode}
-          payrollCustomizations={payrollCustomizations}
-          advanceRequests={advanceRequests}
-          leaveRequests={leaveRequests}
-          legalDeductions={legalDeductions}
-        />
-      )}
     </div>
   );
 };

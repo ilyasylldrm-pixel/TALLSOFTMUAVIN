@@ -415,6 +415,718 @@ export const Orders: React.FC<OrdersProps> = ({
     };
   };
 
+  if (isModalOpen) {
+    return (
+        <DetailPageLayout
+          title={`Yeni ${orderType === "sales" ? "Satış" : "Alış"} Siparişi Oluştur`}
+          subtitle="Cari müşteri/tedarikçi seçip stok & hizmet kalemlerini ekleyin"
+          breadcrumbs={[
+            { label: "Siparişler", onClick: handleBackToList },
+            { label: `Yeni ${orderType === "sales" ? "Satış" : "Alış"} Siparişi`, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span
+              className={`px-3 py-1 text-xs font-bold rounded-xl border ${
+                orderType === "sales"
+                  ? "bg-purple-50 text-purple-700 border-purple-200"
+                  : "bg-indigo-50 text-indigo-700 border-indigo-200"
+              }`}
+            >
+              {orderType === "sales" ? "Satış (Müşteri)" : "Alış (Tedarikçi)"}
+            </span>
+          }
+          headerIcon={<ShoppingCart className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="order-form"
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Siparişi Kaydet</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-6">
+            <form id="order-form" onSubmit={handleSaveOrder} className="space-y-6">
+              {/* Type Switcher & Order Number */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sipariş Tipi</label>
+                  <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white p-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderType("sales");
+                        setOrderNumber("SIP-SAT-2026-" + Math.floor(10000 + Math.random() * 90000));
+                      }}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                        orderType === "sales" ? "bg-[#8252F6] text-white" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Satış (Müşteri)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderType("purchase");
+                        setOrderNumber("SIP-AL-2026-" + Math.floor(10000 + Math.random() * 90000));
+                      }}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                        orderType === "purchase" ? "bg-indigo-600 text-white" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Alış (Tedarikçi)
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sipariş Numarası</label>
+                  <input
+                    type="text"
+                    required
+                    value={orderNumber}
+                    onChange={(e) => setOrderNumber(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Teslimat Yapılacak Depo</label>
+                  <select
+                    value={selectedWarehouseId}
+                    onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  >
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Contact & Dates */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Cari Firma / Müşteri / Tedarikçi <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={selectedContactId}
+                    onChange={(e) => setSelectedContactId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  >
+                    <option value="">-- Cari Seçiniz --</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.companyTitle ? `(${c.companyTitle})` : ""} - VKN: {c.taxNumber || "-"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sipariş Tarihi</label>
+                  <input
+                    type="date"
+                    required
+                    value={orderDate}
+                    onChange={(e) => setOrderDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Planlanan Teslimat Tarihi</label>
+                  <input
+                    type="date"
+                    required
+                    value={deliveryDate}
+                    onChange={(e) => setDeliveryDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  />
+                </div>
+              </div>
+
+              {/* Items Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-purple-600" />
+                    <span>Sipariş Kalemleri (Stok & Hizmet Seçimi)</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleAddItemRow}
+                    className="text-xs text-purple-700 hover:text-purple-900 font-semibold flex items-center gap-1 cursor-pointer bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Kalem Ekle
+                  </button>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left border-collapse min-w-[650px]">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600 text-[11px] font-bold uppercase tracking-wider">
+                        <th className="py-2.5 px-3">Ürün / Hizmet Seçimi</th>
+                        <th className="py-2.5 px-3 w-20">Miktar</th>
+                        <th className="py-2.5 px-3 w-20">Birim</th>
+                        <th className="py-2.5 px-3 w-28 text-right">Birim Fiyat (₺)</th>
+                        <th className="py-2.5 px-3 w-20 text-right">KDV (%)</th>
+                        <th className="py-2.5 px-3 w-32 text-right">Toplam (KDV Dahil)</th>
+                        <th className="py-2.5 px-2 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {items.map((item, idx) => {
+                        const prod = products.find((p) => p.id === item.productId);
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50/60">
+                            <td className="p-2">
+                              <select
+                                value={item.productId || ""}
+                                onChange={(e) => handleItemProductSelect(idx, e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-900 mb-1 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              >
+                                <option value="">-- Listeden Ürün/Hizmet Seçiniz --</option>
+                                {products.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    [{p.code}] {p.name} - Stok: {p.stockQuantity} {p.unit} (Satış: ₺{p.sellPrice})
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                placeholder="Kalem açıklaması..."
+                                value={item.description}
+                                onChange={(e) => handleItemChange(idx, "description", e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] text-slate-700"
+                              />
+                              {prod && (
+                                <div className="text-[10px] text-purple-600 font-medium mt-0.5">
+                                  Depo Mevcut Stok: <strong className="text-slate-900">{prod.stockQuantity} {prod.unit}</strong>
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="any"
+                                required
+                                value={item.quantity}
+                                onChange={(e) => handleItemChange(idx, "quantity", e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-center font-bold text-slate-900"
+                              />
+                            </td>
+
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                value={item.unit}
+                                onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center font-medium text-slate-700"
+                              />
+                            </td>
+
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                required
+                                value={item.unitPrice}
+                                onChange={(e) => handleItemChange(idx, "unitPrice", e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-right font-bold text-slate-900"
+                              />
+                            </td>
+
+                            <td className="p-2">
+                              <select
+                                value={item.vatRate}
+                                onChange={(e) => handleItemChange(idx, "vatRate", e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1 py-1 text-xs text-center font-medium text-slate-800"
+                              >
+                                <option value={0}>%0</option>
+                                <option value={1}>%1</option>
+                                <option value={10}>%10</option>
+                                <option value={20}>%20</option>
+                              </select>
+                            </td>
+
+                            <td className="p-2 text-right font-bold text-slate-900">
+                              ₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </td>
+
+                            <td className="p-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItemRow(idx)}
+                                className="p-1 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Totals Summary & Notes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sipariş Notu & Şartlar</label>
+                  <textarea
+                    rows={3}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Sipariş, ödeme koşulları veya sevkiyat notları yazabilirsiniz..."
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  />
+                </div>
+
+                <div className="space-y-2 text-xs font-semibold text-slate-700 justify-self-end w-full max-w-xs">
+                  <div className="flex justify-between py-1 border-b border-slate-200">
+                    <span className="text-slate-500">Ara Toplam (KDV Hariç):</span>
+                    <span className="text-slate-900 font-bold">
+                      ₺{subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-200">
+                    <span className="text-slate-500">Toplam KDV Tutarı:</span>
+                    <span className="text-purple-700 font-bold">
+                      ₺{totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2 text-sm text-slate-900 font-bold bg-purple-100/60 px-3 rounded-xl border border-purple-200/80">
+                    <span>Genel Toplam:</span>
+                    <span className="text-purple-900">
+                      ₺{grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#8252F6] hover:bg-[#703EE5] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Siparişi Kaydet</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+  if (selectedOrderForView) {
+    return (
+        <DetailPageLayout
+          title={`Sipariş Belgesi: ${selectedOrderForView.orderNumber}`}
+          subtitle={`Sipariş Tarihi: ${formatDate(selectedOrderForView.orderDate)} • Teslim: ${formatDate(selectedOrderForView.deliveryDate)}`}
+          breadcrumbs={[
+            { label: "Siparişler", onClick: handleBackToList },
+            { label: selectedOrderForView.orderNumber, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {selectedOrderForView.status === "completed"
+                ? "Tamamlandı"
+                : selectedOrderForView.status === "converted"
+                ? "Faturalaştı"
+                : selectedOrderForView.status === "cancelled"
+                ? "İptal"
+                : "Bekliyor"}
+            </span>
+          }
+          headerIcon={<ShoppingCart className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              {selectedOrderForView.status !== "converted" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ord = selectedOrderForView;
+                    setSelectedOrderForView(null);
+                    setConvertConfirmOrder(ord);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span className="hidden sm:inline">Faturaya Dönüştür</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setWhatsAppOrder(selectedOrderForView)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+              >
+                <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                <span>WhatsApp ile Gönder</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadOrderPDF}
+                disabled={isDownloadingOrderPDF}
+                className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                <Download className="w-4 h-4 text-purple-200" />
+                <span>{isDownloadingOrderPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+              >
+                <Printer className="w-4 h-4 text-slate-300" />
+                <span className="hidden sm:inline">Yazdır</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-3xl border border-purple-200 shadow-sm print:p-0 print:border-none print:shadow-none">
+
+            {/* Scrollable Printable Document Sheet */}
+            <div className="p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:overflow-visible custom-scrollbar">
+              <div id="printable-order-sheet" className="bg-white text-slate-900 p-6 sm:p-8 border border-purple-100 rounded-xl space-y-6 print:border-none print:p-0">
+                {/* Header Banner */}
+                <div className="flex items-start justify-between border-b-2 border-purple-950 pb-6">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Logo size="md" />
+                    </div>
+                    <h1 className="text-base font-black text-slate-900">
+                      {companySettings?.companyTitle || companySettings?.companyName || "Örnek Bilişim ve Danışmanlık A.Ş."}
+                    </h1>
+                    <p className="text-xs text-slate-600 max-w-sm">
+                      {companySettings?.address || "Büyükdere Cad. No:195 Levent, Beşiktaş / İstanbul"}
+                    </p>
+                    <p className="text-xs text-slate-500 font-mono">
+                      VD: {companySettings?.taxOffice || "Boğaziçi"} - VKN: {companySettings?.taxNumber || "9876543210"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Tel: {companySettings?.phone || "0850 123 45 67"} | E-posta: {companySettings?.email || "info@sirket.com"}
+                    </p>
+                  </div>
+
+                  <div className="text-right space-y-2">
+                    <div className="inline-block bg-purple-950 text-white px-4 py-2 rounded-lg font-black text-sm uppercase tracking-wider">
+                      {selectedOrderForView.type === "sales" ? "SATIŞ SİPARİŞ BELGESİ" : "SATIN ALMA SİPARİŞİ"}
+                    </div>
+                    <div className="text-xs text-slate-600 font-mono space-y-1">
+                      <div><span className="font-bold text-slate-800">Sipariş No:</span> {selectedOrderForView.orderNumber}</div>
+                      <div><span className="font-bold text-slate-800">Sipariş Tarihi:</span> {formatDate(selectedOrderForView.orderDate)}</div>
+                      <div><span className="font-bold text-slate-800">Termin / Teslim:</span> {formatDate(selectedOrderForView.deliveryDate)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Customer Info & Order Parameters Box */}
+                <div className="bg-purple-50/40 border border-purple-100 rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
+                      Cari / Firma Bilgileri
+                    </span>
+                    <div className="text-sm font-black text-slate-900">{selectedOrderForView.contactName}</div>
+                    <div className="text-xs text-slate-600">
+                      {contacts.find((c) => c.id === selectedOrderForView.contactId)?.address || "Adres Belirtilmemiş"}
+                    </div>
+                    <div className="text-xs text-slate-500 font-mono">
+                      VKN/TCKN: {selectedOrderForView.taxNumber || contacts.find((c) => c.id === selectedOrderForView.contactId)?.taxNumber || "-"}
+                    </div>
+                    {selectedOrderForView.contactPhone && (
+                      <div className="text-xs text-slate-500">Tel: {selectedOrderForView.contactPhone}</div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 md:border-l md:border-purple-200/60 md:pl-4">
+                    <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
+                      Sevkiyat & Sipariş Durumu
+                    </span>
+                    <div className="text-xs text-slate-700">
+                      <span className="font-bold text-slate-900">Durum:</span>{" "}
+                      {selectedOrderForView.status === "converted"
+                        ? "Faturaya Dönüştü"
+                        : selectedOrderForView.status === "approved"
+                        ? "Onaylandı"
+                        : selectedOrderForView.status === "delivered"
+                        ? "Teslim Edildi"
+                        : selectedOrderForView.status === "shipped"
+                        ? "Sevk Edildi"
+                        : "Beklemede"}
+                    </div>
+                    {selectedOrderForView.warehouseName && (
+                      <div className="text-xs text-slate-700">
+                        <span className="font-bold text-slate-900">Çıkış Deposu:</span> {selectedOrderForView.warehouseName}
+                      </div>
+                    )}
+                    <div className="text-xs text-slate-700">
+                      <span className="font-bold text-slate-900">Banka IBAN:</span>{" "}
+                      <span className="font-mono font-bold text-purple-900">{companySettings?.iban || "TR33 0006 2000 0000 1234 5678 90"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div className="border border-purple-200/80 rounded-xl overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead>
+                      <tr className="bg-purple-950 text-white font-extrabold uppercase text-[10px]">
+                        <th className="py-2.5 px-3 w-10 text-center">#</th>
+                        <th className="py-2.5 px-3">Ürün / Hizmet Açıklaması</th>
+                        <th className="py-2.5 px-3 text-center w-16">Miktar</th>
+                        <th className="py-2.5 px-3 text-center w-16">Birim</th>
+                        <th className="py-2.5 px-3 text-right w-28">Birim Fiyat</th>
+                        <th className="py-2.5 px-3 text-center w-16">KDV</th>
+                        <th className="py-2.5 px-3 text-right w-28">Toplam</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-purple-100">
+                      {selectedOrderForView.items.map((item, index) => (
+                        <tr key={item.id || index} className="even:bg-purple-50/20">
+                          <td className="py-2.5 px-3 text-center font-bold text-slate-400">{index + 1}</td>
+                          <td className="py-2.5 px-3 font-semibold text-slate-900">{item.description}</td>
+                          <td className="py-2.5 px-3 text-center font-bold">{item.quantity}</td>
+                          <td className="py-2.5 px-3 text-center text-slate-600">{item.unit || "Adet"}</td>
+                          <td className="py-2.5 px-3 text-right font-mono">
+                            ₺{(item.unitPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono text-slate-600">%{item.vatRate}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                            ₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Calculations & Written Amount */}
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-2">
+                  <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-100 w-full sm:w-auto flex-1 space-y-1">
+                    <div className="text-[10px] font-extrabold uppercase text-purple-950">Yazı ile Tutar:</div>
+                    <div className="text-xs font-bold italic text-slate-800">
+                      # {numberToTurkishWords(selectedOrderForView.grandTotal)} #
+                    </div>
+                  </div>
+
+                  <div className="w-full sm:w-72 bg-purple-50/80 p-4 rounded-xl border border-purple-200 space-y-2 text-xs shadow-2xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Ara Toplam (KDV Hariç):</span>
+                      <span className="font-bold text-slate-900">
+                        ₺{selectedOrderForView.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Toplam KDV:</span>
+                      <span className="font-bold text-slate-900">
+                        ₺{selectedOrderForView.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm font-black text-purple-950 pt-2 border-t border-purple-300">
+                      <span>GENEL TOPLAM:</span>
+                      <span>₺{selectedOrderForView.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes Section */}
+                {selectedOrderForView.notes && (
+                  <div className="border border-purple-100 bg-purple-50/20 p-3 rounded-xl space-y-1">
+                    <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
+                      Sipariş Notları & Teslimat Koşulları
+                    </span>
+                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{selectedOrderForView.notes}</p>
+                  </div>
+                )}
+
+                {/* Signatures */}
+                <div className="grid grid-cols-2 gap-8 pt-8 border-t border-purple-100 text-center text-xs">
+                  <div className="space-y-12">
+                    <div className="font-bold text-slate-900">Siparişi Veren / Yetkili</div>
+                    <div className="border-b border-dashed border-slate-300 mx-8"></div>
+                    <div className="text-[10px] text-slate-400">İmza / Kaşe</div>
+                  </div>
+                  <div className="space-y-12">
+                    <div className="font-bold text-slate-900">Siparişi Alan / Yetkili</div>
+                    <div className="border-b border-dashed border-slate-300 mx-8"></div>
+                    <div className="text-[10px] text-slate-400">İmza / Kaşe / Onay Tarihi</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* CONVERT TO INVOICE CONFIRMATION FULL-PAGE VIEW */}
+      {convertConfirmOrder && (
+        <DetailPageLayout
+          title="Siparişi Faturaya Dönüştür"
+          subtitle={`Sipariş No: ${convertConfirmOrder.orderNumber} • Cari: ${convertConfirmOrder.contactName}`}
+          breadcrumbs={[
+            { label: "Siparişler", onClick: () => setConvertConfirmOrder(null) },
+            { label: "Faturaya Dönüştür", active: true },
+          ]}
+          onBack={() => setConvertConfirmOrder(null)}
+          statusBadge={
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
+              FATURA DÖNÜŞTÜRME
+            </span>
+          }
+          headerIcon={<FileText className="w-5 h-5 text-emerald-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setConvertConfirmOrder(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onConvertOrderToInvoice(convertConfirmOrder);
+                  setConvertConfirmOrder(null);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Onayla & Faturaya Dönüştür</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
+            <div className="flex items-center gap-3 text-emerald-600">
+              <div className="p-3 bg-emerald-100 rounded-2xl">
+                <FileText className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Siparişi Faturaya Dönüştür</h3>
+                <p className="text-xs text-slate-500">Cari ve stok hareketi otomatik işlenecektir</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-1.5 text-slate-700">
+              <div><strong>Sipariş No:</strong> {convertConfirmOrder.orderNumber}</div>
+              <div><strong>Cari Unvanı:</strong> {convertConfirmOrder.contactName}</div>
+              <div><strong>Fatura Tipi:</strong> {convertConfirmOrder.type === "sales" ? "Satış Faturası (Gelir)" : "Alış Faturası (Gider)"}</div>
+              <div><strong>Fatura Tutarı:</strong> <span className="font-bold text-emerald-700">₺{convertConfirmOrder.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span></div>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Bu işlem neticesinde sipariş durumu <strong>"Faturaya Dönüştü"</strong> olarak güncellenecek ve sistemde otomatik olarak yeni bir fatura kaydı oluşturulacaktır.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConvertConfirmOrder(null)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onConvertOrderToInvoice(convertConfirmOrder);
+                  setConvertConfirmOrder(null);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Onayla & Faturaya Dönüştür</span>
+              </button>
+            </div>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+      {/* WhatsApp Share Modal */}
+      {whatsAppOrder && (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppOrder}
+          onClose={() => setWhatsAppOrder(null)}
+          title="WhatsApp ile Sipariş Formu Paylaş"
+          documentTypeLabel={whatsAppOrder.type === "sales" ? "Satış Siparişi" : "Satın Alma Siparişi"}
+          recipientName={whatsAppOrder.contactName}
+          recipientPhone={whatsAppOrder.contactPhone || contacts.find((c) => c.id === whatsAppOrder.contactId)?.phone || ""}
+          defaultMessage={formatOrderWhatsAppMessage(
+            whatsAppOrder,
+            companySettings,
+            contacts.find((c) => c.id === whatsAppOrder.contactId)
+          )}
+          documentFileName={`${whatsAppOrder.orderNumber}_Siparis.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const el = document.getElementById("printable-order-sheet");
+            if (el) {
+              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+              return exportElementToPDFWithPrintStyling("printable-order-sheet", `${whatsAppOrder.orderNumber}_Siparis.pdf`, {
+                orientation: "p",
+                margin: 8,
+                scale: 1.6,
+              });
+            }
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `${whatsAppOrder.orderNumber}_Siparis`,
+              title: `${companySettings?.companyName || "Sipariş"} - ${whatsAppOrder.orderNumber}`,
+              subtitle: `Cari: ${whatsAppOrder.contactName} | Tarih: ${formatDate(whatsAppOrder.orderDate)} | Toplam: ${formatCurrency(whatsAppOrder.grandTotal)}`,
+              headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
+              rows: (whatsAppOrder.items || []).map((i) => [
+                i.description,
+                i.quantity,
+                i.unit || "Adet",
+                formatCurrency(i.unitPrice),
+                `%${i.vatRate ?? 20}`,
+                formatCurrency(i.totalWithVat),
+              ]),
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
+    );
+  }
+
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen - Cari Hesaplar Stili) */}
@@ -761,712 +1473,6 @@ export const Orders: React.FC<OrdersProps> = ({
         )}
       </div>
 
-      {/* FULL-PAGE DETAIL VIEW: NEW ORDER */}
-      {isModalOpen && (
-        <DetailPageLayout
-          title={`Yeni ${orderType === "sales" ? "Satış" : "Alış"} Siparişi Oluştur`}
-          subtitle="Cari müşteri/tedarikçi seçip stok & hizmet kalemlerini ekleyin"
-          breadcrumbs={[
-            { label: "Siparişler", onClick: handleBackToList },
-            { label: `Yeni ${orderType === "sales" ? "Satış" : "Alış"} Siparişi`, active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span
-              className={`px-3 py-1 text-xs font-bold rounded-xl border ${
-                orderType === "sales"
-                  ? "bg-purple-50 text-purple-700 border-purple-200"
-                  : "bg-indigo-50 text-indigo-700 border-indigo-200"
-              }`}
-            >
-              {orderType === "sales" ? "Satış (Müşteri)" : "Alış (Tedarikçi)"}
-            </span>
-          }
-          headerIcon={<ShoppingCart className="w-5 h-5 text-purple-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="submit"
-                form="order-form"
-                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Siparişi Kaydet</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-6">
-            <form id="order-form" onSubmit={handleSaveOrder} className="space-y-6">
-              {/* Type Switcher & Order Number */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sipariş Tipi</label>
-                  <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white p-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOrderType("sales");
-                        setOrderNumber("SIP-SAT-2026-" + Math.floor(10000 + Math.random() * 90000));
-                      }}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                        orderType === "sales" ? "bg-[#8252F6] text-white" : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Satış (Müşteri)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOrderType("purchase");
-                        setOrderNumber("SIP-AL-2026-" + Math.floor(10000 + Math.random() * 90000));
-                      }}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                        orderType === "purchase" ? "bg-indigo-600 text-white" : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Alış (Tedarikçi)
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sipariş Numarası</label>
-                  <input
-                    type="text"
-                    required
-                    value={orderNumber}
-                    onChange={(e) => setOrderNumber(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Teslimat Yapılacak Depo</label>
-                  <select
-                    value={selectedWarehouseId}
-                    onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-                  >
-                    {warehouses.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Contact & Dates */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Cari Firma / Müşteri / Tedarikçi <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={selectedContactId}
-                    onChange={(e) => setSelectedContactId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-                  >
-                    <option value="">-- Cari Seçiniz --</option>
-                    {contacts.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.companyTitle ? `(${c.companyTitle})` : ""} - VKN: {c.taxNumber || "-"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sipariş Tarihi</label>
-                  <input
-                    type="date"
-                    required
-                    value={orderDate}
-                    onChange={(e) => setOrderDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Planlanan Teslimat Tarihi</label>
-                  <input
-                    type="date"
-                    required
-                    value={deliveryDate}
-                    onChange={(e) => setDeliveryDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-                  />
-                </div>
-              </div>
-
-              {/* Items Section */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <Package className="w-4 h-4 text-purple-600" />
-                    <span>Sipariş Kalemleri (Stok & Hizmet Seçimi)</span>
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={handleAddItemRow}
-                    className="text-xs text-purple-700 hover:text-purple-900 font-semibold flex items-center gap-1 cursor-pointer bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition-all"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Kalem Ekle
-                  </button>
-                </div>
-
-                <div className="border border-slate-200 rounded-2xl overflow-x-auto custom-scrollbar w-full">
-                  <table className="w-full text-left border-collapse min-w-[650px]">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-600 text-[11px] font-bold uppercase tracking-wider">
-                        <th className="py-2.5 px-3">Ürün / Hizmet Seçimi</th>
-                        <th className="py-2.5 px-3 w-20">Miktar</th>
-                        <th className="py-2.5 px-3 w-20">Birim</th>
-                        <th className="py-2.5 px-3 w-28 text-right">Birim Fiyat (₺)</th>
-                        <th className="py-2.5 px-3 w-20 text-right">KDV (%)</th>
-                        <th className="py-2.5 px-3 w-32 text-right">Toplam (KDV Dahil)</th>
-                        <th className="py-2.5 px-2 w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs">
-                      {items.map((item, idx) => {
-                        const prod = products.find((p) => p.id === item.productId);
-                        return (
-                          <tr key={item.id} className="hover:bg-slate-50/60">
-                            <td className="p-2">
-                              <select
-                                value={item.productId || ""}
-                                onChange={(e) => handleItemProductSelect(idx, e.target.value)}
-                                className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-900 mb-1 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                              >
-                                <option value="">-- Listeden Ürün/Hizmet Seçiniz --</option>
-                                {products.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    [{p.code}] {p.name} - Stok: {p.stockQuantity} {p.unit} (Satış: ₺{p.sellPrice})
-                                  </option>
-                                ))}
-                              </select>
-                              <input
-                                type="text"
-                                placeholder="Kalem açıklaması..."
-                                value={item.description}
-                                onChange={(e) => handleItemChange(idx, "description", e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] text-slate-700"
-                              />
-                              {prod && (
-                                <div className="text-[10px] text-purple-600 font-medium mt-0.5">
-                                  Depo Mevcut Stok: <strong className="text-slate-900">{prod.stockQuantity} {prod.unit}</strong>
-                                </div>
-                              )}
-                            </td>
-
-                            <td className="p-2">
-                              <input
-                                type="number"
-                                min="0.01"
-                                step="any"
-                                required
-                                value={item.quantity}
-                                onChange={(e) => handleItemChange(idx, "quantity", e.target.value)}
-                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-center font-bold text-slate-900"
-                              />
-                            </td>
-
-                            <td className="p-2">
-                              <input
-                                type="text"
-                                value={item.unit}
-                                onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center font-medium text-slate-700"
-                              />
-                            </td>
-
-                            <td className="p-2">
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                required
-                                value={item.unitPrice}
-                                onChange={(e) => handleItemChange(idx, "unitPrice", e.target.value)}
-                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-right font-bold text-slate-900"
-                              />
-                            </td>
-
-                            <td className="p-2">
-                              <select
-                                value={item.vatRate}
-                                onChange={(e) => handleItemChange(idx, "vatRate", e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1 py-1 text-xs text-center font-medium text-slate-800"
-                              >
-                                <option value={0}>%0</option>
-                                <option value={1}>%1</option>
-                                <option value={10}>%10</option>
-                                <option value={20}>%20</option>
-                              </select>
-                            </td>
-
-                            <td className="p-2 text-right font-bold text-slate-900">
-                              ₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                            </td>
-
-                            <td className="p-2 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveItemRow(idx)}
-                                className="p-1 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Totals Summary & Notes */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sipariş Notu & Şartlar</label>
-                  <textarea
-                    rows={3}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Sipariş, ödeme koşulları veya sevkiyat notları yazabilirsiniz..."
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-                  />
-                </div>
-
-                <div className="space-y-2 text-xs font-semibold text-slate-700 justify-self-end w-full max-w-xs">
-                  <div className="flex justify-between py-1 border-b border-slate-200">
-                    <span className="text-slate-500">Ara Toplam (KDV Hariç):</span>
-                    <span className="text-slate-900 font-bold">
-                      ₺{subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-200">
-                    <span className="text-slate-500">Toplam KDV Tutarı:</span>
-                    <span className="text-purple-700 font-bold">
-                      ₺{totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2 text-sm text-slate-900 font-bold bg-purple-100/60 px-3 rounded-xl border border-purple-200/80">
-                    <span>Genel Toplam:</span>
-                    <span className="text-purple-900">
-                      ₺{grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Form Actions */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={handleBackToList}
-                  className="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
-                >
-                  Vazgeç
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-[#8252F6] hover:bg-[#703EE5] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Siparişi Kaydet</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* FULL-PAGE DETAIL VIEW: PRINT / PREVIEW ORDER */}
-      {selectedOrderForView && (
-        <DetailPageLayout
-          title={`Sipariş Belgesi: ${selectedOrderForView.orderNumber}`}
-          subtitle={`Sipariş Tarihi: ${formatDate(selectedOrderForView.orderDate)} • Teslim: ${formatDate(selectedOrderForView.deliveryDate)}`}
-          breadcrumbs={[
-            { label: "Siparişler", onClick: handleBackToList },
-            { label: selectedOrderForView.orderNumber, active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-              {selectedOrderForView.status === "completed"
-                ? "Tamamlandı"
-                : selectedOrderForView.status === "converted"
-                ? "Faturalaştı"
-                : selectedOrderForView.status === "cancelled"
-                ? "İptal"
-                : "Bekliyor"}
-            </span>
-          }
-          headerIcon={<ShoppingCart className="w-5 h-5 text-purple-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              {selectedOrderForView.status !== "converted" && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const ord = selectedOrderForView;
-                    setSelectedOrderForView(null);
-                    setConvertConfirmOrder(ord);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span className="hidden sm:inline">Faturaya Dönüştür</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setWhatsAppOrder(selectedOrderForView)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
-              >
-                <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
-                <span>WhatsApp ile Gönder</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleDownloadOrderPDF}
-                disabled={isDownloadingOrderPDF}
-                className="bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-              >
-                <Download className="w-4 h-4 text-purple-200" />
-                <span>{isDownloadingOrderPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
-              >
-                <Printer className="w-4 h-4 text-slate-300" />
-                <span className="hidden sm:inline">Yazdır</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-3xl border border-purple-200 shadow-sm print:p-0 print:border-none print:shadow-none">
-
-            {/* Scrollable Printable Document Sheet */}
-            <div className="p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:overflow-visible custom-scrollbar">
-              <div id="printable-order-sheet" className="bg-white text-slate-900 p-6 sm:p-8 border border-purple-100 rounded-xl space-y-6 print:border-none print:p-0">
-                {/* Header Banner */}
-                <div className="flex items-start justify-between border-b-2 border-purple-950 pb-6">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Logo size="md" />
-                    </div>
-                    <h1 className="text-base font-black text-slate-900">
-                      {companySettings?.companyTitle || companySettings?.companyName || "Örnek Bilişim ve Danışmanlık A.Ş."}
-                    </h1>
-                    <p className="text-xs text-slate-600 max-w-sm">
-                      {companySettings?.address || "Büyükdere Cad. No:195 Levent, Beşiktaş / İstanbul"}
-                    </p>
-                    <p className="text-xs text-slate-500 font-mono">
-                      VD: {companySettings?.taxOffice || "Boğaziçi"} - VKN: {companySettings?.taxNumber || "9876543210"}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Tel: {companySettings?.phone || "0850 123 45 67"} | E-posta: {companySettings?.email || "info@sirket.com"}
-                    </p>
-                  </div>
-
-                  <div className="text-right space-y-2">
-                    <div className="inline-block bg-purple-950 text-white px-4 py-2 rounded-lg font-black text-sm uppercase tracking-wider">
-                      {selectedOrderForView.type === "sales" ? "SATIŞ SİPARİŞ BELGESİ" : "SATIN ALMA SİPARİŞİ"}
-                    </div>
-                    <div className="text-xs text-slate-600 font-mono space-y-1">
-                      <div><span className="font-bold text-slate-800">Sipariş No:</span> {selectedOrderForView.orderNumber}</div>
-                      <div><span className="font-bold text-slate-800">Sipariş Tarihi:</span> {formatDate(selectedOrderForView.orderDate)}</div>
-                      <div><span className="font-bold text-slate-800">Termin / Teslim:</span> {formatDate(selectedOrderForView.deliveryDate)}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Customer Info & Order Parameters Box */}
-                <div className="bg-purple-50/40 border border-purple-100 rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
-                      Cari / Firma Bilgileri
-                    </span>
-                    <div className="text-sm font-black text-slate-900">{selectedOrderForView.contactName}</div>
-                    <div className="text-xs text-slate-600">
-                      {contacts.find((c) => c.id === selectedOrderForView.contactId)?.address || "Adres Belirtilmemiş"}
-                    </div>
-                    <div className="text-xs text-slate-500 font-mono">
-                      VKN/TCKN: {selectedOrderForView.taxNumber || contacts.find((c) => c.id === selectedOrderForView.contactId)?.taxNumber || "-"}
-                    </div>
-                    {selectedOrderForView.contactPhone && (
-                      <div className="text-xs text-slate-500">Tel: {selectedOrderForView.contactPhone}</div>
-                    )}
-                  </div>
-
-                  <div className="space-y-1 md:border-l md:border-purple-200/60 md:pl-4">
-                    <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
-                      Sevkiyat & Sipariş Durumu
-                    </span>
-                    <div className="text-xs text-slate-700">
-                      <span className="font-bold text-slate-900">Durum:</span>{" "}
-                      {selectedOrderForView.status === "converted"
-                        ? "Faturaya Dönüştü"
-                        : selectedOrderForView.status === "approved"
-                        ? "Onaylandı"
-                        : selectedOrderForView.status === "delivered"
-                        ? "Teslim Edildi"
-                        : selectedOrderForView.status === "shipped"
-                        ? "Sevk Edildi"
-                        : "Beklemede"}
-                    </div>
-                    {selectedOrderForView.warehouseName && (
-                      <div className="text-xs text-slate-700">
-                        <span className="font-bold text-slate-900">Çıkış Deposu:</span> {selectedOrderForView.warehouseName}
-                      </div>
-                    )}
-                    <div className="text-xs text-slate-700">
-                      <span className="font-bold text-slate-900">Banka IBAN:</span>{" "}
-                      <span className="font-mono font-bold text-purple-900">{companySettings?.iban || "TR33 0006 2000 0000 1234 5678 90"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Items Table */}
-                <div className="border border-purple-200/80 rounded-xl overflow-x-auto custom-scrollbar w-full">
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead>
-                      <tr className="bg-purple-950 text-white font-extrabold uppercase text-[10px]">
-                        <th className="py-2.5 px-3 w-10 text-center">#</th>
-                        <th className="py-2.5 px-3">Ürün / Hizmet Açıklaması</th>
-                        <th className="py-2.5 px-3 text-center w-16">Miktar</th>
-                        <th className="py-2.5 px-3 text-center w-16">Birim</th>
-                        <th className="py-2.5 px-3 text-right w-28">Birim Fiyat</th>
-                        <th className="py-2.5 px-3 text-center w-16">KDV</th>
-                        <th className="py-2.5 px-3 text-right w-28">Toplam</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-purple-100">
-                      {selectedOrderForView.items.map((item, index) => (
-                        <tr key={item.id || index} className="even:bg-purple-50/20">
-                          <td className="py-2.5 px-3 text-center font-bold text-slate-400">{index + 1}</td>
-                          <td className="py-2.5 px-3 font-semibold text-slate-900">{item.description}</td>
-                          <td className="py-2.5 px-3 text-center font-bold">{item.quantity}</td>
-                          <td className="py-2.5 px-3 text-center text-slate-600">{item.unit || "Adet"}</td>
-                          <td className="py-2.5 px-3 text-right font-mono">
-                            ₺{(item.unitPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="py-2.5 px-3 text-center font-mono text-slate-600">%{item.vatRate}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
-                            ₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Calculations & Written Amount */}
-                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-2">
-                  <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-100 w-full sm:w-auto flex-1 space-y-1">
-                    <div className="text-[10px] font-extrabold uppercase text-purple-950">Yazı ile Tutar:</div>
-                    <div className="text-xs font-bold italic text-slate-800">
-                      # {numberToTurkishWords(selectedOrderForView.grandTotal)} #
-                    </div>
-                  </div>
-
-                  <div className="w-full sm:w-72 bg-purple-50/80 p-4 rounded-xl border border-purple-200 space-y-2 text-xs shadow-2xs">
-                    <div className="flex justify-between text-slate-600">
-                      <span>Ara Toplam (KDV Hariç):</span>
-                      <span className="font-bold text-slate-900">
-                        ₺{selectedOrderForView.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>Toplam KDV:</span>
-                      <span className="font-bold text-slate-900">
-                        ₺{selectedOrderForView.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm font-black text-purple-950 pt-2 border-t border-purple-300">
-                      <span>GENEL TOPLAM:</span>
-                      <span>₺{selectedOrderForView.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Notes Section */}
-                {selectedOrderForView.notes && (
-                  <div className="border border-purple-100 bg-purple-50/20 p-3 rounded-xl space-y-1">
-                    <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
-                      Sipariş Notları & Teslimat Koşulları
-                    </span>
-                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{selectedOrderForView.notes}</p>
-                  </div>
-                )}
-
-                {/* Signatures */}
-                <div className="grid grid-cols-2 gap-8 pt-8 border-t border-purple-100 text-center text-xs">
-                  <div className="space-y-12">
-                    <div className="font-bold text-slate-900">Siparişi Veren / Yetkili</div>
-                    <div className="border-b border-dashed border-slate-300 mx-8"></div>
-                    <div className="text-[10px] text-slate-400">İmza / Kaşe</div>
-                  </div>
-                  <div className="space-y-12">
-                    <div className="font-bold text-slate-900">Siparişi Alan / Yetkili</div>
-                    <div className="border-b border-dashed border-slate-300 mx-8"></div>
-                    <div className="text-[10px] text-slate-400">İmza / Kaşe / Onay Tarihi</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* CONVERT TO INVOICE CONFIRMATION FULL-PAGE VIEW */}
-      {convertConfirmOrder && (
-        <DetailPageLayout
-          title="Siparişi Faturaya Dönüştür"
-          subtitle={`Sipariş No: ${convertConfirmOrder.orderNumber} • Cari: ${convertConfirmOrder.contactName}`}
-          breadcrumbs={[
-            { label: "Siparişler", onClick: () => setConvertConfirmOrder(null) },
-            { label: "Faturaya Dönüştür", active: true },
-          ]}
-          onBack={() => setConvertConfirmOrder(null)}
-          statusBadge={
-            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
-              FATURA DÖNÜŞTÜRME
-            </span>
-          }
-          headerIcon={<FileText className="w-5 h-5 text-emerald-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setConvertConfirmOrder(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onConvertOrderToInvoice(convertConfirmOrder);
-                  setConvertConfirmOrder(null);
-                }}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Onayla & Faturaya Dönüştür</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
-            <div className="flex items-center gap-3 text-emerald-600">
-              <div className="p-3 bg-emerald-100 rounded-2xl">
-                <FileText className="w-7 h-7" />
-              </div>
-              <div>
-                <h3 className="font-bold text-base text-slate-900">Siparişi Faturaya Dönüştür</h3>
-                <p className="text-xs text-slate-500">Cari ve stok hareketi otomatik işlenecektir</p>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-1.5 text-slate-700">
-              <div><strong>Sipariş No:</strong> {convertConfirmOrder.orderNumber}</div>
-              <div><strong>Cari Unvanı:</strong> {convertConfirmOrder.contactName}</div>
-              <div><strong>Fatura Tipi:</strong> {convertConfirmOrder.type === "sales" ? "Satış Faturası (Gelir)" : "Alış Faturası (Gider)"}</div>
-              <div><strong>Fatura Tutarı:</strong> <span className="font-bold text-emerald-700">₺{convertConfirmOrder.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span></div>
-            </div>
-
-            <p className="text-xs text-slate-600">
-              Bu işlem neticesinde sipariş durumu <strong>"Faturaya Dönüştü"</strong> olarak güncellenecek ve sistemde otomatik olarak yeni bir fatura kaydı oluşturulacaktır.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setConvertConfirmOrder(null)}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onConvertOrderToInvoice(convertConfirmOrder);
-                  setConvertConfirmOrder(null);
-                }}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Onayla & Faturaya Dönüştür</span>
-              </button>
-            </div>
-          </div>
-        </DetailPageLayout>
-      )}
-
-      {/* WhatsApp Share Modal */}
-      {whatsAppOrder && (
-        <UniversalWhatsAppModal
-          isOpen={!!whatsAppOrder}
-          onClose={() => setWhatsAppOrder(null)}
-          title="WhatsApp ile Sipariş Formu Paylaş"
-          documentTypeLabel={whatsAppOrder.type === "sales" ? "Satış Siparişi" : "Satın Alma Siparişi"}
-          recipientName={whatsAppOrder.contactName}
-          recipientPhone={whatsAppOrder.contactPhone || contacts.find((c) => c.id === whatsAppOrder.contactId)?.phone || ""}
-          defaultMessage={formatOrderWhatsAppMessage(
-            whatsAppOrder,
-            companySettings,
-            contacts.find((c) => c.id === whatsAppOrder.contactId)
-          )}
-          documentFileName={`${whatsAppOrder.orderNumber}_Siparis.pdf`}
-          companySettings={companySettings}
-          onGeneratePdf={async () => {
-            const el = document.getElementById("printable-order-sheet");
-            if (el) {
-              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
-              return exportElementToPDFWithPrintStyling("printable-order-sheet", `${whatsAppOrder.orderNumber}_Siparis.pdf`, {
-                orientation: "p",
-                margin: 8,
-                scale: 1.6,
-              });
-            }
-            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
-            const expData: ExportData = {
-              filename: `${whatsAppOrder.orderNumber}_Siparis`,
-              title: `${companySettings?.companyName || "Sipariş"} - ${whatsAppOrder.orderNumber}`,
-              subtitle: `Cari: ${whatsAppOrder.contactName} | Tarih: ${formatDate(whatsAppOrder.orderDate)} | Toplam: ${formatCurrency(whatsAppOrder.grandTotal)}`,
-              headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
-              rows: (whatsAppOrder.items || []).map((i) => [
-                i.description,
-                i.quantity,
-                i.unit || "Adet",
-                formatCurrency(i.unitPrice),
-                `%${i.vatRate ?? 20}`,
-                formatCurrency(i.totalWithVat),
-              ]),
-            };
-            return generateAutoTableFromExportData(expData);
-          }}
-        />
-      )}
     </div>
   );
 };
