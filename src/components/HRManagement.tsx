@@ -4691,27 +4691,44 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         </DetailPageLayout>
       )}
 
-      {/* MODAL: IZIN TALEBI */}
+      {/* FULL-PAGE DETAIL VIEW: IZIN TALEBI */}
       {isAddLeaveOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <span>Yeni İzin Talebi Oluştur</span>
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">Babalık (Erkek Doğum), Analık, Yıllık ve Mazeret İzinleri</p>
-              </div>
+        <DetailPageLayout
+          title="Yeni İzin Talebi Oluştur"
+          subtitle="Yıllık ücretli izin, analık, babalık, mazeret ve ücretsiz izin kayıtları"
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "İzin Talepleri", onClick: handleBackToList },
+            { label: "Yeni İzin", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              Yeni Talep
+            </span>
+          }
+          headerIcon={<Calendar className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setIsAddLeaveOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
-                <XCircle className="w-5 h-5" />
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="add-leave-form"
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>Talebi Oluştur</span>
               </button>
             </div>
-
-            <form onSubmit={handleCreateLeaveSubmit} className="space-y-3.5">
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+            <form id="add-leave-form" onSubmit={handleCreateLeaveSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Personel Seçin *</label>
                 <select
@@ -5107,10 +5124,10 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsAddLeaveOpen(false)}
+                  onClick={handleBackToList}
                   className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Vazgeç
@@ -5124,15 +5141,47 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL: AVANS TALEBI */}
+      {/* FULL-PAGE DETAIL VIEW: AVANS TALEBI */}
       {isAddAdvanceOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="font-black text-slate-900 text-base">Yeni Avans / Masraf Talepleri</h3>
-            <form onSubmit={handleCreateAdvanceSubmit} className="space-y-3">
+        <DetailPageLayout
+          title="Yeni Avans & Masraf Talebi"
+          subtitle="Personel maaş avansı, harcırah ve iş seyahati masraf talepleri"
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Avans & Kesintiler", onClick: handleBackToList },
+            { label: "Yeni Avans", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              Yeni Avans Talebi
+            </span>
+          }
+          headerIcon={<CreditCard className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="add-advance-form"
+                className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>Avansı Kaydet</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+            <form id="add-advance-form" onSubmit={handleCreateAdvanceSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Personel</label>
                 <select
@@ -5186,30 +5235,74 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsAddAdvanceOpen(false)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
+                  onClick={handleBackToList}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Vazgeç
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold"
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md cursor-pointer"
                 >
-                  Kaydet
+                  Avansı Kaydet
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL: OZLUK DETAYI VIEW */}
+      {/* FULL-PAGE DETAIL VIEW: OZLUK DETAYI VIEW */}
       {selectedEmployeeForDetail && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-6 my-8">
+        <DetailPageLayout
+          title={`${selectedEmployeeForDetail.fullName} - Personel Özlük Dosyası`}
+          subtitle={`${selectedEmployeeForDetail.department} • ${selectedEmployeeForDetail.title} • TCKN: ${selectedEmployeeForDetail.tckn || "—"}`}
+          breadcrumbs={[
+            { label: "İnsan Kaynakları", onClick: handleBackToList },
+            { label: "Personeller", onClick: handleBackToList },
+            { label: selectedEmployeeForDetail.fullName, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span
+              className={`px-3 py-1 text-xs font-bold rounded-xl border ${
+                selectedEmployeeForDetail.status === "active"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-slate-100 text-slate-700 border-slate-200"
+              }`}
+            >
+              {selectedEmployeeForDetail.status === "active" ? "Aktif Çalışan" : "Ayrıldı"}
+            </span>
+          }
+          headerIcon={<User className="w-5 h-5 text-purple-700" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const emp = selectedEmployeeForDetail;
+                  setSelectedEmployeeForDetail(null);
+                  handleOpenEditPayroll(emp);
+                }}
+                className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs transition-all flex items-center gap-1.5"
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                <span>Bordro Düzenle</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Geri Dön
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3.5">
                 <div className="w-14 h-14 rounded-full bg-purple-600 text-white font-black flex items-center justify-center text-xl shadow-md border-2 border-purple-200 overflow-hidden shrink-0">
@@ -5350,16 +5443,17 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
               <button
-                onClick={() => setSelectedEmployeeForDetail(null)}
-                className="bg-slate-100 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs hover:bg-slate-200 transition-all cursor-pointer"
+                type="button"
+                onClick={handleBackToList}
+                className="bg-slate-100 text-slate-700 font-bold px-5 py-2 rounded-xl text-xs hover:bg-slate-200 transition-all cursor-pointer"
               >
-                Kapat
+                Geri Dön
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* MODAL: YASAL KESİNTİ (İCRA & NAFAKA) EKLE / DÜZENLE */}

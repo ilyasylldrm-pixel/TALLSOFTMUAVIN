@@ -3517,50 +3517,60 @@ export const Contacts: React.FC<ContactsProps> = ({
         />
       )}
 
-      {/* TAHSİLAT YAP / ÖDEME YAP MODAL */}
+      {/* FULL-PAGE DETAIL VIEW: TAHSİLAT YAP / ÖDEME YAP */}
       {actionModalType && selectedActionContact && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-xl w-full p-3 sm:p-5 shadow-2xl space-y-3 sm:space-y-4 my-auto max-h-[92vh] overflow-y-auto custom-scrollbar">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={`p-2 rounded-xl border ${
-                    actionModalType === "collection"
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-600"
-                      : "bg-rose-50 border-rose-200 text-rose-600"
-                  }`}
-                >
-                  {actionModalType === "collection" ? (
-                    <ArrowDownLeft className="w-5 h-5" />
-                  ) : (
-                    <ArrowUpRight className="w-5 h-5" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
-                    {actionModalType === "collection"
-                      ? "Müşteriden / Cariden Tahsilat Al"
-                      : "Cariye Ödeme Yap"}
-                  </h3>
-                  <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
-                    {actionModalType === "collection"
-                      ? "Gelir girişi ve alacak kapatma işlemi"
-                      : "Gider çıkışı ve borç kapatma işlemi"}
-                  </p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title={actionModalType === "collection" ? `Cariden Tahsilat Al - ${selectedActionContact.name}` : `Cariye Ödeme Yap - ${selectedActionContact.name}`}
+          subtitle={`Hesap Kodu: ${getContactAccountCode(selectedActionContact)} • VKN/TCKN: ${selectedActionContact.taxNumber || "-"}`}
+          breadcrumbs={[
+            { label: "Cari Hesaplar", onClick: handleBackToList },
+            { label: selectedActionContact.name, onClick: handleBackToList },
+            { label: actionModalType === "collection" ? "Tahsilat" : "Ödeme", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span
+              className={`px-3 py-1 text-xs font-bold rounded-xl border ${
+                actionModalType === "collection"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-rose-50 text-rose-700 border-rose-200"
+              }`}
+            >
+              {actionModalType === "collection" ? "Tahsilat İşlemi" : "Ödeme İşlemi"}
+            </span>
+          }
+          headerIcon={
+            actionModalType === "collection" ? (
+              <ArrowDownLeft className="w-5 h-5 text-emerald-600" />
+            ) : (
+              <ArrowUpRight className="w-5 h-5 text-rose-600" />
+            )
+          }
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setActionModalType(null);
-                  setSelectedActionContact(null);
-                }}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="action-contact-form"
+                disabled={!payAmount || parseFloat(payAmount) <= 0}
+                className={`px-5 py-2 font-bold text-white text-xs rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all active:scale-95 ${
+                  actionModalType === "collection"
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-rose-600 hover:bg-rose-700"
+                }`}
+              >
+                {actionModalType === "collection" ? "Tahsilatı Onayla" : "Ödemeyi Onayla"}
               </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
 
             {/* Selected Contact Card Summary */}
             <div className="bg-slate-50 border border-slate-200 p-2.5 sm:p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -3594,7 +3604,7 @@ export const Contacts: React.FC<ContactsProps> = ({
               </div>
             </div>
 
-            <form onSubmit={handleSaveAction} className="space-y-3 sm:space-y-4 text-xs">
+            <form id="action-contact-form" onSubmit={handleSaveAction} className="space-y-4 text-xs">
               {/* Finans Yönetimi Alt Modül Tab Seçimi (Kasa, Banka, Kredi Kartı, Çek, Senet, Virman) */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1.5">
@@ -4089,13 +4099,10 @@ export const Contacts: React.FC<ContactsProps> = ({
               )}
 
               {/* Action Buttons */}
-              <div className="pt-3 flex flex-col sm:flex-row justify-end gap-2 border-t border-slate-200">
+              <div className="pt-4 flex flex-col sm:flex-row justify-end gap-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => {
-                    setActionModalType(null);
-                    setSelectedActionContact(null);
-                  }}
+                  onClick={handleBackToList}
                   className="w-full sm:w-auto px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold text-xs"
                 >
                   İptal
@@ -4114,7 +4121,7 @@ export const Contacts: React.FC<ContactsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
     </div>

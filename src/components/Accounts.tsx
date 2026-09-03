@@ -3483,265 +3483,45 @@ export const Accounts: React.FC<AccountsProps> = ({
         </div>
       )}
 
-      {/* MODAL: TRANSFER / VİRMAN */}
-      {isTransferModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900">
-                Virman Transferi (Hesap / Cari Virmanı)
-              </h3>
-              <button onClick={() => setIsTransferModalOpen(false)}>
-                <X className="w-5 h-5 text-slate-400 hover:text-slate-600 cursor-pointer" />
-              </button>
-            </div>
 
-            <form onSubmit={handleExecuteTransfer} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Borçlu Hesap (Borçlandırılan / Çıkan Kaynak) *
-                </label>
-                <select
-                  value={fromAccId}
-                  onChange={(e) => setFromAccId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                >
-                  <optgroup label="🏦 Kasa & Banka Hesapları">
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        [Kasa/Banka] {a.name} ({a.type === "cash" ? "Kasa" : "Banka"}) - Bakiye: ₺
-                        {a.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                      </option>
-                    ))}
-                  </optgroup>
-                  {contacts.length > 0 && (
-                    <optgroup label="👤 Cari Hesaplar (Müşteriler / Tedarikçiler)">
-                      {contacts.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          [Cari] {c.name} ({c.type === "customer" ? "Müşteri" : "Tedarikçi"}) - Bakiye: ₺
-                          {c.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Alacaklı Hesap (Alacaklandırılan / Giren Hedef) *
-                </label>
-                <select
-                  value={toAccId}
-                  onChange={(e) => setToAccId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                >
-                  <optgroup label="🏦 Kasa & Banka Hesapları">
-                    {accounts
-                      .filter((a) => a.id !== fromAccId)
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          [Kasa/Banka] {a.name} ({a.type === "cash" ? "Kasa" : "Banka"}) - Bakiye: ₺
-                          {a.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </option>
-                      ))}
-                  </optgroup>
-                  {contacts.filter((c) => c.id !== fromAccId).length > 0 && (
-                    <optgroup label="👤 Cari Hesaplar (Müşteriler / Tedarikçiler)">
-                      {contacts
-                        .filter((c) => c.id !== fromAccId)
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            [Cari] {c.name} ({c.type === "customer" ? "Müşteri" : "Tedarikçi"}) - Bakiye: ₺
-                            {c.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                          </option>
-                        ))}
-                    </optgroup>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Transfer Tutarı (TL) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  value={transferAmount}
-                  onChange={(e) => setTransferAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Açıklama
-                </label>
-                <input
-                  type="text"
-                  value={transferDesc}
-                  onChange={(e) => setTransferDesc(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsTransferModalOpen(false)}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer"
-                >
-                  Transferi Gerçekleştir
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ADD ACCOUNT */}
-      {isAccountModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900">
-                Yeni {accType === "cash" ? "Kasa" : "Banka Hesabı"} Ekle
-              </h3>
-              <button onClick={() => setIsAccountModalOpen(false)}>
-                <X className="w-5 h-5 text-slate-400 hover:text-slate-600 cursor-pointer" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveAccount} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Hesap Adı *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder={accType === "cash" ? "ör: Merkez Dolar Kasası" : "ör: Garanti Ticari TL"}
-                  value={accName}
-                  onChange={(e) => setAccName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 placeholder-slate-400 font-bold"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Hesap Tipi
-                  </label>
-                  <select
-                    value={accType}
-                    onChange={(e) => setAccType(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  >
-                    <option value="bank">Banka Hesabı</option>
-                    <option value="cash">Nakit Kasası</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Para Birimi
-                  </label>
-                  <select
-                    value={accCurrency}
-                    onChange={(e) => setAccCurrency(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  >
-                    <option value="TRY">TRY (₺)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
-                  </select>
-                </div>
-              </div>
-
-              {accType === "bank" && (
-                <>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      Banka Adı
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="ör: Yapı Kredi, Garanti, İş Bankası..."
-                      value={accBankName}
-                      onChange={(e) => setAccBankName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 placeholder-slate-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      IBAN Numarası
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="TR00 0000 0000 0000 0000 0000 00"
-                      value={accIban}
-                      onChange={(e) => setAccIban(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-slate-900 placeholder-slate-400"
-                    />
-                  </div>
-                </>
-              )}
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Açılış Devir Bakiyesi
-                </label>
-                <input
-                  type="number"
-                  value={accInitialBalance}
-                  onChange={(e) => setAccInitialBalance(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsAccountModalOpen(false)}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer"
-                >
-                  Hesabı Ekle
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ADD CHEQUE */}
+      {/* FULL-PAGE DETAIL VIEW: ADD CHEQUE */}
       {isChequeModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2">
-                <FileCheck2 className="w-5 h-5 text-indigo-600" />
-                <h3 className="text-base font-extrabold text-slate-900">Yeni Çek Kaydı</h3>
-              </div>
-              <button onClick={() => setIsChequeModalOpen(false)}>
-                <X className="w-5 h-5 text-slate-400 hover:text-slate-600 cursor-pointer" />
+        <DetailPageLayout
+          title="Yeni Finansal Çek Kaydı"
+          subtitle="Müşteri çeki (tahsilat) veya firma borç çeki (ödeme) portföy girişi"
+          breadcrumbs={[
+            { label: "Finans Yönetimi", onClick: handleBackToList },
+            { label: "Çek & Senet Portföyü", onClick: handleBackToList },
+            { label: "Yeni Çek Kaydı", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-indigo-50 text-indigo-700 border-indigo-200">
+              {chqType === "received" ? "Alınan Müşteri Çeki" : "Verilen Borç Çeki"}
+            </span>
+          }
+          headerIcon={<FileCheck2 className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="add-cheque-form"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>Çek Kaydını Oluştur</span>
               </button>
             </div>
-
-            <form onSubmit={handleSaveCheque} className="space-y-4 text-xs">
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+            <form id="add-cheque-form" onSubmit={handleSaveCheque} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Çek Tipi *</label>
@@ -3869,41 +3649,64 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
+              <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsChequeModalOpen(false)}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
+                  onClick={handleBackToList}
+                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold text-xs"
                 >
                   İptal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer"
+                  className="px-5 py-2 font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer text-xs"
                 >
                   Çek Kaydını Oluştur
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL: ADD PROMISSORY NOTE */}
+      {/* FULL-PAGE DETAIL VIEW: ADD PROMISSORY NOTE */}
       {isNoteModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2">
-                <Stamp className="w-5 h-5 text-purple-600" />
-                <h3 className="text-base font-extrabold text-slate-900">Yeni Senet Kaydı</h3>
-              </div>
-              <button onClick={() => setIsNoteModalOpen(false)}>
-                <X className="w-5 h-5 text-slate-400 hover:text-slate-600 cursor-pointer" />
+        <DetailPageLayout
+          title="Yeni Finansal Senet Kaydı"
+          subtitle="Müşteri seneti (alınan) veya borç seneti (verilen) portföy kaydı"
+          breadcrumbs={[
+            { label: "Finans Yönetimi", onClick: handleBackToList },
+            { label: "Çek & Senet Portföyü", onClick: handleBackToList },
+            { label: "Yeni Senet Kaydı", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {ntType === "received" ? "Alınan Müşteri Seneti" : "Verilen Borç Seneti"}
+            </span>
+          }
+          headerIcon={<Stamp className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="add-note-form"
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>Senet Kaydını Oluştur</span>
               </button>
             </div>
-
-            <form onSubmit={handleSaveNote} className="space-y-4 text-xs">
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+            <form id="add-note-form" onSubmit={handleSaveNote} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Senet Tipi *</label>
@@ -4006,24 +3809,24 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
+              <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsNoteModalOpen(false)}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
+                  onClick={handleBackToList}
+                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold text-xs"
                 >
                   İptal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl cursor-pointer"
+                  className="px-5 py-2 font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl cursor-pointer text-xs"
                 >
                   Senet Kaydını Oluştur
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* NEW TRANSACTION MODAL (Kasa / Banka) */}

@@ -58,6 +58,8 @@ import { ApplianceCalendarView } from "./ApplianceCalendarView";
 import { ServiceInvoicingModal } from "../ServiceInvoicingModal";
 import { ServiceWhatsAppModal } from "../ServiceWhatsAppModal";
 import { ServiceDeliveryModal } from "../ServiceDeliveryModal";
+import { DetailPageLayout } from "../common/DetailPageLayout";
+import { useDetailNavigation } from "../../hooks/useDetailNavigation";
 
 interface ApplianceServiceModuleProps {
   applianceServices: ApplianceServiceRecord[];
@@ -138,6 +140,25 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   const [printRecord, setPrintRecord] = useState<ApplianceServiceRecord | null>(null);
   const [aiAssistantRecord, setAiAssistantRecord] = useState<ApplianceServiceRecord | null>(null);
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+
+  const nav = useDetailNavigation<ApplianceServiceRecord>({ moduleKey: "appliance-service" });
+
+  const handleBackToList = React.useCallback(() => {
+    setIsModalOpen(false);
+    setEditingRecord(null);
+    setAiAssistantRecord(null);
+    setPrintRecord(null);
+    nav.backToList();
+  }, [nav]);
+
+  React.useEffect(() => {
+    if (nav.mode === "list") {
+      setIsModalOpen(false);
+      setEditingRecord(null);
+      setAiAssistantRecord(null);
+      setPrintRecord(null);
+    }
+  }, [nav.mode]);
 
   // Invoicing & Status Dropdown States
   const [invoicingRecord, setInvoicingRecord] = useState<ApplianceServiceRecord | null>(null);
@@ -2118,30 +2139,43 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
         </div>
       )}
 
-      {/* 📝 SERVİS KAYDI EKLEME / DÜZENLEME MODALI */}
+      {/* FULL-PAGE DETAIL VIEW: SERVİS KAYDI EKLEME / DÜZENLEME */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-purple-100">
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-[#6938EF] to-[#8252F6] p-5 text-white flex items-center justify-between">
-              <div>
-                <h3 className="font-black text-lg">
-                  {editingRecord ? "Servis İş Emrini Düzenle" : "Yeni Servis & Saha İş Emri Aç"}
-                </h3>
-                <p className="text-xs text-purple-100">
-                  Beyaz Eşya, İklimlendirme (Klima/Kombi) ve Küçük Ev Aletleri
-                </p>
-              </div>
+        <DetailPageLayout
+          title={editingRecord ? `Servis İş Emrini Düzenle - ${editingRecord.serviceNo}` : "Yeni Servis & Saha İş Emri Aç"}
+          subtitle="Beyaz Eşya, İklimlendirme (Klima/Kombi) ve Küçük Ev Aletleri Servis Kaydı"
+          breadcrumbs={[
+            { label: "Beyaz Eşya & Klima Servis", onClick: handleBackToList },
+            { label: editingRecord ? `${editingRecord.serviceNo} - ${editingRecord.customerName}` : "Yeni Servis Kaydı", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {editingRecord ? editingRecord.status : "Yeni Kayıt"}
+            </span>
+          }
+          headerIcon={<Refrigerator className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 cursor-pointer"
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="appliance-service-form"
+                className="px-5 py-2 bg-[#8252F6] hover:bg-[#703EE5] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                <span>{editingRecord ? "Değişiklikleri Kaydet" : "Servis Kaydını Oluştur"}</span>
               </button>
             </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handleSaveRecord} className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-5xl w-full p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6 mx-auto">
+            <form id="appliance-service-form" onSubmit={handleSaveRecord} className="space-y-6 text-xs">
               {/* 1. Bölüm: Cihaz ve Kategori Bilgileri */}
               <div className="space-y-3">
                 <h4 className="text-xs font-black text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -2593,11 +2627,11 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                 </div>
               </div>
 
-              {/* Modal Aksiyon Butonları */}
+              {/* Form Aksiyon Butonları */}
               <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={handleBackToList}
                   className="px-5 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Vazgeç
@@ -2611,7 +2645,7 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* EV ALETLERİ & KLİMA SERVİS FATURALANDIRMA MODALI */}
