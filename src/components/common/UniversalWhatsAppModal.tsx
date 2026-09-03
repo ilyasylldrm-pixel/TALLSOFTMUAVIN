@@ -25,6 +25,7 @@ import {
   WhatsAppClientStatus,
 } from "../../services/whatsappClient";
 import { CompanySettings } from "../../types";
+import { DetailPageLayout } from "./DetailPageLayout";
 
 export interface QuickTemplateOption {
   id: string;
@@ -276,37 +277,42 @@ export const UniversalWhatsAppModal: React.FC<UniversalWhatsAppModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[94vh] flex flex-col overflow-hidden animate-scaleUp">
-        {/* HEADER */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between shrink-0 shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black shadow-inner">
-              <Zap className="w-5 h-5 fill-emerald-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-black tracking-tight text-white">{title}</h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  {documentTypeLabel}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">
-                {recipientName ? `Alıcı: ${recipientName}` : "Resmi belge ve mesaj iletimi"}
-              </p>
-            </div>
-          </div>
-
+    <DetailPageLayout
+      title={title || "WhatsApp ile Resmi Belge Paylaş"}
+      subtitle={`${documentTypeLabel} • ${recipientName ? `Alıcı: ${recipientName}` : "Resmi belge ve mesaj iletimi"}`}
+      breadcrumbs={[
+        { label: "Belgeler", onClick: onClose },
+        { label: "WhatsApp Paylaşımı", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl uppercase">
+          WHATSAPP ENTEGRASYONU
+        </span>
+      }
+      headerIcon={<Zap className="w-5 h-5 text-emerald-600 fill-emerald-600" />}
+      actions={
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-800/90 hover:bg-rose-500/25 hover:text-rose-200 hover:border-rose-400/40 border border-slate-700 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 group"
-            title="Pencereyi Kapat"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4 text-slate-400 group-hover:text-rose-300 transition-transform group-hover:rotate-90" />
-            <span className="font-extrabold">Kapat</span>
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={isSending}
+            className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+          >
+            <Send className="w-4 h-4" />
+            <span>Gönder</span>
           </button>
         </div>
+      }
+    >
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 w-full max-w-2xl mx-auto flex flex-col overflow-hidden">
 
         {/* BODY */}
         <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
@@ -548,6 +554,6 @@ export const UniversalWhatsAppModal: React.FC<UniversalWhatsAppModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </DetailPageLayout>
   );
 };

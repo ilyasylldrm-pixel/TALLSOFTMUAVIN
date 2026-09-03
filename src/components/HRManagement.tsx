@@ -5456,27 +5456,47 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         </DetailPageLayout>
       )}
 
-      {/* MODAL: YASAL KESİNTİ (İCRA & NAFAKA) EKLE / DÜZENLE */}
+      {/* DETAIL VIEW: YASAL KESİNTİ (İCRA & NAFAKA) EKLE / DÜZENLE */}
       {isAddLegalDeductionOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">
-                  {editingLegalDeduction ? "Yasal Kesinti Dosyasını Düzenle" : "Yeni Yasal Kesinti Kaydı Ekle"}
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">İcra, Nafaka ve Diğer Resmi Kesintilerin Yönetimi</p>
-              </div>
+        <DetailPageLayout
+          title={editingLegalDeduction ? "Yasal Kesinti Dosyasını Düzenle" : "Yeni Yasal Kesinti Kaydı Ekle"}
+          subtitle="İcra, Nafaka ve Diğer Resmi Kesintilerin Yönetimi"
+          breadcrumbs={[
+            {
+              label: "İnsan Kaynakları",
+              onClick: () => {
+                setIsAddLegalDeductionOpen(false);
+                setEditingLegalDeduction(null);
+              },
+            },
+            { label: "Yasal Kesinti", active: true },
+          ]}
+          onBack={() => {
+            setIsAddLegalDeductionOpen(false);
+            setEditingLegalDeduction(null);
+          }}
+          statusBadge={
+            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+              RESMİ KESİNTİ
+            </span>
+          }
+          headerIcon={<Scale className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => {
                   setIsAddLegalDeductionOpen(false);
                   setEditingLegalDeduction(null);
                 }}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <XCircle className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-2xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
 
             <form onSubmit={handleSaveLegalDeductionSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -5640,28 +5660,50 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL: ÖDEME İŞLE & BORÇ DÜŞÜŞÜ */}
+      {/* DETAIL VIEW: ÖDEME İŞLE & BORÇ DÜŞÜŞÜ */}
       {isPaymentModalOpen && paymentModalDeduction && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">İcra / Yasal Kesinti Ödemesi İşle</h3>
-                <p className="text-xs text-slate-500 font-medium">{paymentModalDeduction.employeeName}</p>
-              </div>
+        <DetailPageLayout
+          title="İcra / Yasal Kesinti Ödemesi İşle"
+          subtitle={`${paymentModalDeduction.employeeName} • Dosya No: ${paymentModalDeduction.fileNumber}`}
+          breadcrumbs={[
+            {
+              label: "İnsan Kaynakları",
+              onClick: () => {
+                setIsPaymentModalOpen(false);
+                setPaymentModalDeduction(null);
+              },
+            },
+            { label: "Kesinti Ödemesi", active: true },
+          ]}
+          onBack={() => {
+            setIsPaymentModalOpen(false);
+            setPaymentModalDeduction(null);
+          }}
+          statusBadge={
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
+              İCRA ÖDEMESİ
+            </span>
+          }
+          headerIcon={<DollarSign className="w-5 h-5 text-emerald-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => {
                   setIsPaymentModalOpen(false);
                   setPaymentModalDeduction(null);
                 }}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <XCircle className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
 
             <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2 text-xs font-semibold">
               <div className="flex justify-between">
@@ -5726,7 +5768,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* MODAL: RESMİ İZİN, DEVAMSIZLIK & AVANS FORMLARI YAZDIRMA & DÜZENLEME */}

@@ -35,6 +35,7 @@ import {
   Check,
   Plus
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 import { UserProfile } from "./AuthModal";
 import {
   saveUserFile,
@@ -1518,25 +1519,55 @@ export const FileManager: React.FC<FileManagerProps> = ({
 
       </div>
 
-      {/* FILE PREVIEW MODAL */}
+      {/* FULL-PAGE DETAIL VIEW: FILE PREVIEW */}
       {previewFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-4 flex items-center justify-between border-b border-purple-800/40">
-              <div className="flex items-center gap-2.5">
-                {getFileIcon(previewFile.fileType, previewFile.fileName)}
-                <div>
-                  <h3 className="text-xs font-black text-white">{previewFile.fileName}</h3>
-                  <p className="text-[10px] text-purple-200/80">{previewFile.category} • {formatBytes(previewFile.fileSize)}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setPreviewFile(null)}
-                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
+        <DetailPageLayout
+          title={previewFile.fileName}
+          subtitle={`${previewFile.category} • ${formatBytes(previewFile.fileSize)} • Yükleme: ${new Date(previewFile.uploadDate).toLocaleDateString("tr-TR")}`}
+          breadcrumbs={[
+            { label: "Dosya Yöneticisi", onClick: () => setPreviewFile(null) },
+            { label: previewFile.fileName, active: true },
+          ]}
+          onBack={() => setPreviewFile(null)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              {previewFile.category.toUpperCase()}
+            </span>
+          }
+          headerIcon={getFileIcon(previewFile.fileType, previewFile.fileName)}
+          actions={
+            <div className="flex items-center gap-2">
+              <a
+                href={previewFile.fileUrl || previewFile.fileData}
+                download={previewFile.fileName}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-purple-700 text-white font-extrabold text-xs rounded-xl shadow-xs hover:bg-purple-800 transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
               >
-                <X className="w-5 h-5" />
+                <Download className="w-4 h-4" />
+                <span>İndir</span>
+              </a>
+              {onAddInvoice && !previewFile.extractedData?.isTransferredToAccounting && (
+                <button
+                  type="button"
+                  onClick={() => handleTransferExistingFileToInvoice(previewFile)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Ön Muhasebeye Aktar</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setPreviewFile(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Geri Dön
               </button>
             </div>
+          }
+        >
+          <div className="bg-white w-full max-w-5xl mx-auto rounded-3xl shadow-sm border border-purple-200 overflow-hidden flex flex-col">
 
             <div className="p-6 overflow-y-auto flex-1 flex flex-col md:flex-row items-stretch gap-6 bg-slate-100">
               {/* Document Image/File Area */}
@@ -1695,7 +1726,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
               )}
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
     </div>

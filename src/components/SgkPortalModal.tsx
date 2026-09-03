@@ -25,6 +25,7 @@ import {
   HelpCircle,
   RefreshCw,
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 interface SgkPortalModalProps {
   isOpen: boolean;
@@ -150,39 +151,33 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in duration-150">
-        {/* Top Header */}
-        <div className={`bg-gradient-to-r ${portalInfo.themeColor} text-white p-4 sm:p-5 flex items-center justify-between shrink-0`}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-md shrink-0">
-              <ShieldCheck className="w-6 h-6 text-emerald-300" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-black tracking-tight uppercase">
-                  {portalInfo.name}
-                </h2>
-                <span className={`${portalInfo.badgeColor} text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase border border-white/20 shadow-xs`}>
-                  SGK Entegre
-                </span>
-              </div>
-              <p className="text-xs text-white/80 font-medium line-clamp-1">
-                {portalInfo.description}
-              </p>
-            </div>
-          </div>
-
+    <DetailPageLayout
+      title={`SGK ${portalInfo.name}`}
+      subtitle={portalInfo.description}
+      breadcrumbs={[
+        { label: "İnsan Kaynakları", onClick: onClose },
+        { label: "SGK Resmi Portalı", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl uppercase">
+          SGK RESMİ ENTEGRE
+        </span>
+      }
+      headerIcon={<ShieldCheck className="w-5 h-5 text-emerald-600" />}
+      actions={
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 group shrink-0"
-            title="Pencereyi Kapat"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4 text-white/80 group-hover:text-white transition-transform group-hover:rotate-90" />
-            <span className="font-extrabold">Kapat</span>
+            Geri Dön
           </button>
         </div>
+      }
+    >
+      <div className="bg-white w-full max-w-4xl mx-auto rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
 
         {/* Portal Switcher & Selection Bar */}
         <div className="bg-slate-100/90 border-b border-slate-200 p-3 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shrink-0">
@@ -788,10 +783,10 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
             onClick={onClose}
             className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-2 rounded-xl transition-all cursor-pointer"
           >
-            Kapat
+            Geri Dön
           </button>
         </div>
       </div>
-    </div>
+    </DetailPageLayout>
   );
 };

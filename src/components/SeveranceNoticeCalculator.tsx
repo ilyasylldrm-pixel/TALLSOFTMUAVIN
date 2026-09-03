@@ -24,6 +24,7 @@ import {
 import { Employee, CompanySettings, LeaveRequest } from "../types";
 import { sgkTerminationReasons } from "../data/sgkTerminationReasons";
 import { exportElementToPDF } from "../utils/exportUtils";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 interface SeveranceNoticeCalculatorProps {
   employees: Employee[];
@@ -799,45 +800,52 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
         </div>
       </div>
 
-      {/* YAZDIRILABİLİR RESMİ TAZMİNAT VE İBRANAME MODAL */}
+      {/* YAZDIRILABİLİR RESMİ TAZMİNAT VE İBRANAME TAM SAYFA GÖRÜNÜMÜ */}
       {isPrintModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl space-y-6 my-6 max-h-[92vh] overflow-y-auto custom-scrollbar">
-            {/* Modal Kontrol Butonları (Yazdırmada Gizlenir) */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 print:hidden">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-purple-700" />
-                <h3 className="font-black text-slate-900 text-base">
-                  Resmi Kıdem & İhbar Tazminatı Bordrosu / İbraname
-                </h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadPDF}
-                  disabled={isDownloadingPDF}
-                  className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50"
-                >
-                  <Download className="w-4 h-4 text-purple-200" />
-                  <span>{isDownloadingPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Yazdır</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsPrintModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
+        <DetailPageLayout
+          title="Resmi Kıdem & İhbar Tazminatı Bordrosu / İbraname"
+          subtitle={`${selectedEmp?.fullName || "Personel"} • Çıkış Tarihi: ${endDate} • Net Ödenecek Toplam: ${formatTRY(calculation.grandNetPayable)}`}
+          breadcrumbs={[
+            { label: "Tazminat Hesaplayıcı", onClick: () => setIsPrintModalOpen(false) },
+            { label: "Resmi İbraname & Bordro", active: true },
+          ]}
+          onBack={() => setIsPrintModalOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              RESMİ İBRANAME (4857 S.K.)
+            </span>
+          }
+          headerIcon={<FileText className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                disabled={isDownloadingPDF}
+                className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                <Download className="w-4 h-4 text-purple-200" />
+                <span>{isDownloadingPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Yazdır</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPrintModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Geri Dön
+              </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-4xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-6">
 
             {/* A4 FORMATINDA RESMİ BELGE GÖRÜNÜMÜ */}
             <div id="severance-printable-sheet" className="p-6 bg-white border border-slate-200 rounded-2xl space-y-6 text-slate-900 font-sans text-xs">
@@ -953,10 +961,10 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
                   <span className="font-bold text-slate-800 block text-xs">İBRANAME VEREN PERSONEL İMZA</span>
                   <div className="text-[11px] text-slate-500">{selectedEmp.fullName}</div>
                 </div>
-              </div>
             </div>
           </div>
         </div>
+      </DetailPageLayout>
       )}
     </div>
   );

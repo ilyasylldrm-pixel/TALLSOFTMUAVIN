@@ -19,6 +19,7 @@ import { exportElementToPDF } from "../utils/exportUtils";
 import { formatPayrollWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { Zap, MessageCircle } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 export type PayrollPrintMode =
   | "single_monthly_slip"    // Seçilen Personel - Seçilen Ay Ücret Pusulası
@@ -393,72 +394,66 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
-      {/* Container with Print Specific Styling */}
-      <div className="bg-white rounded-3xl max-w-6xl w-full max-h-[96vh] flex flex-col shadow-2xl overflow-hidden my-auto border border-purple-200/80">
+    <DetailPageLayout
+      title="Bordro & Maaş Pusulası Yazdırma ve Önizleme"
+      subtitle="Seçilen ay veya tüm yıl (12 ay) kümülatif bordrolarını resmi şablonda önizleyin ve yazdırın"
+      breadcrumbs={[
+        { label: "İnsan Kaynakları", onClick: onClose },
+        { label: "Bordro Yazdırma & Önizleme", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1 rounded-xl">
+          RESMİ FORMAT (4857 S.K.)
+        </span>
+      }
+      headerIcon={<Printer className="w-5 h-5 text-purple-600" />}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {scope === "single" && currentEmp && (
+            <button
+              type="button"
+              onClick={() => setIsWhatsAppOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+            >
+              <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+              <span>WhatsApp ile Gönder</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleDownloadPDF}
+            disabled={isDownloadingPDF}
+            className="bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <Download className="w-4 h-4 text-purple-200" />
+            <span className="hidden sm:inline">{isDownloadingPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+            <span className="sm:hidden">PDF</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Yazdır</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+          >
+            Geri Dön
+          </button>
+        </div>
+      }
+    >
+      <div className="bg-white rounded-3xl max-w-6xl mx-auto shadow-sm overflow-hidden border border-purple-200/80">
         {/* MODAL CONTROLS & HEADER (Hidden during print) */}
         <div className="p-4 sm:p-5 border-b border-purple-100 bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-950 text-white flex flex-col gap-3 shrink-0 print:hidden">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 text-purple-200 flex items-center justify-center border border-white/10 shadow-inner">
-                <Printer className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
-                  Bordro & Maaş Pusulası Yazdırma
-                  <span className="text-[11px] font-bold bg-purple-500/30 text-purple-200 border border-purple-400/30 px-2 py-0.5 rounded-full">
-                    Resmi Format (4857 S.K. Md. 37)
-                  </span>
-                </h2>
-                <p className="text-xs text-purple-200/80">
-                  Seçilen ay veya tüm yıl (12 ay) kümülatif bordrolarını resmi şablonda önizleyin ve yazdırın.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {scope === "single" && currentEmp && (
-                <button
-                  type="button"
-                  onClick={() => setIsWhatsAppOpen(true)}
-                  className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
-                >
-                  <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
-                  <span>WhatsApp ile Gönder</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleDownloadPDF}
-                disabled={isDownloadingPDF}
-                className="bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                <Download className="w-4 h-4 text-purple-200" />
-                <span className="hidden sm:inline">{isDownloadingPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
-                <span className="sm:hidden">PDF</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Yazdır</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-purple-200 hover:text-white hover:bg-white/10 p-2 rounded-xl transition-colors cursor-pointer"
-                title="Kapat"
-              >
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-          </div>
-
           {/* FILTER & OPTION BAR */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2 border-t border-white/10 text-xs">
             {/* 1. Kapsam (Personel vs Tüm Şirket) */}
@@ -1311,6 +1306,6 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
           }}
         />
       )}
-    </div>
+    </DetailPageLayout>
   );
 };

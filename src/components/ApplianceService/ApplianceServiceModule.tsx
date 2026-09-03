@@ -1692,32 +1692,35 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
         </>
       )}
 
-      {/* 🔮 AI SAHA & OPERASYON ASİSTANI MODALI */}
+      {/* FULL-PAGE DETAIL VIEW: 🔮 AI SAHA & OPERASYON ASİSTANI */}
       {aiAssistantRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl border border-purple-100 overflow-hidden">
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-[#6938EF] to-[#8252F6] p-5 text-white flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-white/20 backdrop-blur-md">
-                  <Sparkles className="w-5 h-5 text-cyan-200 animate-spin-slow" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-base sm:text-lg">
-                    Ev Aletleri ve Klima AI Operasyon Asistanı
-                  </h3>
-                  <p className="text-xs text-purple-100">
-                    {aiAssistantRecord.serviceNo} - {aiAssistantRecord.brand} {aiAssistantRecord.model}
-                  </p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title="Ev Aletleri ve Klima AI Operasyon Asistanı"
+          subtitle={`${aiAssistantRecord.serviceNo} • ${aiAssistantRecord.brand} ${aiAssistantRecord.model} • Müşteri: ${aiAssistantRecord.customerName}`}
+          breadcrumbs={[
+            { label: "Beyaz Eşya & Klima Servis", onClick: () => setAiAssistantRecord(null) },
+            { label: "AI Saha Asistanı", active: true },
+          ]}
+          onBack={() => setAiAssistantRecord(null)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              AI TEKNİK ASİSTAN
+            </span>
+          }
+          headerIcon={<Sparkles className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setAiAssistantRecord(null)}
-                className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Geri Dön
               </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl w-full max-w-4xl mx-auto flex flex-col shadow-sm border border-purple-100 overflow-hidden">
 
             {/* Modal Sekmeleri */}
             <div className="flex border-b border-slate-200 bg-slate-50 px-5 pt-3 gap-2">
@@ -1958,38 +1961,50 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                 onClick={() => setAiAssistantRecord(null)}
                 className="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 cursor-pointer"
               >
-                Kapat
+                Geri Dön
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* 🖨️ A4 / TERMAL YAZICI UYUMLU SERVİS & TESLİM FİŞİ MODALI */}
+      {/* FULL-PAGE DETAIL VIEW: 🖨️ A4 / TERMAL YAZICI UYUMLU SERVİS & TESLİM FİŞİ */}
       {printRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="p-4 bg-slate-800 text-white flex items-center justify-between print:hidden">
-              <div className="flex items-center gap-2">
-                <Printer className="w-5 h-5 text-purple-300" />
-                <h3 className="font-bold text-sm">Teknik Servis & Teslim Tutanağı Yazdır</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 rounded-lg bg-[#8252F6] hover:bg-[#703EE5] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Yazdır</span>
-                </button>
-                <button
-                  onClick={() => setPrintRecord(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+        <DetailPageLayout
+          title="Teknik Servis & Teslim Tutanağı Yazdır"
+          subtitle={`${printRecord.serviceNo} • ${printRecord.customerName} • ${printRecord.brand} ${printRecord.model}`}
+          breadcrumbs={[
+            { label: "Beyaz Eşya & Klima Servis", onClick: () => setPrintRecord(null) },
+            { label: "Teslim Tutanağı", active: true },
+          ]}
+          onBack={() => setPrintRecord(null)}
+          statusBadge={
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
+              RESMİ TESLİM FORMU
+            </span>
+          }
+          headerIcon={<Printer className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 rounded-xl bg-[#8252F6] hover:bg-[#703EE5] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Yazdır</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintRecord(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Geri Dön
+              </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl w-full max-w-3xl mx-auto flex flex-col shadow-sm border border-slate-200 overflow-hidden">
 
             {/* Yazdırma Belge Alanı */}
             <div className="p-8 overflow-y-auto space-y-6 text-slate-900 bg-white font-sans text-xs" id="printable-service-slip">
@@ -2136,7 +2151,7 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* FULL-PAGE DETAIL VIEW: SERVİS KAYDI EKLEME / DÜZENLEME */}

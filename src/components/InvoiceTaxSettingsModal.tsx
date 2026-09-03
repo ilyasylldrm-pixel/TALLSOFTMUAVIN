@@ -29,6 +29,7 @@ import {
   ArrowUpRight,
   Coins,
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 export interface InvoiceTaxSettingsModalProps {
   isOpen: boolean;
@@ -336,33 +337,41 @@ export const InvoiceTaxSettingsModal: React.FC<InvoiceTaxSettingsModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4">
-      <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto animate-fadeIn">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 p-3.5 sm:p-4 shrink-0 bg-slate-50/80">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-100 border border-purple-200 flex items-center justify-center text-purple-700 shadow-2xs">
-              <Sliders className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <span>Kalem Vergi &amp; Tevkifat / Özel Matrah Ayarları</span>
-              </h3>
-              <p className="text-[10px] sm:text-[11px] text-slate-500 truncate max-w-md">
-                Seçili Kalem: <span className="font-bold text-slate-700">{item.description || "Hizmet / Ürün Kalemi"}</span> ({item.quantity} {item.unit || "Adet"} × {formatCurrency(item.unitPrice, currency)})
-              </p>
-            </div>
-          </div>
+    <DetailPageLayout
+      title="Kalem Vergi & Tevkifat / Özel Matrah Ayarları"
+      subtitle={`Seçili Kalem: ${item.description || "Hizmet / Ürün Kalemi"} (${item.quantity} ${item.unit || "Adet"} × ${formatCurrency(item.unitPrice, currency)})`}
+      breadcrumbs={[
+        { label: "Faturalar", onClick: onClose },
+        { label: "Vergi & Tevkifat Ayarları", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+          GİB VERGİ DÜZENLEMESİ
+        </span>
+      }
+      headerIcon={<Sliders className="w-5 h-5 text-purple-600" />}
+      actions={
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-300 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer active:scale-95 group shrink-0"
-            title="Kapat"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4 text-slate-500 group-hover:text-rose-600 transition-transform group-hover:rotate-90" />
-            <span className="font-extrabold">Kapat</span>
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer active:scale-95"
+          >
+            <Check className="w-4 h-4" />
+            <span>Ayarları Uygula</span>
           </button>
         </div>
+      }
+    >
+      <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-3xl mx-auto shadow-sm overflow-hidden flex flex-col">
 
         {/* Tab Navigation */}
         <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-100/70 p-1.5 shrink-0 overflow-x-auto">
@@ -1130,6 +1139,6 @@ export const InvoiceTaxSettingsModal: React.FC<InvoiceTaxSettingsModalProps> = (
           </div>
         </div>
       </div>
-    </div>
+    </DetailPageLayout>
   );
 };

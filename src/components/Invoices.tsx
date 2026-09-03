@@ -2789,21 +2789,40 @@ export const Invoices: React.FC<InvoicesProps> = ({
         )}
 
         {isQuickContactFormOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
-            <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-purple-600" />
-                  <h3 className="font-extrabold text-slate-900 text-sm">Hızlı Yeni Cari Ekle</h3>
-                </div>
+          <DetailPageLayout
+            title="Hızlı Yeni Cari Ekle"
+            subtitle="Fatura için yeni müşteri veya tedarikçi kartı oluşturun"
+            breadcrumbs={[
+              { label: "Fatura Düzenle", onClick: () => setIsQuickContactFormOpen(false) },
+              { label: "Hızlı Cari Ekle", active: true },
+            ]}
+            onBack={() => setIsQuickContactFormOpen(false)}
+            statusBadge={
+              <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+                YENİ CARİ
+              </span>
+            }
+            headerIcon={<Users className="w-5 h-5 text-purple-600" />}
+            actions={
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsQuickContactFormOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
+                  İptal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleQuickCreateContact}
+                  className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs transition-colors cursor-pointer active:scale-95"
+                >
+                  Cariyi Kaydet & Seç
                 </button>
               </div>
+            }
+          >
+            <div className="bg-white border border-slate-200 rounded-3xl max-w-lg mx-auto p-6 sm:p-8 shadow-sm space-y-4">
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Cari Ünvanı / Adı *</label>
@@ -2850,66 +2869,78 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   </select>
                 </div>
               </div>
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsQuickContactFormOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200"
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 cursor-pointer"
                 >
                   İptal
                 </button>
                 <button
                   type="button"
                   onClick={handleQuickCreateContact}
-                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-sm"
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-xs cursor-pointer active:scale-95 transition-all"
                 >
                   Cariyi Kaydet & Seç
                 </button>
               </div>
             </div>
-          </div>
+          </DetailPageLayout>
         )}
 
         {isContactPickerOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
-            <div className="bg-white border border-slate-200 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-              <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-purple-400" />
-                  <h3 className="font-extrabold text-sm">Cari Hesap Rehberi</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsContactPickerOpen(false)}
-                  className="text-slate-400 hover:text-white p-1"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="p-3 border-b border-slate-100 bg-slate-50 flex gap-2 shrink-0">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Cari adı, unvan veya VKN ile ara..."
-                    value={contactPickerSearch}
-                    onChange={(e) => setContactPickerSearch(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20"
-                  />
-                </div>
+          <DetailPageLayout
+            title="Cari Hesap Rehberi"
+            subtitle="Faturanız için kayıtlı carilerden seçim yapın veya yeni cari oluşturun"
+            breadcrumbs={[
+              { label: "Fatura Düzenle", onClick: () => setIsContactPickerOpen(false) },
+              { label: "Cari Rehberi", active: true },
+            ]}
+            onBack={() => setIsContactPickerOpen(false)}
+            statusBadge={
+              <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+                CARİ REHBERİ
+              </span>
+            }
+            headerIcon={<Users className="w-5 h-5 text-purple-600" />}
+            actions={
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setIsContactPickerOpen(false);
                     setIsQuickContactFormOpen(true);
                   }}
-                  className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0"
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Yeni Ekle</span>
+                  <span>Yeni Cari Ekle</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsContactPickerOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  Kapat
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-3 space-y-2 divide-y divide-slate-100">
+            }
+          >
+            <div className="bg-white border border-slate-200 rounded-3xl max-w-4xl mx-auto shadow-sm overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-slate-100 bg-slate-50 flex gap-2 shrink-0">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Cari adı, unvan veya VKN ile ara..."
+                    value={contactPickerSearch}
+                    onChange={(e) => setContactPickerSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20"
+                  />
+                </div>
+              </div>
+              <div className="p-4 space-y-2 divide-y divide-slate-100 max-h-[60vh] overflow-y-auto">
                 {contacts
                   .filter(
                     (c) =>
@@ -2923,10 +2954,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         handleContactSelectChange(c.id);
                         setIsContactPickerOpen(false);
                       }}
-                      className="p-3 hover:bg-purple-50/50 rounded-xl cursor-pointer flex items-center justify-between transition-colors pt-2"
+                      className="p-3.5 hover:bg-purple-50/50 rounded-2xl cursor-pointer flex items-center justify-between transition-colors pt-2.5"
                     >
                       <div>
-                        <div className="font-bold text-xs text-slate-900">{c.name}</div>
+                        <div className="font-extrabold text-xs text-slate-900">{c.name}</div>
                         <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                           <span>VKN: {c.taxNumber || "—"}</span>
                           {c.taxOffice && <span>VD: {c.taxOffice}</span>}
@@ -2937,44 +2968,47 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </div>
                   ))}
               </div>
-              <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+            </div>
+          </DetailPageLayout>
+        )}
+
+        {isProductPickerOpen && (
+          <DetailPageLayout
+            title="Stok & Hizmet Kataloğundan Kalem Seç"
+            subtitle="Ürün veya hizmetlerinizi filtreleyip faturanıza tek tıkla ekleyin"
+            breadcrumbs={[
+              { label: "Fatura Düzenle", onClick: () => setIsProductPickerOpen(false) },
+              { label: "Ürün & Hizmet Seçimi", active: true },
+            ]}
+            onBack={() => setIsProductPickerOpen(false)}
+            statusBadge={
+              <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+                STOK REHBERİ
+              </span>
+            }
+            headerIcon={<Package className="w-5 h-5 text-purple-600" />}
+            actions={
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsContactPickerOpen(false)}
-                  className="px-4 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl"
+                  onClick={() => setIsProductPickerOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
                 >
                   Kapat
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {isProductPickerOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
-            <div className="bg-white border border-slate-200 rounded-3xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-              <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2">
-                  <Package className="w-5 h-5 text-purple-400" />
-                  <h3 className="font-extrabold text-sm">Stok & Hizmet Kataloğundan Kalem Seç</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsProductPickerOpen(false)}
-                  className="text-slate-400 hover:text-white p-1"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="p-3 border-b border-slate-100 bg-slate-50 flex gap-2 shrink-0">
+            }
+          >
+            <div className="bg-white border border-slate-200 rounded-3xl max-w-4xl mx-auto shadow-sm overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-slate-100 bg-slate-50 flex gap-3 shrink-0">
                 <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
                     placeholder="Ürün adı, barkod veya kod ile ara..."
                     value={productPickerSearch}
                     onChange={(e) => setProductPickerSearch(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20"
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20"
                   />
                 </div>
                 <select
@@ -2990,7 +3024,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   ))}
                 </select>
               </div>
-              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
                 {products
                   .filter((p) => {
                     const matchesSearch =
@@ -3008,7 +3042,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         handleSelectProductFromPicker(p);
                         setIsProductPickerOpen(false);
                       }}
-                      className="p-3 border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 rounded-xl cursor-pointer flex items-center justify-between transition-all"
+                      className="p-3.5 border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 rounded-2xl cursor-pointer flex items-center justify-between transition-all"
                     >
                       <div>
                         <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
@@ -3034,17 +3068,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </div>
                   ))}
               </div>
-              <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsProductPickerOpen(false)}
-                  className="px-4 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl"
-                >
-                  Kapat
-                </button>
-              </div>
             </div>
-          </div>
+          </DetailPageLayout>
         )}
 
         {isAiScannerModalOpen && (
@@ -3670,31 +3695,67 @@ export const Invoices: React.FC<InvoicesProps> = ({
         />
       )}
 
-      {/* MODAL: Record Payment / Collection */}
+      {/* FULL-PAGE DETAIL VIEW: Record Payment / Collection */}
       {paymentModalInvoice && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900">
-                {paymentModalInvoice.type === "sales"
-                  ? "Tahsilat Ekle (Giriş)"
-                  : "Ödeme Ekle (Çıkış)"}
-              </h3>
+        <DetailPageLayout
+          title={paymentModalInvoice.type === "sales" ? "Faturadan Tahsilat Ekle (Kasa / Banka Girişi)" : "Faturaya Ödeme Yap (Kasa / Banka Çıkışı)"}
+          subtitle={`${paymentModalInvoice.contactName} • Fatura No: ${paymentModalInvoice.invoiceNumber} • Kalan Bakiye: ₺${paymentModalInvoice.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
+          breadcrumbs={[
+            { label: "Faturalar", onClick: () => setPaymentModalInvoice(null) },
+            { label: paymentModalInvoice.invoiceNumber, onClick: () => setPaymentModalInvoice(null) },
+            { label: paymentModalInvoice.type === "sales" ? "Tahsilat Al" : "Ödeme Yap", active: true },
+          ]}
+          onBack={() => setPaymentModalInvoice(null)}
+          statusBadge={
+            <span className={`px-3 py-1 rounded-xl text-xs font-bold border ${
+              paymentModalInvoice.type === "sales"
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                : "bg-blue-50 text-blue-800 border-blue-200"
+            }`}>
+              {paymentModalInvoice.type === "sales" ? "GELİR TAHSİLATI" : "GİDER ÖDEMESİ"}
+            </span>
+          }
+          headerIcon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setPaymentModalInvoice(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="payment-record-form"
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer active:scale-95 transition-all"
+              >
+                {paymentModalInvoice.type === "sales" ? "Tahsilatı İşle" : "Ödemeyi Kaydet"}
               </button>
             </div>
+          }
+        >
+          <div className="max-w-xl mx-auto bg-white border border-slate-200 text-slate-900 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-semibold">Cari Hesap:</span>
+                <strong className="text-slate-800 font-bold">{paymentModalInvoice.contactName}</strong>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-semibold">Fatura Numarası:</span>
+                <strong className="font-mono text-slate-800 font-bold">{paymentModalInvoice.invoiceNumber}</strong>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                <span className="text-slate-500 font-semibold">Fatura Toplamı:</span>
+                <span className="font-bold text-slate-700">₺{paymentModalInvoice.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-semibold">Kalan Ödenecek / Tahsil Edilecek:</span>
+                <span className="font-extrabold text-emerald-700 text-sm">₺{paymentModalInvoice.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
 
-            <p className="text-xs text-slate-500">
-              <strong className="text-slate-800">{paymentModalInvoice.contactName}</strong> firmasına ait{" "}
-              <strong className="font-mono text-slate-800">{paymentModalInvoice.invoiceNumber}</strong> nolu
-              fatura için tahsilat/ödeme kaydı.
-            </p>
-
-            <form onSubmit={handleRecordPayment} className="space-y-4">
+            <form id="payment-record-form" onSubmit={handleRecordPayment} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Kasa / Banka Hesabı Seçin *
@@ -3726,7 +3787,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setPaymentModalInvoice(null)}
@@ -3738,12 +3799,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   type="submit"
                   className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
                 >
-                  Tahsilatı İşle
+                  {paymentModalInvoice.type === "sales" ? "Tahsilatı İşle" : "Ödemeyi Kaydet"}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* WHATSAPP SHARE MODAL */}
@@ -3783,378 +3844,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
         />
       )}
 
-      {/* QUICK CONTACT PICKER MODAL */}
-      {isContactPickerOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in duration-150">
-            {/* Modal Header */}
-            <div className="p-4 bg-purple-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-purple-300" />
-                <div>
-                  <h3 className="font-bold text-sm">Cari Hesap Seç ve Faturaya Ekle</h3>
-                  <p className="text-[10px] text-purple-200">
-                    Faturanız için cari seçin veya hızlıca yeni cari oluşturun
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsContactPickerOpen(false)}
-                className="p-1 text-purple-200 hover:text-white rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Search & Filter Controls */}
-            <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    value={contactPickerSearch}
-                    onChange={(e) => setContactPickerSearch(e.target.value)}
-                    placeholder="Cari unvanı, VKN/TCKN veya telefon ara..."
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-purple-500 outline-none"
-                    autoFocus
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsQuickContactFormOpen(!isQuickContactFormOpen)}
-                  className="px-3 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 transition-all"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{isQuickContactFormOpen ? "Aramaya Dön" : "Yeni Cari Ekle"}</span>
-                </button>
-              </div>
-
-              {/* Quick Contact Form */}
-              {isQuickContactFormOpen && (
-                <form
-                  onSubmit={handleQuickCreateContact}
-                  className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl space-y-3 animate-in fade-in duration-150"
-                >
-                  <div className="text-xs font-bold text-purple-900 flex items-center gap-1">
-                    <Plus className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Hızlı Cari Kaydı & Seçimi</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Cari Unvanı / Adı *"
-                      value={newContactName}
-                      onChange={(e) => setNewContactName(e.target.value)}
-                      className="bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-900"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Vergi / TCKN No"
-                      value={newContactTaxNo}
-                      onChange={(e) => setNewContactTaxNo(e.target.value)}
-                      className="bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-900"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Telefon No"
-                      value={newContactPhone}
-                      onChange={(e) => setNewContactPhone(e.target.value)}
-                      className="bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-900"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <select
-                      value={newContactType}
-                      onChange={(e) => setNewContactType(e.target.value as any)}
-                      className="bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-800"
-                    >
-                      <option value="both">Müşteri & Tedarikçi</option>
-                      <option value="customer">Sadece Müşteri</option>
-                      <option value="vendor">Sadece Tedarikçi</option>
-                    </select>
-                    <button
-                      type="submit"
-                      className="px-4 py-1.5 rounded-lg text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white cursor-pointer"
-                    >
-                      Cariyi Kaydet ve Faturada Seç
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-
-            {/* Contact List Grid */}
-            <div className="p-4 overflow-y-auto flex-1 space-y-2 max-h-[50vh]">
-              {contacts.filter((c) => {
-                const q = contactPickerSearch.toLowerCase();
-                return (
-                  c.name.toLowerCase().includes(q) ||
-                  (c.taxNumber && c.taxNumber.includes(q)) ||
-                  (c.phone && c.phone.includes(q))
-                );
-              }).length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs">
-                  Aramanıza uygun cari hesap bulunamadı. "Yeni Cari Ekle" butonu ile hızlıca ekleyebilirsiniz.
-                </div>
-              ) : (
-                contacts
-                  .filter((c) => {
-                    const q = contactPickerSearch.toLowerCase();
-                    return (
-                      c.name.toLowerCase().includes(q) ||
-                      (c.taxNumber && c.taxNumber.includes(q)) ||
-                      (c.phone && c.phone.includes(q))
-                    );
-                  })
-                  .map((c) => (
-                    <div
-                      key={c.id}
-                      className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                        contactId === c.id
-                          ? "bg-purple-50/80 border-purple-300 ring-1 ring-purple-400"
-                          : "bg-white border-slate-200 hover:border-purple-200 hover:bg-slate-50/50"
-                      }`}
-                    >
-                      <div className="space-y-0.5 min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-xs text-slate-900 truncate">
-                            {c.name}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.2 text-[9px] font-bold rounded uppercase ${
-                              c.contactType === "customer"
-                                ? "bg-blue-50 text-blue-700"
-                                : c.contactType === "vendor"
-                                ? "bg-amber-50 text-amber-700"
-                                : "bg-purple-50 text-purple-700"
-                            }`}
-                          >
-                            {c.contactType === "customer"
-                              ? "Müşteri"
-                              : c.contactType === "vendor"
-                              ? "Tedarikçi"
-                              : "Müşteri & Tedarikçi"}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-3">
-                          {c.taxNumber && <span>VKN: {c.taxNumber}</span>}
-                          {c.phone && <span>Tel: {c.phone}</span>}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {onSelectTab && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsContactPickerOpen(false);
-                              setIsCreateModalOpen(false);
-                              onSelectTab("contacts");
-                            }}
-                            className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
-                            title="Cari detaylarına git"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setContactId(c.id);
-                            setVknSearchInput(c.taxNumber ? c.taxNumber.replace(/\D/g, "") : "");
-                            setIsContactPickerOpen(false);
-                          }}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
-                            contactId === c.id
-                              ? "bg-emerald-600 text-white"
-                              : "bg-purple-600 hover:bg-purple-700 text-white shadow-2xs"
-                          }`}
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{contactId === c.id ? "Seçildi" : "Seç & Faturaya Ekle"}</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-              {onSelectTab ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsContactPickerOpen(false);
-                    setIsCreateModalOpen(false);
-                    onSelectTab("contacts");
-                  }}
-                  className="text-xs font-bold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Cari Hesap Listesine Git (Tam Sayfa)</span>
-                </button>
-              ) : (
-                <div></div>
-              )}
-              <button
-                type="button"
-                onClick={() => setIsContactPickerOpen(false)}
-                className="px-4 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 cursor-pointer"
-              >
-                Kapat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* QUICK PRODUCT / STOCK PICKER MODAL */}
-      {isProductPickerOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in duration-150">
-            {/* Modal Header */}
-            <div className="p-4 bg-purple-950 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Package className="w-5 h-5 text-purple-300" />
-                <div>
-                  <h3 className="font-bold text-sm">Stok & Hizmet Listesinden Seç ve Faturaya Ekle</h3>
-                  <p className="text-[10px] text-purple-200">
-                    Ürün veya hizmetinizi arayın, tek tıkla faturalandırma kalemlerinize ekleyin
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsProductPickerOpen(false)}
-                className="p-1 text-purple-200 hover:text-white rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Search Bar */}
-            <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-2">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={productPickerSearch}
-                  onChange={(e) => setProductPickerSearch(e.target.value)}
-                  placeholder="Ürün adı, stok kodu, barkod veya seri numarası ara..."
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-purple-500 outline-none"
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            {/* Product List */}
-            <div className="p-4 overflow-y-auto flex-1 space-y-2.5 max-h-[55vh]">
-              {products.filter((p) => {
-                const q = productPickerSearch.toLowerCase();
-                return (
-                  p.name.toLowerCase().includes(q) ||
-                  (p.code && p.code.toLowerCase().includes(q)) ||
-                  (p.barcode && p.barcode.toLowerCase().includes(q)) ||
-                  (p.imeiOrSerialNo && p.imeiOrSerialNo.toLowerCase().includes(q))
-                );
-              }).length === 0 ? (
-                <div className="text-center py-10 text-slate-400 text-xs">
-                  Aradığınız kriterlere uygun stok/hizmet bulunamadı.
-                </div>
-              ) : (
-                products
-                  .filter((p) => {
-                    const q = productPickerSearch.toLowerCase();
-                    return (
-                      p.name.toLowerCase().includes(q) ||
-                      (p.code && p.code.toLowerCase().includes(q)) ||
-                      (p.barcode && p.barcode.toLowerCase().includes(q)) ||
-                      (p.imeiOrSerialNo && p.imeiOrSerialNo.toLowerCase().includes(q))
-                    );
-                  })
-                  .map((p) => {
-                    const price = invType === "sales" ? p.sellPrice : p.buyPrice;
-                    return (
-                      <div
-                        key={p.id}
-                        className="p-3.5 bg-white border border-slate-200 hover:border-purple-300 hover:bg-purple-50/20 rounded-xl transition-all flex items-center justify-between gap-4 group"
-                      >
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-xs text-slate-900 group-hover:text-purple-950">
-                              {p.name}
-                            </span>
-                            {p.stockType && (
-                              <span className="px-2 py-0.5 text-[9px] font-bold rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                                {p.stockType}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 font-medium">
-                            {p.code && <span>Kod: <strong className="text-slate-700">{p.code}</strong></span>}
-                            {p.barcode && <span>Barkod: <strong className="text-slate-700">{p.barcode}</strong></span>}
-                            <span>Birim: <strong className="text-slate-700">{p.unit || "Adet"}</strong></span>
-                            <span>Mevcut Stok: <strong className={p.stockQuantity > 0 ? "text-emerald-700 font-bold" : "text-amber-600 font-bold"}>{p.stockQuantity} {p.unit}</strong></span>
-                          </div>
-                        </div>
-
-                        <div className="text-right shrink-0 space-y-1">
-                          <div className="text-xs font-black text-slate-900">
-                            ₺{price.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                            <span className="text-[10px] font-normal text-slate-400 ml-1">
-                              ({invType === "sales" ? "Satış" : "Alış"})
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleSelectProductFromPicker(p)}
-                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-2xs cursor-pointer flex items-center gap-1.5 transition-all active:scale-95"
-                          >
-                            <Package className="w-3.5 h-3.5 text-purple-200" />
-                            <span>Seç & Faturaya Ekle</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-              {onSelectTab ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsProductPickerOpen(false);
-                    setIsCreateModalOpen(false);
-                    onSelectTab("products");
-                  }}
-                  className="text-xs font-bold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Package className="w-3.5 h-3.5" />
-                  <span>Stok & Hizmet Listesine Git (Tam Sayfa)</span>
-                </button>
-              ) : (
-                <div></div>
-              )}
-              <button
-                type="button"
-                onClick={() => setIsProductPickerOpen(false)}
-                className="px-4 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 cursor-pointer"
-              >
-                Kapat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* PRINT MODAL VIEW */}
       {printingInvoice && (
         <InvoicePrintModal
@@ -4166,53 +3855,76 @@ export const Invoices: React.FC<InvoicesProps> = ({
         />
       )}
 
-      {/* MODAL: Collect All Invoices */}
+      {/* FULL-PAGE DETAIL VIEW: Collect All Invoices */}
       {isCollectAllModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-emerald-100 rounded-xl text-emerald-700">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <h3 className="font-bold text-slate-900 text-base">Tüm Faturaları Tahsil Et & Öde</h3>
-              </div>
+        <DetailPageLayout
+          title="Tüm Faturaları Toplu Tahsil Et & Öde"
+          subtitle="Açık ve vadesi gelen tüm fatura bakiyelerinin tek tıkla kapatılması ve muhasebeleştirilmesi"
+          breadcrumbs={[
+            { label: "Faturalar", onClick: () => setIsCollectAllModalOpen(false) },
+            { label: "Toplu Tahsilat & Tediye", active: true },
+          ]}
+          onBack={() => setIsCollectAllModalOpen(false)}
+          statusBadge={
+            <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+              TOPLU İŞLEM
+            </span>
+          }
+          headerIcon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setIsCollectAllModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onCollectAllInvoices) {
+                    onCollectAllInvoices(collectAllAccountId);
+                  }
+                  setIsCollectAllModalOpen(false);
+                }}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Evet, Hepsini Tahsil Et & Öde</span>
               </button>
             </div>
-
-            <div className="py-4 space-y-4 text-xs text-slate-600">
+          }
+        >
+          <div className="max-w-xl mx-auto bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 space-y-6">
+            <div className="space-y-4 text-xs text-slate-600">
               {(() => {
                 const uncollectedInvoices = invoices.filter((i) => i.status !== "cancelled" && i.remainingAmount > 0);
                 const totalAmount = uncollectedInvoices.reduce((acc, i) => acc + i.remainingAmount, 0);
 
                 return (
                   <>
-                    <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-4 space-y-2 text-emerald-950">
+                    <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-5 space-y-3 text-emerald-950">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold">Bekleyen Fatura Sayısı:</span>
+                        <span className="font-semibold">Bekleyen Açık Fatura Sayısı:</span>
                         <span className="font-bold text-sm text-emerald-700">{uncollectedInvoices.length} Adet</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold">İşlenecek Toplam Tutar:</span>
-                        <span className="font-black text-base text-emerald-800">
+                      <div className="flex items-center justify-between pt-2 border-t border-emerald-200">
+                        <span className="font-semibold">Kapatılacak Toplam Tutar:</span>
+                        <span className="font-black text-lg text-emerald-800">
                           ₺{totalAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-slate-700 font-bold mb-1">
-                        Tahsilat / Ödemenin İşleneceği Kasa / Banka Hesabı
+                      <label className="block text-slate-700 font-bold mb-1.5">
+                        Tahsilat / Ödemenin İşleneceği Kasa / Banka Hesabı *
                       </label>
                       <select
                         value={collectAllAccountId}
                         onChange={(e) => setCollectAllAccountId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                       >
                         {accounts.map((acc) => (
                           <option key={acc.id} value={acc.id}>
@@ -4222,8 +3934,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </select>
                     </div>
 
-                    <p className="text-slate-500 text-[11px] leading-relaxed">
-                      Bu işlem sonucunda sistemdeki tüm açık, bekleyen veya kısmi ödenmiş gelir ve gider faturaları <strong>"Ödendi"</strong> statüsüne getirilecek ve kasa/banka hareketleri otomatik olarak kaydedilecektir.
+                    <p className="text-slate-500 text-[11px] leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      Bu işlem sonucunda sistemdeki tüm açık, bekleyen veya kısmi ödenmiş gelir ve gider faturaları <strong>"Ödendi"</strong> statüsüne getirilecek ve kasa/banka hareketleri otomatik olarak muhasebeleştirilecektir.
                     </p>
                   </>
                 );
@@ -4246,14 +3958,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   }
                   setIsCollectAllModalOpen(false);
                 }}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Evet, Hepsini Tahsil Et & Öde</span>
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
       {/* AI Expense Scanner Modal */}
       {isAiScannerModalOpen && (

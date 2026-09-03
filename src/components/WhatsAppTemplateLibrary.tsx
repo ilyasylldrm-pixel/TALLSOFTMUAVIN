@@ -26,6 +26,7 @@ import {
   Zap,
   HelpCircle
 } from 'lucide-react';
+import { DetailPageLayout } from './common/DetailPageLayout';
 import { WhatsAppTemplate } from '../types';
 
 interface WhatsAppTemplateLibraryProps {
@@ -653,34 +654,36 @@ export const WhatsAppTemplateLibrary: React.FC<WhatsAppTemplateLibraryProps> = (
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: Yeni Şablon Oluştur / Düzenle                                      */}
+      {/* FULL-PAGE DETAIL VIEW: Yeni Şablon Oluştur / Düzenle                       */}
       {/* ========================================================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-8">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
-              <div className="flex items-center gap-2.5">
-                <span className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  <FileText className="w-5 h-5" />
-                </span>
-                <div>
-                  <h3 className="font-bold text-base">
-                    {editingTemplate ? 'Şablonu Düzenle' : 'Yeni Hızlı Mesaj Şablonu Oluştur'}
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Özelleştirilebilir dinamik değişkenlerle parametrik WhatsApp mesajı tasarlayın
-                  </p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title={editingTemplate ? 'Şablonu Düzenle' : 'Yeni Hızlı Mesaj Şablonu Oluştur'}
+          subtitle="Özelleştirilebilir dinamik değişkenlerle parametrik WhatsApp mesajı tasarlayın"
+          breadcrumbs={[
+            { label: 'WhatsApp Şablonları', onClick: () => setIsModalOpen(false) },
+            { label: editingTemplate ? 'Şablon Düzenle' : 'Yeni Şablon', active: true },
+          ]}
+          onBack={() => setIsModalOpen(false)}
+          statusBadge={
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
+              ŞABLON YÖNETİMİ
+            </span>
+          }
+          headerIcon={<FileText className="w-5 h-5 text-emerald-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white w-full max-w-4xl mx-auto rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col p-6">
 
             {/* Modal Form Content */}
             <form onSubmit={handleSaveTemplate} className="p-6 space-y-6 overflow-y-auto max-h-[80vh]">
@@ -907,7 +910,7 @@ export const WhatsAppTemplateLibrary: React.FC<WhatsAppTemplateLibraryProps> = (
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
     </div>
   );

@@ -15,6 +15,7 @@ import {
   FileCheck2,
 } from "lucide-react";
 import { AssetCustody } from "../types";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 interface AssetReturnModalProps {
   isOpen: boolean;
@@ -112,36 +113,43 @@ export const AssetReturnModal: React.FC<AssetReturnModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border-b border-amber-200">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-md">
-              <RotateCcw className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                Zimmet İade Alma İşlemi
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                  İade Süreci
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Personeldeki şirket demirbaşının teslim alınması ve tutanak kaydı
-              </p>
-            </div>
-          </div>
+    <DetailPageLayout
+      title="Zimmet İade Alma İşlemi"
+      subtitle={`${asset.employeeName} • ${asset.assetName} • Personeldeki şirket demirbaşının teslim alınması ve tutanak kaydı`}
+      breadcrumbs={[
+        { label: "İnsan Kaynakları", onClick: onClose },
+        { label: "Demirbaş Zimmetleri", onClick: onClose },
+        { label: "İade Alma", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="px-3 py-1 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+          İADE SÜRECİ
+        </span>
+      }
+      headerIcon={<RotateCcw className="w-5 h-5 text-amber-600" />}
+      actions={
+        <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-xl transition-colors cursor-pointer"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            Vazgeç
+          </button>
+          <button
+            type="submit"
+            form="asset-return-form"
+            className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>İadeyi Onayla ve Kaydet</span>
           </button>
         </div>
-
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+      }
+    >
+      <div className="max-w-2xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
+        <form id="asset-return-form" onSubmit={handleSubmit} className="space-y-4">
           {/* Target Asset Summary Box */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
             <div className="flex justify-between items-start">
@@ -396,6 +404,6 @@ export const AssetReturnModal: React.FC<AssetReturnModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </DetailPageLayout>
   );
 };

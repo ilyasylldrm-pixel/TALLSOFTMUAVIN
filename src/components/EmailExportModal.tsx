@@ -13,6 +13,7 @@ import {
   Send,
   Sparkles,
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 import { Contact } from "../types";
 
 export interface EmailExportModalProps {
@@ -241,31 +242,42 @@ export const EmailExportModal: React.FC<EmailExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fadeIn">
-      <div className="bg-white rounded-2xl shadow-2xl border border-indigo-200/80 max-w-2xl w-full max-h-[94vh] flex flex-col my-auto overflow-hidden animate-scaleUp">
-        {/* 1. Modal Top Bar */}
-        <div className="bg-slate-900 text-white px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-extrabold shrink-0 shadow-md">
-              <Mail className="w-5 h-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-sm sm:text-base font-extrabold text-white truncate">
-                E-Posta ile Belge Gönder
-              </h3>
-              <p className="text-[11px] text-slate-300 truncate">
-                {title} • PDF Eki ile Resmi Gönderim
-              </p>
-            </div>
-          </div>
+    <DetailPageLayout
+      title="E-Posta ile Belge Gönder"
+      subtitle={`${title} • PDF Eki ile Resmi Gönderim`}
+      breadcrumbs={[
+        { label: "Belgeler", onClick: onClose },
+        { label: "E-Posta Gönder", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+          E-POSTA PAYLAŞIMI
+        </span>
+      }
+      headerIcon={<Mail className="w-5 h-5 text-indigo-600" />}
+      actions={
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            onClick={handleSendMailto}
+            disabled={isProcessing || !recipientEmail || !isValidEmail(recipientEmail)}
+            className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+          >
+            <Send className="w-4 h-4" />
+            <span>{isProcessing ? "Hazırlanıyor..." : "E-Posta İstemcisinde Aç"}</span>
           </button>
         </div>
+      }
+    >
+      <div className="bg-white rounded-3xl shadow-sm border border-indigo-200/80 max-w-2xl mx-auto overflow-hidden">
 
         {/* 2. Modal Body */}
         <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-4 text-xs">
@@ -484,6 +496,6 @@ export const EmailExportModal: React.FC<EmailExportModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </DetailPageLayout>
   );
 };

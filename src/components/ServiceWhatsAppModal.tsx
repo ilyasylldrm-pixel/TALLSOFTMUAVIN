@@ -19,6 +19,7 @@ import {
   Smartphone,
   Info,
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 import {
   AutoServiceRecord,
   ItServiceRecord,
@@ -247,37 +248,43 @@ export const ServiceWhatsAppModal: React.FC<ServiceWhatsAppModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-3xl shadow-2xl border border-emerald-200/80 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden animate-scaleUp">
-        {/* MODAL HEADER */}
-        <div className="px-6 py-4 bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white flex items-center justify-between shrink-0 shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner">
-              <MessageCircle className="w-6 h-6 text-emerald-100" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black tracking-tight text-white">
-                  WhatsApp Müşteri Bilgilendirme
-                </h3>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-500/30 text-emerald-100 border border-emerald-400/30 font-mono">
-                  {serviceRecord.serviceNo}
-                </span>
-              </div>
-              <p className="text-xs text-emerald-100/90 font-medium">
-                {serviceRecord.contactName} • {serviceDetails.title}
-              </p>
-            </div>
-          </div>
-
+    <DetailPageLayout
+      title="WhatsApp Müşteri Bilgilendirme"
+      subtitle={`${serviceRecord.contactName} • ${serviceDetails.title} • Servis No: ${serviceRecord.serviceNo}`}
+      breadcrumbs={[
+        { label: "Teknik Servis", onClick: onClose },
+        { label: serviceRecord.serviceNo, onClick: onClose },
+        { label: "WhatsApp Bildirimi", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
+          WHATSAPP ENTEGRASYONU
+        </span>
+      }
+      headerIcon={<MessageCircle className="w-5 h-5 text-emerald-600" />}
+      actions={
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenWhatsApp}
+            disabled={!cleanPhone || !message.trim()}
+            className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+          >
+            <Send className="w-4 h-4" />
+            <span>WhatsApp ile Gönder</span>
           </button>
         </div>
+      }
+    >
+      <div className="bg-white rounded-3xl shadow-sm border border-emerald-200/80 w-full max-w-3xl mx-auto flex flex-col overflow-hidden">
 
         {/* MODAL BODY */}
         <div className="p-6 overflow-y-auto space-y-5 bg-slate-50/50 flex-1">
@@ -548,6 +555,6 @@ export const ServiceWhatsAppModal: React.FC<ServiceWhatsAppModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </DetailPageLayout>
   );
 };

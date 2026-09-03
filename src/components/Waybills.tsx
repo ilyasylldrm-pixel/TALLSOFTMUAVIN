@@ -1790,10 +1790,46 @@ export const Waybills: React.FC<WaybillsProps> = ({
         </DetailPageLayout>
       )}
 
-      {/* CONVERT TO INVOICE CONFIRM MODAL */}
+      {/* CONVERT TO INVOICE CONFIRM DETAIL VIEW */}
       {convertConfirmWaybill && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+        <DetailPageLayout
+          title="İrsaliyeyi Faturalandır"
+          subtitle={`İrsaliye No: ${convertConfirmWaybill.waybillNumber} • Cari: ${convertConfirmWaybill.contactName}`}
+          breadcrumbs={[
+            { label: "İrsaliyeler", onClick: () => setConvertConfirmWaybill(null) },
+            { label: "İrsaliyeyi Faturalandır", active: true },
+          ]}
+          onBack={() => setConvertConfirmWaybill(null)}
+          statusBadge={
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
+              FATURALANDIRMA
+            </span>
+          }
+          headerIcon={<FileText className="w-5 h-5 text-emerald-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setConvertConfirmWaybill(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onConvertWaybillToInvoice(convertConfirmWaybill);
+                  setConvertConfirmWaybill(null);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Onayla ve Faturayı Kes</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-xl mx-auto p-6 sm:p-8 space-y-5 shadow-sm border border-slate-200">
             <div className="flex items-center gap-3 text-emerald-600">
               <div className="p-2.5 bg-emerald-100 rounded-xl">
                 <FileText className="w-6 h-6" />
@@ -1811,7 +1847,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
               <div>• Cari hesaba ₺{convertConfirmWaybill.grandTotal.toLocaleString("tr-TR")} borç/alacak işlenecektir.</div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
               <button
                 onClick={() => setConvertConfirmWaybill(null)}
                 className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
@@ -1830,7 +1866,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* WhatsApp Share Modal */}

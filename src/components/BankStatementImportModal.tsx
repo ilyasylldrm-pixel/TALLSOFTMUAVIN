@@ -26,6 +26,7 @@ import {
   ArrowRightLeft,
   FileUp
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 export interface BankStatementImportModalProps {
   isOpen: boolean;
@@ -564,38 +565,46 @@ export const BankStatementImportModal: React.FC<BankStatementImportModalProps> =
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-5xl w-full my-auto shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
-        
-        {/* MODAL HEADER */}
-        <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-blue-800/50 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 font-bold shadow-inner">
-              <FileSpreadsheet className="w-5 h-5 text-blue-300" />
-            </div>
-            <div>
-              <h3 className="font-black text-base sm:text-lg tracking-tight flex items-center gap-2">
-                <span>Banka Ekstresi Yükle ve Otomatik Eşleştir</span>
-                <span className="text-[10px] bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 px-2 py-0.5 rounded-full font-extrabold uppercase">
-                  Akıllı Cari Eşleme
-                </span>
-              </h3>
-              <p className="text-xs text-blue-200/80">
-                Excel veya CSV ekstrenizi yükleyin, cari hesaplar ile otomatik eşleştirip doğrudan bakiyelere işleyin.
-              </p>
-            </div>
-          </div>
-
+    <DetailPageLayout
+      title="Banka Ekstresi Yükle ve Otomatik Eşleştir"
+      subtitle="Excel veya CSV ekstrenizi yükleyin, cari hesaplar ile otomatik eşleştirip doğrudan bakiyelere işleyin"
+      breadcrumbs={[
+        { label: "Kasa & Banka", onClick: onClose },
+        { label: "Banka Ekstresi İçe Aktarım", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-full font-extrabold uppercase">
+          AKILLI CARİ EŞLEME
+        </span>
+      }
+      headerIcon={<FileSpreadsheet className="w-5 h-5 text-blue-600" />}
+      actions={
+        <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            disabled={selectedRows.length === 0 || !selectedAccountId}
+            onClick={handleExecuteImport}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs px-5 py-2 rounded-xl shadow-xs inline-flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>
+              {selectedRows.length > 0
+                ? `Seçilen ${selectedRows.length} Hareketi Hesaba Aktar`
+                : "Hareketleri Aktar"}
+            </span>
           </button>
         </div>
-
-        {/* MODAL BODY */}
-        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+      }
+    >
+      <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-5xl mx-auto shadow-sm p-6 space-y-6">
           
           {/* TOP STEP 1: TARGET ACCOUNT & FILE SELECTION BAR */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
@@ -1227,8 +1236,6 @@ export const BankStatementImportModal: React.FC<BankStatementImportModalProps> =
             </button>
           </div>
         </div>
-
-      </div>
-    </div>
+    </DetailPageLayout>
   );
 };

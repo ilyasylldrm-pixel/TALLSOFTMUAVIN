@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Employee, CompanySettings, LeaveRequest, AdvanceRequest } from "../types";
 import { exportElementToPDF } from "../utils/exportUtils";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 export type HRFormType = "annual_leave" | "unpaid_leave" | "absence_report" | "paternity_leave" | "advance_request" | "expense_request";
 
@@ -456,57 +457,50 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
-      {/* Printable area identifier */}
-      <div className="bg-white rounded-3xl max-w-6xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[96vh] my-auto border border-slate-200">
-        
-        {/* MODAL HEADER - HIDE ON PRINT */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0 print:hidden">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-600/30 border border-purple-400/40 flex items-center justify-center text-purple-300">
-              <FileCheck2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
-                <span>İzin, Avans & Masraf Formları Yönetimi</span>
-                <span className="text-[11px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-400/30 px-2 py-0.5 rounded-full">
-                  Mevzuata Uygun Resmi Evrak
-                </span>
-              </h2>
-              <p className="text-xs text-slate-400 font-medium">
-                Seçilen personele göre anında doldurulabilir, düzenlenen harcamalar ve avanslar yazdırılabilir A4 belgeleri
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDownloadPDF}
-              disabled={isDownloadingPDF}
-              className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-            >
-              <Download className="w-4 h-4 text-purple-200" />
-              <span>{isDownloadingPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Yazdır</span>
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+    <DetailPageLayout
+      title="İzin, Avans & Masraf Resmi Evrak Yönetimi"
+      subtitle="Seçilen personele göre anında doldurulabilir, düzenlenen harcamalar ve avanslar yazdırılabilir resmi A4 evrakları"
+      breadcrumbs={[
+        { label: "İnsan Kaynakları", onClick: onClose },
+        { label: "Resmi Evrak & Formlar", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="text-[11px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1 rounded-xl">
+          MEVZUATA UYGUN RESMİ EVRAK
+        </span>
+      }
+      headerIcon={<FileCheck2 className="w-5 h-5 text-purple-600" />}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadPDF}
+            disabled={isDownloadingPDF}
+            className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+          >
+            <Download className="w-4 h-4 text-purple-200" />
+            <span>{isDownloadingPDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Yazdır</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="border border-slate-200 text-slate-600 hover:bg-slate-100 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all active:scale-95"
+          >
+            Geri Dön
+          </button>
         </div>
-
+      }
+    >
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
         {/* MODAL BODY (SPLIT: LEFT EDITOR / RIGHT LIVE A4 PREVIEW) */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden min-h-0">
           
@@ -2231,6 +2225,6 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </DetailPageLayout>
   );
 };

@@ -29,6 +29,7 @@ import { exportAssetCustodyToPDF } from "../utils/assetCustodyPdf";
 import { formatCustodyWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { Zap, MessageCircle } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 interface AssetCustodyPrintModalProps {
   isOpen: boolean;
@@ -149,109 +150,94 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
   const empBranch = asset.branchName || employee?.branchName || "Genel Merkez";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 sm:p-4 backdrop-blur-sm print:p-0 print:bg-white print:fixed print:inset-0 overflow-y-auto">
-      <div
-        id="zimmet-print-container"
-        className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col border border-slate-200 print:max-w-none print:max-h-none print:shadow-none print:border-none print:rounded-none"
-      >
-        {/* Modal Header (Hidden in Print) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50 print:hidden shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center font-bold">
-              <FileCheck2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-800">
-                {isReturn ? "Zimmet İade ve Teslim Alma Tutanağı" : "Zimmet Teslim ve Tesellüm Tutanağı"}
-              </h2>
-              <p className="text-xs text-slate-500">
-                4857 Sayılı İş Kanunu ve TBK standartlarında resmi imzalı tutanak
-              </p>
-            </div>
-          </div>
-
-          {/* Action Bar */}
-          <div className="flex items-center flex-wrap gap-2">
-            {/* Toggle Protocol Type */}
-            <div className="flex items-center bg-slate-200/70 p-1 rounded-xl text-xs font-semibold">
-              <button
-                onClick={() => setDocType("delivery")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  !isReturn ? "bg-white text-blue-700 shadow-xs font-bold" : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Teslim Tutanağı
-              </button>
-              <button
-                onClick={() => setDocType("return")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  isReturn ? "bg-white text-blue-700 shadow-xs font-bold" : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                İade Tutanağı
-              </button>
-            </div>
-
-            {/* WhatsApp Share Button */}
+    <DetailPageLayout
+      title={isReturn ? "Zimmet İade ve Teslim Alma Tutanağı" : "Zimmet Teslim ve Tesellüm Tutanağı"}
+      subtitle={`${empName} • ${asset.assetName} • 4857 Sayılı İş Kanunu Standartlarında Resmi Belge`}
+      breadcrumbs={[
+        { label: "İnsan Kaynakları", onClick: onClose },
+        { label: "Demirbaş Zimmetleri", onClick: onClose },
+        { label: isReturn ? "İade Tutanağı" : "Teslim Tutanağı", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-slate-200/70 p-1 rounded-xl text-xs font-semibold">
             <button
-              type="button"
-              onClick={() => setIsWhatsAppOpen(true)}
-              className="inline-flex items-center px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all cursor-pointer gap-1.5"
-              title="Zimmet Tutanağını Personelin WhatsApp'ına Gönder"
+              onClick={() => setDocType("delivery")}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                !isReturn ? "bg-white text-blue-700 shadow-xs font-bold" : "text-slate-600 hover:text-slate-900"
+              }`}
             >
-              <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
-              <span>WhatsApp ile Gönder</span>
+              Teslim Tutanağı
             </button>
-
-            {/* Direct PDF Download Button */}
             <button
-              onClick={handleDownloadPDF}
-              disabled={isGeneratingPdf}
-              className={`inline-flex items-center px-4 py-2 text-xs font-bold text-white rounded-xl shadow-sm transition-all cursor-pointer ${
-                downloadSuccess
-                  ? "bg-emerald-600 hover:bg-emerald-700"
-                  : "bg-indigo-600 hover:bg-indigo-700"
-              } ${isGeneratingPdf ? "opacity-75 cursor-not-allowed" : ""}`}
-              title="İmzalı formatta resmi PDF belgesi indir"
+              onClick={() => setDocType("return")}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                isReturn ? "bg-white text-blue-700 shadow-xs font-bold" : "text-slate-600 hover:text-slate-900"
+              }`}
             >
-              {isGeneratingPdf ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                  PDF Hazırlanıyor...
-                </>
-              ) : downloadSuccess ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                  İndirildi!
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4 mr-1.5" />
-                  İmzalı PDF İndir
-                </>
-              )}
-            </button>
-
-            {/* Print Button */}
-            <button
-              onClick={handlePrint}
-              className="inline-flex items-center px-3.5 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              <Printer className="w-4 h-4 mr-1.5 text-slate-600" />
-              Yazdır
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
+              İade Tutanağı
             </button>
           </div>
         </div>
+      }
+      headerIcon={<FileCheck2 className="w-5 h-5 text-blue-600" />}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsWhatsAppOpen(true)}
+            className="inline-flex items-center px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all cursor-pointer gap-1.5"
+          >
+            <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+            <span>WhatsApp ile Paylaş</span>
+          </button>
 
-        {/* Printable Document Area */}
-        <div className="p-6 sm:p-10 overflow-y-auto print:p-4 print:overflow-visible text-slate-900 bg-white font-sans">
+          <button
+            onClick={handleDownloadPDF}
+            disabled={isGeneratingPdf}
+            className={`inline-flex items-center px-4 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-all cursor-pointer ${
+              downloadSuccess
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-indigo-600 hover:bg-indigo-700"
+            } ${isGeneratingPdf ? "opacity-75 cursor-not-allowed" : ""}`}
+          >
+            {isGeneratingPdf ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                PDF Hazırlanıyor...
+              </>
+            ) : downloadSuccess ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                İndirildi!
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4 mr-1.5" />
+                İmzalı PDF İndir
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handlePrint}
+            className="inline-flex items-center px-3.5 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl shadow-xs transition-colors cursor-pointer"
+          >
+            <Printer className="w-4 h-4 mr-1.5 text-slate-600" />
+            Yazdır
+          </button>
+
+          <button
+            onClick={onClose}
+            className="border border-slate-200 text-slate-600 hover:bg-slate-100 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all active:scale-95"
+          >
+            Geri Dön
+          </button>
+        </div>
+      }
+    >
+      <div id="zimmet-print-container" className="max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-10 space-y-6 print:border-none print:shadow-none print:p-0">
           {/* Document Header */}
           <div className="border-b-2 border-slate-900 pb-5 mb-5">
             <div className="flex justify-between items-start">
@@ -545,7 +531,6 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
             İşbu tutanak iki (2) nüsha olarak tanzim edilmiş olup, bir nüshası personele teslim edilmiş, diğeri personelin özlük dosyasında muhafaza edilmektedir. • Muavin ERP & İK Sistemi
           </div>
         </div>
-      </div>
 
       {/* WhatsApp Share Modal */}
       <UniversalWhatsAppModal
@@ -571,6 +556,6 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
           return null;
         }}
       />
-    </div>
+    </DetailPageLayout>
   );
 };

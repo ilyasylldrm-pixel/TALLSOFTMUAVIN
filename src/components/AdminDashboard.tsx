@@ -42,6 +42,7 @@ import {
   RotateCcw,
   Undo2,
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 import { UserProfile, BRAND_LOGOS } from "./AuthModal";
 import {
   getAllUsersProfiles,
@@ -1025,30 +1026,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
       )}
 
       {/* ========================================================================= */}
-      {/* 🛑 MODAL: SINGLE USER PERMISSION SAVE CONFIRMATION */}
+      {/* FULL-PAGE DETAIL VIEW: SINGLE USER PERMISSION SAVE CONFIRMATION */}
       {/* ========================================================================= */}
       {confirmSaveUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col">
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white/20 text-white flex items-center justify-center font-bold">
-                  <CheckCircle2 className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-white">Yetki Kaydını Onayla</h3>
-                  <p className="text-[11px] text-emerald-100">{confirmSaveUser.name}</p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title="Yetki Kaydını Onayla"
+          subtitle={`${confirmSaveUser.name} • ${confirmSaveUser.email}`}
+          breadcrumbs={[
+            { label: "Yönetici Paneli", onClick: () => setConfirmSaveUser(null) },
+            { label: "Yetki Onayı", active: true },
+          ]}
+          onBack={() => setConfirmSaveUser(null)}
+          statusBadge={
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
+              YETKİ ONAYI
+            </span>
+          }
+          headerIcon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setConfirmSaveUser(null)}
-                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteSaveUser}
+                disabled={savingUserId !== null}
+                className="px-5 py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                {savingUserId !== null ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                <span>Onayla ve Kaydet</span>
               </button>
             </div>
-
-            <div className="p-6 space-y-4 bg-slate-50 text-xs">
+          }
+        >
+          <div className="bg-white w-full max-w-xl mx-auto rounded-3xl shadow-sm border border-purple-200 overflow-hidden flex flex-col p-6 space-y-4">
+            <div className="p-4 space-y-4 bg-slate-50 rounded-2xl text-xs">
               <p className="text-slate-700 font-medium">
                 <strong>{confirmSaveUser.name}</strong> kullanıcısı için seçilen ({getUserEffectiveModules(confirmSaveUser).length}) modül yetkisi kaydedilecektir.
               </p>
@@ -1066,60 +1087,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                 </div>
               </div>
             </div>
+          </div>
+        </DetailPageLayout>
+      )}
 
-            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-end gap-3">
+      {/* ========================================================================= */}
+      {/* FULL-PAGE DETAIL VIEW: BATCH SAVE CONFIRMATION */}
+      {/* ========================================================================= */}
+      {confirmBatchSaveModalOpen && (
+        <DetailPageLayout
+          title="Toplu Yetki Kaydı Onayı"
+          subtitle={`${pendingChangesCount} kullanıcının yetkileri kaydedilecek`}
+          breadcrumbs={[
+            { label: "Yönetici Paneli", onClick: () => setConfirmBatchSaveModalOpen(false) },
+            { label: "Toplu Yetki Onayı", active: true },
+          ]}
+          onBack={() => setConfirmBatchSaveModalOpen(false)}
+          statusBadge={
+            <span className="bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold px-3 py-1 rounded-xl">
+              TOPLU İŞLEM
+            </span>
+          }
+          headerIcon={<AlertCircle className="w-5 h-5 text-amber-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setConfirmSaveUser(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                onClick={() => setConfirmBatchSaveModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
                 Vazgeç
               </button>
               <button
                 type="button"
-                onClick={handleExecuteSaveUser}
-                disabled={savingUserId !== null}
-                className="px-5 py-2.5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                onClick={handleExecuteBatchSave}
+                disabled={isBatchSaving}
+                className="px-5 py-2.5 text-xs font-black bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
               >
-                {savingUserId !== null ? (
+                {isBatchSaving ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <CheckCircle2 className="w-4 h-4" />
                 )}
-                <span>Onayla ve Kaydet</span>
+                <span>Tümünü Onayla ve Kaydet</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 🛑 MODAL: BATCH SAVE CONFIRMATION */}
-      {/* ========================================================================= */}
-      {confirmBatchSaveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col">
-            <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-orange-700 text-white p-5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white/20 text-white flex items-center justify-center font-bold">
-                  <AlertCircle className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-white">Toplu Yetki Kaydı Onayı</h3>
-                  <p className="text-[11px] text-orange-100">
-                    {pendingChangesCount} kullanıcının yetkileri kaydedilecek
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setConfirmBatchSaveModalOpen(false)}
-                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-3 bg-slate-50 max-h-80 overflow-y-auto custom-scrollbar text-xs">
+          }
+        >
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-3xl shadow-sm border border-purple-200 overflow-hidden flex flex-col p-6 space-y-4">
+            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl max-h-80 overflow-y-auto custom-scrollbar text-xs">
               <p className="font-bold text-slate-700">Aşağıdaki personelin erişim izinleri güncellenecektir:</p>
               <div className="space-y-2">
                 {pendingUsersList.map((user) => (
@@ -1135,61 +1151,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                 ))}
               </div>
             </div>
+          </div>
+        </DetailPageLayout>
+      )}
 
-            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-end gap-3">
+      {/* ========================================================================= */}
+      {/* FULL-PAGE DETAIL VIEW: DETAILED USER PERMISSIONS EDITING */}
+      {/* ========================================================================= */}
+      {editingPermissionsUser && (
+        <DetailPageLayout
+          title={`${editingPermissionsUser.name} — Modül İzinleri`}
+          subtitle={`${editingPermissionsUser.email} • Rol: ${editingPermissionsUser.role || "Standart"}`}
+          breadcrumbs={[
+            { label: "Yönetici Paneli", onClick: () => setEditingPermissionsUser(null) },
+            { label: "Modül Yetkileri", active: true },
+          ]}
+          onBack={() => setEditingPermissionsUser(null)}
+          statusBadge={
+            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+              YETKİLENDİRME
+            </span>
+          }
+          headerIcon={<Sliders className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setConfirmBatchSaveModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                onClick={() => setEditingPermissionsUser(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
                 Vazgeç
               </button>
               <button
                 type="button"
-                onClick={handleExecuteBatchSave}
-                disabled={isBatchSaving}
-                className="px-5 py-2.5 text-xs font-black bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                onClick={handleSaveEditedPermissions}
+                disabled={savingPermissions}
+                className="px-5 py-2 text-xs font-extrabold bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-2 active:scale-95"
               >
-                {isBatchSaving ? (
+                {savingPermissions ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <CheckCircle2 className="w-4 h-4" />
                 )}
-                <span>Tümünü Onayla ve Kaydet</span>
+                <span>Kaydet ve Uygula</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 🛑 MODAL: DETAILED USER PERMISSIONS EDITING */}
-      {/* ========================================================================= */}
-      {editingPermissionsUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-5 flex items-center justify-between border-b border-purple-800/40">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-600/30 text-indigo-300 flex items-center justify-center font-black border border-indigo-500/30">
-                  <Sliders className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-black text-white">{editingPermissionsUser.name} — Modül İzinleri</h3>
-                    <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-indigo-400/30">
-                      Rol: {editingPermissionsUser.role || "Standart"}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-purple-200/80">{editingPermissionsUser.email}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setEditingPermissionsUser(null)}
-                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+          }
+        >
+          <div className="bg-white w-full max-w-3xl mx-auto rounded-3xl shadow-sm border border-purple-200 overflow-hidden flex flex-col p-6 space-y-4">
 
             <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-slate-50">
               {/* Presets Quick Actions */}
@@ -1290,32 +1299,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               </div>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* ========================================================================= */}
-      {/* 🛑 MODAL: NEW USER CREATION */}
+      {/* FULL-PAGE DETAIL VIEW: NEW USER CREATION */}
       {/* ========================================================================= */}
       {isAddUserModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-5 flex items-center justify-between border-b border-purple-800/40">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-600/30 text-purple-300 flex items-center justify-center font-black border border-purple-500/30">
-                  <UserPlus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-white">Yeni Sistem Kullanıcısı Tanımla</h3>
-                  <p className="text-[11px] text-purple-200/80">Kullanıcı hesabı oluşturun ve modül yetkilerini belirleyin</p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title="Yeni Sistem Kullanıcısı Tanımla"
+          subtitle="Kullanıcı hesabı oluşturun ve modül yetkilerini belirleyin"
+          breadcrumbs={[
+            { label: "Yönetici Paneli", onClick: () => setIsAddUserModalOpen(false) },
+            { label: "Yeni Kullanıcı", active: true },
+          ]}
+          onBack={() => setIsAddUserModalOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              KULLANICI EKLEME
+            </span>
+          }
+          headerIcon={<UserPlus className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setIsAddUserModalOpen(false)}
-                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white w-full max-w-3xl mx-auto rounded-3xl shadow-sm border border-purple-200 overflow-hidden flex flex-col p-6 space-y-4">
 
             <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-slate-50">
               {createdSuccessInfo ? (
@@ -1566,37 +1583,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               )}
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* ========================================================================= */}
-      {/* 🛑 MODAL: USER FILES INSPECTION */}
+      {/* FULL-PAGE DETAIL VIEW: USER FILES INSPECTION */}
       {/* ========================================================================= */}
       {selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-5 flex items-center justify-between border-b border-purple-800/40">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-600/30 text-purple-300 flex items-center justify-center font-black border border-purple-500/30">
-                  <HardDrive className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-black text-white">{selectedUser.name} — Yüklü Dosyalar</h3>
-                    <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-400/30">
-                      Admin İnceleme
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-purple-200/80">{selectedUser.email} • {selectedUser.companyName}</p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title={`${selectedUser.name} — Yüklü Dosyalar`}
+          subtitle={`${selectedUser.email} • ${selectedUser.companyName || "Firma Belirtilmedi"}`}
+          breadcrumbs={[
+            { label: "Yönetici Paneli", onClick: () => setSelectedUser(null) },
+            { label: selectedUser.name, active: true },
+          ]}
+          onBack={() => setSelectedUser(null)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              DOSYA İNCELEME
+            </span>
+          }
+          headerIcon={<HardDrive className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setSelectedUser(null)}
-                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Geri Dön
               </button>
             </div>
+          }
+        >
+          <div className="bg-white w-full max-w-5xl mx-auto rounded-3xl shadow-sm border border-purple-200 overflow-hidden flex flex-col p-6 space-y-4">
 
             <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-slate-50">
               {(() => {
@@ -1659,30 +1679,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               })()}
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* ========================================================================= */}
-      {/* 🛑 MODAL: FILE PREVIEW */}
+      {/* FULL-PAGE DETAIL VIEW: FILE PREVIEW */}
       {/* ========================================================================= */}
       {previewFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-purple-200 overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white p-4 flex items-center justify-between border-b border-purple-800/40">
-              <div className="flex items-center gap-2.5">
-                {getFileIcon(previewFile.fileType)}
-                <div>
-                  <h3 className="text-xs font-black text-white">{previewFile.fileName}</h3>
-                  <p className="text-[10px] text-purple-200/80">{previewFile.category} • {formatBytes(previewFile.fileSize)}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setPreviewFile(null)}
-                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full cursor-pointer transition-all"
+        <DetailPageLayout
+          title={previewFile.fileName}
+          subtitle={`${previewFile.category} • ${formatBytes(previewFile.fileSize)}`}
+          breadcrumbs={[
+            { label: "Yönetici Paneli", onClick: () => setPreviewFile(null) },
+            { label: previewFile.fileName, active: true },
+          ]}
+          onBack={() => setPreviewFile(null)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              DOSYA ÖNİZLEME
+            </span>
+          }
+          headerIcon={getFileIcon(previewFile.fileType)}
+          actions={
+            <div className="flex items-center gap-2">
+              <a
+                href={previewFile.fileUrl || previewFile.fileData}
+                download={previewFile.fileName}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-purple-700 text-white font-extrabold text-xs rounded-xl shadow-xs hover:bg-purple-800 transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
               >
-                <X className="w-5 h-5" />
+                <Download className="w-4 h-4" />
+                <span>İndir</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewFile(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Geri Dön
               </button>
             </div>
+          }
+        >
+          <div className="bg-white w-full max-w-4xl mx-auto rounded-3xl shadow-sm border border-purple-200 overflow-hidden flex flex-col p-6 space-y-4">
 
             <div className="p-6 overflow-y-auto flex-1 flex items-center justify-center bg-slate-100">
               {previewFile.fileType.startsWith("image/") ? (
@@ -1712,7 +1752,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               )}
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
     </div>
   );

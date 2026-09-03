@@ -3831,30 +3831,33 @@ export const Accounts: React.FC<AccountsProps> = ({
 
       {/* NEW TRANSACTION MODAL (Kasa / Banka) */}
       {isAddTxModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                {addTxContext === "kasa" ? (
-                  <>
-                    <Banknote className="w-5 h-5 text-amber-600" />
-                    <span>Yeni Kasa Hareketi Ekle</span>
-                  </>
-                ) : (
-                  <>
-                    <Building className="w-5 h-5 text-blue-600" />
-                    <span>Yeni Banka Hareketi Ekle</span>
-                  </>
-                )}
-              </h3>
+        <DetailPageLayout
+          title={addTxContext === "kasa" ? "Yeni Kasa Hareketi Ekle" : "Yeni Banka Hareketi Ekle"}
+          subtitle={addTxContext === "kasa" ? "Nakit Giriş / Çıkış Fişi Kaydı" : "Banka Havale / EFT / Gelen & Giden Transfer Kaydı"}
+          breadcrumbs={[
+            { label: "Kasa & Banka", onClick: () => setIsAddTxModalOpen(false) },
+            { label: addTxContext === "kasa" ? "Yeni Kasa Hareketi" : "Yeni Banka Hareketi", active: true },
+          ]}
+          onBack={() => setIsAddTxModalOpen(false)}
+          statusBadge={
+            <span className={`text-xs font-bold px-3 py-1 rounded-xl border ${addTxContext === "kasa" ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-blue-50 text-blue-800 border-blue-200"}`}>
+              {addTxContext === "kasa" ? "KASA FİŞİ" : "BANKA FİŞİ"}
+            </span>
+          }
+          headerIcon={addTxContext === "kasa" ? <Banknote className="w-5 h-5 text-amber-600" /> : <Building className="w-5 h-5 text-blue-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsAddTxModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
 
             <form onSubmit={handleSaveTransaction} className="space-y-4 text-xs">
               {/* İşlem Tipi */}
@@ -4023,26 +4026,38 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* ENDORSEMENT (CİRO / CİRANTA) MODAL */}
+      {/* ENDORSEMENT (CİRO / CİRANTA) DETAIL VIEW */}
       {isEndorseModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <ArrowRightLeft className="w-5 h-5 text-indigo-600" />
-                <span>Portföydeki Çek / Seneti Ciro Et (Ciranta Yap)</span>
-              </h3>
+        <DetailPageLayout
+          title="Portföydeki Çek / Seneti Ciro Et (Ciranta Yap)"
+          subtitle="Portföydeki kıymetli evrakı üçüncü bir cariye devredin ve ciro bordrosunu oluşturun"
+          breadcrumbs={[
+            { label: "Kasa & Banka", onClick: () => setIsEndorseModalOpen(false) },
+            { label: "Çek / Senet Ciro Et", active: true },
+          ]}
+          onBack={() => setIsEndorseModalOpen(false)}
+          statusBadge={
+            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+              CİRO İŞLEMİ (CİRANTA)
+            </span>
+          }
+          headerIcon={<ArrowRightLeft className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsEndorseModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
 
             <form onSubmit={handleSaveEndorsement} className="space-y-4 text-xs">
               {/* Belge Tipi Seçimi (Çek / Senet) */}
@@ -4243,26 +4258,38 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL 1: EDIT ACCOUNT (KASA / BANKA DÜZENLE) */}
+      {/* FULL-PAGE DETAIL VIEW: EDIT ACCOUNT (KASA / BANKA DÜZENLE) */}
       {isEditAccountModalOpen && editingAccount && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Pencil className="w-5 h-5 text-indigo-600" />
-                <span>Finans Hesabını Düzenle</span>
-              </h3>
+        <DetailPageLayout
+          title="Finans Hesabını Düzenle"
+          subtitle={`${editingAccount.name} (${editingAccount.type === "bank" ? "Banka Hesabı" : "Nakit Kasa"})`}
+          breadcrumbs={[
+            { label: "Kasa & Banka", onClick: () => setIsEditAccountModalOpen(false) },
+            { label: "Hesap Düzenle", active: true },
+          ]}
+          onBack={() => setIsEditAccountModalOpen(false)}
+          statusBadge={
+            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+              HESAP DÜZENLEME
+            </span>
+          }
+          headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsEditAccountModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
 
             <form
               onSubmit={(e) => {
@@ -4388,26 +4415,38 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL 2: EDIT TRANSACTION (HAREKET DÜZENLE) */}
+      {/* FULL-PAGE DETAIL VIEW: EDIT TRANSACTION (HAREKET DÜZENLE) */}
       {isEditTxModalOpen && editingTransaction && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Pencil className="w-5 h-5 text-indigo-600" />
-                <span>Finans Hareketini / Fişi Düzenle</span>
-              </h3>
+        <DetailPageLayout
+          title="Finans Hareketini / Fişi Düzenle"
+          subtitle={`${editingTransaction.title || "Fiş"} • Tarih: ${editingTransaction.date} • Tutar: ${formatCurrency(editingTransaction.amount, editingTransaction.currency)}`}
+          breadcrumbs={[
+            { label: "Kasa & Banka", onClick: () => setIsEditTxModalOpen(false) },
+            { label: "Fiş / Hareket Düzenle", active: true },
+          ]}
+          onBack={() => setIsEditTxModalOpen(false)}
+          statusBadge={
+            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+              FİNANS HAREKETİ
+            </span>
+          }
+          headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsEditTxModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
 
             <form
               onSubmit={(e) => {
@@ -4511,26 +4550,38 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL 3: EDIT CHEQUE (ÇEK DÜZENLE) */}
+      {/* FULL-PAGE DETAIL VIEW: EDIT CHEQUE (ÇEK DÜZENLE) */}
       {isEditChequeModalOpen && editingCheque && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Pencil className="w-5 h-5 text-indigo-600" />
-                <span>Çek Kaydını Düzenle</span>
-              </h3>
+        <DetailPageLayout
+          title="Çek Kaydını Düzenle"
+          subtitle={`Çek No: ${editingCheque.chequeNumber} • Vade: ${editingCheque.dueDate} • Tutar: ${formatCurrency(editingCheque.amount, editingCheque.currency)}`}
+          breadcrumbs={[
+            { label: "Kasa & Banka", onClick: () => setIsEditChequeModalOpen(false) },
+            { label: "Çek Düzenle", active: true },
+          ]}
+          onBack={() => setIsEditChequeModalOpen(false)}
+          statusBadge={
+            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+              ÇEK BİLGİLERİ
+            </span>
+          }
+          headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsEditChequeModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
 
             <form
               onSubmit={(e) => {
@@ -4643,26 +4694,38 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL 4: EDIT NOTE (SENET DÜZENLE) */}
+      {/* FULL-PAGE DETAIL VIEW: EDIT NOTE (SENET DÜZENLE) */}
       {isEditNoteModalOpen && editingNote && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Pencil className="w-5 h-5 text-indigo-600" />
-                <span>Senet Kaydını Düzenle</span>
-              </h3>
+        <DetailPageLayout
+          title="Senet Kaydını Düzenle"
+          subtitle={`Senet No: ${editingNote.noteNumber} • Vade: ${editingNote.dueDate} • Tutar: ${formatCurrency(editingNote.amount, editingNote.currency)}`}
+          breadcrumbs={[
+            { label: "Kasa & Banka", onClick: () => setIsEditNoteModalOpen(false) },
+            { label: "Senet Düzenle", active: true },
+          ]}
+          onBack={() => setIsEditNoteModalOpen(false)}
+          statusBadge={
+            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+              SENET BİLGİLERİ
+            </span>
+          }
+          headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsEditNoteModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
 
             <form
               onSubmit={(e) => {
@@ -4773,60 +4836,59 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* DEKONT GÖSTER MODAL (Tüm Finans Modülleri için Ortak Dekont / Makbuz Görünümü) */}
+      {/* FULL-PAGE DETAIL VIEW: DEKONT / MAKBUZ GÖRÜNÜMÜ */}
       {receiptData && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl border border-slate-300 w-full max-w-3xl overflow-hidden my-auto animate-in fade-in zoom-in duration-150">
-            {/* Modal Header Controls (Not Printed) */}
-            <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between no-print">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-purple-700 rounded-xl">
-                  <FileText className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-sm sm:text-base text-white leading-tight">
-                    Resmi Finans Dekontu & Makbuzu
-                  </h3>
-                  <p className="text-[11px] font-medium text-slate-300">
-                    {receiptData.documentNo} • {receiptData.date}
-                  </p>
-                </div>
-              </div>
+        <DetailPageLayout
+          title={`Resmi Finans Dekontu & Makbuzu - ${receiptData.documentNo}`}
+          subtitle={`${receiptData.title} • Düzenleme Tarihi: ${receiptData.date} • Tutar: ${formatCurrency(receiptData.amount, receiptData.currency)}`}
+          breadcrumbs={[
+            { label: "Kasa & Banka", onClick: () => setReceiptData(null) },
+            { label: "Finans Dekontu", active: true },
+          ]}
+          onBack={() => setReceiptData(null)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              RESMİ FİNANS MAKBUZU
+            </span>
+          }
+          headerIcon={<FileText className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                title="Yazdır"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Yazdır</span>
+              </button>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Yazdır"
-                >
-                  <Printer className="w-4 h-4 text-emerald-400" />
-                  <span>Yazdır</span>
-                </button>
+              <button
+                type="button"
+                onClick={handleExportReceiptPDF}
+                disabled={isPdfGenerating}
+                className="bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50 active:scale-95"
+                title="PDF Olarak İndir"
+              >
+                <FileCheck2 className="w-4 h-4 text-purple-200" />
+                <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={handleExportReceiptPDF}
-                  disabled={isPdfGenerating}
-                  className="bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-                  title="PDF Olarak İndir / Göster"
-                >
-                  <FileCheck2 className="w-4 h-4 text-purple-200" />
-                  <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setReceiptData(null)}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer ml-1"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setReceiptData(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Geri Dön
+              </button>
             </div>
+          }
+        >
+          <div className="bg-slate-100 rounded-3xl shadow-sm border border-slate-300 w-full max-w-4xl mx-auto overflow-hidden">
 
             {/* Printable Receipt Canvas Paper */}
             <div className="p-4 sm:p-8 max-h-[80vh] overflow-y-auto custom-scrollbar bg-slate-200/60 flex justify-center">
@@ -5087,7 +5149,7 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* MODAL: BANK STATEMENT IMPORT */}
@@ -5101,30 +5163,50 @@ export const Accounts: React.FC<AccountsProps> = ({
         onAddTransaction={onAddTransaction}
       />
 
-      {/* MODAL: UNIVERSAL FINANCE & TRANSACTION SHARE */}
+      {/* FULL-PAGE DETAIL VIEW: UNIVERSAL FINANCE & TRANSACTION SHARE */}
       {shareConfig.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 my-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-700">
-                  <MessageSquare className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900">{shareConfig.title}</h3>
-                  {shareConfig.subtitle && (
-                    <p className="text-xs text-slate-500 font-medium">{shareConfig.subtitle}</p>
-                  )}
-                </div>
-              </div>
+        <DetailPageLayout
+          title={shareConfig.title || "WhatsApp ile Paylaş"}
+          subtitle={shareConfig.subtitle || "Finans hesabı veya hareket bilgisi iletimi"}
+          breadcrumbs={[
+            { label: "Kasa & Banka", onClick: () => setShareConfig((prev) => ({ ...prev, isOpen: false })) },
+            { label: "WhatsApp Paylaşımı", active: true },
+          ]}
+          onBack={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
+          statusBadge={
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl uppercase">
+              WHATSAPP ENTEGRASYONU
+            </span>
+          }
+          headerIcon={<MessageSquare className="w-5 h-5 text-emerald-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleSendDirectWhatsApp}
+                disabled={isSendingWa}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-xs active:scale-95"
+              >
+                <Send className="w-4 h-4" />
+                <span>
+                  {isSendingWa
+                    ? "İletiliyor..."
+                    : shareWaMode === "direct"
+                    ? "WhatsApp ile Gönder"
+                    : "WhatsApp Web'de Aç"}
+                </span>
               </button>
             </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl w-full mx-auto p-4 sm:p-6 shadow-sm space-y-4">
 
             {/* Inputs & Modes */}
             <div className="space-y-3">
@@ -5233,7 +5315,7 @@ export const Accounts: React.FC<AccountsProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
     </div>

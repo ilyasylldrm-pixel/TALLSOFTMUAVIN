@@ -37,6 +37,7 @@ import {
   Square,
   Download
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 interface ProductCostsViewProps {
   products: Product[];
@@ -1188,26 +1189,36 @@ export const ProductCostsView: React.FC<ProductCostsViewProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL 1: YENİ PROJE OLUŞTUR / DÜZENLE MODAL ================= */}
+      {/* ================= DETAIL VIEW 1: YENİ PROJE OLUŞTUR / DÜZENLE ================= */}
       {isProjectModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
-            <div className="bg-gradient-to-r from-purple-900 to-indigo-950 text-white p-5 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <FolderKanban className="w-5 h-5 text-purple-300" />
-                <h3 className="text-base font-bold">
-                  {editingProject ? "Projeyi Düzenle" : "Yeni Proje Aç"}
-                </h3>
-              </div>
+        <DetailPageLayout
+          title={editingProject ? "Projeyi Düzenle" : "Yeni Proje Aç"}
+          subtitle="Proje Bazlı Maliyet & Kârlılık Takip Yönetimi"
+          breadcrumbs={[
+            { label: "Maliyet Analizi", onClick: () => setIsProjectModalOpen(false) },
+            { label: editingProject ? "Projeyi Düzenle" : "Yeni Proje", active: true },
+          ]}
+          onBack={() => setIsProjectModalOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              PROJE YÖNETİMİ
+            </span>
+          }
+          headerIcon={<FolderKanban className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setIsProjectModalOpen(false)}
-                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
-
-            <form onSubmit={handleSaveProject} className="p-6 space-y-4">
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-3xl mx-auto border border-slate-200 shadow-sm overflow-hidden p-6 space-y-4">
+            <form onSubmit={handleSaveProject} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Proje Kodu */}
                 <div>
@@ -1375,39 +1386,34 @@ export const ProductCostsView: React.FC<ProductCostsViewProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* ================= MODAL 2: PROJE DETAYI & MALİYET KALEMLERİ MODAL ================= */}
+      {/* ================= DETAIL VIEW 2: PROJE DETAYI & MALİYET KALEMLERİ ================= */}
       {isDetailModalOpen && selectedDetailProject && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-4xl w-full border border-slate-200 shadow-xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-purple-900 via-fuchsia-900 to-indigo-950 text-white p-5 flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono font-bold bg-white/20 px-2 py-0.5 rounded-md">
-                    {selectedDetailProject.code}
-                  </span>
-                  {renderStatusBadge(selectedDetailProject.status)}
-                </div>
-                <h2 className="text-lg font-black text-white">{selectedDetailProject.name}</h2>
-                <div className="text-xs text-purple-200 mt-1 flex flex-wrap items-center gap-4">
-                  {selectedDetailProject.contactName && (
-                    <span>Müşteri: <strong className="text-white">{selectedDetailProject.contactName}</strong></span>
-                  )}
-                  <span>Kategori: <strong className="text-white">{selectedDetailProject.category || "Genel"}</strong></span>
-                  <span>Tarih: <strong className="text-white">{selectedDetailProject.startDate}</strong></span>
-                </div>
-              </div>
-
+        <DetailPageLayout
+          title={selectedDetailProject.name}
+          subtitle={`Proje Kodu: ${selectedDetailProject.code} • Kategori: ${selectedDetailProject.category || "Genel"} • Başlangıç: ${selectedDetailProject.startDate}`}
+          breadcrumbs={[
+            { label: "Maliyet Analizi", onClick: () => setIsDetailModalOpen(false) },
+            { label: selectedDetailProject.name, active: true },
+          ]}
+          onBack={() => setIsDetailModalOpen(false)}
+          statusBadge={renderStatusBadge(selectedDetailProject.status)}
+          headerIcon={<FolderKanban className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setIsDetailModalOpen(false)}
-                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Geri Dön
               </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-5xl w-full mx-auto border border-slate-200 shadow-sm overflow-hidden">
 
             {/* Modal Body */}
             <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
@@ -1839,40 +1845,56 @@ export const ProductCostsView: React.FC<ProductCostsViewProps> = ({
                 onClick={() => setIsDetailModalOpen(false)}
                 className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-5 py-2 rounded-xl transition-all cursor-pointer"
               >
-                Kapat
+                Geri Dön
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* ================= MODAL 3: TOPLU İÇE AKTAR (FATURALAR / GİDER FİŞLERİ / İNSAN KAYNAKLARI) ================= */}
+      {/* ================= DETAIL VIEW 3: TOPLU İÇE AKTAR (FATURALAR / GİDER FİŞLERİ / İNSAN KAYNAKLARI) ================= */}
       {isImportModalOpen && selectedDetailProject && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-800 via-fuchsia-800 to-slate-900 text-white p-5 flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[11px] font-mono font-bold bg-white/20 px-2 py-0.5 rounded-md">
-                    {selectedDetailProject.code}
-                  </span>
-                  <span className="text-xs bg-purple-500/30 text-purple-200 px-2 py-0.5 rounded-full font-bold">
-                    Proje Maliyet Aktarımı
-                  </span>
-                </div>
-                <h3 className="text-lg font-black">Sistem Modüllerinden Maliyet Kalemi İçe Aktar</h3>
-                <p className="text-xs text-purple-200 mt-0.5">
-                  Gelen faturalar, gider fişleri veya insan kaynaklarından personel işçilik maliyetlerini projeye aktarın.
-                </p>
-              </div>
+        <DetailPageLayout
+          title="Sistem Modüllerinden Maliyet Kalemi İçe Aktar"
+          subtitle={`${selectedDetailProject.name} (${selectedDetailProject.code}) • Gelen faturalar, gider fişleri veya insan kaynaklarından personel işçilik maliyetlerini projeye aktarın.`}
+          breadcrumbs={[
+            { label: "Maliyet Analizi", onClick: () => setIsImportModalOpen(false) },
+            { label: selectedDetailProject.name, onClick: () => setIsImportModalOpen(false) },
+            { label: "Maliyet İçe Aktar", active: true },
+          ]}
+          onBack={() => setIsImportModalOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              MALİYET AKTARIMI
+            </span>
+          }
+          headerIcon={<Layers className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setIsImportModalOpen(false)}
-                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBatchImport}
+                disabled={
+                  (importTab === "hr" && selectedEmployeeIds.length === 0) ||
+                  (importTab === "invoices" && selectedInvoiceIds.length === 0) ||
+                  (importTab === "expenses" && selectedExpenseIds.length === 0)
+                }
+                className="bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-bold text-xs px-5 py-2 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Seçilenleri Projeye Aktar</span>
               </button>
             </div>
+          }
+        >
+          <div className="bg-white rounded-3xl max-w-4xl w-full mx-auto border border-slate-200 shadow-sm overflow-hidden">
 
             {/* Modal Sub-Tabs */}
             <div className="flex border-b border-slate-200 bg-slate-50 p-2 gap-2">
@@ -2252,7 +2274,7 @@ export const ProductCostsView: React.FC<ProductCostsViewProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
     </div>
   );

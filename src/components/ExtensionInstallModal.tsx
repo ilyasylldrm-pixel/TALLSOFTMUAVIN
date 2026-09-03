@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 export interface ExtensionInstallModalProps {
   isOpen: boolean;
@@ -41,37 +42,47 @@ export const ExtensionInstallModal: React.FC<ExtensionInstallModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden animate-scaleUp">
-        {/* MODAL HEADER */}
-        <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between shrink-0 shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black shadow-inner">
-              <Zap className="w-6 h-6 fill-emerald-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-black tracking-tight text-white">
-                  Muavin Chrome & Edge Eklentisi
-                </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
-                  v1.0.0
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">
-                GİB, SGK, e-Arşiv ve e-Devlet sitelerine tek tıkla şifresiz doğrudan giriş yapın.
-              </p>
-            </div>
-          </div>
-
+    <DetailPageLayout
+      title="Muavin Chrome & Edge Eklentisi"
+      subtitle="GİB, SGK, e-Arşiv ve e-Devlet sitelerine tek tıkla şifresiz doğrudan giriş yapın"
+      breadcrumbs={[
+        { label: "Sistem & Entegrasyon", onClick: onClose },
+        { label: "Tarayıcı Eklentisi", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span
+          className={`text-xs font-bold px-3 py-1 rounded-xl border ${
+            isExtensionDetected
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+              : "bg-amber-50 text-amber-800 border-amber-200"
+          }`}
+        >
+          {isExtensionDetected ? "EKLENTİ AKTİF" : "KURULUM GEREKİYOR"}
+        </span>
+      }
+      headerIcon={<Zap className="w-5 h-5 text-emerald-600" />}
+      actions={
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadZip}
+            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs shadow-xs active:scale-95 transition cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Eklenti Paketini İndir (.ZIP)</span>
+          </button>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            Geri Dön
           </button>
         </div>
+      }
+    >
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 w-full max-w-3xl mx-auto flex flex-col overflow-hidden">
 
         {/* MODAL BODY: 3-STEP INSTALLATION GUIDE */}
         <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
@@ -205,26 +216,26 @@ export const ExtensionInstallModal: React.FC<ExtensionInstallModalProps> = ({
           </div>
         </div>
 
-        {/* MODAL FOOTER */}
+        {/* FOOTER ACTIONS */}
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold text-xs transition cursor-pointer"
           >
-            Kapat
+            Geri Dön
           </button>
 
           <button
             type="button"
             onClick={handleDownloadZip}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-lg shadow-emerald-600/25 active:scale-95 transition cursor-pointer"
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-xs active:scale-95 transition cursor-pointer"
           >
             <Download className="w-4 h-4" />
             <span>Eklenti Paketini İndir (.ZIP)</span>
           </button>
         </div>
       </div>
-    </div>
+    </DetailPageLayout>
   );
 };

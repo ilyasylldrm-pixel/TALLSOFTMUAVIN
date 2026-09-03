@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { NavItem } from "./Sidebar";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 export interface InvoicePreviewModalProps {
   invoice: Partial<Invoice>;
@@ -127,81 +128,80 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-2 md:p-3 overflow-y-auto animate-in fade-in">
-      <div className="bg-white border-0 sm:border border-indigo-200 text-slate-900 rounded-none sm:rounded-2xl w-full h-full sm:h-[98vh] shadow-2xl overflow-hidden flex flex-col my-auto print:max-h-none print:shadow-none print:m-0 print:w-full print:max-w-none print:border-none print:bg-white print:text-black">
-        {/* Control Bar Header */}
-        <div className="sticky top-0 bg-slate-900 text-white p-3 sm:p-3.5 sm:px-6 flex flex-wrap items-center justify-between z-20 border-b border-slate-800 gap-2.5 shadow-sm shrink-0 print:hidden">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <span
-              className={`text-[11px] sm:text-xs font-extrabold px-2.5 py-1 rounded-lg uppercase tracking-wider shrink-0 ${
-                isDraft
-                  ? "bg-amber-500/20 text-amber-300 border border-amber-400/30"
-                  : invType === "sales"
-                  ? "bg-indigo-500/20 text-indigo-200 border border-indigo-400/30"
-                  : "bg-emerald-500/20 text-emerald-200 border border-emerald-400/30"
-              }`}
-            >
-              {isDraft ? "TASLAK ÖNİZLEME" : invType === "sales" ? "SATIŞ FATURASI" : "ALIŞ FATURASI"}
-            </span>
-            <span className="text-xs text-slate-300 font-mono font-bold truncate max-w-[120px] sm:max-w-none">
-              {invNumber}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5 shrink-0 ml-auto">
-            {onConfirm && isDraft && (
-              <button
-                type="button"
-                onClick={onConfirm}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
-              >
-                <Check className="w-4 h-4" />
-                <span>Onayla</span>
-              </button>
-            )}
-
+    <DetailPageLayout
+      title={title || `${invNumber} - ${contactName}`}
+      subtitle={`Resmi e-Fatura / e-Arşiv A4 Önizleme & Yazdırma Belgesi • Düzenleme: ${formatDate(issueDate)}`}
+      breadcrumbs={[
+        { label: "Faturalar", onClick: onClose },
+        { label: invNumber, active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span
+          className={`text-[11px] sm:text-xs font-extrabold px-3 py-1 rounded-xl uppercase tracking-wider border ${
+            isDraft
+              ? "bg-amber-50 text-amber-800 border-amber-200"
+              : invType === "sales"
+              ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+              : "bg-emerald-50 text-emerald-800 border-emerald-200"
+          }`}
+        >
+          {isDraft ? "TASLAK ÖNİZLEME" : invType === "sales" ? "SATIŞ FATURASI" : "ALIŞ FATURASI"}
+        </span>
+      }
+      headerIcon={<FileText className="w-5 h-5 text-indigo-600" />}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {onConfirm && isDraft && (
             <button
               type="button"
-              onClick={() => setIsWhatsAppModalOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+              onClick={onConfirm}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
             >
-              <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
-              <span className="hidden sm:inline">WhatsApp</span>
+              <Check className="w-4 h-4" />
+              <span>Faturayı Onayla</span>
             </button>
+          )}
 
-            <button
-              type="button"
-              onClick={handleDownloadPDF}
-              disabled={isDownloading}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/40 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-            >
-              <Download className="w-4 h-4 text-indigo-200" />
-              <span>{isDownloading ? "..." : "PDF"}</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setIsWhatsAppModalOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+          >
+            <Zap className="w-4 h-4 text-emerald-100 fill-emerald-100" />
+            <span>WhatsApp ile Gönder</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
-            >
-              <Printer className="w-4 h-4 text-slate-300" />
-              <span className="hidden sm:inline">Yazdır</span>
-            </button>
+          <button
+            type="button"
+            onClick={handleDownloadPDF}
+            disabled={isDownloading}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+          >
+            <Download className="w-4 h-4 text-indigo-100" />
+            <span>{isDownloading ? "İndiriliyor..." : "PDF İndir"}</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
-              title="Pencereyi Kapat"
-            >
-              <X className="w-4 h-4 text-rose-300" />
-              <span className="hidden xs:inline">Kapat</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-100 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+          >
+            <Printer className="w-4 h-4 text-slate-300" />
+            <span>Yazdır</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="border border-slate-200 text-slate-600 hover:bg-slate-100 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all active:scale-95"
+          >
+            Geri Dön
+          </button>
         </div>
-
-        {/* Scrollable Printable Document Canvas */}
-        <div className="p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:overflow-visible custom-scrollbar">
+      }
+    >
+      <div className="max-w-4xl mx-auto space-y-6">
           <div
             id="invoice-preview-paper"
             className="bg-white text-slate-900 p-6 sm:p-8 border border-slate-200 rounded-xl space-y-6 print:border-none print:p-0"
@@ -670,7 +670,6 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
 
       {/* WhatsApp Share Modal */}
       <UniversalWhatsAppModal
@@ -692,6 +691,6 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
           });
         }}
       />
-    </div>
+    </DetailPageLayout>
   );
 };

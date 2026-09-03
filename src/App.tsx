@@ -66,6 +66,7 @@ import {
 } from "./types";
 
 import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X } from "lucide-react";
+import { DetailPageLayout } from "./components/common/DetailPageLayout";
 
 import { FinanceSubModule } from "./components/Accounts";
 
@@ -1942,38 +1943,51 @@ export default function App() {
         </main>
       </div>
 
-      {/* QUICK ADD ACTION MODAL */}
+      {/* FULL-PAGE DETAIL VIEW: QUICK ADD ACTION */}
       {isQuickAddOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900">
-                Hızlı İşlem Seçin
-              </h3>
+        <DetailPageLayout
+          title="Hızlı İşlem Menüsü"
+          subtitle="Sistem genelinde hızlı kayıt ve operasyon başlatma"
+          breadcrumbs={[
+            { label: "Ana Menü", onClick: () => setIsQuickAddOpen(false) },
+            { label: "Hızlı İşlemler", active: true },
+          ]}
+          onBack={() => setIsQuickAddOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              HIZLI ERİŞİM
+            </span>
+          }
+          headerIcon={<Plus className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setIsQuickAddOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
-
-            <div className="space-y-2">
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-xl mx-auto p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="space-y-3">
               <button
                 onClick={() => {
                   setIsQuickAddOpen(false);
                   setCurrentTab("invoices");
                 }}
-                className="w-full p-3 bg-slate-50 hover:bg-slate-100 hover:border-indigo-500/50 border border-slate-200 rounded-xl flex items-center gap-3 text-left transition-colors cursor-pointer"
+                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-indigo-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
               >
-                <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                  <FileText className="w-5 h-5" />
+                <div className="w-11 h-11 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                  <FileText className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs text-slate-900">
+                  <h4 className="font-extrabold text-sm text-slate-900">
                     Yeni Fatura Kes / Kaydet
                   </h4>
-                  <p className="text-[10px] text-slate-500">
+                  <p className="text-xs text-slate-500">
                     Satış veya Alış e-Faturası hazırlayın
                   </p>
                 </div>
@@ -1984,16 +1998,16 @@ export default function App() {
                   setIsQuickAddOpen(false);
                   setCurrentTab("contacts");
                 }}
-                className="w-full p-3 bg-slate-50 hover:bg-slate-100 hover:border-blue-500/50 border border-slate-200 rounded-xl flex items-center gap-3 text-left transition-colors cursor-pointer"
+                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-blue-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
               >
-                <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                  <Users className="w-5 h-5" />
+                <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                  <Users className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs text-slate-900">
+                  <h4 className="font-extrabold text-sm text-slate-900">
                     Yeni Cari Kart Ekle
                   </h4>
-                  <p className="text-[10px] text-slate-500">
+                  <p className="text-xs text-slate-500">
                     Müşteri veya Tedarikçi tanımı yapın
                   </p>
                 </div>
@@ -2004,23 +2018,23 @@ export default function App() {
                   setIsQuickAddOpen(false);
                   setCurrentTab("transactions");
                 }}
-                className="w-full p-3 bg-slate-50 hover:bg-slate-100 hover:border-emerald-500/50 border border-slate-200 rounded-xl flex items-center gap-3 text-left transition-colors cursor-pointer"
+                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-emerald-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
               >
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                  <ArrowUpRight className="w-5 h-5" />
+                <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <ArrowUpRight className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs text-slate-900">
+                  <h4 className="font-extrabold text-sm text-slate-900">
                     Hızlı Gelir / Gider Kaydı
                   </h4>
-                  <p className="text-[10px] text-slate-500">
+                  <p className="text-xs text-slate-500">
                     Kira, Maaş, Fiş veya Fatura dışı ödemeler
                   </p>
                 </div>
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* Auth & Registration Modal with 6 Brand Logo Gallery */}

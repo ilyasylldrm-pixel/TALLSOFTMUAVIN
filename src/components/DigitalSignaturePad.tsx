@@ -13,6 +13,7 @@ import {
   Sparkles,
   User,
 } from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 interface DigitalSignaturePadProps {
   title?: string;
@@ -475,15 +476,45 @@ export const DigitalSignaturePad: React.FC<DigitalSignaturePadProps> = ({
 
   if (isModal) {
     return (
-      <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-6 bg-slate-950/75 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-        <div
-          className={`w-full transition-all ${
-            isFullscreen ? "max-w-5xl h-[92vh]" : "max-w-2xl max-h-[90vh]"
-          } my-auto`}
-        >
+      <DetailPageLayout
+        title={title || "Dijital İmza Alanı"}
+        subtitle={`${signerRole} • ${customSignerName || "Yetkili İmza Sahibi"}`}
+        breadcrumbs={[
+          { label: "Servis & Teslimat", onClick: onClose },
+          { label: "Dijital İmza", active: true },
+        ]}
+        onBack={onClose}
+        statusBadge={
+          <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+            DİJİTAL ONAY
+          </span>
+        }
+        headerIcon={<PenTool className="w-5 h-5 text-purple-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmSave}
+              disabled={!hasDrawn}
+              className="px-5 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+            >
+              <Check className="w-4 h-4" />
+              <span>İmzayı Onayla</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-2xl mx-auto">
           {content}
         </div>
-      </div>
+      </DetailPageLayout>
     );
   }
 

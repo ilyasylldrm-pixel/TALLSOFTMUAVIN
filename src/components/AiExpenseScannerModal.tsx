@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Contact, Account, Invoice, EXPENSE_CATEGORIES, InvoiceTaxItem, TaxType } from "../types";
 import { parseXmlInvoice } from "../utils/xmlInvoiceParser";
+import { DetailPageLayout } from "./common/DetailPageLayout";
 
 export type ExtractedExpenseData = {
   taxNumber?: string;
@@ -345,39 +346,33 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white border border-purple-200/80 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden my-4 flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
-        
-        {/* Header */}
-        <div className="relative bg-gradient-to-r from-amber-600 via-orange-600 to-purple-700 p-4 text-white flex items-center justify-between shadow-md">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shrink-0">
-              <Sparkles className="w-5 h-5 text-amber-200" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-extrabold text-white">
-                  Yapay Zeka (AI OCR) Fiş & Fatura Tarayıcı
-                </h3>
-                <span className="bg-white/20 text-amber-100 text-[10px] font-black px-2 py-0.5 rounded-full border border-white/30">
-                  Gider Faturaları & Fişleri
-                </span>
-              </div>
-              <p className="text-xs text-amber-100/90 font-medium">
-                Fiş veya fatura görselini yükleyin; tutar, KDV, satıcı ve ödeme yöntemi otomatik ayrıştırılsın.
-              </p>
-            </div>
-          </div>
+    <DetailPageLayout
+      title="Yapay Zeka (AI OCR) Fiş & Fatura Tarayıcı"
+      subtitle="Fiş veya fatura görselini yükleyin; tutar, KDV, satıcı ve ödeme yöntemi otomatik ayrıştırılsın"
+      breadcrumbs={[
+        { label: "Faturalar", onClick: onClose },
+        { label: "AI Fiş & Fatura Tarayıcı", active: true },
+      ]}
+      onBack={onClose}
+      statusBadge={
+        <span className="bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold px-3 py-1 rounded-xl">
+          YAPAY ZEKA OCR
+        </span>
+      }
+      headerIcon={<Sparkles className="w-5 h-5 text-amber-600" />}
+      actions={
+        <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            Geri Dön
           </button>
         </div>
-
-        {/* Content Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 custom-scrollbar">
+      }
+    >
+      <div className="bg-white border border-purple-200/80 rounded-3xl max-w-4xl mx-auto shadow-sm p-6 space-y-6">
           
           {/* File Upload Dropzone */}
           <div className="relative border-2 border-dashed border-purple-300 hover:border-purple-600 bg-purple-50/40 hover:bg-purple-50/80 p-5 rounded-2xl text-center transition-all cursor-pointer group">
@@ -983,7 +978,6 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </DetailPageLayout>
   );
 };

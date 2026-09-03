@@ -1243,24 +1243,35 @@ export const Transactions: React.FC<TransactionsProps> = ({
         )}
       </div>
 
-      {/* MODAL: Create New Invoice-style Slip */}
+      {/* FULL-PAGE DETAIL VIEW: Create New Invoice-style Slip */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-4xl w-full p-6 shadow-2xl space-y-5 my-8">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-purple-700" />
-                <h3 className="text-base font-extrabold text-slate-900">
-                  {txType === "income" ? "Yeni Gelir Fişi Oluştur (Fatura Düzeninde)" : "Yeni Gider Fişi Oluştur (Fatura Düzeninde)"}
-                </h3>
-              </div>
+        <DetailPageLayout
+          title={txType === "income" ? "Yeni Gelir Fişi Oluştur" : "Yeni Gider Fişi Oluştur"}
+          subtitle="Fatura Düzeninde Resmi Mali İşlem ve Kalem Kaydı"
+          breadcrumbs={[
+            { label: "Mali İşlemler", onClick: () => setIsModalOpen(false) },
+            { label: txType === "income" ? "Yeni Gelir Fişi" : "Yeni Gider Fişi", active: true },
+          ]}
+          onBack={() => setIsModalOpen(false)}
+          statusBadge={
+            <span className={`text-xs font-bold px-3 py-1 rounded-xl border ${txType === "income" ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-rose-50 text-rose-800 border-rose-200"}`}>
+              {txType === "income" ? "GELİR FİŞİ" : "GİDER FİŞİ"}
+            </span>
+          }
+          headerIcon={<Receipt className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Vazgeç
               </button>
             </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-4xl mx-auto p-6 sm:p-8 shadow-sm space-y-5">
 
             <form onSubmit={handleSave} className="space-y-5">
               {/* Header Inputs */}
@@ -1701,37 +1712,62 @@ export const Transactions: React.FC<TransactionsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
-      {/* MODAL: View / Inspect Slip Details */}
+      {/* FULL-PAGE DETAIL VIEW: View / Inspect Slip Details */}
       {viewingTx && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 my-8">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div>
-                <span
-                  className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase mb-1 ${
-                    viewingTx.type === "income" || viewingTx.type === "collection"
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : "bg-rose-50 text-rose-700 border border-rose-200"
-                  }`}
-                >
-                  {viewingTx.type === "income" || viewingTx.type === "collection"
-                    ? "Gelir Fişi"
-                    : "Gider Fişi"}
-                </span>
-                <h3 className="text-base font-extrabold text-slate-900 font-mono">
-                  Belge No: {viewingTx.documentNo || "FİŞ-KAYDI"}
-                </h3>
-              </div>
+        <DetailPageLayout
+          title={`Mali İşlem / Fiş Detayı - ${viewingTx.documentNo || "FİŞ"}`}
+          subtitle={`${viewingTx.title || viewingTx.description} • Tarih: ${formatDate(viewingTx.date)} • Tutar: ${formatCurrency(viewingTx.amount, viewingTx.currency)}`}
+          breadcrumbs={[
+            { label: "Mali İşlemler", onClick: () => setViewingTx(null) },
+            { label: viewingTx.documentNo || "Fiş Detayı", active: true },
+          ]}
+          onBack={() => setViewingTx(null)}
+          statusBadge={
+            <span
+              className={`text-xs font-bold px-3 py-1 rounded-xl border ${
+                viewingTx.type === "income" || viewingTx.type === "collection"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-rose-50 text-rose-800 border-rose-200"
+              }`}
+            >
+              {viewingTx.type === "income" || viewingTx.type === "collection"
+                ? "GELİR FİŞİ"
+                : "GİDER FİŞİ"}
+            </span>
+          }
+          headerIcon={<Receipt className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setViewingTx(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+                type="button"
+                onClick={() => setWhatsAppTx(viewingTx)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
               >
-                <X className="w-5 h-5" />
+                <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                <span>WhatsApp</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Yazdır</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewingTx(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Geri Dön
               </button>
             </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-3xl mx-auto p-6 sm:p-8 shadow-sm space-y-5">
 
             <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
               <div>
@@ -1844,13 +1880,13 @@ export const Transactions: React.FC<TransactionsProps> = ({
               </div>
               <button
                 onClick={() => setViewingTx(null)}
-                className="px-5 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-xl cursor-pointer"
+                className="px-5 py-2 text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl cursor-pointer"
               >
-                Kapat
+                Geri Dön
               </button>
             </div>
           </div>
-        </div>
+        </DetailPageLayout>
       )}
 
       {/* WhatsApp Share Modal */}
