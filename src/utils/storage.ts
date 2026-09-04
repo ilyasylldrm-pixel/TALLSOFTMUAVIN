@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, ApplianceServiceRecord, getContactAccountCode } from "../types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, ApplianceServiceRecord, IndustrySector, FoodRecipe, FoodMenuPlan, FoodProductionOrder, FoodDispatchDelivery, FoodWitnessSample, getContactAccountCode } from "../types";
 import {
   initialCompanySettings,
   initialContacts,
@@ -28,6 +28,14 @@ import {
   initialItServices,
   initialApplianceServices,
 } from "../mockData";
+import {
+  initialSectors,
+  initialFoodRecipes,
+  initialFoodMenus,
+  initialFoodProductionOrders,
+  initialFoodDispatches,
+  initialFoodWitnessSamples,
+} from "../data/productionSectorData";
 
 const STORAGE_KEYS = {
   SETTINGS: "muavin_company_settings",
@@ -58,6 +66,21 @@ const STORAGE_KEYS = {
   AUTO_SERVICES: "muavin_auto_services",
   IT_SERVICES: "muavin_it_services",
   APPLIANCE_SERVICES: "muavin_appliance_services",
+  SECTORS: "muavin_production_sectors",
+  ACTIVE_SECTOR: "muavin_active_production_sector",
+  FOOD_RECIPES: "muavin_food_recipes",
+  FOOD_MENUS: "muavin_food_menus",
+  FOOD_PRODUCTION_ORDERS: "muavin_food_production_orders",
+  FOOD_DISPATCHES: "muavin_food_dispatches",
+  FOOD_SAMPLES: "muavin_food_samples",
+};
+
+const safeSet = (key: string, val: any) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+  } catch (e) {
+    console.warn(`Storage quota exceeded or error setting ${key}:`, e);
+  }
 };
 
 export function getStoredData() {
@@ -114,6 +137,37 @@ export function getStoredData() {
     autoServices: get<AutoServiceRecord[]>(STORAGE_KEYS.AUTO_SERVICES, initialAutoServices),
     itServices: get<ItServiceRecord[]>(STORAGE_KEYS.IT_SERVICES, initialItServices),
     applianceServices: get<ApplianceServiceRecord[]>(STORAGE_KEYS.APPLIANCE_SERVICES, initialApplianceServices),
+    sectors: get<IndustrySector[]>(STORAGE_KEYS.SECTORS, initialSectors),
+    activeSectorId: get<string>(STORAGE_KEYS.ACTIVE_SECTOR, "catering"),
+    foodRecipes: (() => {
+      const stored = get<FoodRecipe[]>(STORAGE_KEYS.FOOD_RECIPES, initialFoodRecipes);
+      if (!Array.isArray(stored) || stored.length < initialFoodRecipes.length || !stored.some(r => r.laborCostPerPortion !== undefined)) {
+        const storedMap = new Map((stored || []).map((r) => [r.id, r]));
+        const merged = initialFoodRecipes.map((initR) => {
+          const userR = storedMap.get(initR.id);
+          if (!userR) return initR;
+          return {
+            ...initR,
+            ...userR,
+            laborCostPerPortion: userR.laborCostPerPortion ?? initR.laborCostPerPortion,
+            gasEnergyCostPerPortion: userR.gasEnergyCostPerPortion ?? initR.gasEnergyCostPerPortion,
+            overheadCostPerPortion: userR.overheadCostPerPortion ?? initR.overheadCostPerPortion,
+          };
+        });
+        (stored || []).forEach((r) => {
+          if (!initialFoodRecipes.some((init) => init.id === r.id)) {
+            merged.push(r);
+          }
+        });
+        safeSet(STORAGE_KEYS.FOOD_RECIPES, merged);
+        return merged;
+      }
+      return stored;
+    })(),
+    foodMenus: get<FoodMenuPlan[]>(STORAGE_KEYS.FOOD_MENUS, initialFoodMenus),
+    foodProductionOrders: get<FoodProductionOrder[]>(STORAGE_KEYS.FOOD_PRODUCTION_ORDERS, initialFoodProductionOrders),
+    foodDispatches: get<FoodDispatchDelivery[]>(STORAGE_KEYS.FOOD_DISPATCHES, initialFoodDispatches),
+    foodWitnessSamples: get<FoodWitnessSample[]>(STORAGE_KEYS.FOOD_SAMPLES, initialFoodWitnessSamples),
   };
 }
 
@@ -190,14 +244,6 @@ export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any) {
 }
 
 export function resetToDemoData() {
-  const safeSet = (key: string, val: any) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(val));
-    } catch (e) {
-      console.warn(`Storage quota exceeded or error setting ${key}:`, e);
-    }
-  };
-
   safeSet(STORAGE_KEYS.SETTINGS, initialCompanySettings);
   safeSet(STORAGE_KEYS.CONTACTS, initialContacts);
   safeSet(STORAGE_KEYS.ACCOUNTS, initialAccounts);
@@ -225,6 +271,13 @@ export function resetToDemoData() {
   safeSet(STORAGE_KEYS.AUTO_SERVICES, initialAutoServices);
   safeSet(STORAGE_KEYS.IT_SERVICES, initialItServices);
   safeSet(STORAGE_KEYS.APPLIANCE_SERVICES, initialApplianceServices);
+  safeSet(STORAGE_KEYS.SECTORS, initialSectors);
+  safeSet(STORAGE_KEYS.ACTIVE_SECTOR, "catering");
+  safeSet(STORAGE_KEYS.FOOD_RECIPES, initialFoodRecipes);
+  safeSet(STORAGE_KEYS.FOOD_MENUS, initialFoodMenus);
+  safeSet(STORAGE_KEYS.FOOD_PRODUCTION_ORDERS, initialFoodProductionOrders);
+  safeSet(STORAGE_KEYS.FOOD_DISPATCHES, initialFoodDispatches);
+  safeSet(STORAGE_KEYS.FOOD_SAMPLES, initialFoodWitnessSamples);
   safeSet(STORAGE_KEYS.EDOCUMENTS, []);
 }
 

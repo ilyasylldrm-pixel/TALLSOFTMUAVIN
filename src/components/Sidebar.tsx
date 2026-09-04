@@ -40,6 +40,8 @@ import {
   Wrench,
   Laptop,
   ThermometerSnowflake,
+  CookingPot,
+  Layers,
 } from "lucide-react";
 import { CompanySettings } from "../types";
 import { Logo } from "./Logo";
@@ -48,6 +50,8 @@ import { UserProfile } from "./AuthModal";
 
 export type NavItem =
   | "dashboard"
+  | "production"
+  | "sectors"
   | "contacts"
   | "invoices"
   | "invoices_sales"
@@ -139,6 +143,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "e_services" as NavItem, label: "E-İşlemler", icon: ShieldCheck, badge: "Resmi" },
     { id: "invoices" as NavItem, label: "E-Belgeler", icon: FileText, hasSubItems: true },
     { id: "orders_module" as NavItem, label: "Sipariş & Proforma", icon: ShoppingCart, hasSubItems: true },
+    { id: "production" as NavItem, label: "Üretim", icon: CookingPot, badge: "Yemek" },
+    { id: "sectors" as NavItem, label: "Sektörler", icon: Layers },
     { id: "auto_service" as NavItem, label: "Oto Servis & Araç Bakım", icon: Wrench, badge: "Oto" },
     { id: "it_service" as NavItem, label: "Bilişim & BT Teknik Servis", icon: Laptop, badge: "BT" },
     { id: "appliance_service" as NavItem, label: "Ev Aletleri ve Klima", icon: ThermometerSnowflake, badge: "Klima" },

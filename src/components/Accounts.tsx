@@ -4,6 +4,7 @@ import jsPDF from "jspdf";
 import { ExportButtons } from "./ExportButtons";
 import { BankStatementImportModal } from "./BankStatementImportModal";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF } from "../utils/exportUtils";
+import { exportElementToPDFWithPrintStyling } from "../utils/pdfService";
 import {
   Account,
   Transaction,
@@ -56,9 +57,12 @@ import {
   Cloud,
   FileSpreadsheet,
   Upload,
+  Zap,
+  MessageCircle,
 } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { UniversalWhatsAppModal, QuickTemplateOption } from "./common/UniversalWhatsAppModal";
 
 export type FinanceSubModule = "kasa" | "banka" | "cek" | "senet" | "virman";
 
@@ -187,6 +191,29 @@ export function numberToTurkishWords(amount: number, currency: string = "TRY"): 
   return formatted;
 }
 
+export function generateReceiptShareText(
+  receipt: ReceiptData,
+  companySettings?: CompanySettings | null
+): string {
+  const companyName = companySettings?.companyTitle || companySettings?.companyName || "Şirketimiz";
+  const currency = receipt.currency || "TRY";
+
+  let text = `🧾 *${receipt.documentTitle.toUpperCase()}*\n`;
+  text += `🏛️ *Düzenleyen:* ${companyName}\n`;
+  text += `📄 *Dekont No:* ${receipt.documentNo}\n`;
+  text += `📅 *İşlem Tarihi:* ${receipt.date}${receipt.time ? ` • ${receipt.time}` : ""}\n`;
+  if (receipt.accountName) text += `🏦 *Hesap / Kasa:* ${receipt.accountName}\n`;
+  if (receipt.bankName) text += `🏛️ *Banka:* ${receipt.bankName}\n`;
+  if (receipt.iban) text += `💳 *IBAN:* ${receipt.iban}\n`;
+  if (receipt.contactName) text += `👤 *Cari / Muhatap:* ${receipt.contactName}\n`;
+  if (receipt.statusText) text += `📌 *Durum:* ${receipt.statusText}\n`;
+  text += `💰 *Tutar:* ${formatCurrency(receipt.amount, currency)}\n`;
+  text += `🔤 *Yazıyla:* ${numberToTurkishWords(receipt.amount, currency)}\n`;
+  if (receipt.description) text += `📝 *Açıklama:* ${receipt.description}\n`;
+  text += `\nResmi finans dekont belgeniz PDF formatında WhatsApp İletişim & Entegrasyon Merkezi üzerinden iletilmiştir.\nİyi çalışmalar dileriz.\n*${companyName}*`;
+  return text;
+}
+
 interface AccountsProps {
   accounts: Account[];
   transactions: Transaction[];
@@ -287,6 +314,7 @@ export const Accounts: React.FC<AccountsProps> = ({
     setIsEditAccountModalOpen(false);
     setIsTransferModalOpen(false);
     setReceiptData(null);
+    setIsReceiptWhatsAppOpen(false);
     setEditingAccount(null);
   };
 
@@ -314,6 +342,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   // Receipt / Voucher (Dekont Göster) Modal State
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
+  const [isReceiptWhatsAppOpen, setIsReceiptWhatsAppOpen] = useState(false);
 
   // Helper to find contact by ID or Name
   const findContactInfo = (contactId?: string, contactName?: string) => {
@@ -1817,10 +1846,233 @@ export const Accounts: React.FC<AccountsProps> = ({
     );
   }
 
+  // Helper to render printable receipt content
+  const renderPrintableReceiptContent = (receipt: ReceiptData) => (
+    <div
+      id="printable-receipt"
+      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+      className="bg-white text-slate-900 p-6 sm:p-10 rounded-2xl shadow-xl border border-slate-200 w-full mx-auto space-y-6 font-sans text-xs sm:text-sm"
+    >
+      {/* Corporate Header Section */}
+      <div className="border-b-2 border-indigo-900 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          {companySettings?.logoUrl ? (
+            <img
+              src={companySettings.logoUrl}
+              alt="Firma Logo"
+              className="w-14 h-14 object-contain rounded-xl border border-slate-200 p-1 bg-white"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div
+              style={{ backgroundColor: "#312e81", color: "#ffffff" }}
+              className="w-14 h-14 rounded-xl flex items-center justify-center font-black text-2xl shadow-xs border border-indigo-900 shrink-0"
+            >
+              <Landmark className="w-7 h-7 text-indigo-100" />
+            </div>
+          )}
+          <div className="space-y-0.5">
+            <div className="font-extrabold text-base sm:text-lg text-slate-950 tracking-tight leading-tight">
+              {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL FİNANS VE YÖNETİM HİZMETLERİ"}
+            </div>
+            <div className="text-[11px] text-slate-600 space-y-0.5">
+              <div>{companySettings?.address || "Merkez Mah. Büyükdere Cad. No:142 Şişli / İstanbul"}</div>
+              <div>
+                Vergi Dairesi: {companySettings?.taxOffice || "Boğaziçi"} • VKN/TCKN: {companySettings?.taxNumber || "1234567890"}
+              </div>
+              <div>
+                Tel: {companySettings?.phone || "0850 123 45 67"} • E-posta: {companySettings?.email || "finans@muavin.com"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{ backgroundColor: "#f8fafc", borderColor: "#cbd5e1" }}
+          className="text-center p-3 rounded-2xl border min-w-[220px] shrink-0"
+        >
+          <span className="text-[11px] font-black text-indigo-950 uppercase tracking-widest block">
+            RESMİ FİNANS DEKONTU
+          </span>
+          <div
+            style={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            className="font-mono text-xs font-black py-1 px-2 rounded-lg border mt-1"
+          >
+            {receipt.documentNo}
+          </div>
+          <div className="text-[11px] text-slate-500 font-semibold mt-1">
+            Tarih: {receipt.date} {receipt.time ? `• ${receipt.time}` : ""}
+          </div>
+        </div>
+      </div>
+
+      {/* Subtitle / Description */}
+      <div
+        style={{ backgroundColor: "#eef2ff", borderColor: "#c7d2fe" }}
+        className="p-3.5 rounded-xl border flex items-center justify-between gap-2"
+      >
+        <div>
+          <span className="font-extrabold text-indigo-950 text-xs block">
+            {receipt.documentTitle}
+          </span>
+          <span className="text-[11px] text-indigo-700 font-medium">
+            {receipt.subTitle || "Resmi muhasebe işlem ve bakiye kaydı"}
+          </span>
+        </div>
+        {receipt.statusText && (
+          <span
+            style={{ backgroundColor: "#312e81", color: "#ffffff" }}
+            className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold tracking-wider uppercase shrink-0"
+          >
+            {receipt.statusText}
+          </span>
+        )}
+      </div>
+
+      {/* Details Table / Grid */}
+      <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-200">
+        {receipt.details.map((d, index) => (
+          <div
+            key={index}
+            className={`flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:px-4 text-xs ${
+              index % 2 === 0 ? "bg-white" : "bg-slate-50/70"
+            }`}
+          >
+            <span className="font-bold text-slate-600 sm:w-1/3">{d.label}</span>
+            <span className="font-bold text-slate-900 sm:w-2/3 sm:text-right break-words">
+              {d.value}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Grand Total Highlight Box */}
+      <div
+        style={{ backgroundColor: "#0f172a", color: "#ffffff" }}
+        className="rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
+      >
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+            İŞLEM TUTARI / BAKİYE
+          </span>
+          <span className="text-xs sm:text-sm font-bold text-indigo-200 italic mt-0.5 block">
+            # {numberToTurkishWords(receipt.amount, receipt.currency)} #
+          </span>
+        </div>
+        <div className="text-left sm:text-right">
+          <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-white block">
+            {formatCurrency(receipt.amount, receipt.currency)}
+          </span>
+        </div>
+      </div>
+
+      {/* Description / Notes if any */}
+      {receipt.description && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700">
+          <span className="font-bold text-slate-900 block mb-0.5">İşlem Açıklaması:</span>
+          {receipt.description}
+        </div>
+      )}
+
+      {/* Signatures Zone */}
+      <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-200 text-center">
+        <div className="space-y-12">
+          <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+            TESLİM EDEN / ONAYLAYAN
+          </div>
+          <div className="border-t border-dashed border-slate-300 pt-1 text-[11px] text-slate-400">
+            İmza & Kaşe
+          </div>
+        </div>
+        <div className="space-y-12">
+          <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+            TESLİM ALAN / CARİ FİRMA
+          </div>
+          <div className="border-t border-dashed border-slate-300 pt-1 text-[11px] text-slate-400">
+            İmza & Kaşe
+          </div>
+        </div>
+      </div>
+
+      {/* Footer Notice */}
+      <div className="text-[10px] text-slate-400 text-center pt-2">
+        Bu dekont Muavin ERP Finans Yönetim Sistemi tarafından elektronik ortamda üretilmiştir.
+      </div>
+    </div>
+  );
+
   // =========================================================================
   // 4. FULL-PAGE DETAIL VIEW: RECEIPT / DEKONT GÖRÜNTÜLEME
   // =========================================================================
   if ((detailNav.mode === "receipt" || receiptData !== null) && receiptData) {
+    if (isReceiptWhatsAppOpen) {
+      const recipientContact = findContactInfo(undefined, receiptData.contactName);
+      const recipientPhone =
+        receiptData.contactPhone ||
+        recipientContact?.phone ||
+        recipientContact?.mobile ||
+        "";
+
+      return (
+        <>
+          {/* Printable Receipt DOM container for PDF generation */}
+          <div
+            style={{
+              position: "fixed",
+              left: 0,
+              top: 0,
+              width: "800px",
+              zIndex: -100,
+              opacity: 0,
+              pointerEvents: "none",
+            }}
+          >
+            {renderPrintableReceiptContent(receiptData)}
+          </div>
+          <UniversalWhatsAppModal
+            isOpen={true}
+            onClose={() => setIsReceiptWhatsAppOpen(false)}
+            title={`WhatsApp ile Dekont Paylaş - ${receiptData.documentNo}`}
+            documentTypeLabel={receiptData.documentTitle || "Finans Dekontu / Makbuz"}
+            recipientName={receiptData.contactName || receiptData.accountName || "Sayın İlgili"}
+            recipientPhone={recipientPhone}
+            defaultMessage={generateReceiptShareText(receiptData, companySettings)}
+            documentFileName={`Dekont_${receiptData.documentNo || "Finans_Dekontu"}.pdf`}
+            companySettings={companySettings}
+            quickTemplates={[
+              {
+                id: "standard_dekont",
+                label: "Standart Dekont Bildirimi",
+                templateText: generateReceiptShareText(receiptData, companySettings),
+              },
+              {
+                id: "short_notice",
+                label: "Kısa Bilgilendirme",
+                templateText: `Sayın Yetkili,\n\n${receiptData.documentNo} nolu ${receiptData.documentTitle} düzenlenmiştir. Tutar: ${formatCurrency(receiptData.amount, receiptData.currency)}. Dekont PDF formatında ekte bilgilerinize sunulmuştur.\n\n${companySettings?.companyName || "Muavin Finans"}`,
+              },
+              {
+                id: "formal_receipt",
+                label: "Resmi Muhasebe & Teyit",
+                templateText: `Sayın ${receiptData.contactName || "Yetkili"},\n\nŞirketimiz kayıtlarında ${receiptData.date} tarihinde ${formatCurrency(receiptData.amount, receiptData.currency)} tutarındaki resmi finansal işleminiz gerçekleştirilmiştir. İlgili dekont belgesi ekte yer almaktadır.\n\nSaygılarımızla,\n${companySettings?.companyTitle || companySettings?.companyName || "Muavin Finans"}`,
+              },
+            ]}
+            onGeneratePdf={async () => {
+              const el = document.getElementById("printable-receipt");
+              if (el) {
+                return exportElementToPDFWithPrintStyling(
+                  "printable-receipt",
+                  `Dekont_${receiptData.documentNo || "Finans_Dekontu"}.pdf`,
+                  { orientation: "p", margin: 8, scale: 2 }
+                );
+              }
+              return null;
+            }}
+            onSuccess={() => setIsReceiptWhatsAppOpen(false)}
+          />
+        </>
+      );
+    }
+
     return (
       <DetailPageLayout
         title={receiptData.documentTitle}
@@ -1863,162 +2115,48 @@ export const Accounts: React.FC<AccountsProps> = ({
               <FileCheck2 className="w-4 h-4 text-purple-200" />
               <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setIsReceiptWhatsAppOpen(true)}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer active:scale-95"
+              title="WhatsApp İletişim & Entegrasyon Merkezi ile Paylaş"
+            >
+              <MessageSquare className="w-4 h-4 text-emerald-100 fill-emerald-100" />
+              <span>WhatsApp ile Paylaş</span>
+            </button>
           </div>
         }
       >
         <div className="max-w-3xl mx-auto space-y-6">
-          {/* Printable Receipt Paper */}
-          <div
-            id="printable-receipt"
-            style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
-            className="bg-white text-slate-900 p-6 sm:p-10 rounded-2xl shadow-xl border border-slate-200 w-full mx-auto space-y-6 font-sans text-xs sm:text-sm"
-          >
-            {/* Corporate Header Section */}
-            <div className="border-b-2 border-indigo-900 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                {companySettings?.logoUrl ? (
-                  <img
-                    src={companySettings.logoUrl}
-                    alt="Firma Logo"
-                    className="w-14 h-14 object-contain rounded-xl border border-slate-200 p-1 bg-white"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div
-                    style={{ backgroundColor: "#312e81", color: "#ffffff" }}
-                    className="w-14 h-14 rounded-xl flex items-center justify-center font-black text-2xl shadow-xs border border-indigo-900 shrink-0"
-                  >
-                    <Landmark className="w-7 h-7 text-indigo-100" />
-                  </div>
-                )}
-                <div className="space-y-0.5">
-                  <div className="font-extrabold text-base sm:text-lg text-slate-950 tracking-tight leading-tight">
-                    {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL FİNANS VE YÖNETİM HİZMETLERİ"}
-                  </div>
-                  <div className="text-[11px] text-slate-600 space-y-0.5">
-                    <div>{companySettings?.address || "Merkez Mah. Büyükdere Cad. No:142 Şişli / İstanbul"}</div>
-                    <div>
-                      Vergi Dairesi: {companySettings?.taxOffice || "Boğaziçi"} • VKN/TCKN: {companySettings?.taxNumber || "1234567890"}
-                    </div>
-                    <div>
-                      Tel: {companySettings?.phone || "0850 123 45 67"} • E-posta: {companySettings?.email || "finans@muavin.com"}
-                    </div>
-                  </div>
-                </div>
+          {/* WhatsApp İletişim & Entegrasyon Merkezi Entegrasyonu */}
+          <div className="bg-gradient-to-r from-emerald-50 via-emerald-100/40 to-slate-50 border border-emerald-300/70 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                <MessageSquare className="w-5 h-5 fill-white" />
               </div>
-
-              <div
-                style={{ backgroundColor: "#f8fafc", borderColor: "#cbd5e1" }}
-                className="text-center p-3 rounded-2xl border min-w-[220px] shrink-0"
-              >
-                <span className="text-[11px] font-black text-indigo-950 uppercase tracking-widest block">
-                  RESMİ FİNANS DEKONTU
-                </span>
-                <div
-                  style={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }}
-                  className="font-mono text-xs font-black py-1 px-2 rounded-lg border mt-1"
-                >
-                  {receiptData.documentNo}
-                </div>
-                <div className="text-[11px] text-slate-500 font-semibold mt-1">
-                  Tarih: {receiptData.date} {receiptData.time ? `• ${receiptData.time}` : ""}
-                </div>
-              </div>
-            </div>
-
-            {/* Subtitle / Description */}
-            <div
-              style={{ backgroundColor: "#eef2ff", borderColor: "#c7d2fe" }}
-              className="p-3.5 rounded-xl border flex items-center justify-between gap-2"
-            >
               <div>
-                <span className="font-extrabold text-indigo-950 text-xs block">
-                  {receiptData.documentTitle}
-                </span>
-                <span className="text-[11px] text-indigo-700 font-medium">
-                  {receiptData.subTitle || "Resmi muhasebe işlem ve bakiye kaydı"}
-                </span>
-              </div>
-              {receiptData.statusText && (
-                <span
-                  style={{ backgroundColor: "#312e81", color: "#ffffff" }}
-                  className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold tracking-wider uppercase shrink-0"
-                >
-                  {receiptData.statusText}
-                </span>
-              )}
-            </div>
-
-            {/* Details Table / Grid */}
-            <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-200">
-              {receiptData.details.map((d, index) => (
-                <div
-                  key={index}
-                  className={`flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:px-4 text-xs ${
-                    index % 2 === 0 ? "bg-white" : "bg-slate-50/70"
-                  }`}
-                >
-                  <span className="font-bold text-slate-600 sm:w-1/3">{d.label}</span>
-                  <span className="font-bold text-slate-900 sm:w-2/3 sm:text-right break-words">
-                    {d.value}
+                <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <span>WhatsApp İletişim & Entegrasyon Merkezi</span>
+                  <span className="bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+                    Canlı Entegrasyon
                   </span>
-                </div>
-              ))}
+                </h4>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  Bu resmi finans dekontunu PDF eki ve onaylı muhasebe şablonuyla doğrudan WhatsApp üzerinden anında paylaşabilirsiniz.
+                </p>
+              </div>
             </div>
-
-            {/* Grand Total Highlight Box */}
-            <div
-              style={{ backgroundColor: "#0f172a", color: "#ffffff" }}
-              className="rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
+            <button
+              type="button"
+              onClick={() => setIsReceiptWhatsAppOpen(true)}
+              className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer shrink-0 active:scale-95"
             >
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                  İŞLEM TUTARI / BAKİYE
-                </span>
-                <span className="text-xs sm:text-sm font-bold text-indigo-200 italic mt-0.5 block">
-                  # {numberToTurkishWords(receiptData.amount, receiptData.currency)} #
-                </span>
-              </div>
-              <div className="text-left sm:text-right">
-                <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-white block">
-                  {formatCurrency(receiptData.amount, receiptData.currency)}
-                </span>
-              </div>
-            </div>
-
-            {/* Description / Notes if any */}
-            {receiptData.description && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700">
-                <span className="font-bold text-slate-900 block mb-0.5">İşlem Açıklaması:</span>
-                {receiptData.description}
-              </div>
-            )}
-
-            {/* Signatures Zone */}
-            <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-200 text-center">
-              <div className="space-y-12">
-                <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  TESLİM EDEN / ONAYLAYAN
-                </div>
-                <div className="border-t border-dashed border-slate-300 pt-1 text-[11px] text-slate-400">
-                  İmza & Kaşe
-                </div>
-              </div>
-              <div className="space-y-12">
-                <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  TESLİM ALAN / CARİ FİRMA
-                </div>
-                <div className="border-t border-dashed border-slate-300 pt-1 text-[11px] text-slate-400">
-                  İmza & Kaşe
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Notice */}
-            <div className="text-[10px] text-slate-400 text-center pt-2">
-              Bu dekont Muavin ERP Finans Yönetim Sistemi tarafından elektronik ortamda üretilmiştir.
-            </div>
+              <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+              <span>WhatsApp ile Paylaş</span>
+            </button>
           </div>
+
+          {renderPrintableReceiptContent(receiptData)}
         </div>
       </DetailPageLayout>
     );
@@ -3387,320 +3525,6 @@ export const Accounts: React.FC<AccountsProps> = ({
     );
   }
 
-      {/* FULL-PAGE DETAIL VIEW: DEKONT / MAKBUZ GÖRÜNÜMÜ */}
-      {receiptData && (
-        <DetailPageLayout
-          title={`Resmi Finans Dekontu & Makbuzu - ${receiptData.documentNo}`}
-          subtitle={`${receiptData.title} • Düzenleme Tarihi: ${receiptData.date} • Tutar: ${formatCurrency(receiptData.amount, receiptData.currency)}`}
-          breadcrumbs={[
-            { label: "Kasa & Banka", onClick: () => setReceiptData(null) },
-            { label: "Finans Dekontu", active: true },
-          ]}
-          onBack={() => setReceiptData(null)}
-          statusBadge={
-            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
-              RESMİ FİNANS MAKBUZU
-            </span>
-          }
-          headerIcon={<FileText className="w-5 h-5 text-purple-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                title="Yazdır"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Yazdır</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportReceiptPDF}
-                disabled={isPdfGenerating}
-                className="bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50 active:scale-95"
-                title="PDF Olarak İndir"
-              >
-                <FileCheck2 className="w-4 h-4 text-purple-200" />
-                <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setReceiptData(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Geri Dön
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-slate-100 rounded-3xl shadow-sm border border-slate-300 w-full max-w-4xl mx-auto overflow-hidden">
-
-            {/* Printable Receipt Canvas Paper */}
-            <div className="p-4 sm:p-8 max-h-[80vh] overflow-y-auto custom-scrollbar bg-slate-200/60 flex justify-center">
-              <div
-                id="printable-receipt"
-                style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
-                className="bg-white text-slate-900 p-6 sm:p-8 rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl mx-auto space-y-5 font-sans text-xs sm:text-sm"
-              >
-                {/* Corporate Header Section */}
-                <div className="border-b-2 border-indigo-900 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    {companySettings?.logoUrl ? (
-                      <img
-                        src={companySettings.logoUrl}
-                        alt="Firma Logo"
-                        className="w-12 h-12 object-contain rounded-xl border border-slate-200 p-1 bg-white"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div
-                        style={{ backgroundColor: "#312e81", color: "#ffffff" }}
-                        className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shadow-xs border border-indigo-900 shrink-0"
-                      >
-                        <Landmark className="w-6 h-6 text-indigo-100" />
-                      </div>
-                    )}
-                    <div className="space-y-0.5">
-                      <div className="font-extrabold text-sm sm:text-base text-slate-950 tracking-tight leading-tight">
-                        {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL FİNANS VE YÖNETİM HİZMETLERİ"}
-                      </div>
-                      <div className="text-[10px] text-slate-600 space-y-0.5">
-                        <div>{companySettings?.address || "Merkez Mah. Büyükdere Cad. No:142 Şişli / İstanbul"}</div>
-                        <div>
-                          Vergi Dairesi: {companySettings?.taxOffice || "Boğaziçi"} • VKN/TCKN: {companySettings?.taxNumber || "1234567890"}
-                        </div>
-                        <div>
-                          Tel: {companySettings?.phone || "0850 123 45 67"} • E-posta: {companySettings?.email || "finans@muavin.com"}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div
-                    style={{ backgroundColor: "#f8fafc", borderColor: "#cbd5e1" }}
-                    className="text-center p-3 rounded-2xl border min-w-[200px] shrink-0"
-                  >
-                    <span className="text-[10px] font-black text-indigo-950 uppercase tracking-widest block">
-                      RESMİ FİNANS DEKONTU
-                    </span>
-                    <div
-                      style={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }}
-                      className="font-mono text-xs font-black py-1 px-2 rounded-lg border mt-1"
-                    >
-                      {receiptData.documentNo}
-                    </div>
-                    <div className="text-[10px] text-slate-600 font-bold mt-1 flex items-center justify-center gap-1">
-                      <Clock className="w-3 h-3 text-indigo-600" />
-                      <span>{receiptData.date} {receiptData.time ? `• ${receiptData.time}` : ""}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Centered Document Title Banner */}
-                <div className="text-center space-y-1">
-                  <div
-                    style={{ backgroundColor: "#312e81", color: "#ffffff", borderColor: "#1e1b4b" }}
-                    className="inline-block px-6 sm:px-8 py-1.5 rounded-xl font-black text-xs sm:text-sm tracking-wider uppercase shadow-xs border text-center"
-                  >
-                    {receiptData.documentTitle}
-                  </div>
-                  {receiptData.subTitle && (
-                    <div className="text-[11px] font-bold text-slate-600 tracking-wide text-center">
-                      {receiptData.subTitle}
-                    </div>
-                  )}
-                </div>
-
-                {/* Parties Information (2 Columns) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  {/* Left: Organization / Account */}
-                  <div
-                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
-                    className="p-3 rounded-xl border space-y-1"
-                  >
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-1">
-                      <span className="text-[10px] font-black uppercase text-slate-900 tracking-wider flex items-center gap-1">
-                        <Building className="w-3.5 h-3.5 text-indigo-600" />
-                        İŞLEMİ YAPAN HESAP / KURUM
-                      </span>
-                      <span
-                        style={{ backgroundColor: "#e0e7ff", color: "#3730a3" }}
-                        className="text-[9px] font-bold px-2 py-0.5 rounded-md"
-                      >
-                        Düzenleyen
-                      </span>
-                    </div>
-                    <div className="text-xs font-black text-slate-900 truncate">
-                      {companySettings?.companyTitle || companySettings?.companyName || "Şirket Merkezi"}
-                    </div>
-                    <div className="text-[11px] text-slate-700 space-y-0.5">
-                      <div><span className="font-bold text-slate-900">Hesap / Kasa:</span> {receiptData.accountName || "Ana Kasa"}</div>
-                      {receiptData.bankName && <div><span className="font-bold text-slate-900">Banka:</span> {receiptData.bankName}</div>}
-                      {receiptData.iban && <div><span className="font-bold text-slate-900">IBAN:</span> <span className="font-mono text-[10px] font-bold">{receiptData.iban}</span></div>}
-                    </div>
-                  </div>
-
-                  {/* Right: Contact / Counterparty */}
-                  <div
-                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
-                    className="p-3 rounded-xl border space-y-1"
-                  >
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-1">
-                      <span className="text-[10px] font-black uppercase text-slate-900 tracking-wider flex items-center gap-1">
-                        <Landmark className="w-3.5 h-3.5 text-indigo-600" />
-                        MUHATAP / İLGİLİ CARİ BİLGİLERİ
-                      </span>
-                      <span
-                        style={{ backgroundColor: "#e0e7ff", color: "#3730a3" }}
-                        className="text-[9px] font-bold px-2 py-0.5 rounded-md"
-                      >
-                        Muhatap Taraf
-                      </span>
-                    </div>
-                    <div className="text-xs font-black text-slate-900 truncate">
-                      {receiptData.contactName || "Genel Muhasebe / Doğrudan İşlem"}
-                    </div>
-                    <div className="text-[11px] text-slate-700 space-y-0.5">
-                      {receiptData.contactTaxNumber && (
-                        <div><span className="font-bold text-slate-900">VKN/TCKN:</span> {receiptData.contactTaxNumber} {receiptData.contactTaxOffice ? `(${receiptData.contactTaxOffice} V.D.)` : ""}</div>
-                      )}
-                      {receiptData.contactPhone && (
-                        <div><span className="font-bold text-slate-900">İletişim:</span> {receiptData.contactPhone}</div>
-                      )}
-                      {receiptData.contactCity && (
-                        <div><span className="font-bold text-slate-900">Şehir:</span> {receiptData.contactCity}</div>
-                      )}
-                      {!receiptData.contactTaxNumber && !receiptData.contactPhone && !receiptData.contactCity && (
-                        <div className="text-slate-500 italic text-[10px]">Cari kartı doğrudan işlem veya kurum içi transfer kaydı</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Amount Box */}
-                <div
-                  style={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#ffffff" }}
-                  className="rounded-2xl p-4 sm:p-5 shadow-md border flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                >
-                  <div className="text-center sm:text-left">
-                    <span className="text-[10px] uppercase font-black text-slate-300 tracking-widest block mb-0.5">
-                      İşlem Tutarı
-                    </span>
-                    <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-emerald-400">
-                      {formatCurrency(receiptData.amount, receiptData.currency)}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{ backgroundColor: "#1e293b", borderColor: "#475569" }}
-                    className="text-center px-4 py-2.5 rounded-xl border"
-                  >
-                    <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider block mb-0.5">
-                      Yazıyla Tutar
-                    </span>
-                    <span className="text-xs font-extrabold text-amber-300 italic">
-                      #{numberToTurkishWords(receiptData.amount, receiptData.currency)}#
-                    </span>
-                  </div>
-                </div>
-
-                {/* Detail Items Grid */}
-                <div className="space-y-2.5">
-                  <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-1 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                      İşlem Detay ve Kayıt Bilgileri
-                    </span>
-                    <span
-                      style={{ backgroundColor: "#e0e7ff", color: "#3730a3", borderColor: "#c7d2fe" }}
-                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border"
-                    >
-                      Onaylı Kayıt
-                    </span>
-                  </h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {receiptData.details.map((dt, idx) => (
-                      <div
-                        key={idx}
-                        style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
-                        className="p-3 rounded-xl border text-center flex flex-col items-center justify-center"
-                      >
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                          {dt.label}
-                        </span>
-                        <span className="font-extrabold text-xs text-slate-900 mt-1 break-words text-center">
-                          {dt.value || "-"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Legal Provisions */}
-                <div
-                  style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0", color: "#334155" }}
-                  className="p-3 rounded-xl border text-[10px] space-y-1 leading-relaxed"
-                >
-                  <div className="font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5 mb-1">
-                    <Stamp className="w-3.5 h-3.5 text-indigo-600" />
-                    YASAL HÜKÜMLER VE TEYİT ŞARTLARI
-                  </div>
-                  <p>
-                    1. İşbu dekont, 213 Sayılı Vergi Usul Kanunu ve 6102 Sayılı Türk Ticaret Kanunu hükümleri uyarınca işletme resmi muhasebe kayıtlarının tevsik edici belgesi hükmündedir.
-                  </p>
-                  <p>
-                    2. Banka hesap transferlerinde bankaların resmi veri tabanı logları ve dekont referans kodları esastır; nakit işlemlerde kasa mutabakatı aranır.
-                  </p>
-                  <p>
-                    3. Kıymetli evraklarda (çek/senet) kambiyo hukuku ve teslim-tesellüm ciro silsilesi hükümleri geçerlidir.
-                  </p>
-                </div>
-
-                {/* Official Signatures / Stamps */}
-                <div className="pt-4 border-t border-slate-300 grid grid-cols-2 gap-6 text-center text-xs">
-                  <div
-                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
-                    className="space-y-6 p-3.5 rounded-xl border"
-                  >
-                    <span className="font-extrabold text-slate-900 uppercase tracking-wider block">
-                      Düzenleyen / Yetkili İmza
-                    </span>
-                    <div className="pt-2 text-[10px] text-slate-400 border-t border-dashed border-slate-300">
-                      İmza / Kaşe
-                    </div>
-                  </div>
-
-                  <div
-                    style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
-                    className="space-y-6 p-3.5 rounded-xl border"
-                  >
-                    <span className="font-extrabold text-slate-900 uppercase tracking-wider block">
-                      Teslim Alan / İlgili Cari
-                    </span>
-                    <div className="pt-2 text-[10px] text-slate-400 border-t border-dashed border-slate-300">
-                      İmza
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer Disclaimer */}
-                <div className="text-[10px] text-center text-slate-400 pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>
-                    Bu dekont elektronik ortamda üretilmiş olup ilgili muhasebe ve cari kayıtların resmi tevsik edici belgesidir. • Muavin Finans & Muhasebe Yönetimi
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </DetailPageLayout>
-    );
-  }
-
       {/* MODAL: BANK STATEMENT IMPORT */}
       <BankStatementImportModal
         isOpen={isBankStatementModalOpen}
@@ -4201,6 +4025,18 @@ export const Accounts: React.FC<AccountsProps> = ({
                           <button
                             type="button"
                             onClick={() => {
+                              handleShowAccountReceipt(acc);
+                              setIsReceiptWhatsAppOpen(true);
+                            }}
+                            className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-950 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Ekstre / Dekontu WhatsApp ile Paylaş"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-emerald-850 shrink-0" />
+                            <span>WhatsApp</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
                               setEditingAccount(acc);
                               setIsEditAccountModalOpen(true);
                               detailNav.openEdit(acc, acc.id);
@@ -4355,6 +4191,18 @@ export const Accounts: React.FC<AccountsProps> = ({
                               <button
                                 type="button"
                                 onClick={() => {
+                                  handleShowTransactionReceipt(tx);
+                                  setIsReceiptWhatsAppOpen(true);
+                                }}
+                                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                                title="Dekontu WhatsApp ile Paylaş"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>WhatsApp</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
                                   setEditingTransaction(tx);
                                   setIsEditTxModalOpen(true);
                                 }}
@@ -4443,6 +4291,18 @@ export const Accounts: React.FC<AccountsProps> = ({
                           >
                             <FileText className="w-3.5 h-3.5 text-blue-900 shrink-0" />
                             <span>Ekstre</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleShowAccountReceipt(acc);
+                              setIsReceiptWhatsAppOpen(true);
+                            }}
+                            className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-950 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Ekstre / Dekontu WhatsApp ile Paylaş"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-emerald-850 shrink-0" />
+                            <span>WhatsApp</span>
                           </button>
                           <button
                             type="button"
@@ -4613,6 +4473,18 @@ export const Accounts: React.FC<AccountsProps> = ({
                               >
                                 <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                                 <span>Dekont</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleShowTransactionReceipt(tx);
+                                  setIsReceiptWhatsAppOpen(true);
+                                }}
+                                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                                title="Dekontu WhatsApp ile Paylaş"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>WhatsApp</span>
                               </button>
                               <button
                                 type="button"
@@ -4807,6 +4679,18 @@ export const Accounts: React.FC<AccountsProps> = ({
                           >
                             <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <span>Bordro</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleShowChequeReceipt(c);
+                              setIsReceiptWhatsAppOpen(true);
+                            }}
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Çek Bordrosu / Dekontunu WhatsApp ile Paylaş"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>WhatsApp</span>
                           </button>
                           <button
                             type="button"
@@ -5028,6 +4912,18 @@ export const Accounts: React.FC<AccountsProps> = ({
                           >
                             <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <span>Bordro</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleShowNoteReceipt(n);
+                              setIsReceiptWhatsAppOpen(true);
+                            }}
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Senet Bordrosu / Dekontunu WhatsApp ile Paylaş"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>WhatsApp</span>
                           </button>
                           <button
                             type="button"
@@ -5280,6 +5176,18 @@ export const Accounts: React.FC<AccountsProps> = ({
                             >
                               <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                               <span>Dekont</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleShowVirmanReceipt(tx);
+                                setIsReceiptWhatsAppOpen(true);
+                              }}
+                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Virman Dekontunu WhatsApp ile Paylaş"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>WhatsApp</span>
                             </button>
                             <button
                               type="button"

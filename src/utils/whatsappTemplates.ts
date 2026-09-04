@@ -127,6 +127,40 @@ export function formatTransactionWhatsAppMessage(
   return `Sayın *${contactName}*,\n\n*${companyName}* mali kayıtlarında gerçekleştirilen *${docNo}* numaralı *${typeLabel}* düzenlenmiştir.\n\n💵 *İşlem Tutarı:* ${amount}\n📅 *İşlem Tarihi:* ${formatDate(tx.date)}\n🏛️ *Hesap / Kasa:* ${tx.accountName}\n📝 *Açıklama:* ${tx.description}\n\nİşlem dekontunuz ekte yer almaktadır.\nİyi çalışmalar dileriz.`;
 }
 
+export function formatReceiptWhatsAppMessage(
+  receipt: {
+    documentTitle: string;
+    documentNo: string;
+    date: string;
+    time?: string;
+    accountName?: string;
+    bankName?: string;
+    iban?: string;
+    contactName?: string;
+    statusText?: string;
+    amount: number;
+    currency?: string;
+    description?: string;
+  },
+  companySettings?: CompanySettings | null
+): string {
+  const companyName = companySettings?.companyTitle || companySettings?.companyName || "Şirketimiz";
+  const contactName = receipt.contactName || "Sayın İlgili";
+  const currency = receipt.currency || "TRY";
+  const amount = formatCurrency(receipt.amount, currency);
+
+  let text = `Sayın *${contactName}*,\n\n*${companyName}* bünyesinde gerçekleştirilen işleme ait *${receipt.documentNo}* numaralı *${receipt.documentTitle}* düzenlenmiştir.\n\n`;
+  text += `💵 *İşlem Tutarı:* ${amount}\n`;
+  text += `📅 *İşlem Tarihi:* ${receipt.date}${receipt.time ? ` ${receipt.time}` : ""}\n`;
+  if (receipt.accountName) text += `🏛️ *Hesap / Kasa:* ${receipt.accountName}\n`;
+  if (receipt.bankName) text += `🏦 *Banka:* ${receipt.bankName}\n`;
+  if (receipt.iban) text += `💳 *IBAN:* ${receipt.iban}\n`;
+  if (receipt.statusText) text += `📌 *Durum:* ${receipt.statusText}\n`;
+  if (receipt.description) text += `📝 *Açıklama:* ${receipt.description}\n`;
+  text += `\nResmi finans dekontunuz ekte PDF olarak sunulmuştur.\nİyi çalışmalar dileriz.\n*${companyName}*`;
+  return text;
+}
+
 export function formatETebligatWhatsAppMessage(
   tebligat: ETebligatItem,
   companySettings?: CompanySettings | null

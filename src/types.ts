@@ -1799,6 +1799,229 @@ export interface WhatsAppTemplate {
   createdAt?: string;
 }
 
+// ==========================================
+// 🏭 SEKTÖR YÖNETİMİ & ÜRETİM MODÜLÜ TİPLERİ
+// ==========================================
+
+export type IndustrySectorId =
+  | "catering" // Yemek Fabrikası & Catering (Endüstriyel Mutfak)
+  | "textile" // Tekstil & Hazır Giyim (Konfeksiyon)
+  | "furniture" // Mobilya & Ahşap İmalatı
+  | "metal_machinery" // Metal, Sac & Makine İmalatı
+  | "plastics" // Plastik & Ambalaj
+  | "chemicals" // Kimya, Kozmetik & Temizlik
+  | "custom"; // Özel Tanımlı Sektör
+
+export interface IndustrySector {
+  id: IndustrySectorId | string;
+  name: string; // Örn: "Yemek Fabrikası & Catering"
+  shortCode: string; // Örn: "YMK"
+  icon: string; // Lucide icon name
+  badgeColor: string;
+  description: string;
+  isActive: boolean; // Kullanımda olan sektör mü?
+  features: string[];
+  workflowStages: string[];
+  sampleItems: string[];
+  customFields?: { key: string; label: string; type: "text" | "number" | "select"; options?: string[] }[];
+  createdAt?: string;
+}
+
+// 🍲 YEMEK FABRİKASI (CATERING & ENDÜSTRİYEL MUTFAK) TİPLERİ
+
+export type FoodCategory =
+  | "soup" // Çorba
+  | "main_meat" // Etli / Tavuklu Ana Yemek
+  | "main_veg" // Sebzeli / Bakliyat Ana Yemek
+  | "side_dish" // Pilav, Makarna, Börek, Püre
+  | "salad_appetizer" // Salata, Meze, Yoğurt, Cacık
+  | "dessert_fruit" // Tatlı, Meyve, Komposto
+  | "breakfast_ration" // Kahvaltı, Sandviç, Kumanya
+  | "bakery" // Ekmek, Pide, Unlu Mamuller
+  | "beverage"; // İçecek (Ayran, Meyve Suyu vb.)
+
+export interface FoodIngredientItem {
+  id: string;
+  productId?: string; // Stoklardaki hammadde ile eşleşme
+  productCode?: string;
+  name: string; // Dana Kuşbaşı, Pilavlık Pirinç, Ayçiçek Yağı, Soğan, Salça, Tuz vb.
+  portionGrams: number; // 1 Porsiyon için miktar (gram veya ml veya adet)
+  unit: "g" | "kg" | "ml" | "lt" | "adet" | "paket";
+  unitCost: number; // KG veya LT birim maliyeti (TL)
+  portionCost: number; // 1 Porsiyondaki maliyet tutarı (TL)
+  wastagePercent: number; // Zayiat / Fire Oranı (% örn: sebze soyma %10, et pişme çekme %20)
+  allergen?: string; // Gluten, Laktoz, Kereviz, Yumurta, vb.
+}
+
+export interface FoodRecipe {
+  id: string;
+  recipeCode: string; // REC-YMK-001
+  name: string; // Örn: "Dana Tas Kebabı"
+  category: FoodCategory;
+  categoryLabel: string;
+  standardPortionGrams: number; // Toplam porsiyon gramajı (örn: 220 gr)
+  servingsCount: number; // Reçete baz porsiyon sayısı (genelde 1 veya 100 porsiyon)
+  ingredients: FoodIngredientItem[];
+  portionCost: number; // 1 porsiyon hammadde maliyeti (TL)
+  laborCostPerPortion?: number; // Mutfak personeli işçilik gideri (TL)
+  gasEnergyCostPerPortion?: number; // Doğalgaz, tüp, elektrik & enerji gideri (TL)
+  overheadCostPerPortion?: number; // Diğer genel imalat giderleri & amortisman (TL)
+  laborAndOverheadPerPortion: number; // Toplam mutfak işçilik + gaz/enerji + genel gider payı (TL)
+  totalCostPerPortion: number; // Toplam maliyet (Hammadde + İşçilik + Gaz/Enerji + Genel Gider) (TL)
+  suggestedSalePrice: number; // Önerilen Satış Fiyatı (TL)
+  cookingTimeMinutes: number; // Pişirme süresi (dk)
+  prepTimeMinutes: number; // Hazırlık süresi (dk)
+  caloriePerPortion: number; // Kalori (kcal)
+  proteinGrams?: number;
+  carbGrams?: number;
+  fatGrams?: number;
+  allergens: string[]; // Gluten, Süt/Laktoz, vb.
+  cookingInstructions?: string; // Pişirme Talimatı / Mutfak Notu
+  storageTemp?: string; // Servis sıcaklığı (+65°C sıcak / +4°C soğuk)
+  isApproved: boolean; // Gıda Mühendisi / Aşçıbaşı Onayı
+  approvedBy?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MealType = "lunch" | "dinner" | "breakfast" | "night_shift" | "diet" | "event";
+export type MenuTier = "standard_4_course" | "premium_5_course" | "diet_healthy" | "construction_hearty" | "vip";
+
+export interface FoodMenuItem {
+  soupRecipeId?: string;
+  soupRecipeName?: string;
+  mainRecipeId: string;
+  mainRecipeName: string;
+  sideRecipeId?: string;
+  sideRecipeName?: string;
+  dessertOrSaladRecipeId?: string;
+  dessertOrSaladRecipeName?: string;
+  additionalItemNames?: string[]; // Ekmek, Ayran, Su vb.
+}
+
+export interface FoodMenuPlan {
+  id: string;
+  menuCode: string; // MNU-2026-W36-01
+  date: string; // YYYY-MM-DD
+  dayOfWeek: "Pazartesi" | "Salı" | "Çarşamba" | "Perşembe" | "Cuma" | "Cumartesi" | "Pazar";
+  mealType: MealType;
+  menuTier: MenuTier;
+  title: string; // Örn: "4 Kap Standart Tabldot Öğle Menüsü"
+  items: FoodMenuItem;
+  totalCalorie: number;
+  totalCostPerPortion: number;
+  sellingPricePerPortion: number;
+  targetPortionsTotal?: number;
+  allergensList: string[];
+  isLocked: boolean; // Menü onaylandı ve kilitlendi
+  notes?: string;
+}
+
+export type FoodOrderStatus =
+  | "planned" // Üretim Planlandı
+  | "ingredients_issued" // Hammadde Depodan Çıktı / Mutfakta
+  | "cooking" // Kazanlarda Pişiriliyor
+  | "portioning" // Termobox / Sefer Tası Dolumu Yapılıyor
+  | "ready_for_dispatch" // Sevkiyata Hazır / Araç Yüklemede
+  | "dispatched" // Dağıtımda / Yolda
+  | "completed" // Teslim Edildi & Tutanak İmzalandı
+  | "cancelled"; // İptal
+
+export interface FoodCustomerPortion {
+  contactId?: string;
+  contactName: string; // Müşteri Firma Adı (Örn: ABC İnşaat Şantiye)
+  deliveryAddress: string; // Teslimat Adresi
+  contactPerson?: string;
+  phone?: string;
+  portionCount: number; // Talep edilen porsiyon adedi
+  menuVariant?: string; // Standart, Diyet (örn: 10 diyet, 240 normal)
+  dietPortionCount?: number;
+  specialInstructions?: string; // "Saat 11:30'da sıcak teslim edilsin"
+  termoboxCount?: number; // Kaç adet termobox ile teslim edilecek
+  breadCount?: number;
+  ayranWaterCount?: number;
+  isDelivered?: boolean;
+  deliveryTime?: string;
+  receivedBy?: string;
+}
+
+export interface FoodProductionOrder {
+  id: string;
+  orderNo: string; // URT-2026-YMK-001
+  date: string; // YYYY-MM-DD
+  mealType: MealType;
+  menuPlanId?: string;
+  menuTitle: string;
+  recipes: { recipeId: string; recipeName: string; portionCount: number }[];
+  customerPortions: FoodCustomerPortion[];
+  totalPortions: number; // Toplam üretilecek porsiyon
+  status: FoodOrderStatus;
+  headChefName: string; // Sorumlu Aşçıbaşı
+  kitchenSection: string; // Sıcak Mutfak, Soğuk/Salata, Tatlıhane, Paketleme
+  scheduledStartTime: string; // 06:00
+  scheduledDispatchTime: string; // 11:00
+  actualStartTime?: string;
+  actualCompletionTime?: string;
+  ingredientsRequired: {
+    productId?: string;
+    productName: string;
+    totalAmount: number;
+    unit: string;
+    currentStock: number;
+    isStockSufficient: boolean;
+    unitCost: number;
+    totalCost: number;
+  }[];
+  totalProductionCost: number;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface FoodDispatchDelivery {
+  id: string;
+  dispatchNo: string; // SVK-2026-0042
+  date: string;
+  mealType: MealType;
+  productionOrderId: string;
+  vehiclePlate: string; // 34 YMK 505
+  driverName: string; // Ahmet Kaptan
+  driverPhone?: string;
+  deliveries: {
+    contactId?: string;
+    contactName: string;
+    address: string;
+    contactPhone?: string;
+    portionCount: number;
+    termoboxCount: number;
+    dispatchedTime?: string;
+    estimatedArrivalTime?: string;
+    actualDeliveryTime?: string;
+    receivedBy?: string;
+    status: "pending" | "on_the_way" | "delivered" | "failed";
+    deliveryNoteNo?: string;
+  }[];
+  status: "preparing" | "loaded" | "on_route" | "completed";
+  notes?: string;
+}
+
+export interface FoodWitnessSample {
+  id: string;
+  sampleNo: string; // SMP-2026-0120
+  date: string;
+  mealType: MealType;
+  dishName: string; // Örn: Mercimek Çorbası, Dana Tas Kebabı
+  productionOrderNo: string;
+  sampleTempCelsius: number; // Örn: 72°C (Pişme anı sıcaklığı)
+  storageTempCelsius: number; // Örn: +4°C (Numune dolabı)
+  takenBy: string; // Numuneyi alan gıda teknikeri / aşçı
+  takenAtTime: string; // 10:45
+  retentionHours: number; // Standart: 72 saat
+  disposeDate: string; // İmha Edileceği Tarih
+  status: "retained" | "tested_clean" | "tested_issue" | "disposed";
+  notes?: string;
+}
+
 
 
 

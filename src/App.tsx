@@ -3,29 +3,57 @@ import { Sidebar, NavItem } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Dashboard } from "./components/Dashboard";
 import { AuthModal, UserProfile, BRAND_LOGOS } from "./components/AuthModal";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
+
+// Self-healing dynamic import wrapper with retries for network resilience
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+  retries = 3,
+  interval = 800
+): React.LazyExoticComponent<T> {
+  return lazy(() =>
+    new Promise<{ default: T }>((resolve, reject) => {
+      const attempt = (remaining: number) => {
+        factory()
+          .then(resolve)
+          .catch((error) => {
+            console.warn("Failed to dynamically load module, retrying...", error);
+            if (remaining <= 1) {
+              reject(error);
+            } else {
+              setTimeout(() => attempt(remaining - 1), interval);
+            }
+          });
+      };
+      attempt(retries);
+    })
+  );
+}
 
 // Lazy-loaded heavy tab modules for fast initial page load and automatic code splitting
-const Contacts = lazy(() => import("./components/Contacts").then((m) => ({ default: m.Contacts })));
-const Invoices = lazy(() => import("./components/Invoices").then((m) => ({ default: m.Invoices })));
-const Quotes = lazy(() => import("./components/Quotes").then((m) => ({ default: m.Quotes })));
-const Orders = lazy(() => import("./components/Orders").then((m) => ({ default: m.Orders })));
-const Waybills = lazy(() => import("./components/Waybills").then((m) => ({ default: m.Waybills })));
-const Accounts = lazy(() => import("./components/Accounts").then((m) => ({ default: m.Accounts })));
-const Transactions = lazy(() => import("./components/Transactions").then((m) => ({ default: m.Transactions })));
-const Products = lazy(() => import("./components/Products").then((m) => ({ default: m.Products })));
-const Reports = lazy(() => import("./components/Reports").then((m) => ({ default: m.Reports })));
-const AiAssistant = lazy(() => import("./components/AiAssistant").then((m) => ({ default: m.AiAssistant })));
-const Settings = lazy(() => import("./components/Settings").then((m) => ({ default: m.Settings })));
-const CompanyManagement = lazy(() => import("./components/CompanyManagement").then((m) => ({ default: m.CompanyManagement })));
-const EServices = lazy(() => import("./components/EServices").then((m) => ({ default: m.EServices })));
-const EDocuments = lazy(() => import("./components/EDocuments"));
-const HRManagement = lazy(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement })));
-const FileManager = lazy(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
-const AdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
-const WhatsAppCenter = lazy(() => import("./components/WhatsAppCenter").then((m) => ({ default: m.WhatsAppCenter })));
-const AutoServiceModule = lazy(() => import("./components/AutoService/AutoServiceModule").then((m) => ({ default: m.AutoServiceModule })));
-const ITServiceModule = lazy(() => import("./components/ITService/ITServiceModule").then((m) => ({ default: m.ITServiceModule })));
-const ApplianceServiceModule = lazy(() => import("./components/ApplianceService/ApplianceServiceModule").then((m) => ({ default: m.ApplianceServiceModule })));
+const Contacts = lazyWithRetry(() => import("./components/Contacts").then((m) => ({ default: m.Contacts })));
+const Invoices = lazyWithRetry(() => import("./components/Invoices").then((m) => ({ default: m.Invoices })));
+const Quotes = lazyWithRetry(() => import("./components/Quotes").then((m) => ({ default: m.Quotes })));
+const Orders = lazyWithRetry(() => import("./components/Orders").then((m) => ({ default: m.Orders })));
+const Waybills = lazyWithRetry(() => import("./components/Waybills").then((m) => ({ default: m.Waybills })));
+const Accounts = lazyWithRetry(() => import("./components/Accounts").then((m) => ({ default: m.Accounts })));
+const Transactions = lazyWithRetry(() => import("./components/Transactions").then((m) => ({ default: m.Transactions })));
+const Products = lazyWithRetry(() => import("./components/Products").then((m) => ({ default: m.Products })));
+const Reports = lazyWithRetry(() => import("./components/Reports").then((m) => ({ default: m.Reports })));
+const AiAssistant = lazyWithRetry(() => import("./components/AiAssistant").then((m) => ({ default: m.AiAssistant })));
+const Settings = lazyWithRetry(() => import("./components/Settings").then((m) => ({ default: m.Settings })));
+const CompanyManagement = lazyWithRetry(() => import("./components/CompanyManagement").then((m) => ({ default: m.CompanyManagement })));
+const EServices = lazyWithRetry(() => import("./components/EServices").then((m) => ({ default: m.EServices })));
+const EDocuments = lazyWithRetry(() => import("./components/EDocuments"));
+const HRManagement = lazyWithRetry(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement })));
+const FileManager = lazyWithRetry(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
+const AdminDashboard = lazyWithRetry(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
+const WhatsAppCenter = lazyWithRetry(() => import("./components/WhatsAppCenter").then((m) => ({ default: m.WhatsAppCenter })));
+const AutoServiceModule = lazyWithRetry(() => import("./components/AutoService/AutoServiceModule").then((m) => ({ default: m.AutoServiceModule })));
+const ITServiceModule = lazyWithRetry(() => import("./components/ITService/ITServiceModule").then((m) => ({ default: m.ITServiceModule })));
+const ApplianceServiceModule = lazyWithRetry(() => import("./components/ApplianceService/ApplianceServiceModule").then((m) => ({ default: m.ApplianceServiceModule })));
+const ProductionModule = lazyWithRetry(() => import("./components/Production/ProductionModule").then((m) => ({ default: m.ProductionModule || (m as any).default })));
+const SectorsModule = lazyWithRetry(() => import("./components/Sectors/SectorsModule").then((m) => ({ default: m.SectorsModule })));
 
 import {
   getStoredData,
@@ -1487,6 +1515,10 @@ export default function App() {
         return "Siparişler & Sipariş Oluştur";
       case "orders_module":
         return "Sipariş & Proforma";
+      case "production":
+        return "Üretim Yönetimi";
+      case "sectors":
+        return "Sektör Yönetimi & Mimarisi";
       case "waybills":
         return "İrsaliye Oluştur (Yerel)";
       case "waybills_dispatch":
@@ -1574,7 +1606,8 @@ export default function App() {
         />
 
         <main className="flex-1 pb-12 bg-slate-100">
-          <Suspense fallback={<TabLoadingSkeleton />}>
+          <ErrorBoundary key={currentTab}>
+            <Suspense fallback={<TabLoadingSkeleton />}>
             {currentTab === "dashboard" && (
             <Dashboard
               contacts={data.contacts}
@@ -1718,6 +1751,7 @@ export default function App() {
                   ? "expense"
                   : undefined
               }
+              companySettings={data.settings}
               onAddTransaction={handleAddTransaction}
               onUpdateTransaction={handleUpdateTransaction}
               onDeleteTransaction={handleDeleteTransaction}
@@ -1759,6 +1793,54 @@ export default function App() {
               onConvertOrderToInvoice={handleConvertOrderToInvoice}
               onDeleteOrder={handleDeleteOrder}
             />
+          )}
+
+          {currentTab === "production" && (
+            <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+              <ProductionModule
+                sectors={data.sectors || []}
+                activeSectorId={data.activeSectorId || "catering"}
+                foodRecipes={data.foodRecipes || []}
+                foodMenus={data.foodMenus || []}
+                foodProductionOrders={data.foodProductionOrders || []}
+                foodDispatches={data.foodDispatches || []}
+                foodWitnessSamples={data.foodWitnessSamples || []}
+                products={data.products || []}
+                contacts={data.contacts || []}
+                settings={data.settings}
+                onNavigateToSectors={() => setCurrentTab("sectors")}
+                onUpdateSectors={(updatedSectors, activeId) => {
+                  setData((prev) => ({
+                    ...prev,
+                    sectors: updatedSectors,
+                    activeSectorId: activeId,
+                  }));
+                }}
+              />
+            </div>
+          )}
+
+          {currentTab === "sectors" && (
+            <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+              <SectorsModule
+                sectors={data.sectors || []}
+                activeSectorId={data.activeSectorId || "catering"}
+                onSelectActiveSector={(secId) => {
+                  setData((prev) => ({
+                    ...prev,
+                    activeSectorId: secId,
+                  }));
+                }}
+                onNavigateToProduction={() => setCurrentTab("production")}
+                onUpdateSectors={(updatedSectors, activeId) => {
+                  setData((prev) => ({
+                    ...prev,
+                    sectors: updatedSectors,
+                    activeSectorId: activeId,
+                  }));
+                }}
+              />
+            </div>
           )}
 
           {(currentTab === "waybills_dispatch" || currentTab === "waybills_receipt") && (
@@ -1939,7 +2021,8 @@ export default function App() {
               onResetDemoData={handleResetDemoData}
             />
           )}
-          </Suspense>
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Transaction, Account, Contact, TransactionType, Product, InvoiceItem, getContactAccountCode } from "../types";
+import { Transaction, Account, Contact, TransactionType, Product, InvoiceItem, getContactAccountCode, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { formatTransactionWhatsAppMessage } from "../utils/whatsappTemplates";
@@ -33,6 +33,7 @@ interface TransactionsProps {
   products?: Product[];
   forcedType?: "income" | "expense";
   globalSearchTerm?: string;
+  companySettings?: CompanySettings | null;
   onAddTransaction: (tx: Transaction) => void;
   onUpdateTransaction?: (tx: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
@@ -97,6 +98,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
   products = [],
   forcedType,
   globalSearchTerm = "",
+  companySettings,
   onAddTransaction,
   onDeleteTransaction,
 }) => {
@@ -109,6 +111,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
     detailNav.backToList();
     setIsModalOpen(false);
     setViewingTx(null);
+    setWhatsAppTx(null);
   };
 
   const [filterType, setFilterType] = useState<string>(forcedType || "all");
@@ -740,6 +743,31 @@ export const Transactions: React.FC<TransactionsProps> = ({
           </form>
         </div>
       </DetailPageLayout>
+    );
+  }
+
+  // =========================================================================
+  // WHATSAPP SHARE MODAL FOR TRANSACTIONS
+  // =========================================================================
+  if (whatsAppTx) {
+    const matchedContact = contacts.find(
+      (c) => c.id === whatsAppTx.contactId || c.name === whatsAppTx.contactName
+    );
+    const recipientPhone = matchedContact?.phone || matchedContact?.mobile || "";
+
+    return (
+      <UniversalWhatsAppModal
+        isOpen={true}
+        onClose={() => setWhatsAppTx(null)}
+        title={`WhatsApp ile İşlem Dekontu Paylaş - ${whatsAppTx.documentNo || whatsAppTx.id.slice(0, 8)}`}
+        documentTypeLabel="İşlem Fişi / Dekont"
+        recipientName={whatsAppTx.contactName || whatsAppTx.accountName || "Sayın İlgili"}
+        recipientPhone={recipientPhone}
+        defaultMessage={formatTransactionWhatsAppMessage(whatsAppTx, companySettings, matchedContact)}
+        documentFileName={`Dekont_${whatsAppTx.documentNo || whatsAppTx.id.slice(0, 8)}.pdf`}
+        companySettings={companySettings}
+        onSuccess={() => setWhatsAppTx(null)}
+      />
     );
   }
 
