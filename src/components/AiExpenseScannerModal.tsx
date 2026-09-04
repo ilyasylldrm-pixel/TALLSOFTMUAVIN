@@ -24,11 +24,16 @@ import {
   Zap,
   Globe,
   Copy,
-  AlertCircle
+  AlertCircle,
+  RotateCw,
+  QrCode,
+  CheckCheck,
+  UserCheck,
+  UserPlus
 } from "lucide-react";
 import { Contact, Account, Invoice, EXPENSE_CATEGORIES, InvoiceTaxItem, TaxType } from "../types";
 import { parseXmlInvoice } from "../utils/xmlInvoiceParser";
-import { parseTurkishReceiptText, ParsedAccountingData } from "../utils/turkishReceiptParser";
+import { parseTurkishReceiptText, validateVKN, validateTCKN, parseGibQrCode, ParsedAccountingData } from "../utils/turkishReceiptParser";
 import { processDocumentWithLocalOcr } from "../utils/turkishOcrService";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 
@@ -52,6 +57,10 @@ export type ExtractedExpenseData = {
   paymentMethod?: "Nakit" | "Kredi Kartı" | "Banka Transferi / EFT" | "Çek" | "Senet" | "Açık Hesap / Vadeli";
   expenseCategory?: string;
   notes?: string;
+  ettn?: string;
+  iban?: string;
+  buyerTaxNumber?: string;
+  isQrDecoded?: boolean;
 };
 
 interface AiExpenseScannerModalProps {
@@ -119,6 +128,7 @@ Fatura Tipi: SATIS
 Fatura No: GKA2024000000098
 Fatura Tarihi: 17-05-2024
 Fatura Saati: 14:32:36
+ETTN: ac3cb695-282a-4060-a700-ad3268d3595c
 
 Sıra No | Malzeme/ Hizmet Açıklaması | Miktar | Birim Fiyatı | KDV Oranı | KDV Tutarı | Mal Hizmet Tutarı
 1 | LAMİNANT PARKE 2.K | 3.000,00 M2 | 125,00 TL | %20,00 | 75.000,00 TL | 375.000,00 TL
@@ -129,6 +139,23 @@ Vergiler Dahil Toplam Tutar 450.000,00 TL
 Ödenecek Tutar 450.000,00 TL
 
 Banka: İŞ BANKASI Şube: KARATAY SANAYİ IBAN: TR68 0006 4000 0014 5030 7062 43`;
+
+// Official GİB standard JSON QR code payload
+const SAMPLE_3_GIB_QR_JSON = JSON.stringify({
+  vkntckn: "3901021947",
+  avkntckn: "9970751040",
+  senaryo: "EARSIVFATURA",
+  tip: "SATIS",
+  tarih: "2024-05-17",
+  no: "GKA2024000000098",
+  ettn: "ac3cb695-282a-4060-a700-ad3268d3595c",
+  parabirimi: "TRY",
+  malhizmettoplam: "375000.00",
+  kdvmatrah: "375000.00",
+  hesaplanankdv: "75000.00",
+  vergidahil: "450000.00",
+  odenecek: "450000.00"
+}, null, 2);
 
 export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
   isOpen,
@@ -147,6 +174,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
   const [activeTab, setActiveTab] = useState<"fields" | "rawText">("fields");
   const [rawOcrText, setRawOcrText] = useState<string>("");
   const [copySuccess, setCopySuccess] = useState(false);
+  const [rotationDegrees, setRotationDegrees] = useState<number>(0);
 
   const [extractedData, setExtractedData] = useState<ExtractedExpenseData>({
     taxNumber: "",
@@ -165,6 +193,16 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Check matching contact in system
+  const matchedContact = contacts.find(
+    (c) =>
+      (extractedData.taxNumber && c.taxNumber === extractedData.taxNumber) ||
+      (extractedData.companyTitle && c.name.toLowerCase() === extractedData.companyTitle.trim().toLowerCase())
+  );
+
+  // VKN MOD 10 Checksum Validity
+  const isVknValidGib = validateVKN(extractedData.taxNumber) || validateTCKN(extractedData.taxNumber);
+
   // Apply parsed accounting result to state
   const applyParsedData = (parsed: ParsedAccountingData) => {
     setRawOcrText(parsed.rawText);
@@ -181,6 +219,10 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
       paymentMethod: parsed.paymentMethod,
       expenseCategory: parsed.expenseCategory,
       notes: parsed.notes,
+      ettn: parsed.ettn,
+      iban: parsed.iban,
+      buyerTaxNumber: parsed.buyerTaxNumber,
+      isQrDecoded: parsed.isQrDecoded,
       taxItems: [
         {
           id: `tax_${Date.now()}`,
@@ -194,19 +236,22 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
     });
   };
 
-  // 1. Local OCR (Zero AI cost, offline-first)
-  const triggerLocalOcr = async (file: File) => {
+  // 1. Local Multi-Stage Processing (QR Code, PDF, Adaptive Binarization, OCR)
+  const triggerLocalOcr = async (file: File, rot = rotationDegrees) => {
     setScanning(true);
     setOcrProgress({ percent: 5, message: "Dosya hazırlanıyor..." });
 
     try {
-      const parsed = await processDocumentWithLocalOcr(file, (percent, message) => {
-        setOcrProgress({ percent, message });
-      });
+      const parsed = await processDocumentWithLocalOcr(
+        file,
+        (percent, message) => {
+          setOcrProgress({ percent, message });
+        },
+        { rotationDegrees: rot }
+      );
       applyParsedData(parsed);
     } catch (err: any) {
       console.error("Yerel OCR hatası, Gemini AI yedek moduna yönlendiriliyor:", err);
-      // Automatically fallback to cloud AI if local fails
       if (filePreview) {
         triggerGeminiAiOcr(file, filePreview);
       } else {
@@ -312,6 +357,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
         return;
       }
       setSelectedFile(file);
+      setRotationDegrees(0);
 
       const isXml = file.name.toLowerCase().endsWith(".xml") || file.type.includes("xml");
 
@@ -324,7 +370,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
           if (parsed.success && parsed.data) {
             setExtractedData(parsed.data);
           } else {
-            triggerLocalOcr(file);
+            triggerLocalOcr(file, 0);
           }
         };
         textReader.readAsText(file);
@@ -341,13 +387,21 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
           setFilePreview(base64);
 
           if (ocrEngine === "local") {
-            triggerLocalOcr(file);
+            triggerLocalOcr(file, 0);
           } else {
             triggerGeminiAiOcr(file, base64);
           }
         };
         reader.readAsDataURL(file);
       }
+    }
+  };
+
+  const handleRotateClockwise = () => {
+    const nextRot = (rotationDegrees + 90) % 360;
+    setRotationDegrees(nextRot);
+    if (selectedFile && ocrEngine === "local") {
+      triggerLocalOcr(selectedFile, nextRot);
     }
   };
 
@@ -389,13 +443,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
 
   const handleDirectSave = () => {
     const vendorName = extractedData.companyTitle?.trim() || "Gider Tedarikçisi / Satıcı";
-    const existingContact = contacts.find(
-      (c) =>
-        (extractedData.taxNumber && c.taxNumber === extractedData.taxNumber) ||
-        c.name.toLowerCase() === vendorName.toLowerCase()
-    );
-
-    const contactId = existingContact ? existingContact.id : `cnt_ven_${Date.now()}`;
+    const contactId = matchedContact ? matchedContact.id : `cnt_ven_${Date.now()}`;
     const isPaid = extractedData.paymentMethod !== "Açık Hesap / Vadeli";
     const subtotal = extractedData.subtotal || 0;
     const vatAmount = extractedData.vatAmount || 0;
@@ -431,7 +479,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
       paidAmount: isPaid ? grandTotal : 0,
       remainingAmount: isPaid ? 0 : grandTotal,
       currency: "TRY",
-      notes: `${ocrEngine === "local" ? "⚡ Sıfır Maliyetli Yerel OCR" : "🌐 Bulut Gemini AI"} ile tarandı (${selectedFile?.name || "Evrak"}). Tür: ${extractedData.docType || "Fatura"}. Ödeme: ${extractedData.paymentMethod || "Nakit"}. ${extractedData.notes || ""}`.trim(),
+      notes: `${ocrEngine === "local" ? "⚡ Sıfır Maliyetli Yerel OCR" : "🌐 Bulut Gemini AI"} ile tarandı (${selectedFile?.name || "Evrak"}). Tür: ${extractedData.docType || "Fatura"}. Ödeme: ${extractedData.paymentMethod || "Nakit"}. ${extractedData.ettn ? "ETTN: " + extractedData.ettn : ""} ${extractedData.iban ? "IBAN: " + extractedData.iban : ""} ${extractedData.notes || ""}`.trim(),
       items: [
         {
           id: `item_${Date.now()}`,
@@ -462,19 +510,19 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
 
   const handleApplyToForm = () => {
     if (onApplyToForm) {
-      const vendorName = extractedData.companyTitle?.trim() || "";
-      const existingContact = contacts.find(
-        (c) =>
-          (extractedData.taxNumber && c.taxNumber === extractedData.taxNumber) ||
-          c.name.toLowerCase() === vendorName.toLowerCase()
-      );
-      onApplyToForm(extractedData, existingContact?.id);
+      onApplyToForm(extractedData, matchedContact?.id);
     }
     onClose();
   };
 
   // Quick test with sample texts
-  const runQuickTest = (type: "fuel" | "invoice") => {
+  const runQuickTest = (type: "fuel" | "invoice" | "gib_qr") => {
+    if (type === "gib_qr") {
+      const parsed = parseTurkishReceiptText(SAMPLE_3_GIB_QR_JSON, "gib_resmi_karekod.json");
+      applyParsedData(parsed);
+      setSelectedFile(new File([SAMPLE_3_GIB_QR_JSON], "gib_karekod_ornegi.json", { type: "application/json" }));
+      return;
+    }
     const text = type === "fuel" ? SAMPLE_1_FUEL_TEXT : SAMPLE_2_INVOICE_TEXT;
     const dummyFile = new File([text], type === "fuel" ? "akaryakit_pompa_fisi.png" : "resmi_earciv_fatura.pdf", {
       type: type === "fuel" ? "image/png" : "application/pdf"
@@ -491,7 +539,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
   return (
     <DetailPageLayout
       title="Akıllı Fiş & Fatura OCR Tarayıcı"
-      subtitle="PDF veya görsel yükleyin; VKN, Fiş No, Matrah, KDV ve Ödeme bilgileri yapay zeka maliyeti olmadan anında çıkarılsın"
+      subtitle="GİB Karekod çözücü, resmi VKN MOD 10 doğrulaması ve yerel Türkçe OCR ile sıfır yapay zeka maliyetiyle faturaları aktarın"
       breadcrumbs={[
         { label: "Faturalar", onClick: onClose },
         { label: "Akıllı OCR Tarayıcı", active: true },
@@ -502,7 +550,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
           {ocrEngine === "local" ? (
             <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-black px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
               <Zap className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
-              <span>SIFIR MALİYETLİ YEREL OCR</span>
+              <span>SIFIR MALİYETLİ YEREL MOTOR</span>
             </span>
           ) : (
             <span className="bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-1.5">
@@ -525,12 +573,12 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
         </div>
       }
     >
-      <div className="bg-white border border-purple-200/80 rounded-3xl max-w-5xl mx-auto shadow-sm p-5 sm:p-6 space-y-6">
+      <div className="bg-white border border-purple-200/80 rounded-3xl max-w-5xl mx-auto shadow-sm p-5 sm:p-6 space-y-5">
         
-        {/* Engine Switcher Ribbon (Local Zero-Cost vs Cloud AI) */}
+        {/* Engine Switcher Ribbon & Quick Test Buttons */}
         <div className="bg-gradient-to-r from-purple-50 via-slate-50 to-indigo-50/60 p-3 rounded-2xl border border-purple-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-extrabold text-slate-800">Çalışma Motoru:</span>
+            <span className="text-xs font-extrabold text-slate-800">Motor:</span>
             <div className="inline-flex p-1 bg-white rounded-xl border border-purple-200 shadow-2xs">
               <button
                 type="button"
@@ -542,7 +590,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                 }`}
               >
                 <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-                <span>⚡ Yerel OCR (Sıfır Maliyet / Çevrimdışı)</span>
+                <span>⚡ Yerel OCR (Sıfır Maliyet)</span>
               </button>
               <button
                 type="button"
@@ -554,13 +602,13 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                 }`}
               >
                 <Globe className="w-3.5 h-3.5 text-slate-400" />
-                <span>🌐 Bulut Gemini AI (Yedek)</span>
+                <span>🌐 Bulut Gemini AI</span>
               </button>
             </div>
           </div>
 
-          {/* Quick Test Buttons with user uploaded samples */}
-          <div className="flex items-center gap-2">
+          {/* Quick Test Demo Buttons */}
+          <div className="flex items-center flex-wrap gap-1.5">
             <span className="text-[11px] font-bold text-slate-500">Hızlı Test:</span>
             <button
               type="button"
@@ -576,11 +624,19 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
             >
               📄 Örnek 2 (e-Arşiv Fatura)
             </button>
+            <button
+              type="button"
+              onClick={() => runQuickTest("gib_qr")}
+              className="px-2.5 py-1 text-[11px] font-black bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-lg cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
+            >
+              <QrCode className="w-3 h-3 text-emerald-700" />
+              <span>GİB Karekod</span>
+            </button>
           </div>
         </div>
 
-        {/* File Upload Dropzone */}
-        <div className="relative border-2 border-dashed border-purple-300 hover:border-purple-600 bg-purple-50/40 hover:bg-purple-50/80 p-5 rounded-2xl text-center transition-all cursor-pointer group">
+        {/* File Upload Dropzone with Rotation Controls */}
+        <div className="relative border-2 border-dashed border-purple-300 hover:border-purple-600 bg-purple-50/40 hover:bg-purple-50/80 p-4 sm:p-5 rounded-2xl text-center transition-all cursor-pointer group">
           <input
             type="file"
             accept="image/*,.pdf,.xml,.xlsx,.csv"
@@ -596,26 +652,42 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                 {selectedFile ? selectedFile.name : "Fiş, Fatura veya PDF Belgesi Seçin ya da Sürükleyin"}
               </h4>
               <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
-                PDF (dijital veya taranmış), JPG, PNG, WebP veya e-Fatura XML formatında masraf/akaryakıt fişi ya da gider faturası (Max 15 MB)
+                PDF (dijital veya taranmış), JPG, PNG, WebP veya e-Fatura XML formatında belge (Max 15 MB)
               </p>
             </div>
             {selectedFile && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (ocrEngine === "local") {
-                    triggerLocalOcr(selectedFile);
-                  } else if (filePreview) {
-                    triggerGeminiAiOcr(selectedFile, filePreview);
-                  }
-                }}
-                disabled={scanning}
-                className="sm:ml-auto z-20 text-xs font-extrabold text-purple-900 bg-white hover:bg-purple-100 px-3.5 py-2 rounded-xl border border-purple-300 flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${scanning ? "animate-spin text-purple-600" : ""}`} />
-                <span>Yeniden Tara</span>
-              </button>
+              <div className="sm:ml-auto z-20 flex items-center gap-2">
+                {/* 90° Clockwise Rotate Button for Sideways Photos */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRotateClockwise();
+                  }}
+                  title="Görseli 90° Sağa Döndür"
+                  className="p-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl shadow-2xs flex items-center gap-1 text-xs font-bold cursor-pointer transition-colors"
+                >
+                  <RotateCw className="w-3.5 h-3.5 text-purple-700" />
+                  <span>Döndür ({rotationDegrees}°)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (ocrEngine === "local") {
+                      triggerLocalOcr(selectedFile, rotationDegrees);
+                    } else if (filePreview) {
+                      triggerGeminiAiOcr(selectedFile, filePreview);
+                    }
+                  }}
+                  disabled={scanning}
+                  className="text-xs font-extrabold text-purple-900 bg-white hover:bg-purple-100 px-3.5 py-2 rounded-xl border border-purple-300 flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${scanning ? "animate-spin text-purple-600" : ""}`} />
+                  <span>Yeniden Tara</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -638,6 +710,58 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
             </div>
           </div>
         )}
+
+        {/* Live Validation Badges Ribbon */}
+        <div className="flex items-center flex-wrap gap-2 text-xs">
+          {/* GİB QR Badge */}
+          {extractedData.isQrDecoded && (
+            <span className="bg-indigo-50 text-indigo-900 border border-indigo-300 px-2.5 py-1 rounded-xl font-black flex items-center gap-1 shadow-2xs">
+              <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+              <span>GİB Resmi Karekod Okundu (%100 Doğruluk)</span>
+            </span>
+          )}
+
+          {/* VKN MOD 10 Badge */}
+          {extractedData.taxNumber && (
+            <span
+              className={`px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 border shadow-2xs ${
+                isVknValidGib
+                  ? "bg-emerald-50 text-emerald-900 border-emerald-300 font-black"
+                  : "bg-slate-100 text-slate-700 border-slate-300"
+              }`}
+            >
+              {isVknValidGib ? <CheckCheck className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{isVknValidGib ? "GİB MOD 10 Doğrulanmış VKN: " : "VKN: "}{extractedData.taxNumber}</span>
+            </span>
+          )}
+
+          {/* Matrah + KDV = Toplam Check */}
+          {extractedData.grandTotal > 0 && (
+            <span
+              className={`px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 border shadow-2xs ${
+                mathIsConsistent
+                  ? "bg-emerald-50 text-emerald-900 border-emerald-300 font-black"
+                  : "bg-amber-50 text-amber-900 border-amber-300"
+              }`}
+            >
+              {mathIsConsistent ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-600" />}
+              <span>{mathIsConsistent ? "Matematiksel Eşitlik Sağlandı (Matrah + KDV = Toplam)" : "Tutarları Kontrol Ediniz"}</span>
+            </span>
+          )}
+
+          {/* Contact Match Badge */}
+          {matchedContact ? (
+            <span className="bg-purple-50 text-purple-900 border border-purple-300 px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 shadow-2xs">
+              <UserCheck className="w-3.5 h-3.5 text-purple-600" />
+              <span>Kayıtlı Cari: <strong>{matchedContact.name}</strong></span>
+            </span>
+          ) : extractedData.companyTitle ? (
+            <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-xl font-medium flex items-center gap-1">
+              <UserPlus className="w-3.5 h-3.5 text-slate-400" />
+              <span>Yeni Cari (Otomatik Kart Açılır)</span>
+            </span>
+          ) : null}
+        </div>
 
         {/* Inspection Tabs Header */}
         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -671,23 +795,6 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
               )}
             </button>
           </div>
-
-          {/* Cross-Check Math Badge */}
-          {extractedData.grandTotal > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5">
-              {mathIsConsistent ? (
-                <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-black px-2.5 py-1 rounded-lg flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Matematiksel Eşitlik Sağlandı (Matrah + KDV = Toplam)</span>
-                </span>
-              ) : (
-                <span className="bg-amber-50 text-amber-800 border border-amber-300 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Tutarları Gözden Geçiriniz</span>
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Tab 2: Raw Text Inspection View */}
@@ -726,16 +833,9 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                     <Sparkles className="w-4 h-4 text-amber-500" />
                     <span>Okunan Belge ve Satıcı Bilgileri</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {extractedData.taxNumber && (
-                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
-                        VKN: {extractedData.taxNumber}
-                      </span>
-                    )}
-                    <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                      Otomatik Ayrıştırıldı
-                    </span>
-                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                    Otomatik Ayrıştırıldı
+                  </span>
                 </div>
 
                 {/* Satıcı Firma & Vergi No */}
@@ -1146,14 +1246,45 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                   </div>
                 </div>
 
-                {/* Notlar & Tespit Edilen Ek Bilgiler (Plaka, UTTS, IBAN vb.) */}
+                {/* ETTN & IBAN & Notlar */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {extractedData.ettn && (
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        ETTN (Evrensel Fatura Kodu)
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={extractedData.ettn}
+                        className="w-full bg-slate-100 border border-slate-300 rounded-xl p-1.5 text-[11px] font-mono font-bold text-purple-900"
+                      />
+                    </div>
+                  )}
+
+                  {extractedData.iban && (
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Banka IBAN Numarası
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={extractedData.iban}
+                        className="w-full bg-slate-100 border border-slate-300 rounded-xl p-1.5 text-[11px] font-mono font-bold text-blue-900"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Ek Notlar */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Tespit Edilen Belge Notları & Ekstra Detaylar
+                    Tespit Edilen Belge Notları & Detaylar
                   </label>
                   <input
                     type="text"
-                    placeholder="Araç plakası, UTTS onay no, IBAN vb."
+                    placeholder="Araç plakası, UTTS onay no vb."
                     value={extractedData.notes || ""}
                     onChange={(e) => setExtractedData({ ...extractedData, notes: e.target.value })}
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs text-slate-800"
@@ -1232,15 +1363,30 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                 {/* Belge Önizleme (Varsa) */}
                 {filePreview && (
                   <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
-                      Yüklenen Belge Önizlemesi
-                    </span>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-extrabold text-slate-500 uppercase">
+                        Yüklenen Belge Önizlemesi {rotationDegrees !== 0 ? `(${rotationDegrees}° Döndürüldü)` : ""}
+                      </span>
+                      {selectedFile?.type.startsWith("image/") && (
+                        <button
+                          type="button"
+                          onClick={handleRotateClockwise}
+                          className="text-[10px] font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 cursor-pointer"
+                        >
+                          <RotateCw className="w-3 h-3" />
+                          <span>Döndür</span>
+                        </button>
+                      )}
+                    </div>
                     {selectedFile?.type.startsWith("image/") ? (
-                      <img
-                        src={filePreview}
-                        alt="Fiş Önizleme"
-                        className="max-h-48 w-full object-contain rounded-lg border border-slate-100 bg-slate-50"
-                      />
+                      <div className="overflow-hidden flex items-center justify-center bg-slate-50 rounded-lg border border-slate-100 p-1">
+                        <img
+                          src={filePreview}
+                          alt="Fiş Önizleme"
+                          style={{ transform: `rotate(${rotationDegrees}deg)` }}
+                          className="max-h-48 w-full object-contain rounded-lg transition-transform duration-200"
+                        />
+                      </div>
                     ) : (
                       <div className="p-4 text-center text-xs font-bold text-slate-600 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center gap-2">
                         <FileText className="w-5 h-5 text-rose-600" />
