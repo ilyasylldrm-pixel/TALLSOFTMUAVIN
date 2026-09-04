@@ -3409,6 +3409,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
     );
   }
 
+  // AI & OCR EXPENSE SCANNER FULL-PAGE VIEW
+  if (isAiScannerModalOpen) {
+    return (
+      <AiExpenseScannerModal
+        isOpen={isAiScannerModalOpen}
+        onClose={() => setIsAiScannerModalOpen(false)}
+        contacts={contacts}
+        accounts={accounts}
+        onSaveInvoiceDirectly={handleSaveInvoiceDirectlyFromAi}
+        onApplyToForm={handleApplyAiDataToForm}
+      />
+    );
+  }
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Header (Lila Bal Peteği & Geometrik Desen) */}

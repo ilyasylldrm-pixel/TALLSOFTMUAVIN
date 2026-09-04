@@ -1,4 +1,4 @@
-﻿# Logs
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -38,3 +38,7 @@ sessions/
 .idea/
 .DS_Store
 Thumbs.db
+
+# OCR language models
+*.traineddata
+*.traineddata.gz
