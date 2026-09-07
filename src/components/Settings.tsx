@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { CompanySettings } from "../types";
-import { ExchangeRatesWidget } from "./ExchangeRatesWidget";
 import {
   Settings as SettingsIcon,
   Save,
@@ -10,8 +9,6 @@ import {
   Check,
   ShieldCheck,
   Database,
-  Printer,
-  Globe,
   DollarSign,
   FileText,
 } from "lucide-react";
@@ -19,9 +16,10 @@ import {
 interface SettingsProps {
   settings: CompanySettings;
   onSaveSettings: (s: CompanySettings) => void;
-  onExportBackup: () => void;
-  onImportBackup: (jsonStr: string) => boolean;
-  onResetDemoData: () => void;
+  onExportBackup?: () => void;
+  onImportBackup?: (jsonStr: string) => boolean;
+  onResetDemoData?: () => void;
+  embedded?: boolean;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -30,6 +28,7 @@ export const Settings: React.FC<SettingsProps> = ({
   onExportBackup,
   onImportBackup,
   onResetDemoData,
+  embedded = false,
 }) => {
   const [formData, setFormData] = useState<CompanySettings>(settings);
   const [isSaved, setIsSaved] = useState(false);
@@ -43,7 +42,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !onImportBackup) return;
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -62,31 +61,36 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   return (
-    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 rounded-2xl p-6 text-white shadow-md border border-slate-800">
-        <div className="relative z-10 flex items-center justify-between gap-4">
-          <div>
-            <span className="bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-              Sistem Konfigürasyonu
-            </span>
-            <h1 className="text-xl font-black text-white flex items-center gap-2 mt-1">
-              <SettingsIcon className="w-6 h-6 text-indigo-300" />
-              Sistem ve Parametre Ayarları
-            </h1>
-            <p className="text-xs text-indigo-200/90 mt-1 max-w-xl leading-relaxed">
-              Fatura seri/sıra numarası formatı, varsayılan para birimi, KDV oranları ve yerel veri yedekleme/içe aktarma tercihlerini yapılandırın.
-            </p>
+    <div className={embedded ? "space-y-6" : "p-3 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6"}>
+      {/* Header Banner - only when not embedded or styled cleanly */}
+      {!embedded && (
+        <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 rounded-2xl p-6 text-white shadow-md border border-slate-800">
+          <div className="relative z-10 flex items-center justify-between gap-4">
+            <div>
+              <span className="bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                Sistem Konfigürasyonu
+              </span>
+              <h1 className="text-xl font-black text-white flex items-center gap-2 mt-1">
+                <SettingsIcon className="w-6 h-6 text-indigo-300" />
+                Sistem ve Parametre Ayarları
+              </h1>
+              <p className="text-xs text-indigo-200/90 mt-1 max-w-xl leading-relaxed">
+                Fatura seri/sıra numarası formatı, varsayılan para birimi, KDV oranları ve yerel veri yedekleme/içe aktarma tercihlerini yapılandırın.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* System Settings Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5 text-xs">
-          <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
-            <FileText className="w-4 h-4 text-purple-600" />
-            Fatura & Belge Format Parametreleri
+          <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-purple-600" />
+              Fatura & Belge Format Parametreleri
+            </span>
+            <span className="text-[10px] text-slate-500 font-normal">Varsayılan ticari parametreler</span>
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -135,8 +139,6 @@ export const Settings: React.FC<SettingsProps> = ({
           </div>
         </div>
 
-
-
         {/* Action Button */}
         <div className="flex items-center justify-between bg-purple-50/60 p-4 rounded-2xl border border-purple-200/60">
           {isSaved ? (
@@ -160,53 +162,63 @@ export const Settings: React.FC<SettingsProps> = ({
         </div>
       </form>
 
-      {/* Central Bank (TCMB) Exchange Rates Section */}
-      <ExchangeRatesWidget compact={false} />
-
       {/* Backup & Data Recovery */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
-        <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
-          <Database className="w-4 h-4 text-purple-600" />
-          Veri Tabanı Yedekleme, Aktarma ve Sıfırlama
-        </h3>
+      {(onExportBackup || onImportBackup || onResetDemoData) && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
+          <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-purple-600" />
+              Veri Tabanı Yedekleme, Aktarma ve Sıfırlama
+            </span>
+            <span className="text-[10px] text-slate-500 font-normal">Yerel Güvenli Depolama</span>
+          </h3>
 
-        <p className="text-slate-600 leading-relaxed">
-          Uygulama verileriniz (firmalar, şubeler, depolar, faturalar, cari hesaplar, stoklar) taranmış olarak tarayıcınızda saklanmaktadır. İstediğiniz an tam veri yedeği (JSON) indirebilir veya dışarıdan yükleyebilirsiniz.
-        </p>
+          <p className="text-slate-600 leading-relaxed">
+            Uygulama verileriniz (firmalar, şubeler, depolar, faturalar, cari hesaplar, stoklar) güvenle saklanmaktadır. İstediğiniz an tam sistem yedeğini (JSON formatında) indirebilir veya dışarıdan yükleyebilirsiniz.
+          </p>
 
-        <div className="flex flex-wrap items-center gap-3 pt-2">
-          <button
-            onClick={onExportBackup}
-            className="bg-slate-900 hover:bg-slate-950 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
-          >
-            <Download className="w-4 h-4 text-purple-400" />
-            <span>Tüm Sistem Verilerini İndir (JSON Yedeği)</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            {onExportBackup && (
+              <button
+                type="button"
+                onClick={onExportBackup}
+                className="bg-slate-900 hover:bg-slate-950 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
+              >
+                <Download className="w-4 h-4 text-purple-400" />
+                <span>Tüm Sistem Verilerini İndir (JSON Yedeği)</span>
+              </button>
+            )}
 
-          <label className="bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors border border-purple-200">
-            <Upload className="w-4 h-4 text-purple-700" />
-            <span>Yedek JSON Dosyası Yükle</span>
-            <input
-              type="file"
-              accept=".json"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-          </label>
+            {onImportBackup && (
+              <label className="bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors border border-purple-200">
+                <Upload className="w-4 h-4 text-purple-700" />
+                <span>Yedek JSON Dosyası Yükle</span>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+            )}
 
-          <button
-            onClick={() => {
-              if (confirm("Tüm veriler sıfırlanıp varsayılan demo veriler yüklensin mi?")) {
-                onResetDemoData();
-              }
-            }}
-            className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors border border-rose-200 ml-auto"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span>Örnek Demo Verileri Yeniden Yükle</span>
-          </button>
+            {onResetDemoData && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm("Tüm veriler sıfırlanıp varsayılan demo veriler yüklensin mi?")) {
+                    onResetDemoData();
+                  }
+                }}
+                className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors border border-rose-200 sm:ml-auto"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Örnek Demo Verileri Yeniden Yükle</span>
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

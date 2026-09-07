@@ -1557,11 +1557,12 @@ export default function App() {
         return "Firma Şubeleri";
       case "company_warehouses":
         return "Firma Depoları";
+      case "company_settings":
+      case "settings":
+        return "Firma Bilgileri - Sistem Ayarları";
       case "company_e_services":
       case "e_services":
         return "E-İşlemler (GİB, SGK, E-Devlet)";
-      case "settings":
-        return "Sistem Ayarları";
       case "admin":
         return "Admin Yönetici Paneli";
       default:
@@ -1972,7 +1973,7 @@ export default function App() {
             />
           )}
 
-          {["company", "company_profile", "company_branches", "company_warehouses"].includes(currentTab) && (
+          {["company", "company_profile", "company_branches", "company_warehouses", "company_settings", "settings"].includes(currentTab) && (
             <CompanyManagement
               settings={data.settings}
               branches={data.branches || []}
@@ -1984,16 +1985,22 @@ export default function App() {
               onAddWarehouse={handleAddWarehouse}
               onUpdateWarehouse={handleUpdateWarehouse}
               onDeleteWarehouse={handleDeleteWarehouse}
+              onExportBackup={handleExportBackup}
+              onImportBackup={handleImportBackup}
+              onResetDemoData={handleResetDemoData}
               activeSubTab={
                 currentTab === "company_branches"
                   ? "branches"
                   : currentTab === "company_warehouses"
                   ? "warehouses"
+                  : currentTab === "company_settings" || currentTab === "settings"
+                  ? "settings"
                   : "profile"
               }
               onSelectSubTab={(tab) => {
                 if (tab === "branches") setCurrentTab("company_branches");
                 else if (tab === "warehouses") setCurrentTab("company_warehouses");
+                else if (tab === "settings") setCurrentTab("company_settings");
                 else setCurrentTab("company_profile");
               }}
             />
@@ -2010,16 +2017,6 @@ export default function App() {
 
           {currentTab === "whatsapp" && (
             <WhatsAppCenter settings={data.settings} />
-          )}
-
-          {currentTab === "settings" && (
-            <Settings
-              settings={data.settings}
-              onSaveSettings={handleSaveSettings}
-              onExportBackup={handleExportBackup}
-              onImportBackup={handleImportBackup}
-              onResetDemoData={handleResetDemoData}
-            />
           )}
             </Suspense>
           </ErrorBoundary>

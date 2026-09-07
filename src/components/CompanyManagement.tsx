@@ -7,6 +7,7 @@ import { GibPortalModal } from "./GibPortalModal";
 import { MysoftTenantPicker } from "./MysoftTenantPicker";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { Settings } from "./Settings";
 import {
   Building2,
   Building,
@@ -42,9 +43,10 @@ import {
   Shield,
   Fingerprint,
   CheckCheck,
+  Settings as SettingsIcon,
 } from "lucide-react";
 
-export type CompanySubTab = "profile" | "branches" | "warehouses";
+export type CompanySubTab = "profile" | "branches" | "warehouses" | "settings";
 
 interface CompanyManagementProps {
   settings: CompanySettings;
@@ -57,6 +59,9 @@ interface CompanyManagementProps {
   onAddWarehouse: (w: Warehouse) => void;
   onUpdateWarehouse: (w: Warehouse) => void;
   onDeleteWarehouse: (id: string) => void;
+  onExportBackup?: () => void;
+  onImportBackup?: (jsonStr: string) => boolean;
+  onResetDemoData?: () => void;
   activeSubTab?: CompanySubTab;
   onSelectSubTab?: (tab: CompanySubTab) => void;
 }
@@ -72,10 +77,19 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   onAddWarehouse,
   onUpdateWarehouse,
   onDeleteWarehouse,
+  onExportBackup,
+  onImportBackup,
+  onResetDemoData,
   activeSubTab = "profile",
   onSelectSubTab,
 }) => {
   const [currentSubTab, setCurrentSubTab] = useState<CompanySubTab>(activeSubTab);
+
+  React.useEffect(() => {
+    if (activeSubTab) {
+      setCurrentSubTab(activeSubTab);
+    }
+  }, [activeSubTab]);
 
   // Sync internal subtab if controlled externally
   const handleTabChange = (tab: CompanySubTab) => {
@@ -444,6 +458,18 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           >
             <WarehouseIcon className={`w-4 h-4 ${currentSubTab === "warehouses" ? "text-white" : "text-amber-500"}`} />
             <span>Depolar ({warehouses.length})</span>
+          </button>
+
+          <button
+            onClick={() => handleTabChange("settings")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              currentSubTab === "settings"
+                ? "bg-purple-700 text-white shadow-xs font-black"
+                : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200"
+            }`}
+          >
+            <SettingsIcon className={`w-4 h-4 ${currentSubTab === "settings" ? "text-white" : "text-purple-600"}`} />
+            <span>Sistem Ayarları</span>
           </button>
         </div>
       </div>
@@ -1670,6 +1696,23 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 4: SISTEM AYARLARI */}
+      {currentSubTab === "settings" && (
+        <div className="space-y-6">
+          <Settings
+            embedded={true}
+            settings={profileForm}
+            onSaveSettings={(newSettings) => {
+              setProfileForm(newSettings);
+              onSaveSettings(newSettings);
+            }}
+            onExportBackup={onExportBackup}
+            onImportBackup={onImportBackup}
+            onResetDemoData={onResetDemoData}
+          />
         </div>
       )}
 

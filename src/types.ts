@@ -717,6 +717,10 @@ export interface PayrollRecord {
   executionDeduction?: number;
   alimonyDeduction?: number;
   otherDeductions?: number;
+  advanceReason?: string; // Avans mahsup gerekçesi / talep açıklaması
+  deductionReason?: string; // Yasal ve özel kesinti gerekçesi / icra nafaka detayı
+  missingDayReason?: string; // Eksik gün gerekçesi / SGK eksik gün nedeni
+  missingDayCode?: string; // SGK Eksik Gün Bildirim Kodu (örn: "01", "21")
   grossSalary: number;
   sgkEmployeeShare: number; // %14
   unemploymentEmployeeShare: number; // %1
@@ -733,6 +737,44 @@ export interface PayrollRecord {
   paymentDate?: string;
   isCustomized?: boolean;
 }
+
+export type PuantajCode = "N" | "HT" | "RT" | "Yİ" | "Üİ" | "Dİ" | "R" | "M";
+
+export interface DayPuantajDetail {
+  code: PuantajCode;
+  overtimeHours?: number; // Günlük yapılan fazla mesai saati (örn: 2.5 saat)
+  isHolidayOvertime?: boolean; // Resmi tatil veya Hafta tatili günü tam gün çalışma
+  leaveReason?: string; // İzin nedeni / talep açıklaması
+  leaveType?: string; // İzin türü (örn: Yıllık İzin, Ücretsiz İzin, Babalık İzni vb.)
+  leaveId?: string; // İzin talep ID'si
+  leaveStatus?: "approved" | "pending" | "rejected";
+}
+
+export type CustomPayrollAdjustment = {
+  salaryType?: "net" | "gross";
+  baseSalary?: number;
+  bonusAmount?: number;
+  overtimePay?: number;
+  overtimeNormalHours?: number;
+  overtimeWeekendHours?: number;
+  overtimeHolidayDays?: number;
+  overtimeHolidayHours?: number;
+  foodAllowance?: number;
+  roadAllowance?: number;
+  advanceDeduction?: number;
+  advanceReason?: string;
+  unpaidLeaveDays?: number;
+  missingDayReason?: string;
+  missingDayCode?: string;
+  besDeduction?: number;
+  executionDeduction?: number;
+  alimonyDeduction?: number;
+  otherDeductions?: number;
+  deductionReason?: string;
+  isCustomized?: boolean;
+  notes?: string;
+  puantajDays?: Record<number, DayPuantajDetail>;
+};
 
 export interface LeaveRequest {
   id: string;
@@ -778,6 +820,7 @@ export interface LegalDeduction {
   creditorName?: string;
   fileNumber?: string;
   fileNo?: string; // Alias for fileNumber
+  courtOffice?: string;
   iban?: string;
   calculationType?: string;
   priorityOrder?: number;

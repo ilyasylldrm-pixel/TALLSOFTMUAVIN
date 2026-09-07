@@ -13,6 +13,7 @@ import {
   CreditCard,
   Layers,
   ChevronDown,
+  FileCheck2,
 } from "lucide-react";
 import { Employee, CompanySettings, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction } from "../types";
 import { exportElementToPDF } from "../utils/exportUtils";
@@ -20,6 +21,8 @@ import { formatPayrollWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { Zap, MessageCircle } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import { calculatePayrollRecordHelper, generateDefaultPuantaj } from "../utils/puantajUtils";
+import { MissingDayNotificationForm, DeductionAuthorizationForm } from "./PayrollSupplementalForms";
 
 export type PayrollPrintMode =
   | "single_monthly_slip"    // Seçilen Personel - Seçilen Ay Ücret Pusulası
@@ -81,6 +84,8 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
   const [showSignatures, setShowSignatures] = useState<boolean>(true);
   const [showEmployerCost, setShowEmployerCost] = useState<boolean>(true);
   const [showCompanyHeader, setShowCompanyHeader] = useState<boolean>(true);
+  const [includeMissingDayForm, setIncludeMissingDayForm] = useState<boolean>(true);
+  const [includeDeductionForm, setIncludeDeductionForm] = useState<boolean>(true);
 
   if (!isOpen) return null;
 
@@ -151,131 +156,19 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
 
   // Helper to calculate payroll for an employee for ANY given month
   const calculatePayrollForMonth = (emp: Employee, targetMonth: string): PayrollRecord => {
-    const custom = (targetMonth === monthStr ? payrollCustomizations[emp.id] : undefined) || {};
+    const custom =
+      (targetMonth === monthStr
+        ? (payrollCustomizations[targetMonth]?.[emp.id] || payrollCustomizations[emp.id])
+        : payrollCustomizations[targetMonth]?.[emp.id]) || {};
 
-    // Auto advances
-    let autoAdvance = 0;
-    advanceRequests
-      .filter((a) => a.employeeId === emp.id && (a.status === "approved" || a.status === "paid") && a.requestDate?.startsWith(targetMonth))
-      .forEach((a) => {
-        autoAdvance += a.amount;
-      });
-
-    // Auto unpaid leaves
-    let autoUnpaidDays = 0;
-    leaveRequests
-      .filter((l) => l.employeeId === emp.id && l.status === "approved" && (l.type === "Ücretsiz İzin" || l.type === "Mazeretsiz İzin"))
-      .forEach((l) => {
-        if (l.startDate?.startsWith(targetMonth) || l.endDate?.startsWith(targetMonth)) {
-          autoUnpaidDays += l.daysCount;
-        }
-      });
-
-    const salaryType = custom.salaryType ?? emp.salaryType;
-    const baseSalary = custom.baseSalary ?? emp.salaryAmount;
-    const bonusAmount = custom.bonusAmount ?? 0;
-    const overtimePay = custom.overtimePay ?? 0;
-    const overtimeNormalHours = custom.overtimeNormalHours ?? 0;
-    const overtimeWeekendHours = custom.overtimeWeekendHours ?? 0;
-    const overtimeHolidayDays = custom.overtimeHolidayDays ?? 0;
-    const overtimeHolidayHours = custom.overtimeHolidayHours ?? 0;
-    const foodAllowance = custom.foodAllowance ?? (emp.foodAllowance || 0);
-    const roadAllowance = custom.roadAllowance ?? (emp.roadAllowance || 0);
-
-    const advanceDeduction = custom.advanceDeduction !== undefined ? custom.advanceDeduction : autoAdvance;
-    const unpaidLeaveDays = custom.unpaidLeaveDays !== undefined ? custom.unpaidLeaveDays : autoUnpaidDays;
-
-    let baseGross = 0;
-    if (salaryType === "gross") {
-      baseGross = baseSalary;
-    } else {
-      baseGross = baseSalary * 1.38;
-    }
-
-    const unpaidLeaveDeduction = Math.round((baseGross / 30) * unpaidLeaveDays);
-    const grossSalary = Math.max(0, baseGross + bonusAmount + overtimePay + foodAllowance + roadAllowance - unpaidLeaveDeduction);
-
-    const sgkEmployeeShare = Math.round(grossSalary * 0.14);
-    const unemploymentEmployeeShare = Math.round(grossSalary * 0.01);
-    const incomeTaxBase = Math.round(grossSalary - (sgkEmployeeShare + unemploymentEmployeeShare));
-    const minWageTaxExemption = 2950;
-    const rawIncomeTax = incomeTaxBase * 0.15;
-    const incomeTax = Math.round(Math.max(0, rawIncomeTax - minWageTaxExemption));
-    const stampTax = Math.round(grossSalary * 0.00759);
-
-    const netSalary = Math.round(grossSalary - (sgkEmployeeShare + unemploymentEmployeeShare + incomeTax + stampTax));
-
-    // Legal deductions
-    let executionDeduction = 0;
-    let alimonyDeduction = 0;
-    legalDeductions
-      .filter((d) => d.employeeId === emp.id && d.status === "active")
-      .forEach((d) => {
-        if (d.type === "İcra Kesintisi") {
-          let amt = 0;
-          if (d.calculationType === "quarter_salary") {
-            amt = Math.round(netSalary / 4);
-          } else {
-            amt = d.monthlyAmount || 0;
-          }
-          if (d.totalDebtAmount && d.totalDebtAmount > 0) {
-            const rem = Math.max(0, d.totalDebtAmount - d.paidAmount);
-            if (amt > rem) amt = rem;
-          }
-          executionDeduction += amt;
-        } else if (d.type === "Nafaka Kesintisi") {
-          alimonyDeduction += d.monthlyAmount || 0;
-        }
-      });
-
-    const besDeduction = custom.besDeduction !== undefined
-      ? custom.besDeduction
-      : (emp.hasBes ? Math.round(baseGross * 0.03) : 0);
-
-    const otherDeductions = custom.otherDeductions ?? 0;
-    const payableNetSalary = Math.max(0, netSalary - advanceDeduction - besDeduction - executionDeduction - alimonyDeduction - otherDeductions);
-
-    const sgkEmployerShare = Math.round(grossSalary * 0.155);
-    const unemploymentEmployerShare = Math.round(grossSalary * 0.02);
-    const totalEmployerCost = Math.round(grossSalary + sgkEmployerShare + unemploymentEmployerShare + foodAllowance + roadAllowance);
-
-    return {
-      id: `pay_${emp.id}_${targetMonth}`,
-      employeeId: emp.id,
-      employeeName: emp.fullName,
-      department: emp.department,
-      monthYear: targetMonth,
-      baseSalary,
-      salaryType,
-      bonusAmount,
-      overtimePay,
-      overtimeNormalHours,
-      overtimeWeekendHours,
-      overtimeHolidayDays,
-      overtimeHolidayHours,
-      foodAllowance,
-      roadAllowance,
-      advanceDeduction,
-      unpaidLeaveDays,
-      unpaidLeaveDeduction,
-      besDeduction,
-      executionDeduction,
-      alimonyDeduction,
-      otherDeductions,
-      grossSalary: Math.round(grossSalary),
-      sgkEmployeeShare,
-      unemploymentEmployeeShare,
-      incomeTaxBase,
-      incomeTax,
-      stampTax,
-      minWageTaxExemption,
-      netSalary,
-      payableNetSalary,
-      sgkEmployerShare,
-      unemploymentEmployerShare,
-      totalEmployerCost,
-      paymentStatus: "pending",
-    };
+    return calculatePayrollRecordHelper(
+      emp,
+      targetMonth,
+      custom,
+      advanceRequests,
+      leaveRequests,
+      legalDeductions
+    );
   };
 
   // Month names in Turkish
@@ -298,6 +191,24 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
     if (!currentEmp) return null;
     return calculatePayrollForMonth(currentEmp, monthStr);
   }, [currentEmp, monthStr, payrollCustomizations, advanceRequests, leaveRequests, legalDeductions]);
+
+  const currentEmployeePuantaj = useMemo(() => {
+    if (!currentEmp) return undefined;
+    return (
+      payrollCustomizations[monthStr]?.[currentEmp.id]?.puantajDays ||
+      payrollCustomizations[currentEmp.id]?.puantajDays ||
+      generateDefaultPuantaj(currentEmp.id, monthStr, leaveRequests)
+    );
+  }, [currentEmp, monthStr, payrollCustomizations, leaveRequests]);
+
+  const hasMissingDays = Boolean(singleMonthlyRecord && (singleMonthlyRecord.unpaidLeaveDays || 0) > 0);
+  const hasDeductionsOrAdvances = Boolean(
+    singleMonthlyRecord &&
+    ((singleMonthlyRecord.advanceDeduction || 0) > 0 ||
+     (singleMonthlyRecord.executionDeduction || 0) > 0 ||
+     (singleMonthlyRecord.alimonyDeduction || 0) > 0 ||
+     (singleMonthlyRecord.otherDeductions || 0) > 0)
+  );
 
   // 2. Single Employee 12 Months (Entire Year)
   const singleAnnualRecords = useMemo(() => {
@@ -601,6 +512,34 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
               />
               <span>İmza & Tebellüğ Blokları (İşveren Kaşe ve Personel İmzası)</span>
             </label>
+
+            {scope === "single" && periodType === "month" && hasMissingDays && (
+              <label className="flex items-center gap-1.5 cursor-pointer bg-rose-950/60 hover:bg-rose-900/80 px-2 py-0.5 rounded-lg border border-rose-400/40 text-rose-200 hover:text-white transition-colors">
+                <input
+                  type="checkbox"
+                  checked={includeMissingDayForm}
+                  onChange={(e) => setIncludeMissingDayForm(e.target.checked)}
+                  className="rounded text-rose-500 focus:ring-0 cursor-pointer"
+                />
+                <span className="font-bold">
+                  📄 SGK Eksik Gün Bildirim Formu Eki ({singleMonthlyRecord?.unpaidLeaveDays} Gün)
+                </span>
+              </label>
+            )}
+
+            {scope === "single" && periodType === "month" && hasDeductionsOrAdvances && (
+              <label className="flex items-center gap-1.5 cursor-pointer bg-amber-950/60 hover:bg-amber-900/80 px-2 py-0.5 rounded-lg border border-amber-400/40 text-amber-200 hover:text-white transition-colors">
+                <input
+                  type="checkbox"
+                  checked={includeDeductionForm}
+                  onChange={(e) => setIncludeDeductionForm(e.target.checked)}
+                  className="rounded text-amber-500 focus:ring-0 cursor-pointer"
+                />
+                <span className="font-bold">
+                  📋 Kesinti ve Avans Mahsup Formu Eki
+                </span>
+              </label>
+            )}
           </div>
         </div>
 
@@ -636,7 +575,14 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
             {/* CASE 1: TEK PERSONEL - SEÇİLEN AY ÜCRET HESAP PUSULASI     */}
             {/* ========================================================= */}
             {scope === "single" && periodType === "month" && currentEmp && singleMonthlyRecord && (
-              <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-slate-300/80 text-slate-900 print:shadow-none print:border-0 print:p-0">
+              <>
+                <div
+                  className={`bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-slate-300/80 text-slate-900 print:shadow-none print:border-0 print:p-0 ${
+                    (hasMissingDays && includeMissingDayForm) || (hasDeductionsOrAdvances && includeDeductionForm)
+                      ? "page-break-always"
+                      : ""
+                  }`}
+                >
                 {/* Şirket Başlığı */}
                 {showCompanyHeader && (
                   <div className="border-b-2 border-slate-900 pb-4 mb-4 flex flex-col sm:flex-row items-start justify-between gap-4">
@@ -912,7 +858,31 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
                   </div>
                 )}
               </div>
-            )}
+
+              {/* OTOMATİK EKLENEN SGK EKSİK GÜN BİLDİRİM FORMU */}
+              {hasMissingDays && includeMissingDayForm && (
+                <MissingDayNotificationForm
+                  companySettings={companySettings}
+                  employee={currentEmp}
+                  record={singleMonthlyRecord}
+                  monthStr={monthStr}
+                  puantajDays={currentEmployeePuantaj}
+                  showSignatures={showSignatures}
+                />
+              )}
+
+              {/* OTOMATİK EKLENEN KESİNTİ VE AVANS MAHSUP BİLDİRİM FORMU (MUVAFAKATNAME) */}
+              {hasDeductionsOrAdvances && includeDeductionForm && (
+                <DeductionAuthorizationForm
+                  companySettings={companySettings}
+                  employee={currentEmp}
+                  record={singleMonthlyRecord}
+                  monthStr={monthStr}
+                  showSignatures={showSignatures}
+                />
+              )}
+            </>
+          )}
 
             {/* ========================================================================= */}
             {/* CASE 2: TEK PERSONEL - TÜM YIL (12 AY) KÜMÜLATİF BORDRO VE ÜCRET KARTI    */}

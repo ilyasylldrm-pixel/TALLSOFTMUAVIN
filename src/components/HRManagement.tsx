@@ -53,6 +53,7 @@ import {
   Scale,
   ArrowUpDown,
   Laptop,
+  Layers,
 } from "lucide-react";
 import { Employee, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction, CompanySettings, Branch, Warehouse, CostProject, AssetCustody } from "../types";
 import { sgkOccupations } from "../data/sgkOccupations";
@@ -60,6 +61,7 @@ import { sgkTerminationReasons } from "../data/sgkTerminationReasons";
 import { HRDocumentFormsModal, HRFormType } from "./HRDocumentFormsModal";
 import { SeveranceNoticeCalculator } from "./SeveranceNoticeCalculator";
 import { PayrollPrintModal } from "./PayrollPrintModal";
+import { BulkPayrollModal } from "./BulkPayrollModal";
 import { AssetCustodyManagement } from "./AssetCustodyManagement";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
@@ -248,7 +250,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       badgeClass: "bg-blue-600 text-white hover:bg-blue-700",
     },
     Dİ: {
-      label: "Doğum İzni (Dİ)",
+      label: "Doğum İzni",
       shortDesc: "4857 S.K. Erkek Doğum (Babalık) & Analık İzni (Tam Ücretli)",
       bgClass: "bg-sky-50",
       textClass: "text-sky-900",
@@ -504,6 +506,20 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [editingPayrollEmp, setEditingPayrollEmp] = useState<Employee | null>(null);
   const [editingPayrollForm, setEditingPayrollForm] = useState<CustomPayrollAdjustment>({});
   const [isPayrollFullscreen, setIsPayrollFullscreen] = useState(true);
+  const [isBulkPayrollModalOpen, setIsBulkPayrollModalOpen] = useState(false);
+
+  const handleApplyBatchPayroll = (
+    updatedCustomizations: Record<string, CustomPayrollAdjustment>,
+    processedCount: number,
+    totalNet: number,
+    totalCost: number
+  ) => {
+    setPayrollCustomizations(updatedCustomizations);
+    setIsBulkPayrollModalOpen(false);
+    showToast(
+      `🎉 ${processedCount} personelin ${payrollMonth} dönemi bordrosu başarıyla hazırlandı! Toplam Net: ${formatTRY(totalNet)} • İşveren Maliyeti: ${formatTRY(totalCost)}`
+    );
+  };
 
   const nav = useDetailNavigation<Employee>({ moduleKey: "hr" });
 
@@ -512,6 +528,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     setSelectedEmployeeForDetail(null);
     setEditingPayrollEmp(null);
     setSelectedPayrollRecord(null);
+    setIsBulkPayrollModalOpen(false);
     nav.backToList();
   }, [nav]);
 
@@ -680,7 +697,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       (a) => a.employeeId === empId && (a.status === "paid" || a.status === "approved") && (a.type === "Avans" || a.type === "Masraf")
     );
     const totalAdvance = empAdvances.reduce((sum, a) => sum + a.amount, 0);
-    return { totalAdvance, count: empAdvances.length, items: empAdvances };
+    const reasons = empAdvances.map((a) => a.description || a.type || "Avans").filter(Boolean);
+    return { totalAdvance, count: empAdvances.length, items: empAdvances, reasons };
   };
 
   // Helper: Auto-detect approved unpaid leaves for an employee according to HR rules
@@ -689,16 +707,23 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       (l) => l.employeeId === empId && l.status === "approved"
     );
     let unpaidDays = 0;
+    const reasons: string[] = [];
+    let primaryCode = "21";
+
     empLeaves.forEach((l) => {
       if (l.type === "Ücretsiz İzin" || l.type === "Mazeretsiz İzin") {
         unpaidDays += l.daysCount;
+        reasons.push(`${l.type}: ${l.reason || "Yazılı izin talebi"}`);
+        primaryCode = l.type === "Mazeretsiz İzin" ? "15" : "21";
       } else if (l.type === "Sıhhi İzin" || l.type === "Hastalık/Rapor") {
         if (l.daysCount > 2) {
           unpaidDays += (l.daysCount - 2);
+          reasons.push(`İstirahat/Rapor (${l.daysCount} gün - ${l.reason || "Sağlık raporu"})`);
+          primaryCode = "01";
         }
       }
     });
-    return { unpaidDays, count: empLeaves.length, items: empLeaves };
+    return { unpaidDays, count: empLeaves.length, items: empLeaves, reasons, primaryCode };
   };
 
   // Helper: Auto-detect active legal deductions (icra/nafaka) for an employee
@@ -1622,9 +1647,33 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     );
   }
 
-      {/* FULL-PAGE DETAIL VIEW: BORDRO & PUANTAJ HESAPLAMA */}
-      {editingPayrollEmp && (
-        <DetailPageLayout
+  // FULL-PAGE DETAIL VIEW: TOPLU BORDRO & PUANTAJ HAZIRLAMA
+  if (isBulkPayrollModalOpen) {
+    return (
+      <BulkPayrollModal
+        isOpen={isBulkPayrollModalOpen}
+        onClose={() => setIsBulkPayrollModalOpen(false)}
+        employees={employees}
+        companySettings={companySettings}
+        payrollMonth={payrollMonth}
+        onMonthChange={(m) => setPayrollMonth(m)}
+        leaveRequests={leaveRequests}
+        advanceRequests={advanceRequests}
+        legalDeductions={legalDeductions}
+        payrollCustomizations={payrollCustomizations}
+        onApplyBatchPayroll={handleApplyBatchPayroll}
+        onOpenPayrollPrintModal={() => {
+          setIsBulkPayrollModalOpen(false);
+          setIsPayrollPrintModalOpen(true);
+        }}
+      />
+    );
+  }
+
+  // FULL-PAGE DETAIL VIEW: BORDRO & PUANTAJ HESAPLAMA
+  if (editingPayrollEmp) {
+    return (
+      <DetailPageLayout
           title={`Bordro & Puantaj Hesaplama - ${editingPayrollEmp.fullName}`}
           subtitle={`${payrollMonth} Dönemi • ${editingPayrollEmp.department} (${editingPayrollEmp.title}) • TC: ${editingPayrollEmp.tckn || "—"}`}
           breadcrumbs={[
@@ -2338,6 +2387,17 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                     onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, advanceDeduction: Number(e.target.value) })}
                     className="w-full bg-white border border-amber-300 rounded-xl p-2 font-black text-amber-900 text-sm focus:outline-none focus:border-amber-500"
                   />
+                  {(editingPayrollForm.advanceDeduction ?? 0) > 0 && (
+                    <div className="pt-1">
+                      <input
+                        type="text"
+                        value={editingPayrollForm.advanceReason || ""}
+                        onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, advanceReason: e.target.value })}
+                        placeholder="Avans nedeni (Otomatik Mahsup Formu için örn: Nakit avans mahsubu)"
+                        className="w-full bg-white border border-amber-200 rounded-lg p-1.5 text-xs text-amber-950 placeholder:text-amber-400"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Unpaid Leave Days (Entegre & Puantaj ile Otomatik) */}
@@ -2352,6 +2412,30 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                     onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, unpaidLeaveDays: Number(e.target.value) })}
                     className="w-full bg-white border border-rose-300 rounded-xl p-2 font-black text-rose-900 text-sm focus:outline-none focus:border-rose-500"
                   />
+                  {(editingPayrollForm.unpaidLeaveDays ?? 0) > 0 && (
+                    <div className="pt-1 grid grid-cols-3 gap-1.5">
+                      <select
+                        value={editingPayrollForm.missingDayCode || "21"}
+                        onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, missingDayCode: e.target.value })}
+                        className="col-span-1 bg-white border border-rose-200 rounded-lg p-1.5 text-xs text-rose-950"
+                        title="SGK Eksik Gün Kodu"
+                      >
+                        <option value="21">21 - Ücretsiz İzin</option>
+                        <option value="01">01 - İstirahat / Rapor</option>
+                        <option value="03">03 - Disiplin Cezası</option>
+                        <option value="07">07 - Puantaj Kaydı</option>
+                        <option value="13">13 - Diğer Nedenler</option>
+                        <option value="15">15 - Devamsızlık</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={editingPayrollForm.missingDayReason || ""}
+                        onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, missingDayReason: e.target.value })}
+                        placeholder="Eksik gün gerekçesi (SGK Formu Eki)"
+                        className="col-span-2 bg-white border border-rose-200 rounded-lg p-1.5 text-xs text-rose-950 placeholder:text-rose-400"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* BES Kesintisi */}
@@ -2402,6 +2486,24 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 </div>
               </div>
 
+              {/* Kesinti Nedeni & Açıklaması Girişi (Elle Girilen Kesintiler İçin Otomatik Form Tevsiki) */}
+              {((editingPayrollForm.executionDeduction ?? 0) > 0 ||
+                (editingPayrollForm.alimonyDeduction ?? 0) > 0 ||
+                (editingPayrollForm.otherDeductions ?? 0) > 0) && (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-1">
+                  <label className="block font-bold text-slate-800 text-xs">
+                    📋 Kesinti Gerekçesi / Dosya No (Personel Kesinti Bildirim Formu İçin)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingPayrollForm.deductionReason || ""}
+                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, deductionReason: e.target.value })}
+                    placeholder="Örn: 2026/142 Esas sayılı İcra Müdürlüğü Haciz Müzekkeresi veya personel yazılı muvafakati"
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-purple-500 font-medium"
+                  />
+                </div>
+              )}
+
               {/* Calculated Live Breakdown Summary */}
               {(() => {
                 const baseSal = editingPayrollForm.baseSalary ?? 0;
@@ -2431,13 +2533,20 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
                 return (
                   <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[11px] uppercase font-bold text-purple-300 block">Canlı Bordro Hakediş Özeti</span>
-                      {(execDed > 0 || aliDed > 0 || othDed > 0) && (
-                        <span className="text-[10px] bg-red-500/30 text-red-200 border border-red-400/40 px-2 py-0.5 rounded-full font-bold">
-                          Özel Kesintiler Mevcut (-{formatTRY(execDed + aliDed + othDed)})
-                        </span>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {lvsDays > 0 && (
+                          <span className="text-[10px] bg-rose-500/30 text-rose-200 border border-rose-400/40 px-2 py-0.5 rounded-full font-bold">
+                            ✓ SGK Eksik Gün Formu Eklendi ({lvsDays} Gün)
+                          </span>
+                        )}
+                        {(advDeduct > 0 || execDed > 0 || aliDed > 0 || othDed > 0) && (
+                          <span className="text-[10px] bg-amber-500/30 text-amber-200 border border-amber-400/40 px-2 py-0.5 rounded-full font-bold">
+                            ✓ Kesinti / Avans Formu Eklendi (-{formatTRY(advDeduct + execDed + aliDed + othDed)})
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                       <div>
@@ -2461,7 +2570,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 );
               })()}
 
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => {
@@ -2482,11 +2591,15 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       foodAllowance: editingPayrollEmp.foodAllowance || 0,
                       roadAllowance: editingPayrollEmp.roadAllowance || 0,
                       advanceDeduction: autoAdv.totalAdvance,
+                      advanceReason: autoAdv.reasons.join(", "),
                       unpaidLeaveDays: freshStats.unpaidDays > 0 ? freshStats.unpaidDays : autoLvs.unpaidDays,
+                      missingDayReason: autoLvs.reasons.join(", "),
+                      missingDayCode: autoLvs.primaryCode || "21",
                       besDeduction: editingPayrollEmp.hasBes ? Math.round((editingPayrollEmp.salaryAmount * (editingPayrollEmp.salaryType === "net" ? 1.38 : 1)) * 0.03) : 0,
                       executionDeduction: 0,
                       alimonyDeduction: 0,
                       otherDeductions: 0,
+                      deductionReason: "",
                       notes: "",
                       puantajDays: freshPuantaj,
                     });
@@ -2496,7 +2609,22 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   Varsayılanlara Sıfırla
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveEditPayroll(undefined, false);
+                      setPayrollPrintSelectedEmpId(editingPayrollEmp.id);
+                      setPayrollPrintInitialMode("month");
+                      setIsPayrollPrintModalOpen(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl border border-purple-300 bg-purple-100/70 hover:bg-purple-200 text-purple-950 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                    title="Bordro ve otomatik eklenen SGK eksik gün / kesinti formlarını önizle, PDF indir veya yazdır"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-purple-700" />
+                    <span>Bordro & Ekleri Yazdır</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleBackToList}
@@ -2542,9 +2670,10 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     );
   }
 
-      {/* FULL-PAGE DETAIL VIEW: BORDRO PUSULASI */}
-      {selectedPayrollRecord && (
-        <DetailPageLayout
+  // FULL-PAGE DETAIL VIEW: BORDRO PUSULASI
+  if (selectedPayrollRecord) {
+    return (
+      <DetailPageLayout
           title={`Ücret Hesap Pusulası - ${selectedPayrollRecord.employeeName}`}
           subtitle={`Bordro Dönemi: ${selectedPayrollRecord.monthYear} • Departman: ${selectedPayrollRecord.department} • Net Maaş: ${formatTRY(selectedPayrollRecord.payableNetSalary)}`}
           breadcrumbs={[
@@ -2729,9 +2858,10 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     );
   }
 
-      {/* FULL-PAGE DETAIL VIEW: IZIN TALEBI */}
-      {isAddLeaveOpen && (
-        <DetailPageLayout
+  // FULL-PAGE DETAIL VIEW: IZIN TALEBI
+  if (isAddLeaveOpen) {
+    return (
+      <DetailPageLayout
           title="Yeni İzin Talebi Oluştur"
           subtitle="Yıllık ücretli izin, analık, babalık, mazeret ve ücretsiz izin kayıtları"
           breadcrumbs={[
@@ -3183,9 +3313,10 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     );
   }
 
-      {/* FULL-PAGE DETAIL VIEW: AVANS TALEBI */}
-      {isAddAdvanceOpen && (
-        <DetailPageLayout
+  // FULL-PAGE DETAIL VIEW: AVANS TALEBI
+  if (isAddAdvanceOpen) {
+    return (
+      <DetailPageLayout
           title="Yeni Avans & Masraf Talebi"
           subtitle="Personel maaş avansı, harcırah ve iş seyahati masraf talepleri"
           breadcrumbs={[
@@ -3295,9 +3426,10 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     );
   }
 
-      {/* FULL-PAGE DETAIL VIEW: OZLUK DETAYI VIEW */}
-      {selectedEmployeeForDetail && (
-        <DetailPageLayout
+  // FULL-PAGE DETAIL VIEW: OZLUK DETAYI VIEW
+  if (selectedEmployeeForDetail) {
+    return (
+      <DetailPageLayout
           title={`${selectedEmployeeForDetail.fullName} - Personel Özlük Dosyası`}
           subtitle={`${selectedEmployeeForDetail.department} • ${selectedEmployeeForDetail.title} • TCKN: ${selectedEmployeeForDetail.tckn || "—"}`}
           breadcrumbs={[
@@ -3497,9 +3629,10 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     );
   }
 
-      {/* DETAIL VIEW: YASAL KESİNTİ (İCRA & NAFAKA) EKLE / DÜZENLE */}
-      {isAddLegalDeductionOpen && (
-        <DetailPageLayout
+  // DETAIL VIEW: YASAL KESİNTİ (İCRA & NAFAKA) EKLE / DÜZENLE
+  if (isAddLegalDeductionOpen) {
+    return (
+      <DetailPageLayout
           title={editingLegalDeduction ? "Yasal Kesinti Dosyasını Düzenle" : "Yeni Yasal Kesinti Kaydı Ekle"}
           subtitle="İcra, Nafaka ve Diğer Resmi Kesintilerin Yönetimi"
           breadcrumbs={[
@@ -3705,9 +3838,10 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     );
   }
 
-      {/* DETAIL VIEW: ÖDEME İŞLE & BORÇ DÜŞÜŞÜ */}
-      {isPaymentModalOpen && paymentModalDeduction && (
-        <DetailPageLayout
+  // DETAIL VIEW: ÖDEME İŞLE & BORÇ DÜŞÜŞÜ
+  if (isPaymentModalOpen && paymentModalDeduction) {
+    return (
+      <DetailPageLayout
           title="İcra / Yasal Kesinti Ödemesi İşle"
           subtitle={`${paymentModalDeduction.employeeName} • Dosya No: ${paymentModalDeduction.fileNumber}`}
           breadcrumbs={[
@@ -3814,46 +3948,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     );
   }
 
-      {/* MODAL: RESMİ İZİN, DEVAMSIZLIK & AVANS FORMLARI YAZDIRMA & DÜZENLEME */}
-      {isFormsModalOpen && (
-        <HRDocumentFormsModal
-          isOpen={isFormsModalOpen}
-          onClose={() => {
-            setIsFormsModalOpen(false);
-            setFormsModalLeaveRequest(undefined);
-            setFormsModalAdvanceRequest(undefined);
-          }}
-          employees={employees}
-          companySettings={companySettings}
-          advanceRequests={advanceRequests}
-          initialEmployeeId={formsModalEmployeeId}
-          initialFormType={formsModalType}
-          leaveRequest={formsModalLeaveRequest}
-          advanceRequest={formsModalAdvanceRequest}
-        />
-    );
-  }
 
-      {/* MODAL: RESMİ BORDRO VE MAAŞ PUSULASI YAZDIRMA (AYLIK & TÜM YIL) */}
-      {isPayrollPrintModalOpen && (
-        <PayrollPrintModal
-          isOpen={isPayrollPrintModalOpen}
-          onClose={() => {
-            setIsPayrollPrintModalOpen(false);
-            setPayrollPrintSelectedEmpId(undefined);
-          }}
-          employees={employees}
-          companySettings={companySettings}
-          selectedMonth={payrollMonth}
-          initialEmployeeId={payrollPrintSelectedEmpId}
-          initialMode={payrollPrintInitialMode}
-          payrollCustomizations={payrollCustomizations}
-          advanceRequests={advanceRequests}
-          leaveRequests={leaveRequests}
-          legalDeductions={legalDeductions}
-        />
-    );
-  }
 
 
   return (
@@ -3920,6 +4015,14 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             >
               <UserPlus className="w-4 h-4" />
               Yeni Personel Ekle
+            </button>
+            <button
+              onClick={() => setIsBulkPayrollModalOpen(true)}
+              className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold px-3.5 py-2 rounded-xl shadow-2xs transition-all flex items-center gap-1.5 text-xs cursor-pointer active:scale-95"
+              title="Tüm Aktif Personeller İçin Toplu Puantaj ve Bordro Hakedişi Hazırla"
+            >
+              <Layers className="w-4 h-4 text-purple-200" />
+              Toplu Bordro Hazırla
             </button>
             <button
               onClick={() => setIsAddLeaveOpen(true)}
@@ -4213,7 +4316,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   <th className="pb-2 px-3">Anlaşma & Maaş</th>
                   <th className="pb-2 px-3">İzin Hakkı</th>
                   <th className="pb-2 px-3">Durum</th>
-                  <th className="pb-2 px-3 text-right">İşlem</th>
+                  <th className="pb-2 px-3 text-right">İşlemler</th>
                 </tr>
               </thead>
               <tbody>
@@ -4326,13 +4429,26 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       )}
                     </td>
                     <td className="py-3 px-3 rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all text-right">
-                      <button
-                        onClick={() => setSelectedEmployeeForDetail(emp)}
-                        className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/70 font-bold px-3 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-purple-700" />
-                        Özlük Detayı
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditPayroll(emp)}
+                          className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95"
+                          title={`${emp.fullName} için Puantaj ve Bordro Hazırla`}
+                        >
+                          <Calculator className="w-3.5 h-3.5 text-purple-200" />
+                          <span>Bordro Hazırla</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEmployeeForDetail(emp)}
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/70 font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="Özlük Dosyası ve Personel Bilgilerini Görüntüle"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-purple-700" />
+                          <span>Özlük Detayı</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -4400,6 +4516,16 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkPayrollModalOpen(true)}
+                  className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 active:scale-95 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                  title="Tüm Aktif Personeller İçin Toplu Puantaj ve Bordro Hakedişi Hazırla"
+                >
+                  <Layers className="w-3.5 h-3.5 text-purple-200" />
+                  <span>Toplu Bordro Hazırla</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -4574,10 +4700,10 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                               <button
                                 onClick={() => handleOpenEditPayroll(empObj)}
                                 className="bg-purple-700 hover:bg-purple-800 text-white font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                                title="Personel Puantaj Takvimi ve Bordro Hesapla"
+                                title="Personel Puantaj Takvimi ve Bordro Hazırla"
                               >
                                 <Calculator className="w-3.5 h-3.5" />
-                                Bordro Hesapla
+                                Bordro Hazırla
                               </button>
                             )}
 
@@ -5818,6 +5944,45 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           onAddAsset={onAddAsset}
           onUpdateAsset={onUpdateAsset}
           onDeleteAsset={onDeleteAsset}
+        />
+      )}
+
+      {/* MODAL: RESMİ İZİN, DEVAMSIZLIK & AVANS FORMLARI YAZDIRMA & DÜZENLEME */}
+      {isFormsModalOpen && (
+        <HRDocumentFormsModal
+          isOpen={isFormsModalOpen}
+          onClose={() => {
+            setIsFormsModalOpen(false);
+            setFormsModalLeaveRequest(undefined);
+            setFormsModalAdvanceRequest(undefined);
+          }}
+          employees={employees}
+          companySettings={companySettings}
+          advanceRequests={advanceRequests}
+          initialEmployeeId={formsModalEmployeeId}
+          initialFormType={formsModalType}
+          leaveRequest={formsModalLeaveRequest}
+          advanceRequest={formsModalAdvanceRequest}
+        />
+      )}
+
+      {/* MODAL: RESMİ BORDRO VE MAAŞ PUSULASI YAZDIRMA (AYLIK & TÜM YIL) */}
+      {isPayrollPrintModalOpen && (
+        <PayrollPrintModal
+          isOpen={isPayrollPrintModalOpen}
+          onClose={() => {
+            setIsPayrollPrintModalOpen(false);
+            setPayrollPrintSelectedEmpId(undefined);
+          }}
+          employees={employees}
+          companySettings={companySettings}
+          selectedMonth={payrollMonth}
+          initialEmployeeId={payrollPrintSelectedEmpId}
+          initialMode={payrollPrintInitialMode}
+          payrollCustomizations={payrollCustomizations}
+          advanceRequests={advanceRequests}
+          leaveRequests={leaveRequests}
+          legalDeductions={legalDeductions}
         />
       )}
 

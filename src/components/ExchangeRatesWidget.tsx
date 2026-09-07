@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { fetchTCMBExchangeRates, ExchangeRatesData } from "../services/exchangeRateService";
-import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Globe, CheckCircle2 } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown, Globe, CheckCircle2, Table, LayoutGrid } from "lucide-react";
 
 interface ExchangeRatesWidgetProps {
-  compact?: boolean; // If true, shows a horizontal ticker style; if false, shows full cards
+  compact?: boolean; // Default display mode
   className?: string;
+  allowToggle?: boolean;
 }
 
 export const ExchangeRatesWidget: React.FC<ExchangeRatesWidgetProps> = ({
-  compact = false,
+  compact = true,
   className = "",
+  allowToggle = true,
 }) => {
   const [rateData, setRateData] = useState<ExchangeRatesData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isCompact, setIsCompact] = useState<boolean>(compact);
 
   const loadRates = async () => {
     setLoading(true);
@@ -30,7 +33,7 @@ export const ExchangeRatesWidget: React.FC<ExchangeRatesWidgetProps> = ({
     loadRates();
   }, []);
 
-  if (compact) {
+  if (isCompact) {
     return (
       <div className={`relative overflow-hidden bg-gradient-to-r from-purple-50/90 via-white/95 to-fuchsia-50/80 backdrop-blur-md rounded-2xl p-4.5 shadow-2xs border border-purple-200/70 ${className}`}>
         {/* Lila Bal Peteği Desen Kaplaması */}
@@ -56,10 +59,23 @@ export const ExchangeRatesWidget: React.FC<ExchangeRatesWidgetProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <span className="text-[11px] font-semibold text-purple-900/80 bg-white/60 px-2.5 py-1 rounded-lg border border-purple-200/50">
               {rateData?.lastUpdated ? `Güncelleme: ${rateData.lastUpdated}` : "Yükleniyor..."}
             </span>
+
+            {allowToggle && (
+              <button
+                type="button"
+                onClick={() => setIsCompact(false)}
+                className="px-2.5 py-1 text-[11px] font-bold text-purple-700 hover:text-purple-900 bg-white/80 hover:bg-purple-100/80 rounded-xl border border-purple-200/60 shadow-2xs transition-all cursor-pointer flex items-center gap-1"
+                title="Detaylı Tablo Görünümüne Geç"
+              >
+                <Table className="w-3.5 h-3.5 text-purple-600" />
+                <span className="hidden sm:inline">Detaylı Tablo</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={loadRates}
@@ -157,10 +173,23 @@ export const ExchangeRatesWidget: React.FC<ExchangeRatesWidgetProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
             {rateData?.lastUpdated ? `Güncelleme: ${rateData.lastUpdated}` : "Yükleniyor..."}
           </span>
+
+          {allowToggle && (
+            <button
+              type="button"
+              onClick={() => setIsCompact(true)}
+              className="px-3 py-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-200 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+              title="Kompakt Görünüme Geç"
+            >
+              <LayoutGrid className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Kompakt Görünüm</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={loadRates}

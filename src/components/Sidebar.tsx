@@ -83,6 +83,7 @@ export type NavItem =
   | "company_profile"
   | "company_branches"
   | "company_warehouses"
+  | "company_settings"
   | "company_e_services"
   | "e_services"
   | "whatsapp"
@@ -157,7 +158,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "reports" as NavItem, label: "Vergilendirme", icon: BarChart3 },
     { id: "ai" as NavItem, label: "AI Muavin Asistanı", icon: Sparkles, badge: "Canlı" },
     { id: "whatsapp" as NavItem, label: "WhatsApp Merkezi", icon: MessageSquare, badge: "Canlı" },
-    { id: "settings" as NavItem, label: "Sistem Ayarları", icon: Settings },
   ];
 
   // Modül Kısıtlaması Kontrolü (Admin her zaman tüm modüllere erişebilir, normal kullanıcılara modül kısıtlaması uygulanır)
@@ -174,6 +174,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "company_profile", label: "Firma Profili & Adres", icon: Building },
     { id: "company_branches", label: "Şubeler", icon: Store },
     { id: "company_warehouses", label: "Depolar", icon: WarehouseIcon },
+    { id: "company_settings", label: "Sistem Ayarları", icon: Settings },
   ];
 
   const invoiceSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
@@ -281,7 +282,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : isFinanceItem
             ? currentTab === "accounts"
             : isCompanyItem
-            ? ["company", "company_profile", "company_branches", "company_warehouses", "company_e_services"].includes(currentTab)
+            ? ["company", "company_profile", "company_branches", "company_warehouses", "company_settings", "settings", "company_e_services"].includes(currentTab)
             : isProductItem
             ? ["products", "products_list"].includes(currentTab)
             : currentTab === item.id;
@@ -318,7 +319,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }
                   } else if (isCompanyItem) {
                     setIsCompanyExpanded((prev) => !prev);
-                    if (!["company", "company_profile", "company_branches", "company_warehouses"].includes(currentTab)) {
+                    if (!["company", "company_profile", "company_branches", "company_warehouses", "company_settings", "settings"].includes(currentTab)) {
                       handleSelectTabWithMobileClose("company_profile");
                     }
                   } else {
@@ -586,6 +587,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 "company_profile",
                 "company_branches",
                 "company_warehouses",
+                "company_settings",
+                "settings",
                 "company_e_services",
               ].includes(currentTab)
             : isProductItem

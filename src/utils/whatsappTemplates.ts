@@ -84,10 +84,23 @@ export function formatPayrollWhatsAppMessage(
 ): string {
   const companyName = companySettings?.companyTitle || companySettings?.companyName || "Şirketimiz";
   const donem = payroll?.monthYear || "Cari Ay";
-  const netPayable = formatCurrency(payroll?.netSalary || payroll?.grossSalary || employee.salaryAmount || 0, "TRY");
+  const netPayable = formatCurrency(payroll?.payableNetSalary ?? payroll?.netSalary ?? payroll?.grossSalary ?? employee.salaryAmount ?? 0, "TRY");
   const gross = formatCurrency(payroll?.grossSalary || employee.salaryAmount || 0, "TRY");
 
-  return `Sayın *${employee.fullName}* (T.C.: ${employee.tckn}),\n\n*${companyName}* bünyesindeki *${donem}* dönemine ait Resmi Maaş Bordronuz (Ücret Hesap Pusulası - 4857 S.K. Md. 37) düzenlenmiştir.\n\n💵 *Net Ele Geçen Maaş:* ${netPayable}\n📊 *Brüt Ücret:* ${gross}\n\nMaaş bordronuz ekte şifresiz PDF olarak iletilmiştir. Lütfen inceleyiniz.\nİyi çalışmalar dileriz.`;
+  const attachedForms: string[] = [];
+  if (payroll?.unpaidLeaveDays && payroll.unpaidLeaveDays > 0) {
+    attachedForms.push(`📄 SGK Eksik Gün Bildirim Formu (${payroll.unpaidLeaveDays} Gün - Kod ${payroll.missingDayCode || "21"}: ${payroll.missingDayReason || "Ücretsiz İzin"})`);
+  }
+  const totalDeds = (payroll?.advanceDeduction || 0) + (payroll?.executionDeduction || 0) + (payroll?.alimonyDeduction || 0) + (payroll?.otherDeductions || 0);
+  if (totalDeds > 0) {
+    attachedForms.push(`📋 Personel Ücret Kesinti ve Avans Mahsup Formu (${formatCurrency(totalDeds, "TRY")})`);
+  }
+
+  const attachmentsText = attachedForms.length > 0
+    ? `\n\n📌 *Bordroya Eklenen Resmi Formlar:*\n${attachedForms.join("\n")}`
+    : "";
+
+  return `Sayın *${employee.fullName}* (T.C.: ${employee.tckn}),\n\n*${companyName}* bünyesindeki *${donem}* dönemine ait Resmi Maaş Bordronuz (Ücret Hesap Pusulası - 4857 S.K. Md. 37) düzenlenmiştir.\n\n💵 *Net Ele Geçen Maaş:* ${netPayable}\n📊 *Brüt Ücret:* ${gross}${attachmentsText}\n\nMaaş bordronuz ve ilgili ek formlar bu mesaj ile birlikte PDF olarak iletilmiştir. Lütfen inceleyip tebellüğ ediniz.\nİyi çalışmalar dileriz.`;
 }
 
 export function formatCustodyWhatsAppMessage(
