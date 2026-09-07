@@ -262,7 +262,7 @@ export function healGibInvoiceNumber(candidate: string): string {
  * Categorizes expense according to vendor name and line descriptions
  */
 export function detectExpenseCategory(text: string): string {
-  const lower = text.toLowerCase();
+  const lower = text.replace(/İ/g, "i").replace(/I/g, "ı").toLocaleLowerCase("tr-TR");
 
   if (
     lower.includes("petrol") ||
@@ -284,6 +284,23 @@ export function detectExpenseCategory(text: string): string {
   }
 
   if (
+    lower.includes("lastik") ||
+    lower.includes("tamir") ||
+    lower.includes("oto bakım") ||
+    lower.includes("oto lastik") ||
+    lower.includes("rot balans") ||
+    lower.includes("balata") ||
+    lower.includes("oto tamir") ||
+    lower.includes("oto servis") ||
+    lower.includes("kaporta") ||
+    lower.includes("motor bakım") ||
+    lower.includes("periyodik bakım") ||
+    lower.includes("onarım")
+  ) {
+    return "Bakım ve onarım";
+  }
+
+  if (
     lower.includes("mal alım") ||
     lower.includes("ticari mal") ||
     lower.includes("parke") ||
@@ -295,7 +312,8 @@ export function detectExpenseCategory(text: string): string {
     lower.includes("palet") ||
     lower.includes("inşaat") ||
     lower.includes("nalbur") ||
-    lower.includes("demir") ||
+    lower.includes("inşaat demir") ||
+    lower.includes("profil") ||
     lower.includes("çimento") ||
     lower.includes("malzeme") ||
     lower.includes("yedek parça")
@@ -426,13 +444,17 @@ export function postProcessTurkishOcrText(rawText: string): string {
     [/\bK\.?D\.?V\.?\b/g, "KDV"],
     [/\bNAK[1l|]T\b/gi, "NAKİT"],
     [/\bFATURA\s*N[O0]\b/gi, "FATURA NO"],
+    [/\bF[Iİ1l|][SŞ$]\s*[NnWwMm][O0o]\b/gi, "FİŞ NO"],
     [/\bF[Iİ1l|][SŞ$]\s*N[O0]\b/gi, "FİŞ NO"],
+    [/\bKRED[Iİ1l|]\s*(?:KART[Iİ1l|]?|RARER|KARTA|KORT)\b/gi, "KREDİ KARTI"],
     [/\bVERG[Iİ1l|]\s*DA[Iİ1l|]RES[Iİ1l|]\b/gi, "VERGİ DAİRESİ"],
     [/\bVERG[Iİ1l|]\s*K[Iİ1l|]ML[Iİ1l|]K\s*N[O0]\b/gi, "VERGİ KİMLİK NO"],
     [/\bVERG[Iİ1l|]\s*N[O0]\b/gi, "VERGİ NO"],
     [/\bHESAPLANAN\s*KDV\b/gi, "HESAPLANAN KDV"],
     [/\bMAL\s*H[Iİ1l|]ZMET\b/gi, "MAL HİZMET"],
     [/\bVERG[Iİ1l|]LER\s*DAH[Iİ1l|]L\b/gi, "VERGİLER DAHİL"],
+    [/\bAMİR\s+(?=%\s*\d+)/gi, "TAMİR "],
+    [/\bAMIR\s+(?=%\s*\d+)/gi, "TAMİR "],
   ];
 
   for (const [pattern, replacement] of keywordFixes) {
@@ -511,13 +533,23 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
   const companyKeywords = [
     "A.Ş", "A.S", "LTD", "ŞTİ", "STI", "ŞİRKETİ", "SIRKETI",
     "TİCARET", "TICARET", "SANAYİ", "SANAYI", "TİC", "SAN",
-    "PETROL", "MARKET", "GIDA", "LOKANTA", "RESTORAN", "OTOMOTİV",
-    "İNŞAAT", "INSAAT", "TAAHHÜT", "HİZMETLERİ", "HIZMETLERI"
+    "PETROL", "AKARYAKIT", "MARKET", "GIDA", "LOKANTA", "RESTORAN", "RESTAURANT",
+    "OTOMOTİV", "OTO", "LASTİK", "LASTIK", "TAMİR", "TAMIR", "SERVİS", "SERVIS",
+    "BAKIM", "YIKAMA", "İNŞAAT", "INSAAT", "TAAHHÜT", "HİZMETLERİ", "HIZMETLERI",
+    "ECZANE", "OPTİK", "KIRTASİYE", "KAFE", "CAFE", "FIRIN", "PASTANE", "KASAP",
+    "MANAV", "BÜFE", "MAĞAZA", "MAGAZA", "TEKSTİL", "GİYİM", "ELEKTRONİK",
+    "BİLGİSAYAR", "YAZILIM", "KUAFÖR", "BERBER", "HOTEL", "OTEL", "PANSİYON",
+    "DURAK", "TAKSİ", "TAXI", "ŞAHIS"
   ];
 
   const stopHeaderKeywords = [
-    "E-ARŞİV", "EARSIV", "E-FATURA", "EFATURA", "MALİ MÜHÜR",
-    "T.C.", "HAZİNE", "GELİR İDARESİ", "ÖKC", "BİLGİ FİŞİ", "FATURA"
+    "E-ARŞİV", "EARSIV", "E-FATURA", "EFATURA", "MALİ MÜHÜR", "MALI MUHUR",
+    "T.C.", "HAZİNE", "GELİR İDARESİ", "GELIR IDARESI", "ÖKC", "OKC", "BİLGİ FİŞİ", "BILGI FISI", "FATURA", "FİŞ", "FIS"
+  ];
+
+  const backprintKeywords = [
+    "mesma", "mitsubishi", "umur", "rulo", "5045", "saklayin", "saklayınız",
+    "termal", "nem", "derece", "gunes", "güneş"
   ];
 
   let vendorSearchLimit = lines.length;
@@ -527,23 +559,53 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
   }
 
   for (let i = 0; i < Math.min(vendorSearchLimit, 10); i++) {
-    const line = lines[i].replace(/[|\\_«»]/g, "").trim();
-    if (stopHeaderKeywords.some((sw) => line.toUpperCase() === sw)) continue;
+    const rawLine = lines[i].replace(/[|\\_«»]/g, "").trim();
+    const lowerLine = rawLine.toLowerCase();
+
+    // Skip thermal paper roll backprint noise
+    if (backprintKeywords.some((bw) => lowerLine.includes(bw))) continue;
+    // Skip lines with fewer than 3 alphabetic letters or obvious noise
+    const letterCount = (rawLine.match(/[A-Za-zÇĞİÖŞÜçğıöşü]/g) || []).length;
+    if (letterCount < 3) continue;
+
+    if (stopHeaderKeywords.some((sw) => rawLine.toUpperCase() === sw)) continue;
 
     const hasEntityKeyword = companyKeywords.some((k) =>
-      new RegExp(`\\b${k}\\b`, "i").test(line)
+      new RegExp(`\\b${k}\\b`, "i").test(rawLine)
     );
 
-    if (hasEntityKeyword && line.length >= 5) {
-      companyTitle = line;
+    if (hasEntityKeyword && rawLine.length >= 4) {
+      companyTitle = rawLine.replace(/\s+\d{1,2}$/, "");
+      // Check if next line is owner name (e.g. "AHMET DEMİR")
+      if (i + 1 < lines.length) {
+        const nextLine = lines[i + 1].replace(/[|\\_«»¢]/g, "").trim();
+        const nextLower = nextLine.toLowerCase();
+        const words = nextLine.split(/\s+/).filter(Boolean);
+        const isOwnerName =
+          /^[A-ZÇĞİÖŞÜa-zçğıöşü\s]{4,30}$/.test(nextLine) &&
+          words.length >= 2 &&
+          words.length <= 3 &&
+          !companyKeywords.some((k) => new RegExp(`\\b${k}\\b`, "i").test(nextLine)) &&
+          !backprintKeywords.some((bw) => nextLower.includes(bw)) &&
+          !/(?:MAH|MH\b|SOK|SK\b|CAD|CD\b|NO\b|NO:|TEL|VD|VKN|VERGİ|TARİH|YOLU|BULVAR|BLV)/i.test(nextLine);
+
+        if (isOwnerName) {
+          companyTitle += ` - ${nextLine}`;
+        }
+      }
       break;
     }
   }
 
   if (!companyTitle && lines.length > 0) {
-    for (let i = 0; i < Math.min(vendorSearchLimit, 5); i++) {
+    for (let i = 0; i < Math.min(vendorSearchLimit, 6); i++) {
       const line = lines[i].replace(/[|\\_«»]/g, "").trim();
-      if (!stopHeaderKeywords.some((sw) => line.toUpperCase().includes(sw)) && line.length >= 4) {
+      const lowerLine = line.toLowerCase();
+      if (backprintKeywords.some((bw) => lowerLine.includes(bw))) continue;
+      const letterCount = (line.match(/[A-Za-zÇĞİÖŞÜçğıöşü]/g) || []).length;
+      if (letterCount < 4) continue;
+
+      if (!stopHeaderKeywords.some((sw) => line.toUpperCase().includes(sw))) {
         companyTitle = line;
         break;
       }
@@ -554,9 +616,10 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
     // Strip leading non-alphanumeric noise symbols (e.g. "| ", "- ", "* ")
     companyTitle = companyTitle.replace(/^[^A-Za-zÇĞİÖŞÜçğıöşü\d]+/, "");
     // Strip isolated stray single OCR character followed by separator or space (e.g. "ü | ", "ü ", "i - ")
-    // Protects abbreviations like "A.Ş." or "T.C." that have dots
     companyTitle = companyTitle.replace(/^[a-zçğıöşü]\s+/i, "");
     companyTitle = companyTitle.replace(/^[A-Za-zÇĞİÖŞÜçğıöşü]\s*[|!«»\-\.:\/\\]\s*/, "");
+    // Strip trailing isolated numbers or noise symbols (e.g. "DMR OTO LASTİK 4" -> "DMR OTO LASTİK")
+    companyTitle = companyTitle.replace(/\s+\d{1,2}$/, "");
     // Strip trailing symbols and collapse spaces
     companyTitle = companyTitle
       .replace(/[|«»\s\-_.:]+$/, "")
@@ -568,12 +631,12 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
 
   // 3. Extract Tax Number (VKN 10 digits or TCKN 11 digits) with GİB MOD 10 Validation
   let taxNumber = qrParsed?.taxNumber || "";
-  let buyerTaxNumber = qrParsed?.buyerTaxNumber || "";
+let buyerTaxNumber = qrParsed?.buyerTaxNumber || "";
 
   if (!taxNumber) {
     const vknRegexes = [
       /(?:VKN|V\.K\.N|VERG[İI]\s*K[İI]ML[İI]K\s*NO)\s*[:\.]?\s*(\d{10,11})/i,
-      /(?:VD|VERG[İI]\s*D[Aİ]RES[İI]|VERG[İI]\s*DA[İI]RES[İI]).*?[:\.]?\s*(\d{10,11})/i,
+      /(?:V\.?D\.?|VERG[İI]\s*DA[İI]RES[İI]).*?[:\.\s]\s*(\d{10,11})/i,
       /(?:VERG[İI]\s*NO)\s*[:\.]?\s*(\d{10,11})/i,
       /(?:TCKN|T\.C\.?\s*K[İI]ML[İI]K\s*NO)\s*[:\.]?\s*(\d{11})/i
     ];
@@ -592,28 +655,28 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
       }
     }
 
-    // If not found, scan all raw 10-digit numbers and validate with GİB MOD 10
+    // If not found, scan all raw 10 and 11 digit numbers and validate with GİB checksums
     if (!taxNumber) {
-      const all10Digits = textBeforeSayin.match(/\b\d{10}\b/g) || [];
-      for (const num of all10Digits) {
-        if (validateVKN(num)) {
+      const allDigits = textBeforeSayin.match(/\b\d{10,11}\b/g) || [];
+      for (const num of allDigits) {
+        if (validateVKN(num) || validateTCKN(num)) {
           taxNumber = num;
           break;
         }
       }
     }
 
-    // Final fallback to any 10-digit in the whole document
+    // Final fallback to any valid 10 or 11 digit in the whole document
     if (!taxNumber) {
-      const all10Digits = healedText.match(/\b\d{10}\b/g) || [];
-      for (const num of all10Digits) {
-        if (validateVKN(num)) {
+      const allDigits = healedText.match(/\b\d{10,11}\b/g) || [];
+      for (const num of allDigits) {
+        if (validateVKN(num) || validateTCKN(num)) {
           taxNumber = num;
           break;
         }
       }
-      if (!taxNumber && all10Digits.length > 0) {
-        taxNumber = all10Digits[0];
+      if (!taxNumber && allDigits.length > 0) {
+        taxNumber = allDigits[0];
       }
     }
 
@@ -645,7 +708,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
     }
 
     if (!invoiceNumber) {
-      const fisNoMatch = healedText.match(/F[İI]Ş\s*NO\s*[:\.]?\s*(\d{1,8})/i);
+      const fisNoMatch = healedText.match(/(?:F[İI1l|][SŞ$]|\bF[İI1l|][SŞ$]\b)\s*(?:N[O0]|W[O0]|M[O0])?\s*[:\.]?\s*(\d{1,8})/i);
       if (fisNoMatch) {
         invoiceNumber = `FİŞ-${fisNoMatch[1].padStart(4, "0")}`;
       }
@@ -680,7 +743,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
     }
   }
 
-  // 6. Extract ETTN (UUID 36 characters)
+  // 6. Extract ETTN (UUID)
   const ettnMatch = healedText.match(/\b([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\b/);
   const ettn = qrParsed?.ettn || (ettnMatch ? ettnMatch[1].toLowerCase() : undefined);
 
@@ -692,11 +755,12 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
   let grandTotal = qrParsed?.grandTotal || 0;
   if (!grandTotal) {
     const totalRegexes = [
-      /(?:ÖDENECEK\s*TUTAR|ODENECEK\s*TUTAR)\s*[:\*]?\s*([0-9\.,]+)/i,
-      /(?:VERG[İI]LER\s*DAH[İI]L\s*TOPLAM\s*TUTAR)\s*[:\*]?\s*([0-9\.,]+)/i,
-      /(?:GENEL\s*TOPLAM)\s*[:\*]?\s*([0-9\.,]+)/i,
-      /(?:\bTOPLAM)\s*[:\*]?\s*([0-9\.,]+)/i,
-      /(?:K\.KARTI\/B\.KARTI|KREDI\s*KARTI|K\.KARTI)\s*[:\*]?\s*([0-9\.,]+)/i
+      /(?:ÖDENECEK\s*TUTAR|ODENECEK\s*TUTAR)\s*[:\*]?\s*[*#]?\s*([0-9\.,]+)/i,
+      /(?:VERG[İI]LER\s*DAH[İI]L\s*TOPLAM\s*TUTAR)\s*[:\*]?\s*[*#]?\s*([0-9\.,]+)/i,
+      /(?:GENEL\s*TOPLAM)\s*[:\*]?\s*[*#]?\s*([0-9\.,]+)/i,
+      /(?:\bTOPLAM)\s*[:\*]?\s*[*#]?\s*([0-9\.,]+)/i,
+      /(?:K\.KARTI\/B\.KARTI|KREDI\s*KARTI|K\.KARTI)\s*[:\*]?\s*[*#]?\s*([0-9\.,]+)/i,
+      /(?:TUTAR)\s*[:\*]?\s*[*#]?\s*([0-9\.,]+)\s*(?:TL)?/i
     ];
 
     for (const regex of totalRegexes) {
@@ -716,9 +780,9 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
 
   if (!vatAmount) {
     const vatAmountRegexes = [
-      /(?:TOPKDV|TOP\.?\s*KDV)\s*[:\*]?\s*([0-9\.,]+)/i,
-      /(?:HESAPLANAN\s*KDV)\s*(?:\(%\s*([0-9\.,]+)\))?\s*[:\*]?\s*([0-9\.,]+)/i,
-      /(?:KDV\s*TUTARI|KDV\s*TOPLAMI)\s*[:\*]?\s*([0-9\.,]+)/i
+      /(?:TOPKDV|TOP\.?\s*KDV)\s*[:\*]?\s*[*#]?\s*([0-9\.,]+)/i,
+      /(?:HESAPLANAN\s*KDV)\s*(?:\(%\s*([0-9\.,]+)\))?\s*[:\*]?\s*[*#]?\s*([0-9\.,]+)/i,
+      /(?:KDV\s*TUTARI|KDV\s*TOPLAMI)\s*[:\*]?\s*[*#]?\s*([0-9\.,]+)/i
     ];
 
     for (const regex of vatAmountRegexes) {

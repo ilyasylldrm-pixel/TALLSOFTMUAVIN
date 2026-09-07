@@ -716,20 +716,38 @@ export async function runLocalTurkishOcr(
   const text1 = res1.data.text || "";
   const conf1 = res1.data.confidence || 0;
 
-  // Quick validation: Does Pass 1 have a VKN and a total amount?
-  const hasVkn1 = /\b\d{10}\b/.test(text1);
-  const hasTotal1 = /(?:TOPLAM|TUTAR|ÖDENECEK|ODENECEK|K\.KARTI)/i.test(text1);
+  // Semantic Quality Scoring Function
+  const scoreOcrQuality = (text: string): number => {
+    let score = 0;
+    // 10 or 11 digit tax number (VKN/TCKN)
+    if (/\b\d{10,11}\b/.test(text)) score += 30;
+    // Grand total amount with digits
+    if (/(?:TOPLAM|ÖDENECEK|ODENECEK|TUTAR)\s*[:\*]?\s*[*#]?\s*\d+[.,]\d{2}/i.test(text)) score += 35;
+    else if (/(?:TOPLAM|TUTAR)/i.test(text)) score += 15;
+    // VAT amount
+    if (/(?:TOPKDV|KDV)\s*[:\*]?\s*[*#]?\s*\d+[.,]\d{2}/i.test(text)) score += 20;
+    // Issue date
+    if (/\b\d{2}[-./]\d{2}[-./]\d{4}\b/.test(text)) score += 20;
+    // Receipt or Invoice label
+    if (/(?:F[İI1l|][SŞ$]|\bFATURA\b)/i.test(text)) score += 15;
+    return score;
+  };
 
-  if (conf1 >= 65 && hasVkn1 && hasTotal1) {
-    if (onProgress) onProgress(98, "1. Tarama başarılı! Yüksek güvenilirlik.");
+  const hasTaxNum1 = /\b\d{10,11}\b/.test(text1);
+  const hasTotal1 = /(?:TOPLAM|TUTAR|ÖDENECEK|ODENECEK|TOPKDV|K\.KARTI|\bTL\b)/i.test(text1);
+  const hasDate1 = /\b\d{2}[-./]\d{2}[-./]\d{4}\b/.test(text1);
+
+  // If Pass 1 captured key accounting markers, finish fast with high quality
+  if ((hasTaxNum1 && hasTotal1) || (hasTotal1 && hasDate1) || conf1 >= 60) {
+    if (onProgress) onProgress(98, "1. Tarama başarılı! Fiş/Fatura verileri okundu.");
     return { text: text1, confidence: conf1 };
   }
 
-  // ─── PASS 2: Morphological dilation + PSM 11 (sparse text) ───
-  if (onProgress) onProgress(60, "2. Tarama: Zayıf termal mürekkep onarımı (Dilation + Sparse)...");
+  // ─── PASS 2: Morphological dilation + PSM 4 (Single Column Mode) ───
+  if (onProgress) onProgress(60, "2. Tarama: Zayıf termal mürekkep onarımı (Dilation + Single Column)...");
 
   const pass2Canvas = preprocessPass2(sourceCanvas);
-  await worker.setParameters({ tessedit_pageseg_mode: "11" as PSM }); // Sparse text mode
+  await worker.setParameters({ tessedit_pageseg_mode: "4" as PSM }); // Single column mode (preserves table alignment)
   const res2 = await worker.recognize(pass2Canvas);
   const text2 = res2.data.text || "";
   const conf2 = res2.data.confidence || 0;
@@ -772,10 +790,11 @@ export async function runLocalTurkishOcr(
 
   if (onProgress) onProgress(95, "Tarama sonuçları birleştiriliyor...");
 
-  // ─── ARBITRATE: Pick the best combination ───
-  // Use Pass 1 as primary, supplement with Pass 3 totals, fallback to Pass 2
-  const bestPrimary = conf1 >= conf2 ? text1 : text2;
-  const bestConf = Math.max(conf1, conf2);
+  // ─── ARBITRATE: Pick the best combination using semantic field quality ───
+  const score1 = scoreOcrQuality(text1);
+  const score2 = scoreOcrQuality(text2);
+  const bestPrimary = score1 >= score2 ? text1 : text2;
+  const bestConf = score1 >= score2 ? conf1 : conf2;
 
   // Combine: primary text + bottom zone analysis (if it found amounts)
   let finalText = bestPrimary;
@@ -783,13 +802,12 @@ export async function runLocalTurkishOcr(
     finalText += "\n\n--- [ALT TOPLAM BÖLGESİ] ---\n" + text3;
   }
 
-  // Also append Pass 2 if it found things Pass 1 missed
-  if (conf1 >= conf2) {
-    const hasVkn2 = /\b\d{10}\b/.test(text2);
-    const hasTotal2 = /(?:TOPLAM|TUTAR|ÖDENECEK)/i.test(text2);
-    if (!hasVkn1 && hasVkn2 || !hasTotal1 && hasTotal2) {
-      finalText += "\n\n--- [YEDEK TARAMA] ---\n" + text2;
-    }
+  // Also append other pass if it found something missing
+  const secondary = score1 >= score2 ? text2 : text1;
+  const missingVkn = !/\b\d{10,11}\b/.test(finalText) && /\b\d{10,11}\b/.test(secondary);
+  const missingTotal = !/(?:TOPLAM|TUTAR|ÖDENECEK)/i.test(finalText) && /(?:TOPLAM|TUTAR|ÖDENECEK)/i.test(secondary);
+  if (missingVkn || missingTotal) {
+    finalText += "\n\n--- [YEDEK TARAMA] ---\n" + secondary;
   }
 
   if (onProgress) onProgress(98, "Ayrıştırma tamamlanıyor...");
