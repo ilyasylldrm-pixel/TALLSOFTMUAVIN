@@ -366,27 +366,143 @@ export function detectExpenseCategory(text: string): string {
 }
 
 /**
+ * Heals common OCR misrecognitions on Turkish receipt text.
+ * Applied BEFORE fiscal heuristic parsing to maximize field extraction accuracy.
+ * 
+ * Fixes:
+ * - ASCII / Thermal CodePage mismatch: '$' → 'Ş'
+ * - Digit/letter confusion: '1/l/|' → 'İ/I', '0' → 'Ö' in word context
+ * - Turkish accounting keyword dictionary normalization
+ * - Digit restoration in fiscal lines (TOPLAM, KDV, MATRAH)
+ * - Written Turkish month names → date parsing
+ */
+export function postProcessTurkishOcrText(rawText: string): string {
+  if (!rawText) return "";
+
+  let text = rawText;
+
+  // 1. Fix ASCII / Thermal CodePage mismatch where '$' replaces 'Ş' or 'ş'
+  text = text
+    .replace(/FI\$/gi, "FİŞ")
+    .replace(/SATI\$/gi, "SATIŞ")
+    .replace(/BA\$KAN/gi, "BAŞKAN")
+    .replace(/PE\$[Iİ]N/gi, "PEŞİN")
+    .replace(/KAPANI\$/gi, "KAPANIŞ")
+    .replace(/G[Iİ]R[Iİ]\$/gi, "GİRİŞ")
+    .replace(/([A-ZÇĞİÖŞÜa-zçğıöşü])\$([A-ZÇĞİÖŞÜa-zçğıöşü])/g, "$1Ş$2");
+
+  // 2. Fix '1', 'l', '|' inside words to 'İ' or 'I'
+  text = text
+    .replace(/\bTAR[1l|]H\b/gi, "TARİH")
+    .replace(/\bF[1l|][SŞ]\b/gi, "FİŞ")
+    .replace(/\bKRED[1l|]\b/gi, "KREDİ")
+    .replace(/\bB[1l|]LG[1l|]\b/gi, "BİLGİ")
+    .replace(/\b[1l|]RSAL[1l|]YE\b/gi, "İRSALİYE")
+    .replace(/\b[1l|]STANBUL\b/gi, "İSTANBUL")
+    .replace(/\bMAL[1l|]\b/gi, "MALİ")
+    .replace(/\bVERG[1l|]\b/gi, "VERGİ")
+    .replace(/\bK[1l|]ML[1l|]K\b/gi, "KİMLİK")
+    .replace(/\bDA[1l|]RES[1l|]\b/gi, "DAİRESİ")
+    .replace(/\bT[1l|]CARET\b/gi, "TİCARET")
+    .replace(/\bSANAY[1l|]\b/gi, "SANAYİ")
+    .replace(/\bH[1l|]ZMET\b/gi, "HİZMET")
+    .replace(/\bL[1l|]M[1l|]TED\b/gi, "LİMİTED")
+    .replace(/\b[1l|]N[SŞ]AAT\b/gi, "İNŞAAT");
+
+  // 3. Fix '0' at beginning of Turkish words (misread Ö)
+  text = text
+    .replace(/\b0DEME\b/gi, "ÖDEME")
+    .replace(/\b0DENECEK\b/gi, "ÖDENECEK")
+    .replace(/\b0KC\b/gi, "ÖKC")
+    .replace(/\b0ZEL\b/gi, "ÖZEL")
+    .replace(/\b0TV\b/gi, "ÖTV");
+
+  // 4. Heal Turkish Accounting Keywords (systematic normalization)
+  const keywordFixes: [RegExp, string][] = [
+    [/\bT0PLAM\b/gi, "TOPLAM"],
+    [/\bT O P L A M\b/gi, "TOPLAM"],
+    [/\bGENEL\s+T0PLAM\b/gi, "GENEL TOPLAM"],
+    [/\bT0PKDV\b/gi, "TOPKDV"],
+    [/\bK\.?D\.?V\.?\b/g, "KDV"],
+    [/\bNAK[1l|]T\b/gi, "NAKİT"],
+    [/\bFATURA\s*N[O0]\b/gi, "FATURA NO"],
+    [/\bF[Iİ1l|][SŞ$]\s*N[O0]\b/gi, "FİŞ NO"],
+    [/\bVERG[Iİ1l|]\s*DA[Iİ1l|]RES[Iİ1l|]\b/gi, "VERGİ DAİRESİ"],
+    [/\bVERG[Iİ1l|]\s*K[Iİ1l|]ML[Iİ1l|]K\s*N[O0]\b/gi, "VERGİ KİMLİK NO"],
+    [/\bVERG[Iİ1l|]\s*N[O0]\b/gi, "VERGİ NO"],
+    [/\bHESAPLANAN\s*KDV\b/gi, "HESAPLANAN KDV"],
+    [/\bMAL\s*H[Iİ1l|]ZMET\b/gi, "MAL HİZMET"],
+    [/\bVERG[Iİ1l|]LER\s*DAH[Iİ1l|]L\b/gi, "VERGİLER DAHİL"],
+  ];
+
+  for (const [pattern, replacement] of keywordFixes) {
+    text = text.replace(pattern, replacement);
+  }
+
+  // 5. Number & Monetary Digit Restoration in Fiscal Lines
+  // If line contains TOPLAM, KDV, TUTAR, etc., heal 'O'->'0', 'B'->'8', 'S'->'5' in numbers
+  const lines = text.split("\n");
+  const processedLines = lines.map((line) => {
+    if (/(?:TOPLAM|KDV|MATRAH|TUTAR|ÖDENECEK|NAKİT|KREDİ|K\.KARTI|B\.KARTI)/i.test(line)) {
+      return line
+        // Fix 'O'/'o' adjacent to digits: "12O,5O" -> "120,50"
+        .replace(/(\d)[Oo](\d)/g, "$10$2")
+        .replace(/(\d)[Oo]\b/g, "$10")
+        .replace(/\b[Oo](\d)/g, "0$1")
+        // Fix 'B' adjacent to digits: "1B,50" -> "18,50"
+        .replace(/(\d)B(\d)/g, "$18$2")
+        // Fix 'S' adjacent to digits: "1S,00" -> "15,00"
+        .replace(/(\d)S(\d)/g, "$15$2");
+    }
+    return line;
+  });
+
+  text = processedLines.join("\n");
+
+  // 6. Convert written Turkish month names to numeric dates
+  // "13 NİSAN 2026" → "13-04-2026"
+  const turkishMonths: Record<string, string> = {
+    "OCAK": "01", "ŞUBAT": "02", "MART": "03", "NİSAN": "04",
+    "MAYIS": "05", "HAZİRAN": "06", "TEMMUZ": "07", "AĞUSTOS": "08",
+    "EYLÜL": "09", "EKİM": "10", "KASIM": "11", "ARALIK": "12",
+    // Common OCR misspellings
+    "SUBAT": "02", "NISAN": "04", "HAZIRAN": "06", "AGUSTOS": "08",
+    "EYLUL": "09", "EKIM": "10",
+  };
+
+  for (const [monthName, monthNum] of Object.entries(turkishMonths)) {
+    const regex = new RegExp(`\\b(\\d{1,2})\\s+${monthName}\\s+(\\d{4})\\b`, "gi");
+    text = text.replace(regex, `$1-${monthNum}-$2`);
+  }
+
+  return text;
+}
+
+/**
  * Main Turkish Document Parser
  */
 export function parseTurkishReceiptText(rawText: string, fileName?: string): ParsedAccountingData {
-  // Check if rawText is a GİB QR code payload first
-  const qrParsed = parseGibQrCode(rawText);
+  // Step 0: Apply Turkish OCR post-processing to heal character confusions
+  const healedText = postProcessTurkishOcrText(rawText);
 
-  const lines = rawText
+  // Check if healedText is a GİB QR code payload first
+  const qrParsed = parseGibQrCode(healedText);
+
+  const lines = healedText
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
 
   // 1. Determine Document Type (Fiş vs Fatura)
   const isReceipt =
-    /F[İI]Ş\s*NO/i.test(rawText) ||
-    /ÖKC/i.test(rawText) ||
-    /YAZAR\s*KASA/i.test(rawText) ||
-    /TOPKDV/i.test(rawText) ||
-    /Z\s*NO/i.test(rawText) ||
-    /EKÜ/i.test(rawText) ||
-    /POMPA/i.test(rawText) ||
-    /AKARYAKIT\s*POMPA/i.test(rawText);
+    /F[İI]Ş\s*NO/i.test(healedText) ||
+    /ÖKC/i.test(healedText) ||
+    /YAZAR\s*KASA/i.test(healedText) ||
+    /TOPKDV/i.test(healedText) ||
+    /Z\s*NO/i.test(healedText) ||
+    /EKÜ/i.test(healedText) ||
+    /POMPA/i.test(healedText) ||
+    /AKARYAKIT\s*POMPA/i.test(healedText);
 
   const docType: "Fatura" | "Fiş" = qrParsed?.docType || (isReceipt ? "Fiş" : "Fatura");
 
@@ -435,10 +551,15 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
   }
 
   if (companyTitle) {
-    // Strip leading stray OCR characters (e.g. "ü | ", "! ")
+    // Strip leading non-alphanumeric noise symbols (e.g. "| ", "- ", "* ")
+    companyTitle = companyTitle.replace(/^[^A-Za-zÇĞİÖŞÜçğıöşü\d]+/, "");
+    // Strip isolated stray single OCR character followed by separator or space (e.g. "ü | ", "ü ", "i - ")
+    // Protects abbreviations like "A.Ş." or "T.C." that have dots
+    companyTitle = companyTitle.replace(/^[a-zçğıöşü]\s+/i, "");
+    companyTitle = companyTitle.replace(/^[A-Za-zÇĞİÖŞÜçğıöşü]\s*[|!«»\-\.:\/\\]\s*/, "");
+    // Strip trailing symbols and collapse spaces
     companyTitle = companyTitle
-      .replace(/^[üÜöÖıIİ!|«»\s]+/, "")
-      .replace(/[|«»\s]+$/, "")
+      .replace(/[|«»\s\-_.:]+$/, "")
       .replace(/\s{2,}/g, " ")
       .trim();
   } else if (fileName) {
@@ -457,7 +578,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
       /(?:TCKN|T\.C\.?\s*K[İI]ML[İI]K\s*NO)\s*[:\.]?\s*(\d{11})/i
     ];
 
-    const textBeforeSayin = sayinIndex > 0 ? lines.slice(0, sayinIndex).join("\n") : rawText;
+    const textBeforeSayin = sayinIndex > 0 ? lines.slice(0, sayinIndex).join("\n") : healedText;
 
     // First scan text before "SAYIN" (vendor box)
     for (const regex of vknRegexes) {
@@ -484,7 +605,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
 
     // Final fallback to any 10-digit in the whole document
     if (!taxNumber) {
-      const all10Digits = rawText.match(/\b\d{10}\b/g) || [];
+      const all10Digits = healedText.match(/\b\d{10}\b/g) || [];
       for (const num of all10Digits) {
         if (validateVKN(num)) {
           taxNumber = num;
@@ -511,27 +632,27 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
 
   if (!invoiceNumber) {
     // 4a. 16-character standard GİB e-Fatura number (e.g. GKA2024000000098)
-    const gibMatch = rawText.match(/\b([A-ZÇĞİÖŞÜ]{3}[A-Z0-9]{13})\b/i);
+    const gibMatch = healedText.match(/\b([A-ZÇĞİÖŞÜ]{3}[A-Z0-9]{13})\b/i);
     if (gibMatch) {
       invoiceNumber = healGibInvoiceNumber(gibMatch[1]);
     }
 
     if (!invoiceNumber) {
-      const faturaNoLabelMatch = rawText.match(/Fatura\s*No\s*[:\.]?\s*([A-Z0-9_-]{5,20})/i);
+      const faturaNoLabelMatch = healedText.match(/Fatura\s*No\s*[:\.]?\s*([A-Z0-9_-]{5,20})/i);
       if (faturaNoLabelMatch) {
         invoiceNumber = healGibInvoiceNumber(faturaNoLabelMatch[1].trim());
       }
     }
 
     if (!invoiceNumber) {
-      const fisNoMatch = rawText.match(/F[İI]Ş\s*NO\s*[:\.]?\s*(\d{1,8})/i);
+      const fisNoMatch = healedText.match(/F[İI]Ş\s*NO\s*[:\.]?\s*(\d{1,8})/i);
       if (fisNoMatch) {
         invoiceNumber = `FİŞ-${fisNoMatch[1].padStart(4, "0")}`;
       }
     }
 
     if (!invoiceNumber) {
-      const zNoMatch = rawText.match(/Z\s*NO\s*[:\.]?\s*([\d\.]+)/i);
+      const zNoMatch = healedText.match(/Z\s*NO\s*[:\.]?\s*([\d\.]+)/i);
       if (zNoMatch) {
         invoiceNumber = `Z-${zNoMatch[1].replace(/\D/g, "")}`;
       }
@@ -560,11 +681,11 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
   }
 
   // 6. Extract ETTN (UUID 36 characters)
-  const ettnMatch = rawText.match(/\b([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\b/);
+  const ettnMatch = healedText.match(/\b([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\b/);
   const ettn = qrParsed?.ettn || (ettnMatch ? ettnMatch[1].toLowerCase() : undefined);
 
   // 7. Extract IBAN
-  const ibanMatch = rawText.match(/TR\d{2}\s*(?:\d{4}\s*){5}\d{2}/i);
+  const ibanMatch = healedText.match(/TR\d{2}\s*(?:\d{4}\s*){5}\d{2}/i);
   const iban = ibanMatch ? ibanMatch[0].replace(/\s+/g, " ") : undefined;
 
   // 8. Extract Amounts
@@ -579,7 +700,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
     ];
 
     for (const regex of totalRegexes) {
-      const match = rawText.match(regex);
+      const match = healedText.match(regex);
       if (match && match[1]) {
         const parsed = parseTurkishNumber(match[1]);
         if (parsed && parsed > grandTotal) {
@@ -601,7 +722,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
     ];
 
     for (const regex of vatAmountRegexes) {
-      const match = rawText.match(regex);
+      const match = healedText.match(regex);
       if (match) {
         if (match.length >= 3 && match[1] && match[2]) {
           const parsedRate = parseTurkishNumber(match[1]);
@@ -621,7 +742,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
   }
 
   if (vatRate === 20) {
-    const rateMatch = rawText.match(/%\s*(20|10|1|8|18)(?:[,\.]00)?\b/);
+    const rateMatch = healedText.match(/%\s*(20|10|1|8|18)(?:[,\.]00)?\b/);
     if (rateMatch && rateMatch[1]) {
       vatRate = parseInt(rateMatch[1], 10);
     }
@@ -636,7 +757,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
     ];
 
     for (const regex of subtotalRegexes) {
-      const match = rawText.match(regex);
+      const match = healedText.match(regex);
       if (match && match[1]) {
         const parsed = parseTurkishNumber(match[1]);
         if (parsed) {
@@ -662,19 +783,19 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
   // 9. Payment Method
   let paymentMethod: ParsedAccountingData["paymentMethod"] = "Nakit";
   if (
-    /K\.KARTI/i.test(rawText) ||
-    /B\.KARTI/i.test(rawText) ||
-    /KRED[İI]\s*KARTI/i.test(rawText) ||
-    /POS\s*SATIŞ/i.test(rawText) ||
-    /MASTERCARD/i.test(rawText) ||
-    /VISA/i.test(rawText)
+    /K\.KARTI/i.test(healedText) ||
+    /B\.KARTI/i.test(healedText) ||
+    /KRED[İI]\s*KARTI/i.test(healedText) ||
+    /POS\s*SATIŞ/i.test(healedText) ||
+    /MASTERCARD/i.test(healedText) ||
+    /VISA/i.test(healedText)
   ) {
     paymentMethod = "Kredi Kartı";
   } else if (
-    /HAVALE/i.test(rawText) ||
-    /EFT/i.test(rawText) ||
-    /IBAN/i.test(rawText) ||
-    /BANKA/i.test(rawText)
+    /HAVALE/i.test(healedText) ||
+    /EFT/i.test(healedText) ||
+    /IBAN/i.test(healedText) ||
+    /BANKA/i.test(healedText)
   ) {
     paymentMethod = "Banka Transferi / EFT";
   }
@@ -682,7 +803,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
   // 10. Line Items
   const items: ParsedLineItem[] = [];
 
-  const pumpMatch = rawText.match(/([0-9\.,]+)\s*(LT|AD|KG|M2|MT)\s*X\s*([0-9\.,]+)\s+([^\n%*]+)(?:%\s*(\d+))?\s*[:\*]?\s*([0-9\.,]+)/i);
+  const pumpMatch = healedText.match(/([0-9\.,]+)\s*(LT|AD|KG|M2|MT)\s*X\s*([0-9\.,]+)\s+([^\n%*]+)(?:%\s*(\d+))?\s*[:\*]?\s*([0-9\.,]+)/i);
   if (pumpMatch) {
     let rawQtyStr = pumpMatch[1].replace(/,/g, ".");
     const qty = parseFloat(rawQtyStr) || 1;
@@ -702,7 +823,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
     });
   }
 
-  const invoiceItemMatch = rawText.match(/([A-ZÇĞİÖŞÜ0-9\s\.\-]{3,40})\s+([0-9\.,]+)\s*(M2|ADET|KG|LT|PAKET|KOLİ)\s+([0-9\.,]+)\s*(?:TL)?/i);
+  const invoiceItemMatch = healedText.match(/([A-ZÇĞİÖŞÜ0-9\s\.\-]{3,40})\s+([0-9\.,]+)\s*(M2|ADET|KG|LT|PAKET|KOLİ)\s+([0-9\.,]+)\s*(?:TL)?/i);
   if (invoiceItemMatch && items.length === 0) {
     const itemName = invoiceItemMatch[1].trim();
     const qty = parseTurkishNumber(invoiceItemMatch[2]) || 1;
@@ -720,11 +841,11 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
 
   // 11. Extra Notes
   const noteParts: string[] = [];
-  const plateMatch = rawText.match(/\b(\d{2}\s*[A-Z]{1,3}\s*\d{2,4})\b/);
+  const plateMatch = healedText.match(/\b(\d{2}\s*[A-Z]{1,3}\s*\d{2,4})\b/);
   if (plateMatch) {
     noteParts.push(`Araç Plakası: ${plateMatch[1].replace(/\s+/g, "")}`);
   }
-  if (/UTTS/i.test(rawText)) {
+  if (/UTTS/i.test(healedText)) {
     noteParts.push("UTTS (Ulusal Taşıt Tanıma) Onaylı");
   }
   if (ettn) {
@@ -734,7 +855,7 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
     noteParts.push(`IBAN: ${iban}`);
   }
 
-  const expenseCategory = detectExpenseCategory(rawText);
+  const expenseCategory = detectExpenseCategory(healedText);
   const isVknValidGib = validateVKN(taxNumber) || validateTCKN(taxNumber);
   const totalsMatch = Math.abs((subtotal + vatAmount) - grandTotal) < 0.05;
 
@@ -764,6 +885,6 @@ export function parseTurkishReceiptText(rawText: string, fileName?: string): Par
       date: !!issueDate,
       totalsMatch
     },
-    rawText
+    rawText: healedText
   };
 }
