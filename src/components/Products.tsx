@@ -7,6 +7,8 @@ import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { ProductCostsView } from "./ProductCostsView";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS } from "../utils/assetIcons";
 import {
   Package,
   Plus,
@@ -335,8 +337,10 @@ export const Products: React.FC<ProductsProps> = ({
   const [simulatedInflation, setSimulatedInflation] = useState<number>(0);
   const [targetMargin, setTargetMargin] = useState<number>(25);
 
+  const { theme } = useTheme();
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [showOnlyCritical, setShowOnlyCritical] = useState(false);
   const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -348,6 +352,14 @@ export const Products: React.FC<ProductsProps> = ({
   const [ekstreTab, setEkstreTab] = useState<"all" | "purchase" | "sales">("all");
   const [ekstreSearch, setEkstreSearch] = useState("");
   const [ekstreWarehouseId, setEkstreWarehouseId] = useState<string>("all");
+
+  const criticalStockCount = useMemo(() => {
+    return products.filter((p) => {
+      const q = p.stockQuantity || 0;
+      const minAlert = p.minStockAlert !== undefined ? p.minStockAlert : 5;
+      return q <= minAlert;
+    }).length;
+  }, [products]);
 
   const nav = useDetailNavigation<Product>({ moduleKey: "products" });
 
@@ -690,12 +702,20 @@ export const Products: React.FC<ProductsProps> = ({
 
       if (!matchesSearch) return false;
 
-      if (selectedWarehouseId === "all") return true;
+      if (selectedWarehouseId !== "all") {
+        const stockInWh = getProductStockInWarehouse(p, selectedWarehouseId, activeWarehouses);
+        if (stockInWh < 0) return false;
+      }
 
-      const stockInWh = getProductStockInWarehouse(p, selectedWarehouseId, activeWarehouses);
-      return stockInWh >= 0;
+      if (showOnlyCritical) {
+        const stockInWh = getProductStockInWarehouse(p, selectedWarehouseId, activeWarehouses);
+        const minAlert = p.minStockAlert !== undefined ? p.minStockAlert : 5;
+        if (stockInWh > minAlert) return false;
+      }
+
+      return true;
     });
-  }, [products, activeSearchQuery, selectedWarehouseId, activeWarehouses]);
+  }, [products, activeSearchQuery, selectedWarehouseId, activeWarehouses, showOnlyCritical]);
 
   const displayedProducts = filteredProducts.slice(0, displayLimit);
 
@@ -1842,534 +1862,534 @@ export const Products: React.FC<ProductsProps> = ({
         />
       ) : (
         <>
-          {/* Header (Lila Bal Peteği & Geometrik Desen) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        <div className="relative z-10">
-          <h2 className="text-lg font-extrabold text-slate-950 flex items-center gap-2">
-            <Package className="w-5 h-5 text-purple-800" />
-            <span>Stok ve Depo Yönetimi</span>
-          </h2>
-          <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-            Depo bazlı stok takibi, depolar arası stok transferi, ürün hareket ekstresi ve alış/satış analizi.
-          </p>
-        </div>
-
-        <div className="relative z-10 flex flex-wrap items-center gap-2 shrink-0">
-          <button
-            onClick={() => handleOpenTransferModal()}
-            className="bg-purple-900/10 hover:bg-purple-900/20 text-purple-950 border border-purple-300/60 font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs"
-          >
-            <ArrowRightLeft className="w-4 h-4 text-purple-700" />
-            <span>Depo Transferi</span>
-          </button>
-          <button
-            onClick={() => handleOpenAddModal()}
-            className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all"
-          >
-            <Plus className="w-4 h-4 text-purple-800 font-bold" />
-            <span>Yeni Ürün / Stok Kartı</span>
-          </button>
-        </div>
-      </div>
-
-      {/* WAREHOUSE FILTER WIDGET GRID (Matching Reference Design) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50/60 via-fuchsia-50/30 to-slate-50/80 rounded-3xl border border-purple-200/60 p-4 sm:p-5 space-y-4 shadow-2xs">
-        {/* Honeycomb grid overlay pattern */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-10 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Top Header Label */}
-        <div className="relative z-10 flex items-center justify-between border-b border-purple-200/50 pb-2.5">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center font-bold">
-              <WarehouseIcon className="w-4 h-4" />
-            </div>
-            <span className="text-xs font-black tracking-wider uppercase text-purple-950">
-              DEPO BAZLI STOK SÜZGEÇİ & YÖNETİMİ
-            </span>
-          </div>
-          <span className="text-[11px] font-extrabold text-purple-900 bg-purple-100/80 border border-purple-200 px-2.5 py-0.5 rounded-full">
-            {activeWarehouses.length} Depo Aktif
-          </span>
-        </div>
-
-        {/* Grid of Cards styled exactly like the photo */}
-        <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          {/* CARD 1: TÜM DEPOLAR (KONSOLİDE) - Amber/Orange Theme */}
-          {(() => {
-            const isSelected = selectedWarehouseId === "all";
-            return (
-              <div
-                onClick={() => setSelectedWarehouseId("all")}
-                className={`group relative p-4 rounded-2xl cursor-pointer transition-all duration-200 flex flex-col justify-between ${
-                  isSelected
-                    ? "bg-gradient-to-br from-amber-50 via-amber-50/95 to-orange-50/90 border-2 border-amber-400 ring-2 ring-amber-400/30 shadow-md shadow-amber-500/10 -translate-y-0.5"
-                    : "bg-gradient-to-br from-amber-50/50 via-white/80 to-amber-50/30 border border-amber-200/80 hover:border-amber-300 hover:shadow-xs"
-                }`}
-              >
-                {/* Top Row: Title & Icon Badge */}
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-[11px] font-black tracking-wide uppercase text-amber-950 leading-tight">
-                    TÜM DEPOLAR<br />
-                    <span className="text-[10px] text-amber-800/80 font-bold">(KONSOLİDE)</span>
-                  </span>
-                  <div className="w-9 h-9 rounded-xl bg-amber-100/90 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0 shadow-2xs">
-                    <Boxes className="w-4 h-4" />
-                  </div>
-                </div>
-
-                {/* Middle Row: Main Metric Value */}
-                <div className="my-2.5">
-                  <div className="text-xl font-black font-mono tracking-tight text-slate-900 group-hover:text-amber-950">
-                    ₺{totalConsolidatedValue.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-
-                {/* Bottom Row: Pill badge + info text */}
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="bg-amber-200/90 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md font-extrabold text-[11px] font-mono">
-                    {products.length} Kalem
-                  </span>
-                  <span className="text-amber-900/80 font-semibold text-[11px]">
-                    {totalConsolidatedQty} miktar
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* CARDS FOR EACH WAREHOUSE */}
-          {activeWarehouses.map((wh, idx) => {
-            const isSelected = selectedWarehouseId === wh.id;
-            const analytics = getWhAnalytics(wh.id);
-
-            // Color Themes Array matching photo (Blue, Purple, Pink/Fuchsia, Emerald)
-            const themes = [
-              {
-                selected: "bg-gradient-to-br from-blue-50 via-blue-50/95 to-sky-50/90 border-2 border-blue-400 ring-2 ring-blue-400/30 shadow-md shadow-blue-500/10 -translate-y-0.5",
-                unselected: "bg-gradient-to-br from-blue-50/40 via-white/80 to-sky-50/30 border border-blue-200/80 hover:border-blue-300 hover:shadow-xs",
-                iconBg: "bg-blue-100/90 border border-blue-200 text-blue-700",
-                titleColor: "text-blue-950",
-                badgeBg: "bg-blue-200/90 text-blue-900 border border-blue-300",
-                subText: "text-blue-900/80",
-                icon: Building2,
-              },
-              {
-                selected: "bg-gradient-to-br from-indigo-50 via-indigo-50/95 to-purple-50/90 border-2 border-indigo-400 ring-2 ring-indigo-400/30 shadow-md shadow-indigo-500/10 -translate-y-0.5",
-                unselected: "bg-gradient-to-br from-indigo-50/40 via-white/80 to-purple-50/30 border border-indigo-200/80 hover:border-indigo-300 hover:shadow-xs",
-                iconBg: "bg-indigo-100/90 border border-indigo-200 text-indigo-700",
-                titleColor: "text-indigo-950",
-                badgeBg: "bg-indigo-200/90 text-indigo-900 border border-indigo-300",
-                subText: "text-indigo-900/80",
-                icon: WarehouseIcon,
-              },
-              {
-                selected: "bg-gradient-to-br from-fuchsia-50 via-fuchsia-50/95 to-pink-50/90 border-2 border-fuchsia-400 ring-2 ring-fuchsia-400/30 shadow-md shadow-fuchsia-500/10 -translate-y-0.5",
-                unselected: "bg-gradient-to-br from-fuchsia-50/40 via-white/80 to-pink-50/30 border border-fuchsia-200/80 hover:border-fuchsia-300 hover:shadow-xs",
-                iconBg: "bg-fuchsia-100/90 border border-fuchsia-200 text-fuchsia-700",
-                titleColor: "text-fuchsia-950",
-                badgeBg: "bg-fuchsia-200/90 text-fuchsia-900 border border-fuchsia-300",
-                subText: "text-fuchsia-900/80",
-                icon: Boxes,
-              },
-              {
-                selected: "bg-gradient-to-br from-emerald-50 via-emerald-50/95 to-teal-50/90 border-2 border-emerald-400 ring-2 ring-emerald-400/30 shadow-md shadow-emerald-500/10 -translate-y-0.5",
-                unselected: "bg-gradient-to-br from-emerald-50/40 via-white/80 to-teal-50/30 border border-emerald-200/80 hover:border-emerald-300 hover:shadow-xs",
-                iconBg: "bg-emerald-100/90 border border-emerald-200 text-emerald-700",
-                titleColor: "text-emerald-950",
-                badgeBg: "bg-emerald-200/90 text-emerald-900 border border-emerald-300",
-                subText: "text-emerald-900/80",
-                icon: MapPin,
-              },
-            ];
-
-            const theme = themes[idx % themes.length];
-            const IconComponent = theme.icon;
-
-            return (
-              <div
-                key={wh.id}
-                onClick={() => setSelectedWarehouseId(wh.id)}
-                className={`group relative p-4 rounded-2xl cursor-pointer transition-all duration-200 flex flex-col justify-between ${
-                  isSelected ? theme.selected : theme.unselected
-                }`}
-              >
-                {/* Top Row: Warehouse Name & Icon Badge */}
-                <div className="flex items-start justify-between gap-2">
-                  <span className={`text-[11px] font-black tracking-wide uppercase leading-tight ${theme.titleColor}`}>
-                    {wh.name}
-                  </span>
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${theme.iconBg}`}>
-                    <IconComponent className="w-4 h-4" />
-                  </div>
-                </div>
-
-                {/* Middle Row: Valuation / Quantity */}
-                <div className="my-2.5">
-                  <div className="text-xl font-black font-mono tracking-tight text-slate-900">
-                    ₺{analytics.totalValue.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-
-                {/* Bottom Row: Pill badge + status */}
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className={`px-2 py-0.5 rounded-md font-extrabold text-[11px] font-mono ${theme.badgeBg}`}>
-                    {analytics.totalItems} Kalem
-                  </span>
-                  <span className={`font-semibold text-[11px] ${theme.subText}`}>
-                    {analytics.totalQty} {wh.code}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* SELECTED WAREHOUSE SUMMARY CARD (IF SPECIFIC WAREHOUSE SELECTED) */}
-      {selectedWarehouseId !== "all" && selectedWhObj && (
-        <div className="bg-gradient-to-r from-amber-50 via-amber-50/50 to-orange-50/60 rounded-2xl border border-amber-200/80 p-4 shadow-2xs space-y-3">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-amber-200/60">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
-                <WarehouseIcon className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-extrabold text-amber-950">{selectedWhObj.name}</h3>
-                  <span className="bg-amber-200/80 text-amber-900 border border-amber-300 font-mono text-[10px] px-2 py-0.5 rounded-md font-bold">
-                    {selectedWhObj.code}
-                  </span>
-                  <span className="bg-emerald-100 text-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded-md">
-                    Aktif Depo
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-amber-900/80 mt-1">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-amber-700" />
-                    {selectedWhObj.address.fullAddress || `${selectedWhObj.address.district} / ${selectedWhObj.address.city}`}
-                  </span>
-                  {selectedWhObj.managerName && (
-                    <span className="flex items-center gap-1 font-semibold">
-                      <Users className="w-3.5 h-3.5 text-amber-700" />
-                      Sorumlu: {selectedWhObj.managerName} ({selectedWhObj.phone})
-                    </span>
-                  )}
-                  {selectedWhObj.capacityM2 && (
-                    <span className="font-mono text-[11px] bg-amber-100/80 px-2 py-0.5 rounded">
-                      Kapasite: {selectedWhObj.capacityM2} m²
-                    </span>
-                  )}
-                </div>
-              </div>
+          {/* 1. TOP TITLE & ACTION HEADER */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+                Stok ve Depo Yönetimi
+              </h1>
+              <p className="text-xs font-medium text-slate-400 mt-1">
+                Depo bazlı stok takibi, depolar arası sevk transferi, kritik seviye takibi ve resmi envanter ekstresi
+              </p>
             </div>
 
-            <button
-              onClick={() => handleOpenTransferModal(undefined, selectedWhObj.id)}
-              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs shrink-0"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Bu Depodan Stok Çıkışı / Transfer</span>
-            </button>
-          </div>
-
-          {/* Metrics for selected warehouse */}
-          {(() => {
-            const stats = getWhAnalytics(selectedWhObj.id);
-            return (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                <div className="bg-white/80 p-3 rounded-xl border border-amber-200/70">
-                  <div className="text-[11px] text-amber-900 font-semibold">Kayıtlı Çeşit (SKU Sayısı)</div>
-                  <div className="text-base font-black text-amber-950 font-mono mt-0.5">{stats.totalItems} Kalem Ürün</div>
-                </div>
-                <div className="bg-white/80 p-3 rounded-xl border border-amber-200/70">
-                  <div className="text-[11px] text-amber-900 font-semibold">Depodaki Toplam Stok Adedi</div>
-                  <div className="text-base font-black text-amber-950 font-mono mt-0.5">{stats.totalQty.toLocaleString("tr-TR")} Miktar</div>
-                </div>
-                <div className="bg-white/80 p-3 rounded-xl border border-amber-200/70">
-                  <div className="text-[11px] text-amber-900 font-semibold">Depo Stok Parasal Değeri (Maliyet)</div>
-                  <div className="text-base font-black text-emerald-700 font-mono mt-0.5">₺{stats.totalValue.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</div>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-      )}
-
-      {/* TABLE SECTION */}
-      <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full max-w-sm">
-            <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Ürün adı, barkod, IMEI veya stok koda göre ara..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-purple-900/80 font-semibold bg-purple-50/60 px-3 py-1.5 rounded-xl border border-purple-200/50">
-              {selectedWarehouseId === "all" ? "Tüm Depolar" : selectedWhObj?.name}:{" "}
-              <span className="font-bold text-purple-950">{filteredProducts.length}</span> ürün listeleniyor
-            </span>
-            <ExportButtons getExportData={getProductsExportData} size="sm" />
-            <button
-              type="button"
-              onClick={() => setIsCatalogWhatsAppOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-              title="Fiyat Listesi ve Ürün Kataloğunu WhatsApp ile Paylaş"
-            >
-              <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
-              <span>Fiyat Listesini Paylaş</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[800px]">
-            <thead>
-              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                <th className="pb-2 px-3">Stok Kodu & Barkod</th>
-                <th className="pb-2 px-3">Ürün / Hizmet Adı & Seri No</th>
-                <th className="pb-2 px-3">Bulunduğu Depo</th>
-                <th className="pb-2 px-3">Stok Cinsi</th>
-                <th className="pb-2 px-3 text-right">Alış / Satış Fiyatı</th>
-                <th className="pb-2 px-3 text-right">Ort. Kar & Marj (%)</th>
-                <th className="pb-2 px-3 text-center">
-                  {selectedWarehouseId === "all" ? "Toplam Stok" : "Depo Stoğu"}
-                </th>
-                <th className="pb-2 px-3 text-center">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayedProducts.map((p) => {
-                const stockInWh = getProductStockInWarehouse(p, selectedWarehouseId, activeWarehouses);
-                const isCritical = p.minStockAlert && stockInWh <= p.minStockAlert;
-                const analytics = analyticsMap.get(p.id) || getProductAnalytics(p, invoices);
-
-                return (
-                  <tr
-                    key={p.id}
-                    className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+            <div className="flex flex-wrap items-center gap-2">
+              {onSelectSubTab && (
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("list")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === "list"
+                        ? "bg-white text-slate-900 shadow-2xs"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
                   >
-                    {/* Code & Barcode */}
-                    <td className="py-3 px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-mono font-bold text-slate-900 group-hover:text-purple-950">{p.code}</div>
-                      {p.barcode ? (
-                        <div className="flex items-center gap-1 text-[10px] text-slate-500 group-hover:text-purple-700/70 font-mono mt-0.5">
-                          <Barcode className="w-3 h-3 text-slate-400 group-hover:text-purple-500 shrink-0" />
-                          <span>{p.barcode}</span>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 italic">Barkodsuz</span>
-                      )}
-                    </td>
+                    Stok Listesi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("costs")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === "costs"
+                        ? "bg-white text-slate-900 shadow-2xs"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    Maliyet & Kar Analizi
+                  </button>
+                </div>
+              )}
 
-                    {/* Name & IMEI / Serial No */}
-                    <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedEkstreProduct(p);
-                          setEkstreTab("all");
-                          setEkstreSearch("");
-                          setEkstreWarehouseId(selectedWarehouseId || "all");
-                        }}
-                        className="font-extrabold text-slate-900 group-hover:text-purple-700 hover:underline text-left cursor-pointer transition-colors"
-                        title="Stok Ekstresi ve Hareket Detay Sayfasını Aç"
-                      >
-                        {p.name}
-                      </button>
-                      {p.imeiOrSerialNo ? (
-                        <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-mono font-semibold">
-                          <Cpu className="w-3 h-3 text-indigo-500" />
-                          <span>Seri/IMEI: {p.imeiOrSerialNo}</span>
-                        </div>
-                      ) : null}
-                    </td>
+              <button
+                type="button"
+                onClick={() => handleOpenTransferModal()}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer shadow-2xs hover:bg-slate-50"
+                style={{ borderColor: theme.cardBorder, color: theme.pageText }}
+              >
+                <ArrowRightLeft className="w-4 h-4 text-amber-600" />
+                <span>Depo Transferi</span>
+              </button>
 
-                    {/* Warehouse Breakdown / Badge */}
-                    <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      {selectedWarehouseId !== "all" ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                          <WarehouseIcon className="w-3 h-3 text-amber-600" />
-                          {selectedWhObj?.name}
-                        </span>
-                      ) : (
-                        <div className="space-y-1">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
-                            <WarehouseIcon className="w-3 h-3 text-purple-600" />
-                            {p.warehouseName || activeWarehouses[0]?.name}
-                          </span>
-                          <div className="flex flex-wrap gap-1 text-[9px] font-mono text-slate-500">
-                            {activeWarehouses.map((w) => {
-                              const q = getProductStockInWarehouse(p, w.id, activeWarehouses);
-                              return (
-                                <span key={w.id} className="bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
-                                  {w.code.replace("DEP-", "D")}: <strong className="text-slate-800">{q}</strong>
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </td>
+              <button
+                type="button"
+                onClick={() => handleOpenAddModal()}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                style={{ backgroundColor: theme.primaryColor }}
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span>+ Yeni Stok Kartı</span>
+              </button>
+            </div>
+          </div>
 
-                    {/* Stock Type */}
-                    <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${getStockTypeBadgeClass(
-                          p.stockType
-                        )}`}
-                      >
-                        {p.stockType || "Ticari Mal"}
+          {/* 2. TOP 4 KPI SUMMARY CARDS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Toplam Stok Kalemi */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Toplam Stok Kalemi</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                    {products.length}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+                  <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.ciro }} className="w-6 h-6 flex items-center justify-center" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                  {activeWarehouses.length} Depo Aktif
+                </span>
+                <span className="text-slate-400 text-[11px]">Kayıtlı SKU</span>
+              </div>
+            </div>
+
+            {/* Card 2: Toplam Envanter Değeri */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Toplam Envanter Değeri</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                    ₺{totalConsolidatedValue.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                  <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.nakit }} className="w-6 h-6 flex items-center justify-center" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs">
+                <span className="text-[11px] font-bold text-slate-500">Maliyet Değerlemesi</span>
+                <span className="text-slate-400 text-[11px]">• Alış bazlı</span>
+              </div>
+            </div>
+
+            {/* Card 3: Kritik Seviyedeki Stoklar */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Kritik Stok Uyarısı</span>
+                  <div className={`text-2xl font-bold font-mono tracking-tight ${criticalStockCount > 0 ? "text-rose-600" : "text-slate-900"}`}>
+                    {criticalStockCount}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+                  <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.vadesiGecenAlacak }} className="w-6 h-6 flex items-center justify-center" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs">
+                <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${criticalStockCount > 0 ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}>
+                  {criticalStockCount > 0 ? "İkmal Gerekiyor" : "Stoklar Yeterli"}
+                </span>
+                <span className="text-slate-400 text-[11px]">Kritik limit altı</span>
+              </div>
+            </div>
+
+            {/* Card 4: Toplam Fiili Stok Miktarı */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Toplam Fiili Miktar</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                    {totalConsolidatedQty.toLocaleString("tr-TR")}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                  <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamBorc }} className="w-6 h-6 flex items-center justify-center" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                  Konsolide
+                </span>
+                <span className="text-slate-400 text-[11px]">Tüm depolar toplamı</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. DEPO BAZLI STOK SÜZGEÇİ */}
+          <div
+            className="rounded-2xl p-3 sm:p-4 border shadow-2xs"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+              <div className="flex items-center gap-2">
+                <WarehouseIcon className="w-4 h-4 text-purple-600" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Depo Bazlı Stok Görünümü
+                </span>
+              </div>
+              <span className="text-xs font-bold text-slate-400">
+                {activeWarehouses.length} Depo Tanımlı
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Card: Tüm Depolar */}
+              <button
+                type="button"
+                onClick={() => setSelectedWarehouseId("all")}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  selectedWarehouseId === "all"
+                    ? "border-purple-500 bg-purple-50/50 shadow-2xs ring-1 ring-purple-500/20"
+                    : "border-slate-200/80 bg-slate-50/50 hover:bg-slate-100/60"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800">Tüm Depolar (Konsolide)</span>
+                  <Boxes className="w-4 h-4 text-purple-600" />
+                </div>
+                <div className="text-lg font-bold font-mono text-slate-900 mt-1">
+                  ₺{totalConsolidatedValue.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1 font-medium flex items-center justify-between">
+                  <span>{products.length} Kalem Ürün</span>
+                  <span>{totalConsolidatedQty} Miktar</span>
+                </div>
+              </button>
+
+              {/* Individual Warehouses */}
+              {activeWarehouses.map((wh) => {
+                const isSelected = selectedWarehouseId === wh.id;
+                const analytics = getWhAnalytics(wh.id);
+                return (
+                  <button
+                    key={wh.id}
+                    type="button"
+                    onClick={() => setSelectedWarehouseId(wh.id)}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? "border-purple-500 bg-purple-50/50 shadow-2xs ring-1 ring-purple-500/20"
+                        : "border-slate-200/80 bg-slate-50/50 hover:bg-slate-100/60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 truncate max-w-[170px]" title={wh.name}>
+                        {wh.name}
                       </span>
-                    </td>
-
-                    {/* Prices */}
-                    <td className="py-3 px-3 text-right font-mono border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="text-slate-500 text-[11px] group-hover:text-purple-800/80">
-                        Alış: <span className="font-semibold text-slate-700 group-hover:text-slate-900">₺{p.buyPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="text-indigo-600 font-bold text-xs">
-                        Satış: ₺{p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                      </div>
-                    </td>
-
-                    {/* Profit & Margin */}
-                    <td className="py-3 px-3 text-right border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex flex-col items-end gap-0.5">
-                        <div className="flex items-center gap-1 font-mono font-bold text-emerald-600 text-xs">
-                          <TrendingUp className="w-3.5 h-3.5" />
-                          <span>+₺{analytics.unitProfit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[10px]">
-                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded font-bold font-mono">
-                            %{analytics.marginPercent.toFixed(1)} Marj
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Quantity */}
-                    <td className="py-3 px-3 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <span
-                        className={`font-black font-mono px-2.5 py-1 rounded-lg text-xs border ${
-                          isCritical
-                            ? "bg-rose-50 text-rose-700 border-rose-200 animate-pulse"
-                            : "bg-slate-100 border-slate-200 text-slate-800"
-                        }`}
-                      >
-                        {stockInWh} {p.unit}
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
+                        {wh.code}
                       </span>
-                    </td>
-
-                    {/* Actions Column */}
-                    <td className="py-3 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
-                        {/* Ekstre Button */}
-                        <button
-                          onClick={() => {
-                            setSelectedEkstreProduct(p);
-                            setEkstreTab("all");
-                            setEkstreSearch("");
-                            setEkstreWarehouseId(selectedWarehouseId || "all");
-                          }}
-                          title="Ürün Ekstresi & Depo Detayı"
-                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span>Ekstre</span>
-                        </button>
-
-                        {/* WhatsApp Share Button */}
-                        <button
-                          onClick={() => setWhatsAppProduct(p)}
-                          title="Ürün Bilgisini WhatsApp ile Paylaş"
-                          className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors cursor-pointer shadow-2xs shrink-0"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                        </button>
-
-                        {/* Transfer Button */}
-                        <button
-                          onClick={() => handleOpenTransferModal(p.id)}
-                          title="Depolar Arası Transfer Et"
-                          className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
-                        >
-                          <ArrowRightLeft className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          <span>Transfer</span>
-                        </button>
-
-                        {/* Edit Button */}
-                        <button
-                          onClick={() => handleOpenAddModal(p)}
-                          title="Stok Kartını Düzenle"
-                          className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-                          <span>Düzenle</span>
-                        </button>
-
-                        {/* Delete Button */}
-                        <button
-                          onClick={() => {
-                            if (confirm(`'${p.name}' stok kartını silmek istediğinize emin misiniz?`)) {
-                              onDeleteProduct(p.id);
-                            }
-                          }}
-                          title="Stok Kartını Sil"
-                          className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                          <span>Sil</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="text-lg font-bold font-mono text-slate-900 mt-1">
+                      ₺{analytics.totalValue.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1 font-medium flex items-center justify-between">
+                      <span>{analytics.totalItems} Kalem</span>
+                      <span>{analytics.totalQty} Miktar</span>
+                    </div>
+                  </button>
                 );
               })}
-
-              {filteredProducts.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-500 bg-white rounded-xl">
-                    <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                    <p className="font-extrabold text-slate-700 text-sm">Aramanıza veya Seçili Depoya Uygun Ürün Bulunamadı</p>
-                    <p className="text-xs text-slate-400 mt-1">Farklı bir depo seçebilir veya arama kelimesini değiştirebilirsiniz.</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredProducts.length > displayLimit && (
-          <div className="text-center mt-4">
-            <button
-              onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
-            >
-              Daha Fazla Göster ({displayLimit} / {filteredProducts.length})
-            </button>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* 4. FILTER & ACTION TOOLBAR */}
+          <div
+            className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <div className="flex flex-1 items-center gap-2">
+              {/* Search Box */}
+              <div className="relative flex-1 max-w-md">
+                <div
+                  dangerouslySetInnerHTML={{ __html: ASSET_ICONS.search }}
+                  className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+                />
+                <input
+                  type="text"
+                  placeholder="Ürün adı, barkod, seri no veya stok kodu ara..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200/50 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Kritik Stoklar Toggle Filter Pill */}
+              <button
+                type="button"
+                onClick={() => setShowOnlyCritical(!showOnlyCritical)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  showOnlyCritical
+                    ? "bg-rose-50 border-rose-300 text-rose-700 shadow-2xs"
+                    : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Kritik Stoklar ({criticalStockCount})</span>
+              </button>
+            </div>
+
+            {/* Right tools */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-slate-500 font-medium bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hidden sm:inline-block">
+                {selectedWarehouseId === "all" ? "Tüm Depolar" : selectedWhObj?.name}:{" "}
+                <strong className="text-slate-800">{filteredProducts.length}</strong> ürün
+              </span>
+              <ExportButtons getExportData={getProductsExportData} size="sm" />
+              <button
+                type="button"
+                onClick={() => setIsCatalogWhatsAppOpen(true)}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs hover:shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Fiyat Listesi ve Ürün Kataloğunu WhatsApp ile Paylaş"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Fiyat Kataloğu Paylaş</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 5. DATA TABLE */}
+          <div
+            className="rounded-2xl border shadow-2xs overflow-hidden"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">Stok Kodu & Barkod</th>
+                    <th className="py-3 px-4">Ürün / Hizmet Adı</th>
+                    <th className="py-3 px-4">Bulunduğu Depo</th>
+                    <th className="py-3 px-4">Stok Cinsi</th>
+                    <th className="py-3 px-4 text-right">Alış / Satış Fiyatı</th>
+                    <th className="py-3 px-4 text-right">Ort. Kar & Marj</th>
+                    <th className="py-3 px-4 text-center">
+                      {selectedWarehouseId === "all" ? "Toplam Stok" : "Depo Stoğu"}
+                    </th>
+                    <th className="py-3 px-4 text-right">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {displayedProducts.map((p) => {
+                    const stockInWh = getProductStockInWarehouse(p, selectedWarehouseId, activeWarehouses);
+                    const isCritical = p.minStockAlert !== undefined ? stockInWh <= p.minStockAlert : stockInWh <= 5;
+                    const analytics = analyticsMap.get(p.id) || getProductAnalytics(p, invoices);
+
+                    return (
+                      <tr
+                        key={p.id}
+                        className="hover:bg-slate-50/60 transition-colors group"
+                      >
+                        {/* Code & Barcode */}
+                        <td className="py-3.5 px-4">
+                          <div className="font-mono font-bold text-slate-900">{p.code}</div>
+                          {p.barcode ? (
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono mt-0.5">
+                              <Barcode className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span>{p.barcode}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Barkodsuz</span>
+                          )}
+                        </td>
+
+                        {/* Name & IMEI / Serial No */}
+                        <td className="py-3.5 px-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedEkstreProduct(p);
+                              setEkstreTab("all");
+                              setEkstreSearch("");
+                              setEkstreWarehouseId(selectedWarehouseId || "all");
+                            }}
+                            className="font-bold text-slate-900 hover:text-purple-600 hover:underline text-left cursor-pointer transition-colors block"
+                            title="Stok Ekstresi ve Hareket Detay Sayfasını Aç"
+                          >
+                            {p.name}
+                          </button>
+                          {p.imeiOrSerialNo ? (
+                            <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-mono font-semibold">
+                              <Cpu className="w-3 h-3 text-indigo-500" />
+                              <span>Seri/IMEI: {p.imeiOrSerialNo}</span>
+                            </div>
+                          ) : null}
+                        </td>
+
+                        {/* Warehouse Breakdown / Badge */}
+                        <td className="py-3.5 px-4">
+                          {selectedWarehouseId !== "all" ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              <WarehouseIcon className="w-3 h-3 text-amber-600" />
+                              {selectedWhObj?.name}
+                            </span>
+                          ) : (
+                            <div className="space-y-1">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
+                                <WarehouseIcon className="w-3 h-3 text-purple-600" />
+                                {p.warehouseName || activeWarehouses[0]?.name}
+                              </span>
+                              <div className="flex flex-wrap gap-1 text-[9px] font-mono text-slate-500">
+                                {activeWarehouses.map((w) => {
+                                  const q = getProductStockInWarehouse(p, w.id, activeWarehouses);
+                                  return (
+                                    <span key={w.id} className="bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                                      {w.code.replace("DEP-", "D")}: <strong className="text-slate-800">{q}</strong>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Stock Type */}
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all ${getStockTypeBadgeClass(
+                              p.stockType
+                            )}`}
+                          >
+                            {p.stockType || "Ticari Mal"}
+                          </span>
+                        </td>
+
+                        {/* Prices */}
+                        <td className="py-3.5 px-4 text-right font-mono">
+                          <div className="text-slate-400 text-[11px]">
+                            Alış: <span className="font-semibold text-slate-600">₺{p.buyPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="text-slate-900 font-bold text-xs mt-0.5">
+                            Satış: ₺{p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </div>
+                        </td>
+
+                        {/* Profit & Margin */}
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex flex-col items-end gap-0.5">
+                            <div className="flex items-center gap-1 font-mono font-bold text-emerald-600 text-xs">
+                              <TrendingUp className="w-3.5 h-3.5" />
+                              <span>+₺{analytics.unitProfit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded font-bold font-mono text-[10px]">
+                              %{analytics.marginPercent.toFixed(1)} Marj
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Quantity */}
+                        <td className="py-3.5 px-4 text-center">
+                          <span
+                            className={`inline-block font-mono font-bold px-2.5 py-1 rounded-lg text-xs border ${
+                              isCritical
+                                ? "bg-rose-50 text-rose-700 border-rose-200 animate-pulse"
+                                : "bg-slate-50 border-slate-200 text-slate-800"
+                            }`}
+                          >
+                            {stockInWh} {p.unit}
+                          </span>
+                        </td>
+
+                        {/* Actions Column */}
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Ekstre Button */}
+                            <button
+                              onClick={() => {
+                                setSelectedEkstreProduct(p);
+                                setEkstreTab("all");
+                                setEkstreSearch("");
+                                setEkstreWarehouseId(selectedWarehouseId || "all");
+                              }}
+                              title="Ürün Ekstresi & Depo Detayı"
+                              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              <span>Ekstre</span>
+                            </button>
+
+                            {/* WhatsApp Share Button */}
+                            <button
+                              onClick={() => setWhatsAppProduct(p)}
+                              title="Ürün Bilgisini WhatsApp ile Paylaş"
+                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Transfer Button */}
+                            <button
+                              onClick={() => handleOpenTransferModal(p.id)}
+                              title="Depolar Arası Transfer Et"
+                              className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                            >
+                              <ArrowRightLeft className="w-3.5 h-3.5 text-amber-600" />
+                            </button>
+
+                            {/* Edit Button */}
+                            <button
+                              onClick={() => handleOpenAddModal(p)}
+                              title="Stok Kartını Düzenle"
+                              className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-slate-600" />
+                            </button>
+
+                            {/* Delete Button */}
+                            <button
+                              onClick={() => {
+                                if (confirm(`'${p.name}' stok kartını silmek istediğinize emin misiniz?`)) {
+                                  onDeleteProduct(p.id);
+                                }
+                              }}
+                              title="Stok Kartını Sil"
+                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {filteredProducts.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="text-center py-12 text-slate-500">
+                        <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                        <p className="font-extrabold text-slate-700 text-sm">Aramanıza veya Filtreye Uygun Ürün Bulunamadı</p>
+                        <p className="text-xs text-slate-400 mt-1">Farklı bir depo seçebilir veya arama kelimesini değiştirebilirsiniz.</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredProducts.length > displayLimit && (
+              <div className="p-4 border-t border-slate-100 text-center">
+                <button
+                  onClick={() => setDisplayLimit((prev) => prev + 100)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  Daha Fazla Göster ({displayLimit} / {filteredProducts.length})
+                </button>
+              </div>
+            )}
+          </div>
         </>
       )}
 
