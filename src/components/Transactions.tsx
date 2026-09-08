@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS, getContactAvatar } from "../utils/assetIcons";
 
 interface TransactionsProps {
   transactions: Transaction[];
@@ -102,6 +104,38 @@ export const Transactions: React.FC<TransactionsProps> = ({
   onAddTransaction,
   onDeleteTransaction,
 }) => {
+  const { theme } = useTheme();
+
+  const kpiStats = React.useMemo(() => {
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let incomeCount = 0;
+    let expenseCount = 0;
+
+    transactions.forEach((tx) => {
+      const isIncome = tx.type === "income" || tx.type === "collection";
+      const amount = tx.amount || 0;
+      if (isIncome) {
+        totalIncome += amount;
+        incomeCount++;
+      } else {
+        totalExpense += amount;
+        expenseCount++;
+      }
+    });
+
+    const netCashFlow = totalIncome - totalExpense;
+
+    return {
+      totalIncome,
+      totalExpense,
+      netCashFlow,
+      totalCount: transactions.length,
+      incomeCount,
+      expenseCount,
+    };
+  }, [transactions]);
+
   // Full-Page Detail Navigation
   const detailNav = useDetailNavigation<Transaction>({
     moduleKey: "transactions",
@@ -940,186 +974,344 @@ export const Transactions: React.FC<TransactionsProps> = ({
 
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Header (Lila Bal Peteği & Geometrik Desen) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        <div className="relative z-10">
-          <h2 className="text-lg font-extrabold text-slate-950">
+      {/* 1. TOP TITLE & ACTION HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
             {forcedType === "income"
               ? "Gelir Fişi İşlemleri"
               : forcedType === "expense"
               ? "Gider Fişi İşlemleri"
-              : "Gelir ve Gider Hareketleri"}
-          </h2>
-          <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
+              : "Finansal Hareketler & Fişler"}
+          </h1>
+          <p className="text-xs font-medium text-slate-400 mt-1">
             {forcedType === "income"
-              ? "Faturalanmayan kalemli gelir fişleri ve doğrudan satış belgeleri. (Tahsilat makbuzları ve dekontlar Kasa & Banka Hareketleri modülünde gösterilir.)"
+              ? "Faturalanmayan kalemli gelir fişleri ve doğrudan satış belgeleri."
               : forcedType === "expense"
-              ? "Faturalanmayan kalemli gider fişleri ve operasyonel harcama belgeleri. (Banka dekontları ve tediye makbuzları Kasa & Banka Hareketleri modülünde gösterilir.)"
-              : "Fatura düzeninde kalemli gelir ve gider fişi belgelerinizi yönetin."}
+              ? "Faturalanmayan kalemli gider fişleri ve operasyonel harcama belgeleri."
+              : "Nakit akışı, gelir-gider fişleri, dekont ve kasa-banka hareketleri takibi"}
           </p>
         </div>
 
-        <button
-          onClick={() => handleOpenModal()}
-          className="relative z-10 bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-        >
-          <Plus className="w-4 h-4 text-purple-800 font-bold" />
-          <span>
-            {forcedType === "income"
-              ? "Yeni Gelir Fişi Ekle"
-              : forcedType === "expense"
-              ? "Yeni Gider Fişi Ekle"
-              : "Yeni Gelir / Gider Fişi Ekle"}
-          </span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleOpenModal()}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>
+              {forcedType === "income"
+                ? "+ Yeni Gelir Fişi"
+                : forcedType === "expense"
+                ? "+ Yeni Gider Fişi"
+                : "+ Yeni Fiş Ekle"}
+            </span>
+          </button>
+        </div>
       </div>
 
-      {/* Filter Tabs & Table */}
-      <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-1 bg-purple-50/50 border border-purple-200/50 p-1 rounded-xl text-xs font-semibold shadow-2xs">
-            {!forcedType ? (
-              <>
-                <button
-                  onClick={() => setFilterType("all")}
-                  className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                    filterType === "all"
-                      ? "bg-white text-purple-950 font-bold border border-purple-200/60 shadow-2xs"
-                      : "text-purple-900/70 hover:text-purple-950"
-                  }`}
-                >
-                  Tüm Hareketler ({transactions.length})
-                </button>
-                <button
-                  onClick={() => setFilterType("income")}
-                  className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                    filterType === "income"
-                      ? "bg-white text-emerald-600 font-bold border border-purple-200/60 shadow-2xs"
-                      : "text-purple-900/70 hover:text-purple-950"
-                  }`}
-                >
-                  Gelir Fişleri
-                </button>
-                <button
-                  onClick={() => setFilterType("expense")}
-                  className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                    filterType === "expense"
-                      ? "bg-white text-rose-600 font-bold border border-purple-200/60 shadow-2xs"
-                      : "text-purple-900/70 hover:text-purple-950"
-                  }`}
-                >
-                  Gider Fişleri
-                </button>
-                <button
-                  onClick={() => setFilterType("receipts")}
-                  className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                    filterType === "receipts"
-                      ? "bg-white text-indigo-700 font-bold border border-purple-200/60 shadow-2xs"
-                      : "text-purple-900/70 hover:text-purple-950"
-                  }`}
-                >
-                  Tahsilat, Dekont & Tediye
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => setFilterType(forcedType)}
-                className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                  filterType === forcedType
-                    ? "bg-white text-purple-700 font-bold border border-purple-200/60 shadow-2xs"
-                    : "text-purple-900/70 hover:text-purple-950"
-                }`}
-              >
-                Faturalanmayan {forcedType === "income" ? "Gelir Fişleri" : "Gider Fişleri"} ({filteredTxs.length})
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Açıklama, Kategori veya Cari..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
-              />
+      {/* 2. TOP 4 KPI SUMMARY CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Toplam Gelir */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam Gelir Hacmi</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                ₺{kpiStats.totalIncome.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
             </div>
-            <ExportButtons getExportData={getTransactionsExportData} size="sm" />
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.ciro }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+              {kpiStats.incomeCount} Kayıt
+            </span>
+            <span className="text-slate-400 text-[11px]">Gelir ve tahsilat fişi</span>
           </div>
         </div>
 
+        {/* Card 2: Toplam Gider */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam Gider Hacmi</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-rose-600">
+                ₺{kpiStats.totalExpense.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamBorc }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
+              {kpiStats.expenseCount} Kayıt
+            </span>
+            <span className="text-slate-400 text-[11px]">Gider ve harcama fişi</span>
+          </div>
+        </div>
+
+        {/* Card 3: Net Nakit Akışı */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Net Nakit Dengesi</span>
+              <div className={`text-2xl font-bold font-mono tracking-tight ${kpiStats.netCashFlow >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {kpiStats.netCashFlow >= 0 ? "+" : ""}₺{kpiStats.netCashFlow.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.nakit }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className={`text-[11px] font-bold ${kpiStats.netCashFlow >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {kpiStats.netCashFlow >= 0 ? "Pozitif Akış" : "Negatif Fark"}
+            </span>
+            <span className="text-slate-400 text-[11px]">• Gelir - Gider farkı</span>
+          </div>
+        </div>
+
+        {/* Card 4: Toplam İşlem Sayısı */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam İşlem Adedi</span>
+              <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                {kpiStats.totalCount}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.sonBelgeler }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+              Kayıtlı Fişler
+            </span>
+            <span className="text-slate-400 text-[11px]">Tüm hareket kayıtları</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. FILTER & ACTION TOOLBAR */}
+      <div
+        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Submodule Tab Pills */}
+          {!forcedType ? (
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setFilterType("all")}
+                className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                  filterType === "all"
+                    ? "bg-white text-purple-950 font-bold border border-slate-200/60 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Tümü ({transactions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType("income")}
+                className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                  filterType === "income"
+                    ? "bg-white text-emerald-600 font-bold border border-slate-200/60 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Gelir Fişleri
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType("expense")}
+                className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                  filterType === "expense"
+                    ? "bg-white text-rose-600 font-bold border border-slate-200/60 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Gider Fişleri
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType("receipts")}
+                className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                  filterType === "receipts"
+                    ? "bg-white text-indigo-700 font-bold border border-slate-200/60 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Tahsilat & Dekont
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setFilterType(forcedType)}
+                className="px-3 py-1.5 rounded-lg bg-white text-purple-700 font-bold border border-slate-200/60 shadow-2xs"
+              >
+                Faturalanmayan {forcedType === "income" ? "Gelir Fişleri" : "Gider Fişleri"} ({filteredTxs.length})
+              </button>
+            </div>
+          )}
+
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <div
+              dangerouslySetInnerHTML={{ __html: ASSET_ICONS.search }}
+              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+            />
+            <input
+              type="text"
+              placeholder="Fiş no, açıklama veya cari ara..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200/50 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <ExportButtons getExportData={getTransactionsExportData} size="sm" />
+        </div>
+      </div>
+
+      {/* 4. MODERN DATA TABLE */}
+      <div
+        className="rounded-2xl border shadow-2xs overflow-hidden"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
         {/* Desktop / Tablet Transactions Table View */}
-        <div className="hidden md:block overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                <th className="pb-2 px-4">Fiş No / Tarih</th>
-                <th className="pb-2 px-4">Cari / Açıklama</th>
-                <th className="pb-2 px-4">Kasa / Banka Hesabı</th>
-                <th className="pb-2 px-4">Kategori</th>
-                <th className="pb-2 px-4 text-right">Genel Toplam</th>
-                <th className="pb-2 px-4 text-center">İşlemler</th>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="py-3.5 px-4 font-bold">Fiş No / Tarih</th>
+                <th className="py-3.5 px-4 font-bold">Cari / Açıklama</th>
+                <th className="py-3.5 px-4 font-bold">Kasa / Banka Hesabı</th>
+                <th className="py-3.5 px-4 font-bold">Kategori</th>
+                <th className="py-3.5 px-4 font-bold text-right">Genel Toplam</th>
+                <th className="py-3.5 px-4 font-bold text-right">İşlemler</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {filteredTxs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
                     Kayıtlı fiş bulunamadı.
                   </td>
                 </tr>
               ) : (
                 displayedTxs.map((tx) => {
                   const isIncome = tx.type === "income" || tx.type === "collection";
+                  const avatar = getContactAvatar(tx.contactName || tx.accountName || "Cari");
                   return (
                     <tr
                       key={tx.id}
-                      className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                      className="hover:bg-slate-50/80 transition-colors group"
                     >
-                      <td className="py-3 px-4 font-medium text-slate-500 group-hover:text-purple-900 whitespace-nowrap rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="font-mono font-extrabold text-slate-900 group-hover:text-purple-950 text-xs">
-                          {tx.documentNo || (isIncome ? "GLR-FİŞ" : "GDR-FİŞ")}
-                        </div>
-                        <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">
-                          {formatDate(tx.date)}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4 font-semibold text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        {tx.contactName ? (
-                          <div className="font-bold text-slate-900 group-hover:text-purple-950">{tx.contactName}</div>
-                        ) : (
-                          <div className="text-slate-700">{tx.description}</div>
-                        )}
-                        {tx.contactName && (
-                          <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60 line-clamp-1">
-                            {tx.description}
+                      {/* Document No & Date */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`p-1 rounded-lg ${
+                              isIncome ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                            }`}
+                          >
+                            <Receipt className="w-3.5 h-3.5" />
+                          </span>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setViewingTx(tx);
+                                detailNav.openDetail(tx, tx.id);
+                              }}
+                              className="hover:underline hover:text-purple-600 cursor-pointer font-mono font-bold text-left text-slate-900"
+                              title="Fiş Detayını İncele"
+                            >
+                              {tx.documentNo || (isIncome ? "GLR-FİŞ" : "GDR-FİŞ")}
+                            </button>
+                            <div className="text-[10px] text-slate-400">
+                              {formatDate(tx.date)}
+                            </div>
                           </div>
-                        )}
+                        </div>
                       </td>
 
-                      <td className="py-3 px-4 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="font-bold text-slate-800 group-hover:text-purple-950">{tx.accountName}</div>
+                      {/* Contact / Description with 3D Avatar */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={avatar}
+                            alt=""
+                            className="w-8 h-8 rounded-full border border-slate-100 shadow-2xs object-cover shrink-0"
+                          />
+                          <div className="truncate max-w-[240px]">
+                            {tx.contactName ? (
+                              <div className="font-bold text-slate-900 truncate" title={tx.contactName}>
+                                {tx.contactName}
+                              </div>
+                            ) : (
+                              <div className="font-bold text-slate-800 truncate" title={tx.description}>
+                                {tx.description}
+                              </div>
+                            )}
+                            {tx.contactName && (
+                              <div className="text-[10px] text-slate-400 truncate" title={tx.description}>
+                                {tx.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
 
-                      <td className="py-3 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <span className="bg-slate-100 border border-slate-200 group-hover:border-purple-300 text-slate-700 group-hover:text-purple-900 px-2 py-0.5 rounded text-[10px] font-bold transition-all">
+                      {/* Account Name */}
+                      <td className="py-3.5 px-4">
+                        <span className="font-bold text-slate-800">{tx.accountName}</span>
+                      </td>
+
+                      {/* Category Badge */}
+                      <td className="py-3.5 px-4">
+                        <span className="inline-block bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
                           {tx.category}
                         </span>
                       </td>
 
+                      {/* Amount */}
                       <td
-                        className={`py-3 px-4 text-right font-black text-sm whitespace-nowrap border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all ${
+                        className={`py-3.5 px-4 text-right font-mono font-bold text-sm whitespace-nowrap ${
                           isIncome ? "text-emerald-600" : "text-rose-600"
                         }`}
                       >
@@ -1127,34 +1319,32 @@ export const Transactions: React.FC<TransactionsProps> = ({
                         {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                       </td>
 
-                      <td className="py-3 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="flex items-center justify-center gap-1.5">
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => {
                               setViewingTx(tx);
                               detailNav.openDetail(tx, tx.id);
                             }}
                             title="Fiş Detayını İncele & Yazdır"
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                           >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>İncele</span>
+                            <Eye className="w-3.5 h-3.5 text-slate-600" />
                           </button>
                           <button
                             onClick={() => setWhatsAppTx(tx)}
                             title="Fiş / Dekontu WhatsApp ile Paylaş"
-                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
                           >
                             <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>WhatsApp</span>
                           </button>
                           <button
                             onClick={() => onDeleteTransaction(tx.id)}
                             title="Fişi Sil"
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                           >
-                            <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                            <span>Sil</span>
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -1167,26 +1357,34 @@ export const Transactions: React.FC<TransactionsProps> = ({
         </div>
 
         {/* Mobile Responsive Slip Cards View */}
-        <div className="block md:hidden space-y-3">
+        <div className="block md:hidden p-3 space-y-3">
           {filteredTxs.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 bg-white rounded-2xl border border-purple-100/80 p-5">
+            <div className="text-center py-8 text-slate-400">
               Kayıtlı fiş bulunamadı.
             </div>
           ) : (
             displayedTxs.map((tx) => {
               const isIncome = tx.type === "income" || tx.type === "collection";
+              const avatar = getContactAvatar(tx.contactName || tx.accountName || "Cari");
               return (
                 <div
                   key={tx.id}
-                  className="bg-white rounded-2xl border border-purple-200/70 p-3.5 shadow-2xs space-y-3"
+                  className="rounded-2xl border border-slate-200/80 p-3.5 shadow-2xs space-y-3 bg-white"
                 >
                   <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
-                    <div>
-                      <div className="font-mono font-extrabold text-slate-900 text-xs">
-                        {tx.documentNo || (isIncome ? "GLR-FİŞ" : "GDR-FİŞ")}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        {formatDate(tx.date)}
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={avatar}
+                        alt=""
+                        className="w-7 h-7 rounded-full border border-slate-100 shadow-2xs object-cover shrink-0"
+                      />
+                      <div>
+                        <div className="font-mono font-extrabold text-slate-900 text-xs">
+                          {tx.documentNo || (isIncome ? "GLR-FİŞ" : "GDR-FİŞ")}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {formatDate(tx.date)}
+                        </div>
                       </div>
                     </div>
                     <span
@@ -1233,7 +1431,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                         setViewingTx(tx);
                         detailNav.openDetail(tx, tx.id);
                       }}
-                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                      className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>İncele</span>
@@ -1260,10 +1458,10 @@ export const Transactions: React.FC<TransactionsProps> = ({
         </div>
 
         {filteredTxs.length > displayLimit && (
-          <div className="text-center mt-4">
+          <div className="p-4 border-t border-slate-100 text-center">
             <button
               onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
             >
               Daha Fazla Göster ({displayLimit} / {filteredTxs.length})
             </button>
