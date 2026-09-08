@@ -2,6 +2,8 @@ import React, { useState, useMemo } from "react";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS } from "../utils/assetIcons";
 import {
   Contact,
   Invoice,
@@ -122,6 +124,7 @@ export const Reports: React.FC<ReportsProps> = ({
   companySettings,
   employees = [],
 }) => {
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<"monthly" | "periodic" | "guidelines" | "ledger">("monthly");
 
   // Selected Taxpayer Type (Mükellefiyet Türü)
@@ -603,17 +606,20 @@ export const Reports: React.FC<ReportsProps> = ({
     ? netPayableCorporateTax
     : Math.max(0, totalYearCalculatedTax - totalGeçiciVergiPayable);
 
-  // Render Date Filter Bar (Matching Finance Management layout)
+  // Render Date Filter Bar
   const renderDateFilterBar = (title: string) => (
-    <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+    <div
+      className="p-4 rounded-2xl border shadow-2xs space-y-3"
+      style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+    >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="p-2 rounded-xl bg-purple-50 text-purple-700 font-bold">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-purple-500/10 text-purple-600">
             <Filter className="w-4 h-4" />
-          </span>
+          </div>
           <div>
-            <h3 className="text-sm font-extrabold text-slate-900">{title}</h3>
-            <p className="text-[11px] text-slate-500 font-medium">Çeyrek ve ay bazında tarih filtresi ve sıralama</p>
+            <h3 className="text-sm font-bold" style={{ color: theme.pageText }}>{title}</h3>
+            <p className="text-xs font-medium" style={{ color: theme.pageTextMuted }}>Çeyrek ve ay bazında tarih filtresi ve sıralama</p>
           </div>
         </div>
 
@@ -625,61 +631,62 @@ export const Reports: React.FC<ReportsProps> = ({
             placeholder="Cari, Belge No, Açıklama ara..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-purple-500/20 focus:outline-none"
+            className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl font-medium focus:ring-2 focus:ring-purple-500/20 focus:outline-none"
+            style={{ color: theme.pageText }}
           />
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs font-semibold">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-semibold">
         {/* Preset Buttons */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] text-slate-400 font-bold mr-1">Hızlı Çeyrek / Dönem:</span>
           <button
             onClick={() => handleApplyPreset("this_year")}
-            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
               selectedPeriod.type === "all"
-                ? "bg-purple-900 text-white shadow-xs"
-                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:text-slate-300 text-slate-700"
             }`}
           >
             Tüm Yıl ({selectedYear})
           </button>
           <button
             onClick={() => handleApplyPreset("q1")}
-            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
               selectedPeriod.type === "quarter" && selectedPeriod.index === 0
-                ? "bg-purple-900 text-white shadow-xs"
-                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:text-slate-300 text-slate-700"
             }`}
           >
             1. Çeyrek
           </button>
           <button
             onClick={() => handleApplyPreset("q2")}
-            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
               selectedPeriod.type === "quarter" && selectedPeriod.index === 1
-                ? "bg-purple-900 text-white shadow-xs"
-                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:text-slate-300 text-slate-700"
             }`}
           >
             2. Çeyrek
           </button>
           <button
             onClick={() => handleApplyPreset("q3")}
-            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
               selectedPeriod.type === "quarter" && selectedPeriod.index === 2
-                ? "bg-purple-900 text-white shadow-xs"
-                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:text-slate-300 text-slate-700"
             }`}
           >
             3. Çeyrek
           </button>
           <button
             onClick={() => handleApplyPreset("q4")}
-            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-[11px] font-bold ${
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
               selectedPeriod.type === "quarter" && selectedPeriod.index === 3
-                ? "bg-purple-900 text-white shadow-xs"
-                : "bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:text-slate-300 text-slate-700"
             }`}
           >
             4. Çeyrek
@@ -688,28 +695,30 @@ export const Reports: React.FC<ReportsProps> = ({
 
         {/* Date Inputs & Sort Toggle */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-[11px] text-slate-500 font-mono">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-800"
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-bold"
+              style={{ color: theme.pageText }}
             />
             <span>-</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-800"
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-bold"
+              style={{ color: theme.pageText }}
             />
           </div>
 
           <button
             onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-            className="px-3 py-1 rounded-xl bg-purple-50 text-purple-900 border border-purple-200 hover:bg-purple-100 flex items-center gap-1.5 transition-colors cursor-pointer text-xs font-bold"
+            className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/40 hover:bg-purple-100 flex items-center gap-1.5 transition-colors cursor-pointer text-xs font-bold"
             title="Tarihe Göre Sırala"
           >
-            <ArrowUpDown className="w-3.5 h-3.5 text-purple-700" />
+            <ArrowUpDown className="w-3.5 h-3.5 text-purple-600" />
             <span>Tarih: {sortOrder === "asc" ? "Eskiden Yeniye" : "Yeniden Eskiye"}</span>
           </button>
         </div>
@@ -718,80 +727,30 @@ export const Reports: React.FC<ReportsProps> = ({
   );
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-7xl mx-auto text-slate-900">
-      {/* TOP BANNER - Matching Finance Management Top Header Design */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-6 border border-purple-200/60 shadow-2xs space-y-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
+    <div className="p-3 sm:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+            Vergilendirme & Mali Raporlar
+          </h1>
+          <p className="text-xs font-medium mt-1" style={{ color: theme.pageTextMuted }}>
+            Mükellefiyet türünüze uygun KDV, Muhtasar, SGK, Geçici Vergi ve Yıllık Beyanname dökümleri
+          </p>
+        </div>
+
+        {/* Taxpayer Switcher & Year Selector */}
         <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
+          className="flex flex-wrap items-center gap-3 p-2.5 rounded-2xl border shadow-2xs"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
         >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-400/10"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="bg-purple-100 text-purple-900 border border-purple-200 text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
-                <Landmark className="w-3.5 h-3.5 text-purple-700" />
-                Finans & Vergi Modülü
-              </span>
-              <span className="bg-emerald-100 text-emerald-900 border border-emerald-200 text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-                2026 Mevzuat Uyumlu
-              </span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight flex items-center gap-2">
-              Vergilendirme ve Mali Yükümlülük Portalı
-            </h1>
-            <p className="text-xs sm:text-sm text-purple-950/80 font-semibold leading-relaxed">
-              Mükellefiyet türünüze uygun tarih ve dönem bazlı KDV, Muhtasar, SGK, Geçici Vergi ve Yıllık Beyanname dökümleri.
-            </p>
-          </div>
-
-          {/* Taxpayer Switcher Box */}
-          <div className="bg-white/80 backdrop-blur-md border border-purple-200/80 p-4 rounded-2xl space-y-2 min-w-[280px] shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-bold text-purple-950">
-              <span className="flex items-center gap-1.5">
-                <Building2 className="w-4 h-4 text-purple-700" />
-                Mükellefiyet Türü:
-              </span>
-              <span className="text-[10px] bg-purple-100 text-purple-900 border border-purple-200 px-2 py-0.5 rounded font-mono font-extrabold">
-                {selectedYear} Mali Yılı
-              </span>
-            </div>
-
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-purple-600" />
             <select
               value={activeTaxpayerType}
               onChange={(e) => setActiveTaxpayerType(e.target.value)}
-              className="w-full bg-white text-slate-900 border border-purple-300 rounded-xl p-2.5 font-bold text-xs shadow-2xs focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+              className="bg-transparent text-xs font-bold focus:outline-none cursor-pointer pr-2"
+              style={{ color: theme.pageText }}
             >
               {TAXPAYER_TYPES.map((type) => (
                 <option key={type} value={type} className="bg-white text-slate-900">
@@ -799,150 +758,181 @@ export const Reports: React.FC<ReportsProps> = ({
                 </option>
               ))}
             </select>
+          </div>
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 font-mono font-bold text-xs px-2.5 py-1 rounded-lg border border-purple-200/60 dark:border-purple-800/40 cursor-pointer focus:outline-none"
+          >
+            <option value={2026}>2026 Mali Yılı</option>
+            <option value={2025}>2025 Mali Yılı</option>
+          </select>
+        </div>
+      </div>
 
-            <div className="flex items-center justify-between text-[11px] text-purple-950 font-bold pt-1">
-              <span>Yıl Seçimi:</span>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="bg-purple-50 text-purple-900 border border-purple-200 rounded px-2.5 py-1 text-xs font-mono font-bold cursor-pointer"
-              >
-                <option value={2026}>2026 Mali Yılı</option>
-                <option value={2025}>2025 Mali Yılı</option>
-              </select>
+      {/* 5 SUMMARY STAT CARDS GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Card 1: 1 No.lu KDV */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">1 No.lu KDV</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-500/10 text-amber-600 group-hover:scale-110 transition-transform">
+              <img src={ASSET_ICONS.nakit} alt="KDV" className="w-5 h-5 object-contain" />
             </div>
-
-            <p className="text-[10px] text-purple-950/80 font-semibold truncate pt-1 border-t border-purple-200/60">
-              {taxFormulaDescription}
-            </p>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+              {isExemptOrg ? "₺0,00" : `₺${formatTL(annualPayableVat)}`}
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1 font-medium">
+              <span>Satış: ₺{formatTL(annualSalesVat)}</span>
+              <span>Alış: ₺{formatTL(annualPurchaseVat)}</span>
+            </div>
           </div>
         </div>
 
-        {/* 5 SUMMARY STAT CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-5 relative z-10">
-          {/* Card 1: 1 No.lu KDV (Ödenecek / Devreden) */}
-          <div className="bg-white/90 border border-amber-200/80 rounded-2xl p-4 text-left shadow-2xs backdrop-blur-md hover:border-amber-300 transition-all">
-            <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-amber-950 tracking-wider">
-              <span>1 No.lu KDV</span>
-              <Receipt className="w-4 h-4 text-amber-700" />
+        {/* Card 2: 2 No.lu KDV (Tevkifat) */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">2 No.lu KDV</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-orange-500/10 text-orange-600 group-hover:scale-110 transition-transform">
+              <img src={ASSET_ICONS.sonBelgeler} alt="Tevkifat" className="w-5 h-5 object-contain" />
             </div>
-            <div className="mt-2 text-lg font-black text-amber-950 font-mono">
-              {isExemptOrg ? "₺0,00" : `₺${formatTL(annualPayableVat)}`}
-            </div>
-            <p className="text-[10px] font-semibold text-amber-900/80 mt-1 flex justify-between">
-              <span>Satış: ₺{formatTL(annualSalesVat)}</span>
-              <span>Alış: ₺{formatTL(annualPurchaseVat)}</span>
-            </p>
           </div>
-
-          {/* Card 2: 2 No.lu KDV (KDV Tevkifatı Ödemesi) */}
-          <div className="bg-white/90 border border-orange-200/80 rounded-2xl p-4 text-left shadow-2xs backdrop-blur-md hover:border-orange-300 transition-all">
-            <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-orange-950 tracking-wider">
-              <span>2 No.lu KDV (Tevkifat)</span>
-              <FileCheck className="w-4 h-4 text-orange-700" />
-            </div>
-            <div className="mt-2 text-lg font-black text-orange-950 font-mono">
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
               ₺{formatTL(annualPurchaseKdvTevkifat)}
             </div>
-            <p className="text-[10px] font-semibold text-orange-900/80 mt-1">
-              {annualPurchaseKdvTevkifat > 0 ? `+ ₺${formatTL(annualKdv2Damga)} KDV-2 Damga` : "Tevkifatlı Alış Bulunmuyor"}
-            </p>
-          </div>
-
-          {/* Card 3: Muhtasar & Stopaj */}
-          <div className="bg-white/90 border border-indigo-200/80 rounded-2xl p-4 text-left shadow-2xs backdrop-blur-md hover:border-indigo-300 transition-all">
-            <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-indigo-950 tracking-wider">
-              <span>Muhtasar & Stopaj</span>
-              <FileCheck className="w-4 h-4 text-indigo-700" />
+            <div className="text-[11px] text-slate-400 mt-1 font-medium truncate">
+              {annualPurchaseKdvTevkifat > 0 ? `+ ₺${formatTL(annualKdv2Damga)} KDV-2 Damga` : "Tevkifatlı Alış Yok"}
             </div>
-            <div className="mt-2 text-lg font-black text-indigo-950 font-mono">
+          </div>
+        </div>
+
+        {/* Card 3: Muhtasar & Stopaj */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Muhtasar & Stopaj</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-500/10 text-indigo-600 group-hover:scale-110 transition-transform">
+              <img src={ASSET_ICONS.tahsilat} alt="Stopaj" className="w-5 h-5 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
               ₺{formatTL(annualWithholding)}
             </div>
-            <p className="text-[10px] font-semibold text-indigo-900/80 mt-1 truncate">
+            <div className="text-[11px] text-slate-400 mt-1 font-medium truncate">
               {annualPurchaseStopaj > 0 ? `Fatura: ₺${formatTL(annualPurchaseStopaj)} | Kira: ₺${formatTL(annualRentWithholding)}` : "Personel + Kira Stopajı"}
-            </p>
-          </div>
-
-          {/* Card 4: Gelir / Kurumlar Vergisi */}
-          <div className="bg-white/90 border border-emerald-200/80 rounded-2xl p-4 text-left shadow-2xs backdrop-blur-md hover:border-emerald-300 transition-all">
-            <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-emerald-950 tracking-wider">
-              <span>{isCorporate || isCoop ? "Kurumlar Vergisi (%25)" : "Gelir Vergisi (Tarife)"}</span>
-              <TrendingUp className="w-4 h-4 text-emerald-700" />
             </div>
-            <div className="mt-2 text-lg font-black text-emerald-950 font-mono">
+          </div>
+        </div>
+
+        {/* Card 4: Gelir / Kurumlar Vergisi */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 truncate pr-2">
+              {isCorporate || isCoop ? "Kurumlar Vergisi" : "Gelir Vergisi"}
+            </span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-500/10 text-emerald-600 group-hover:scale-110 transition-transform flex-shrink-0">
+              <img src={ASSET_ICONS.ciro} alt="Vergi" className="w-5 h-5 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
               ₺{formatTL(totalYearCalculatedTax)}
             </div>
-            <p className="text-[10px] font-semibold text-emerald-900/80 mt-1 truncate">
-              {isCorporate || isCoop
-                ? `Matrah: ₺${formatTL(corporateTaxableBase)}`
-                : "Artan Oranlı Tarife (GVK M.103)"}
-            </p>
-          </div>
-
-          {/* Card 5: Toplam Yıllık Yük */}
-          <div className="bg-white/90 border border-blue-200/80 rounded-2xl p-4 text-left shadow-2xs backdrop-blur-md hover:border-blue-300 transition-all">
-            <div className="flex items-center justify-between text-[11px] font-extrabold uppercase text-blue-950 tracking-wider">
-              <span>Toplam Mali Yük</span>
-              <Calculator className="w-4 h-4 text-blue-700" />
+            <div className="text-[11px] text-slate-400 mt-1 font-medium truncate">
+              {isCorporate || isCoop ? `Matrah: ₺${formatTL(corporateTaxableBase)}` : "Artan Oranlı Tarife (GVK M.103)"}
             </div>
-            <div className="mt-2 text-lg font-black text-blue-950 font-mono">
+          </div>
+        </div>
+
+        {/* Card 5: Toplam Mali Yük */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 truncate pr-2">Toplam Mali Yük</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-purple-500/10 text-purple-600 group-hover:scale-110 transition-transform flex-shrink-0">
+              <img src={ASSET_ICONS.alacak} alt="Mali Yük" className="w-5 h-5 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tracking-tight text-purple-600">
               ₺{formatTL(annualMonthlyTaxLoad + totalYearCalculatedTax + totalGeçiciDamga + YILLIK_DAMGA_VERGISI)}
             </div>
-            <p className="text-[10px] font-semibold text-blue-900/80 mt-1">
+            <div className="text-[11px] text-slate-400 mt-1 font-medium truncate">
               Tüm Yasal Vergiler + Damga
-            </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* SUB-TAB NAVIGATION - Matching Finance Management Subtab Pills */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+      {/* SUB-TAB NAVIGATION */}
+      <div
+        className="flex items-center gap-1.5 p-1.5 rounded-2xl border shadow-2xs overflow-x-auto"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
         <button
           onClick={() => setActiveTab("monthly")}
-          className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "monthly"
-              ? "bg-purple-900 text-white shadow-sm"
-              : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
           }`}
         >
-          <Receipt className="w-4 h-4" />
-          1. 12 Aylık Vergi Detay Matrisi (KDV & Muhtasar & Damga)
+          <Receipt className="w-3.5 h-3.5" />
+          12 Aylık Vergi Detay Matrisi
         </button>
 
         <button
           onClick={() => setActiveTab("periodic")}
-          className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "periodic"
-              ? "bg-purple-900 text-white shadow-sm"
-              : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
           }`}
         >
-          <Percent className="w-4 h-4" />
-          2. 4 Dönemlik Geçici Vergi & Yıllık Mahsup
+          <Percent className="w-3.5 h-3.5" />
+          4 Dönemlik Geçici Vergi
         </button>
 
         <button
           onClick={() => setActiveTab("ledger")}
-          className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "ledger"
-              ? "bg-purple-900 text-white shadow-sm"
-              : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
           }`}
         >
-          <BarChart3 className="w-4 h-4" />
-          3. Genel Muavin & Defter Kayıtları (Tarih Sıralı)
+          <BarChart3 className="w-3.5 h-3.5" />
+          Genel Muavin & Defter Kayıtları
         </button>
 
         <button
           onClick={() => setActiveTab("guidelines")}
-          className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "guidelines"
-              ? "bg-purple-900 text-white shadow-sm"
-              : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
           }`}
         >
-          <Calendar className="w-4 h-4" />
-          4. Vergi Takvimi & Mevzuat Rehberi
+          <Calendar className="w-3.5 h-3.5" />
+          Vergi Takvimi & Mevzuat Rehberi
         </button>
       </div>
 
