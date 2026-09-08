@@ -35,6 +35,7 @@ import {
   ApplianceServiceStatus,
   ApplianceServiceLocation,
 } from "../../types";
+import { useTheme } from "../../context/ThemeContext";
 
 interface ApplianceCalendarViewProps {
   applianceServices: ApplianceServiceRecord[];
@@ -55,6 +56,7 @@ export const ApplianceCalendarView: React.FC<ApplianceCalendarViewProps> = ({
   onOpenAiAssistant,
   onOpenCreateModalWithDate,
 }) => {
+  const { theme } = useTheme();
   // Current view date state (Default to August 2026 to match mockData base, or current local date)
   const todayStr = useMemo(() => {
     // Check if there are 2026 records
@@ -393,27 +395,11 @@ export const ApplianceCalendarView: React.FC<ApplianceCalendarViewProps> = ({
   return (
     <div className="space-y-6">
       {/* 📅 TAKVİM KONTROL & FİLTRELEME BAŞLIĞI */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs space-y-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Geometrik Vektör Şekli */}
-        <svg
-          className="absolute -right-4 -bottom-6 w-32 h-32 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <circle cx="100" cy="100" r="30" stroke="currentColor" strokeWidth="1" />
-        </svg>
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
+      <div
+        className="rounded-2xl p-5 border shadow-2xs space-y-4"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Sol: Ay / Yıl Başlığı ve Navigasyon */}
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-purple-100/80 border border-purple-200/80 text-purple-700 flex items-center justify-center font-bold shrink-0 shadow-2xs backdrop-blur-2xs">

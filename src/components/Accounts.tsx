@@ -1182,42 +1182,26 @@ export const Accounts: React.FC<AccountsProps> = ({
   const renderDateFilterBar = (subModuleName: string) => {
     const isFiltered = Boolean(startDate || endDate);
     return (
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 border border-purple-200/60 shadow-2xs">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Vektör Şekli */}
-        <svg
-          className="absolute -right-4 -bottom-6 w-32 h-32 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <circle cx="100" cy="100" r="30" stroke="currentColor" strokeWidth="1" />
-        </svg>
-
-        <div className="flex items-center gap-3 relative z-10">
-          <div className="w-10 h-10 rounded-xl bg-purple-100/60 border border-purple-200/60 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs backdrop-blur-2xs">
-            <Calendar className="w-5 h-5 text-purple-600" />
+      <div
+        className="rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 border shadow-2xs transition-colors"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
+            <Calendar className="w-4 h-4 text-purple-600" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-purple-900 uppercase tracking-tight">
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: theme.pageText }}>
                 Tarih Aralığı Filtresi ({subModuleName})
               </span>
               {isFiltered && (
-                <span className="text-[10px] font-extrabold bg-purple-600 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
+                <span className="text-[10px] font-bold bg-purple-600 text-white px-2 py-0.5 rounded-full shadow-2xs">
                   Filtre Aktif
                 </span>
               )}
             </div>
-            <p className="text-[11px] font-semibold text-purple-900/70 mt-0.5">
+            <p className="text-xs font-medium mt-0.5" style={{ color: theme.pageTextMuted }}>
               {isFiltered
                 ? `${startDate ? new Date(startDate).toLocaleDateString("tr-TR") : "Başlangıç Sınırsız"} — ${
                     endDate ? new Date(endDate).toLocaleDateString("tr-TR") : "Bitiş Sınırsız"
@@ -1227,22 +1211,24 @@ export const Accounts: React.FC<AccountsProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 relative z-10">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Inputs */}
-          <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-xs border border-purple-200/60 rounded-xl px-2.5 py-1.5 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase text-purple-700/60">Tarih:</span>
+          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-xl px-2.5 py-1.5 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase text-slate-400">Tarih:</span>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer"
+              className="text-xs font-bold bg-transparent outline-none cursor-pointer"
+              style={{ color: theme.pageText }}
             />
-            <span className="text-purple-300 font-bold text-xs">-</span>
+            <span className="text-slate-400 font-bold text-xs">-</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer"
+              className="text-xs font-bold bg-transparent outline-none cursor-pointer"
+              style={{ color: theme.pageText }}
             />
           </div>
 
@@ -1251,28 +1237,32 @@ export const Accounts: React.FC<AccountsProps> = ({
             <button
               onClick={handlePresetThisMonth}
               type="button"
-              className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+              className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              style={{ color: theme.pageText }}
             >
               Bu Ay
             </button>
             <button
               onClick={handlePresetLastMonth}
               type="button"
-              className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+              className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              style={{ color: theme.pageText }}
             >
               Geçen Ay
             </button>
             <button
               onClick={handlePresetLast30Days}
               type="button"
-              className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+              className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              style={{ color: theme.pageText }}
             >
               Son 30 Gün
             </button>
             <button
               onClick={handlePresetThisYear}
               type="button"
-              className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+              className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              style={{ color: theme.pageText }}
             >
               Bu Yıl
             </button>
@@ -1280,7 +1270,7 @@ export const Accounts: React.FC<AccountsProps> = ({
               <button
                 onClick={handleClearDates}
                 type="button"
-                className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Temizle</span>

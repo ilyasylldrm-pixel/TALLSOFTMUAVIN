@@ -1,5 +1,6 @@
 import React from "react";
-import { ArrowLeft, ChevronRight, CornerDownLeft } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
+import { useTheme } from "../../context/ThemeContext";
 
 export interface BreadcrumbItem {
   label: string;
@@ -32,10 +33,18 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
   fullWidth = false,
   className = "",
 }) => {
+  const { theme } = useTheme();
+
   return (
-    <div className={`min-h-screen bg-slate-100 flex flex-col animate-fadeIn ${className}`}>
+    <div
+      className={`min-h-screen flex flex-col animate-fadeIn transition-colors ${className}`}
+      style={{ backgroundColor: theme.pageBg, color: theme.pageText }}
+    >
       {/* Top Sticky Header Bar */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+      <header
+        className="sticky top-0 z-30 border-b backdrop-blur-md shadow-2xs transition-colors"
+        style={{ backgroundColor: `${theme.cardBg}fa`, borderColor: theme.cardBorder }}
+      >
         <div className={`${fullWidth ? "px-4 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-4 sm:px-6"} py-3`}>
           {/* Breadcrumb row & Back button */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
@@ -43,35 +52,40 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
               <button
                 type="button"
                 onClick={onBack}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold text-slate-700 bg-slate-100 hover:bg-purple-100 hover:text-purple-700 border border-slate-200 transition-all cursor-pointer active:scale-95 shadow-2xs group"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer active:scale-95 shadow-2xs group border"
+                style={{
+                  backgroundColor: theme.cardBg,
+                  borderColor: theme.cardBorder,
+                  color: theme.pageText,
+                }}
                 title="Geri Dön (ESC)"
               >
-                <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:text-purple-700 group-hover:-translate-x-0.5 transition-transform" />
+                <ArrowLeft className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 group-hover:-translate-x-0.5 transition-all" />
                 <span>Geri Dön</span>
-                <span className="hidden sm:inline-block text-[10px] bg-white/80 px-1 py-0.2 rounded border border-slate-300 text-slate-400 font-mono">
+                <span className="hidden sm:inline-block text-[10px] px-1 py-0.2 rounded border border-slate-200 dark:border-slate-700 text-slate-400 font-mono">
                   ESC
                 </span>
               </button>
 
-              <div className="hidden sm:flex items-center gap-1.5 text-slate-500 font-medium pl-1 overflow-x-auto custom-scrollbar">
+              <div className="hidden sm:flex items-center gap-1.5 font-medium pl-1 overflow-x-auto custom-scrollbar">
                 {breadcrumbs.map((crumb, idx) => {
                   const isLast = idx === breadcrumbs.length - 1;
                   return (
                     <React.Fragment key={idx}>
-                      {idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />}
+                      {idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 shrink-0" />}
                       {crumb.onClick && !isLast ? (
                         <button
                           type="button"
                           onClick={crumb.onClick}
-                          className="hover:text-purple-700 font-semibold transition-colors truncate max-w-[160px] cursor-pointer"
+                          className="hover:text-purple-600 font-semibold transition-colors truncate max-w-[160px] cursor-pointer"
+                          style={{ color: theme.pageTextMuted }}
                         >
                           {crumb.label}
                         </button>
                       ) : (
                         <span
-                          className={`truncate max-w-[200px] ${
-                            isLast || crumb.active ? "font-bold text-slate-900" : ""
-                          }`}
+                          className="truncate max-w-[220px] font-bold"
+                          style={{ color: isLast || crumb.active ? theme.pageText : theme.pageTextMuted }}
                         >
                           {crumb.label}
                         </span>
@@ -87,22 +101,24 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
           </div>
 
           {/* Main Title & Status Badge Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-3 min-w-0">
               {headerIcon && (
-                <div className="w-10 h-10 rounded-2xl bg-purple-100 border border-purple-200 flex items-center justify-center text-purple-700 shrink-0 shadow-2xs">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
                   {headerIcon}
                 </div>
               )}
               <div className="min-w-0">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight truncate">
+                  <h1 className="text-lg sm:text-xl font-bold tracking-tight truncate" style={{ color: theme.pageText }}>
                     {title}
                   </h1>
                   {statusBadge && <div className="shrink-0">{statusBadge}</div>}
                 </div>
                 {subtitle && (
-                  <p className="text-xs text-slate-500 font-medium truncate mt-0.5">{subtitle}</p>
+                  <p className="text-xs font-medium truncate mt-0.5" style={{ color: theme.pageTextMuted }}>
+                    {subtitle}
+                  </p>
                 )}
               </div>
             </div>
@@ -110,7 +126,7 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
         </div>
       </header>
 
-      {/* Main Content Body (Full Height, Spacious Workspace) */}
+      {/* Main Content Body */}
       <main className="flex-1 py-6">
         <div className={fullWidth ? "px-4 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-4 sm:px-6"}>
           {children}

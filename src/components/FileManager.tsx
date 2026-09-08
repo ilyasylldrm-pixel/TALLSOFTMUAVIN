@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { UserProfile } from "./AuthModal";
+import { useTheme } from "../context/ThemeContext";
 import {
   saveUserFile,
   getUserFiles,
@@ -84,6 +85,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
   onAddTransaction,
   onSelectTab
 }) => {
+  const { theme } = useTheme();
   const [files, setFiles] = useState<UserFileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -608,74 +610,28 @@ export const FileManager: React.FC<FileManagerProps> = ({
         </div>
       )}
 
-      {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen - Cari Hesaplar Tasarımı) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-500/20"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="bg-purple-600/10 text-purple-900 border border-purple-300/80 font-extrabold text-[10px] uppercase px-2.5 py-0.5 rounded-md flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-purple-700" />
-              Yapay Zeka (AI OCR) Fiş & Fatura Okuyucu
-            </span>
-            <span className="bg-emerald-500/10 text-emerald-800 border border-emerald-300/60 font-extrabold text-[10px] uppercase px-2.5 py-0.5 rounded-md flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              Firestore Güvenli Depolama
-            </span>
-          </div>
-          <h2 className="text-lg font-extrabold text-slate-950 flex items-center gap-2">
-            <HardDrive className="w-5 h-5 text-purple-700" />
-            <span>Bulut Dosya Deposu & Fiş/Fatura Ayrıştırıcı</span>
-          </h2>
-          <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-            Yüklediğiniz fiş veya faturalardan Vergi No, Ünvan, Fiş/Fatura No, Matrah, KDV ve Toplam tutarlar otomatik okunur; ödeme yönteminizi seçerek tek tıkla muhasebeleştirebilirsiniz.
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+            Bulut Dosya Deposu & Fiş/Fatura Ayrıştırıcı
+          </h1>
+          <p className="text-xs font-medium mt-1" style={{ color: theme.pageTextMuted }}>
+            Yüklediğiniz fiş veya faturalar yapay zeka ile okunur ve tek tıkla muhasebeleştirilir
           </p>
         </div>
 
         {/* User Auth ID & Security Card */}
-        <div className="relative z-10 bg-white/80 backdrop-blur-md border border-purple-200/80 p-3 rounded-xl flex flex-col gap-1 shrink-0 max-w-xs shadow-2xs">
-          <div className="flex items-center gap-1.5 text-xs font-extrabold text-purple-950">
-            <Lock className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Kullanıcı Güvenlik Kuralı</span>
+        <div
+          className="p-3 rounded-2xl border shadow-2xs flex items-center gap-3 shrink-0"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-emerald-500/10 text-emerald-600">
+            <ShieldCheck className="w-4 h-4" />
           </div>
-          <div className="text-[10px] font-mono bg-purple-50 text-purple-900 px-2 py-0.5 rounded border border-purple-200/60 truncate">
-            UID: {currentUser.id}
-          </div>
-          <div className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-            <span>Kişiselleştirilmiş güvenli evrak klasörü</span>
+          <div>
+            <div className="text-xs font-bold" style={{ color: theme.pageText }}>Kişiselleştirilmiş Güvenli Depo</div>
+            <div className="text-[10px] font-mono" style={{ color: theme.pageTextMuted }}>UID: {currentUser.id.slice(0, 16)}...</div>
           </div>
         </div>
       </div>

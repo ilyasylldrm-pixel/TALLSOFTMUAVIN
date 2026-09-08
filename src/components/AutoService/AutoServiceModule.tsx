@@ -38,6 +38,7 @@ import { ServiceWhatsAppModal } from "../ServiceWhatsAppModal";
 import { ServiceDeliveryModal } from "../ServiceDeliveryModal";
 import { DetailPageLayout } from "../common/DetailPageLayout";
 import { useDetailNavigation } from "../../hooks/useDetailNavigation";
+import { useTheme } from "../../context/ThemeContext";
 
 interface AutoServiceModuleProps {
   autoServices: AutoServiceRecord[];
@@ -56,6 +57,7 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
   onAddInvoice,
   onAddContact,
 }) => {
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<"records" | "ai_assistants" | "print_preview">("records");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -954,106 +956,64 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
 
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* MODULE HEADER & TOP SUMMARY (Lila Bal Peteği & Geometrik Desen - Finans Yönetimi Teması) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-6 border border-purple-200/60 shadow-2xs space-y-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-400/10"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-purple-100/90 border border-purple-200/90 flex items-center justify-center text-purple-700 shadow-2xs backdrop-blur-2xs font-bold shrink-0">
-                <Car className="w-5 h-5 text-purple-700" />
-              </div>
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-950 flex items-center gap-2">
-                  <span>Oto Servis & Araç Bakım Yönetimi</span>
-                  <span className="text-[10px] font-extrabold bg-purple-200/80 text-purple-950 border border-purple-300/80 px-2 py-0.5 rounded-full">
-                    AI Destekli Atölye
-                  </span>
-                </h2>
-                <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-                  Araç Kabul, Lift/İş Emri Takibi, Yedek Parça & İşçilik Maliyeti, Müşteri Onayları ve 4 AI Danışmanı.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Tabs in Header */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setActiveTab("records")}
-              className={`font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-xs ${
-                activeTab === "records"
-                  ? "bg-purple-700 text-white shadow-md shadow-purple-600/30"
-                  : "bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md"
-              }`}
-            >
-              <Wrench className="w-4 h-4" />
-              <span>İş Emirleri & Kabul</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("ai_assistants")}
-              className={`font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-xs ${
-                activeTab === "ai_assistants"
-                  ? "bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-md shadow-purple-600/30"
-                  : "bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md"
-              }`}
-            >
-              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-              <span>AI Servis Danışmanı</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (autoServices.length > 0 && !selectedRecord) {
-                  setSelectedRecord(autoServices[0]);
-                }
-                setActiveTab("print_preview");
-              }}
-              className={`font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-xs ${
-                activeTab === "print_preview"
-                  ? "bg-purple-700 text-white shadow-md shadow-purple-600/30"
-                  : "bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md"
-              }`}
-            >
-              <Printer className="w-4 h-4" />
-              <span>Formlar & Yazdır</span>
-            </button>
-          </div>
+      {/* MODULE HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+            Oto Servis & Araç Bakım Yönetimi
+          </h1>
+          <p className="text-xs font-medium mt-1" style={{ color: theme.pageTextMuted }}>
+            Araç kabul, iş emri takibi, yedek parça & işçilik maliyeti, müşteri onayları ve servis raporları
+          </p>
         </div>
+
+        {/* Action Tabs in Header */}
+        <div
+          className="flex items-center gap-1.5 p-1.5 rounded-2xl border shadow-2xs"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <button
+            onClick={() => setActiveTab("records")}
+            className={`font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "records"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Wrench className="w-3.5 h-3.5" />
+            <span>İş Emirleri & Kabul</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("ai_assistants")}
+            className={`font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "ai_assistants"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>AI Servis Danışmanı</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (autoServices.length > 0 && !selectedRecord) {
+                setSelectedRecord(autoServices[0]);
+              }
+              setActiveTab("print_preview");
+            }}
+            className={`font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "print_preview"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Formlar & Yazdır</span>
+          </button>
+        </div>
+      </div>
 
         {/* 5 FINANCIAL / OPERATIONAL SUMMARY CARDS (Tam Finans Yönetimi Teması) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-2 relative z-10">
@@ -1222,7 +1182,6 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
             </div>
           </button>
         </div>
-      </div>
 
       {/* TAB 1: RECORDS & WORK ORDERS */}
       {activeTab === "records" && (

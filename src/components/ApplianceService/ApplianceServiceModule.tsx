@@ -60,6 +60,7 @@ import { ServiceWhatsAppModal } from "../ServiceWhatsAppModal";
 import { ServiceDeliveryModal } from "../ServiceDeliveryModal";
 import { DetailPageLayout } from "../common/DetailPageLayout";
 import { useDetailNavigation } from "../../hooks/useDetailNavigation";
+import { useTheme } from "../../context/ThemeContext";
 
 interface ApplianceServiceModuleProps {
   applianceServices: ApplianceServiceRecord[];
@@ -78,6 +79,7 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   onAddInvoice,
   onAddContact,
 }) => {
+  const { theme } = useTheme();
   // Main Tab (List vs Calendar)
   const [activeMainTab, setActiveMainTab] = useState<"records" | "calendar">("records");
 
@@ -1815,95 +1817,57 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
 
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* 🟣 FINANS YÖNETİMİ UYUMLU LİLA & BAL PETEĞİ BAŞLIK BANNERI */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-6 border border-purple-200/60 shadow-2xs space-y-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
+      {/* MODULE HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+            Ev Aletleri ve Klima Teknik Servis Yönetimi
+          </h1>
+          <p className="text-xs font-medium mt-1" style={{ color: theme.pageTextMuted }}>
+            Beyaz eşya, iklimlendirme saha ve atölye iş emirleri, randevu planı ve operasyon
+          </p>
+        </div>
 
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-400/10"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-purple-100/90 border border-purple-200/90 flex items-center justify-center text-purple-700 shadow-2xs backdrop-blur-2xs font-bold shrink-0">
-                <ThermometerSnowflake className="w-5 h-5 text-purple-700" />
-              </div>
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-950">
-                  Ev Aletleri ve Klima Teknik Servis Yönetimi
-                </h2>
-                <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-                  Beyaz Eşya, İklimlendirme (Klima/Kombi), Küçük Ev Aletleri Saha ve Atölye İş Emirleri, Gaz & Basınç Testleri, Takvim ve AI Destekli Operasyon.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Görünüm Değiştirme Sekmeleri */}
-            <div className="inline-flex p-1 rounded-xl bg-purple-100/70 border border-purple-200/80 backdrop-blur-md">
-              <button
-                onClick={() => setActiveMainTab("records")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  activeMainTab === "records"
-                    ? "bg-white text-purple-950 shadow-xs border border-purple-200/60"
-                    : "text-purple-900/80 hover:text-purple-950"
-                }`}
-              >
-                <LayoutList className="w-3.5 h-3.5" />
-                <span>İş Emirleri ({applianceServices.length})</span>
-              </button>
-              <button
-                onClick={() => setActiveMainTab("calendar")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  activeMainTab === "calendar"
-                    ? "bg-white text-purple-950 shadow-xs border border-purple-200/60"
-                    : "text-purple-900/80 hover:text-purple-950"
-                }`}
-              >
-                <CalendarDays className="w-3.5 h-3.5" />
-                <span>Takvim & Randevu Planı</span>
-              </button>
-            </div>
-
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Görünüm Değiştirme Sekmeleri */}
+          <div
+            className="flex items-center gap-1 p-1 rounded-2xl border shadow-2xs"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
             <button
-              onClick={handleOpenCreateModal}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all"
+              onClick={() => setActiveMainTab("records")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeMainTab === "records"
+                  ? "bg-purple-600 text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
             >
-              <Plus className="w-4 h-4 text-purple-100 font-bold" />
-              <span>Yeni Servis Kaydı Aç</span>
+              <LayoutList className="w-3.5 h-3.5" />
+              <span>İş Emirleri ({applianceServices.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveMainTab("calendar")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeMainTab === "calendar"
+                  ? "bg-purple-600 text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>Takvim & Randevu</span>
             </button>
           </div>
+
+          <button
+            onClick={handleOpenCreateModal}
+            className="text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all hover:opacity-90 active:scale-95"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4 font-bold" />
+            <span>Yeni Servis Kaydı</span>
+          </button>
         </div>
+      </div>
 
         {/* 📊 FINANS UYUMLU 5'Lİ KPI İSTATİSTİK KARTLARI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-2 relative z-10">
@@ -2062,7 +2026,6 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
             </div>
           </button>
         </div>
-      </div>
 
       {activeMainTab === "calendar" ? (
         <ApplianceCalendarView
@@ -2075,69 +2038,50 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
         />
       ) : (
         <>
-          {/* 📅 TARİH ARALIĞI FİLTRESİ (FINANS MODÜLÜ BİREBİR TASARIMI) */}
-          <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 border border-purple-200/60 shadow-2xs">
-            {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-            <div
-              className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-                backgroundSize: "20px 35px",
-              }}
-            />
-
-            {/* Dekoratif Vektör Şekli */}
-            <svg
-              className="absolute -right-4 -bottom-6 w-32 h-32 pointer-events-none text-purple-400/10"
-              viewBox="0 0 200 200"
-              fill="none"
-            >
-              <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-              <circle cx="100" cy="100" r="30" stroke="currentColor" strokeWidth="1" />
-            </svg>
-
-            <div className="flex items-center gap-3 relative z-10">
-              <div className="w-10 h-10 rounded-xl bg-purple-100/60 border border-purple-200/60 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs backdrop-blur-2xs">
-                <Calendar className="w-5 h-5 text-purple-600" />
+          {/* 📅 TARİH ARALIĞI FİLTRESİ */}
+          <div
+            className="rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 border shadow-2xs transition-colors"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
+                <Calendar className="w-4 h-4 text-purple-600" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-purple-900 uppercase tracking-tight">
+                  <span className="text-xs font-bold uppercase tracking-wide" style={{ color: theme.pageText }}>
                     Tarih Aralığı Filtresi (Servis Kayıtları)
                   </span>
                   {(startDate || endDate) && (
-                    <span className="text-[10px] font-extrabold bg-purple-600 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
+                    <span className="text-[10px] font-bold bg-purple-600 text-white px-2 py-0.5 rounded-full shadow-2xs">
                       Filtreli
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] font-semibold text-purple-950/80">
+                <p className="text-xs font-medium mt-0.5" style={{ color: theme.pageTextMuted }}>
                   Randevu ve servis kayıtlarını belirli tarih aralığına göre listele
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10">
-              <div className="flex items-center gap-2 bg-white/80 p-1.5 rounded-xl border border-purple-200/60 shadow-2xs backdrop-blur-2xs">
-                <div className="flex items-center gap-1.5 px-2">
-                  <span className="text-[11px] font-bold text-slate-500">Başlangıç:</span>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="text-xs font-bold text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
-                  />
-                </div>
-                <span className="text-slate-300 font-bold">|</span>
-                <div className="flex items-center gap-1.5 px-2">
-                  <span className="text-[11px] font-bold text-slate-500">Bitiş:</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="text-xs font-bold text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
-                  />
-                </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-xl px-2.5 py-1.5 shadow-2xs">
+                <span className="text-[10px] font-bold uppercase text-slate-400">Tarih:</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="text-xs font-bold bg-transparent outline-none cursor-pointer"
+                  style={{ color: theme.pageText }}
+                />
+                <span className="text-slate-400 font-bold text-xs">-</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="text-xs font-bold bg-transparent outline-none cursor-pointer"
+                  style={{ color: theme.pageText }}
+                />
               </div>
 
               {/* Hazır Aralık Butonları */}
@@ -2145,28 +2089,32 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                 <button
                   onClick={handlePresetThisMonth}
                   type="button"
-                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+                  className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  style={{ color: theme.pageText }}
                 >
                   Bu Ay
                 </button>
                 <button
                   onClick={handlePresetLastMonth}
                   type="button"
-                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+                  className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  style={{ color: theme.pageText }}
                 >
                   Geçen Ay
                 </button>
                 <button
                   onClick={handlePresetLast30Days}
                   type="button"
-                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+                  className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  style={{ color: theme.pageText }}
                 >
                   Son 30 Gün
                 </button>
                 <button
                   onClick={handlePresetThisYear}
                   type="button"
-                  className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white/80 hover:bg-white text-purple-900 border border-purple-200/60 transition-colors cursor-pointer shadow-2xs"
+                  className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  style={{ color: theme.pageText }}
                 >
                   Bu Yıl
                 </button>
@@ -2174,7 +2122,7 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                   <button
                     onClick={handleClearDates}
                     type="button"
-                    className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                    className="text-xs font-bold px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
                   >
                     <X className="w-3.5 h-3.5" />
                     <span>Temizle</span>

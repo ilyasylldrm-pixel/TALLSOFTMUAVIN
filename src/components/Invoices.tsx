@@ -1953,21 +1953,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
 <form id="invoice-create-form" onSubmit={handleSaveInvoice} className="space-y-5 min-w-0">
               {/* AI OCR Scanner Shortcut for Gider Faturaları */}
               {(forcedType === "purchase" || invType === "purchase") && (
-                <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-purple-500/10 p-3 rounded-2xl border border-amber-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                <div
+                  className="p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs transition-all"
+                  style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+                >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 to-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <Sparkles className="w-4 h-4 text-amber-100 animate-pulse" />
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-600 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-extrabold text-amber-950">
+                        <span className="text-xs font-bold" style={{ color: theme.pageText }}>
                           Faturanız Var mı?
                         </span>
-                        <span className="bg-amber-200/80 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full">
+                        <span className="bg-purple-500/10 text-purple-600 border border-purple-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full">
                           AI OCR Otomatik Doldurma
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-600 font-medium">
+                      <p className="text-[11px] font-medium" style={{ color: theme.pageTextMuted }}>
                         Fotoğraf veya PDF yükleyin; firma ünvanı, VKN, tutar, KDV ve masraf kalemi anında doldurulsun.
                       </p>
                     </div>
@@ -1977,9 +1980,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     onClick={() => {
                       setIsAiScannerModalOpen(true);
                     }}
-                    className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all shrink-0 active:scale-95"
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0 active:scale-95"
                   >
-                    <UploadCloud className="w-4 h-4 text-amber-200" />
+                    <UploadCloud className="w-4 h-4 text-purple-200" />
                     <span>AI ile Fatura Tara</span>
                   </button>
                 </div>

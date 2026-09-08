@@ -1789,18 +1789,27 @@ export const Contacts: React.FC<ContactsProps> = ({
               </div>
             }
           >
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-6">
+            <div
+              className="rounded-3xl p-6 sm:p-8 border shadow-sm max-w-4xl mx-auto space-y-6"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
               <form id="contact-form" onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-4 text-xs">
                   
-                  {/* 1. CARİ HESAP KODU (OTOMATİK OLUŞUM) */}
-                  <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3.5 space-y-2.5 shadow-2xs">
+                  {/* 1. CARİ HESAP TANIMI & TÜRÜ */}
+                  <div
+                    className="border rounded-2xl p-4 space-y-3"
+                    style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-purple-600 text-white font-bold text-[11px] flex items-center justify-center shadow-2xs">1</span>
-                        <label className="text-xs font-bold text-purple-950 uppercase tracking-wide">
-                          CARİ HESAP KODU <span className="text-[11px] font-normal text-purple-700">(Otomatik: 120/320 . İl Kodu . VKN/TCKN)</span>
+                        <Tag className="w-4 h-4 text-purple-600" />
+                        <label className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.pageText }}>
+                          Cari Hesap Tanımı
                         </label>
+                        <span className="text-[11px] font-normal" style={{ color: theme.pageTextMuted }}>
+                          (Otomatik: 120/320 . İl Kodu . VKN/TCKN)
+                        </span>
                       </div>
                       <button
                         type="button"
@@ -1811,7 +1820,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                             accountCode: !prev.isCustomAccountCode ? currentComputedAccountCode : ""
                           }));
                         }}
-                        className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 underline flex items-center gap-1 cursor-pointer"
+                        className="text-[11px] font-semibold text-purple-600 hover:text-purple-700 underline flex items-center gap-1 cursor-pointer"
                       >
                         {formData.isCustomAccountCode ? (
                           <>
@@ -1827,10 +1836,10 @@ export const Contacts: React.FC<ContactsProps> = ({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
                       {/* Cari Tipi Seçimi */}
                       <div className="sm:col-span-4">
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
                           Cari Tipi (Alıcı / Satıcı) *
                         </label>
                         <select
@@ -1838,7 +1847,8 @@ export const Contacts: React.FC<ContactsProps> = ({
                           onChange={(e) =>
                             setFormData({ ...formData, contactType: e.target.value as ContactType })
                           }
-                          className="w-full bg-white border border-purple-200 rounded-lg p-2 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 cursor-pointer"
+                          className="w-full rounded-xl p-2 text-xs font-semibold border transition-colors cursor-pointer"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                         >
                           <option value="customer">120 - Alıcılar (Müşteri)</option>
                           <option value="vendor">320 - Satıcılar (Tedarikçi)</option>
@@ -1848,7 +1858,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
                       {/* Cari Hesap Kodu Canlı Gösterimi / Giriş */}
                       <div className="sm:col-span-8">
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
                           Üretilen Cari Hesap Kodu
                         </label>
                         {formData.isCustomAccountCode ? (
@@ -1857,14 +1867,18 @@ export const Contacts: React.FC<ContactsProps> = ({
                             value={formData.accountCode}
                             onChange={(e) => setFormData({ ...formData, accountCode: e.target.value })}
                             placeholder="ör: 120.34.1234567890"
-                            className="w-full bg-white border border-purple-300 rounded-lg p-2 text-xs font-mono font-bold text-purple-950 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                            className="w-full rounded-xl p-2 text-xs font-mono font-bold border"
+                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                           />
                         ) : (
-                          <div className="w-full bg-white border-2 border-purple-300/80 rounded-lg p-2 text-xs font-mono font-black text-purple-950 flex flex-wrap items-center justify-between gap-1 shadow-2xs">
-                            <span className="tracking-wider text-sm text-purple-900">
+                          <div
+                            className="w-full border rounded-xl p-2 text-xs font-mono font-bold flex flex-wrap items-center justify-between gap-1 shadow-2xs"
+                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                          >
+                            <span className="tracking-wider text-sm font-black text-purple-600">
                               {currentComputedAccountCode}
                             </span>
-                            <div className="flex items-center gap-1.5 text-[10px] font-sans font-normal text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                            <div className="flex items-center gap-1.5 text-[10px] font-sans font-medium px-2 py-0.5 rounded border border-purple-500/20 bg-purple-500/5 text-purple-600">
                               <span><b>{prefixNumber}</b> ({formData.contactType === "vendor" ? "Satıcı" : "Alıcı"})</span>
                               <span>•</span>
                               <span><b>{currentPlateCode}</b> ({formData.city || "İstanbul"})</span>
@@ -1877,25 +1891,25 @@ export const Contacts: React.FC<ContactsProps> = ({
                     </div>
                   </div>
 
-                  {/* 2. V.K.N. / T.C.K.N & 3. VERGİ DAİRESİ */}
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                    {/* 2- V.K.N. / T.C.K.N with "BİLGİLERİ GETİR" BUTTON */}
+                  {/* 2. V.K.N. / T.C.K.N & VERGİ DAİRESİ */}
+                  <div
+                    className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-4 rounded-2xl border"
+                    style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+                  >
+                    {/* V.K.N. / T.C.K.N with "BİLGİLERİ GETİR" BUTTON */}
                     <div className="sm:col-span-7 space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">2</span>
-                          <label className="text-xs font-bold text-slate-800">
-                            V.K.N. / T.C.K.N *
-                          </label>
-                        </div>
+                        <label className="text-xs font-bold" style={{ color: theme.pageText }}>
+                          V.K.N. / T.C.K.N *
+                        </label>
                         {formData.taxNumber && (
                           <span
                             className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                               formData.taxNumber.length === 10
-                                ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
                                 : formData.taxNumber.length === 11
-                                ? "bg-blue-100 text-blue-700 border border-blue-200"
-                                : "bg-amber-100 text-amber-700 border border-amber-200"
+                                ? "bg-blue-500/10 text-blue-600 border border-blue-500/20"
+                                : "bg-amber-500/10 text-amber-600 border border-amber-500/20"
                             }`}
                           >
                             {formData.taxNumber.length === 10
@@ -1925,7 +1939,8 @@ export const Contacts: React.FC<ContactsProps> = ({
                                 handleFetchTaxpayerInfo();
                               }
                             }}
-                            className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                            className="w-full rounded-xl p-2 text-xs font-mono font-bold border transition-colors shadow-2xs"
+                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                           />
                         </div>
 
@@ -1933,7 +1948,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                           type="button"
                           onClick={handleFetchTaxpayerInfo}
                           disabled={isFetchingTaxpayer || !formData.taxNumber || (formData.taxNumber.length !== 10 && formData.taxNumber.length !== 11)}
-                          className="px-3 sm:px-3.5 py-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-800 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                          className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                           title="GİB & Mysoft sisteminden cari ünvan ve vergi dairesini otomatik getir"
                         >
                           {isFetchingTaxpayer ? (
@@ -1943,7 +1958,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                             </>
                           ) : (
                             <>
-                              <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300 animate-pulse" />
+                              <Sparkles className="w-3.5 h-3.5 text-purple-200" />
                               <span>Bilgileri Getir</span>
                             </>
                           )}
@@ -1956,9 +1971,9 @@ export const Contacts: React.FC<ContactsProps> = ({
                           className={`p-2 rounded-xl border text-[11px] flex flex-wrap items-center justify-between gap-1.5 animate-fadeIn ${
                             taxpayerFetchStatus.success
                               ? taxpayerFetchStatus.isEFatura
-                                ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                                : "bg-sky-50 border-sky-200 text-sky-900"
-                              : "bg-rose-50 border-rose-200 text-rose-800"
+                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                                : "bg-sky-500/10 border-sky-500/20 text-sky-600"
+                              : "bg-rose-500/10 border-rose-500/20 text-rose-600"
                           }`}
                         >
                           <div className="flex items-center gap-1.5">
@@ -1974,7 +1989,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                             <span className="font-bold">{taxpayerFetchStatus.message}</span>
                           </div>
                           {taxpayerFetchStatus.pkAlias && (
-                            <span className="text-[10px] font-mono font-bold bg-white/90 px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-800">
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
                               PK: {taxpayerFetchStatus.pkAlias}
                             </span>
                           )}
@@ -1982,19 +1997,16 @@ export const Contacts: React.FC<ContactsProps> = ({
                       )}
                     </div>
 
-                    {/* 3- VERGİ DAİRESİ */}
+                    {/* VERGİ DAİRESİ */}
                     <div className="sm:col-span-5">
                       <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">3</span>
-                          <label className="text-xs font-bold text-slate-800 truncate">
-                            VERGİ DAİRESİ {formData.city ? `(${formData.city})` : ""}
-                          </label>
-                        </div>
+                        <label className="text-xs font-bold truncate" style={{ color: theme.pageText }}>
+                          VERGİ DAİRESİ {formData.city ? `(${formData.city})` : ""}
+                        </label>
                         <button
                           type="button"
                           onClick={() => setIsCustomTaxOffice(!isCustomTaxOffice)}
-                          className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                          className="text-[11px] font-semibold text-purple-600 hover:text-purple-700 underline cursor-pointer"
                         >
                           {isCustomTaxOffice ? "Listeden Seç" : "Manuel Gir"}
                         </button>
@@ -2005,13 +2017,15 @@ export const Contacts: React.FC<ContactsProps> = ({
                           placeholder="ör: Mecidiyeköy Vergi Dairesi"
                           value={formData.taxOffice}
                           onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                          className="w-full rounded-xl p-2 text-xs border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                         />
                       ) : (
                         <select
                           value={formData.taxOffice}
                           onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                          className="w-full rounded-xl p-2 text-xs font-medium border cursor-pointer"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                         >
                           {taxOfficeOptions.map((vd) => (
                             <option key={vd} value={vd}>
@@ -2023,16 +2037,16 @@ export const Contacts: React.FC<ContactsProps> = ({
                     </div>
                   </div>
 
-                  {/* 4. Resmi Ticari Şirket Unvanı & 5. Kısa Unvan / İsim */}
-                  <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                    {/* 4- Resmi Ticari Şirket Unvanı */}
+                  {/* 3. Resmi Ticari Şirket Unvanı & Kısa Unvan / İsim */}
+                  <div
+                    className="space-y-3 p-4 rounded-2xl border"
+                    style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+                  >
+                    {/* Resmi Ticari Şirket Unvanı */}
                     <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">4</span>
-                        <label className="text-xs font-bold text-slate-800">
-                          Resmi Ticari Şirket Unvanı
-                        </label>
-                      </div>
+                      <label className="block text-xs font-bold mb-1" style={{ color: theme.pageText }}>
+                        Resmi Ticari Şirket Unvanı
+                      </label>
                       <input
                         type="text"
                         placeholder="ör: TeknoSoft Yazılım ve Bilişim Sanayi Ticaret Anonim Şirketi"
@@ -2045,20 +2059,18 @@ export const Contacts: React.FC<ContactsProps> = ({
                             name: prev.name ? prev.name : val.slice(0, 35),
                           }));
                         }}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        className="w-full rounded-xl p-2 text-xs border"
+                        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                       />
                     </div>
 
-                    {/* 5- Kısa Unvan / İsim */}
+                    {/* Kısa Unvan / İsim */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">5</span>
-                          <label className="text-xs font-bold text-slate-800">
-                            Kısa Unvan / İsim *
-                          </label>
-                        </div>
-                        <span className="text-[10px] text-slate-500 font-normal">
+                        <label className="text-xs font-bold" style={{ color: theme.pageText }}>
+                          Kısa Unvan / İsim *
+                        </label>
+                        <span className="text-[10px] font-normal" style={{ color: theme.pageTextMuted }}>
                           (Listelerde ve aramalarda görünen pratik isim)
                         </span>
                       </div>
@@ -2068,34 +2080,43 @@ export const Contacts: React.FC<ContactsProps> = ({
                         placeholder="ör: TeknoSoft A.Ş. veya Ahmet Yılmaz"
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        className="w-full rounded-xl p-2 text-xs font-bold border"
+                        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                       />
                     </div>
                   </div>
 
-                  {/* 6. Cari Hesap Adres Bilgileri BÖLÜMÜ */}
-                  <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">6</span>
-                        <MapPin className="w-3.5 h-3.5 text-indigo-600" />
-                        <span className="text-xs font-bold text-slate-800">Cari Hesap Adres Bilgileri BÖLÜMÜ</span>
+                  {/* 4. Cari Hesap Adres Bilgileri BÖLÜMÜ */}
+                  <div
+                    className="space-y-3 p-4 rounded-2xl border"
+                    style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+                  >
+                    <div
+                      className="flex items-center justify-between border-b pb-2"
+                      style={{ borderColor: theme.cardBorder }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-purple-600" />
+                        <span className="text-xs font-bold" style={{ color: theme.pageText }}>
+                          Cari Hesap Adres Bilgileri
+                        </span>
                       </div>
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                         TrAdres Canlı Katalog
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      {/* İl Seçimi (Plaka kodlarıyla) */}
+                      {/* İl Seçimi */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
                           İl (Türkiye 81 İl) *
                         </label>
                         <select
                           value={formData.city}
                           onChange={(e) => handleCityChange(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                          className="w-full rounded-xl p-2 text-xs font-semibold border cursor-pointer"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                         >
                           {(trAdresProvinces.length > 0 ? trAdresProvinces : ALL_81_PROVINCES).map((prov) => (
                             <option key={prov.code} value={prov.name}>
@@ -2108,14 +2129,14 @@ export const Contacts: React.FC<ContactsProps> = ({
                       {/* İlçe */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                          <label className="block text-[11px] font-semibold flex items-center gap-1" style={{ color: theme.pageText }}>
                             <span>İlçe</span>
-                            {isLoadingDistricts && <span className="text-[10px] text-indigo-600 font-normal">yükleniyor...</span>}
+                            {isLoadingDistricts && <span className="text-[10px] text-purple-600 font-normal">yükleniyor...</span>}
                           </label>
                           <button
                             type="button"
                             onClick={() => setIsCustomDistrict(!isCustomDistrict)}
-                            className="text-[10px] text-indigo-600 hover:underline"
+                            className="text-[10px] text-purple-600 hover:underline cursor-pointer"
                           >
                             {isCustomDistrict ? "Listeden" : "Manuel"}
                           </button>
@@ -2130,13 +2151,15 @@ export const Contacts: React.FC<ContactsProps> = ({
                               const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, val, formData.city, formData.doorNo, formData.postalCode);
                               setFormData(prev => ({ ...prev, district: val, address: newAddr }));
                             }}
-                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                            className="w-full rounded-xl p-2 text-xs border"
+                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                           />
                         ) : (
                           <select
                             value={formData.district}
                             onChange={(e) => handleDistrictChange(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                            className="w-full rounded-xl p-2 text-xs font-medium border cursor-pointer"
+                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                           >
                             {districtOptions.map((d) => (
                               <option key={d} value={d}>{d}</option>
@@ -2148,14 +2171,14 @@ export const Contacts: React.FC<ContactsProps> = ({
                       {/* Mahalle */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                          <label className="block text-[11px] font-semibold flex items-center gap-1" style={{ color: theme.pageText }}>
                             <span>Mahalle</span>
-                            {isLoadingNeighborhoods && <span className="text-[10px] text-indigo-600 font-normal">yükleniyor...</span>}
+                            {isLoadingNeighborhoods && <span className="text-[10px] text-purple-600 font-normal">yükleniyor...</span>}
                           </label>
                           <button
                             type="button"
                             onClick={() => setIsCustomNeighborhood(!isCustomNeighborhood)}
-                            className="text-[10px] text-indigo-600 hover:underline"
+                            className="text-[10px] text-purple-600 hover:underline cursor-pointer"
                           >
                             {isCustomNeighborhood ? "Listeden" : "Manuel"}
                           </button>
@@ -2170,13 +2193,15 @@ export const Contacts: React.FC<ContactsProps> = ({
                               const newAddr = compileAddress(val, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode);
                               setFormData(prev => ({ ...prev, neighborhood: val, address: newAddr }));
                             }}
-                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                            className="w-full rounded-xl p-2 text-xs border"
+                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                           />
                         ) : (
                           <select
                             value={formData.neighborhood}
                             onChange={(e) => handleNeighborhoodChange(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                            className="w-full rounded-xl p-2 text-xs font-medium border cursor-pointer"
+                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                           >
                             {neighborhoodOptions.map((n) => (
                               <option key={n} value={n}>{n}</option>
@@ -2189,9 +2214,9 @@ export const Contacts: React.FC<ContactsProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                       {/* Cadde / Sokak */}
                       <div className="sm:col-span-2">
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                        <label className="block text-[11px] font-semibold mb-1 flex items-center justify-between" style={{ color: theme.pageText }}>
                           <span>Cadde / Sokak / Bulvar</span>
-                          <span className="text-[10px] text-slate-400 font-normal">Öneri listeli</span>
+                          <span className="text-[10px] font-normal" style={{ color: theme.pageTextMuted }}>Öneri listeli</span>
                         </label>
                         <input
                           type="text"
@@ -2199,7 +2224,8 @@ export const Contacts: React.FC<ContactsProps> = ({
                           placeholder="ör: Bağdat Caddesi / Atatürk Bulvarı / 101. Sokak"
                           value={formData.street}
                           onChange={(e) => handleStreetChange(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                          className="w-full rounded-xl p-2 text-xs border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                         />
                         <datalist id="contacts-street-datalist">
                           {COMMON_STREET_TYPES.map((st, idx) => (
@@ -2210,7 +2236,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
                       {/* Bina No */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
                           Bina No / Blok
                         </label>
                         <input
@@ -2218,13 +2244,14 @@ export const Contacts: React.FC<ContactsProps> = ({
                           placeholder="ör: No: 12"
                           value={formData.buildingNo}
                           onChange={(e) => handleBuildingNoChange(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                          className="w-full rounded-xl p-2 text-xs border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                         />
                       </div>
 
                       {/* Posta Kodu / Kapı */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
                           Daire / Posta Kodu
                         </label>
                         <input
@@ -2236,14 +2263,15 @@ export const Contacts: React.FC<ContactsProps> = ({
                             const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, val);
                             setFormData(prev => ({ ...prev, postalCode: val, address: newAddr }));
                           }}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                          className="w-full rounded-xl p-2 text-xs border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                         />
                       </div>
                     </div>
 
                     {/* Tam Açık Adres */}
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
                         Tam Açık Adres (Fatura &amp; Tebligat Adresi)
                       </label>
                       <textarea
@@ -2257,20 +2285,23 @@ export const Contacts: React.FC<ContactsProps> = ({
                             shippingAddress: prev.isSameShippingAddress ? val : prev.shippingAddress,
                           }));
                         }}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        className="w-full rounded-xl p-2 text-xs border"
+                        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                       />
                     </div>
                   </div>
 
-                  {/* 7. İLGİLİ KİŞİ & 8. TELEFON & 9. E POSTA */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                    {/* 7- İLGİLİ KİŞİ */}
+                  {/* 5. İLGİLİ KİŞİ & TELEFON & E-POSTA */}
+                  <div
+                    className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl border"
+                    style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+                  >
+                    {/* İLGİLİ KİŞİ */}
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
-                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">7</span>
-                        <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-                        <label className="text-xs font-bold text-slate-800">
-                          İLGİLİ KİŞİ
+                        <UserCheck className="w-4 h-4 text-purple-600" />
+                        <label className="text-xs font-bold" style={{ color: theme.pageText }}>
+                          İlgili Kişi / Yetkili
                         </label>
                       </div>
                       <input
@@ -2278,17 +2309,17 @@ export const Contacts: React.FC<ContactsProps> = ({
                         placeholder="ör: Ahmet Yılmaz (Satın Alma)"
                         value={formData.contactPerson}
                         onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        className="w-full rounded-xl p-2 text-xs border"
+                        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                       />
                     </div>
 
-                    {/* 8- TELEFON */}
+                    {/* TELEFON */}
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
-                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">8</span>
-                        <Phone className="w-3.5 h-3.5 text-indigo-600" />
-                        <label className="text-xs font-bold text-slate-800">
-                          TELEFON
+                        <Phone className="w-4 h-4 text-purple-600" />
+                        <label className="text-xs font-bold" style={{ color: theme.pageText }}>
+                          Telefon Numarası
                         </label>
                       </div>
                       <input
@@ -2296,17 +2327,17 @@ export const Contacts: React.FC<ContactsProps> = ({
                         placeholder="ör: 0212 555 12 34 / 0532 555 12 34"
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        className="w-full rounded-xl p-2 text-xs border"
+                        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                       />
                     </div>
 
-                    {/* 9- E POSTA */}
+                    {/* E POSTA */}
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
-                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">9</span>
-                        <Mail className="w-3.5 h-3.5 text-indigo-600" />
-                        <label className="text-xs font-bold text-slate-800">
-                          E POSTA
+                        <Mail className="w-4 h-4 text-purple-600" />
+                        <label className="text-xs font-bold" style={{ color: theme.pageText }}>
+                          E-Posta Adresi
                         </label>
                       </div>
                       <input
@@ -2314,20 +2345,28 @@ export const Contacts: React.FC<ContactsProps> = ({
                         placeholder="ör: muhasebe@firma.com"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        className="w-full rounded-xl p-2 text-xs border"
+                        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                       />
                     </div>
                   </div>
 
-                  {/* 10. SEVKİYAT ADRESİ */}
-                  <div className="space-y-2.5 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">10</span>
-                        <Truck className="w-3.5 h-3.5 text-indigo-600" />
-                        <span className="text-xs font-bold text-slate-800">SEVKİYAT ADRESİ</span>
+                  {/* 6. SEVKİYAT ADRESİ */}
+                  <div
+                    className="space-y-2.5 p-4 rounded-2xl border"
+                    style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+                  >
+                    <div
+                      className="flex items-center justify-between border-b pb-2"
+                      style={{ borderColor: theme.cardBorder }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-purple-600" />
+                        <span className="text-xs font-bold" style={{ color: theme.pageText }}>
+                          Sevkiyat / Mal Teslim Adresi
+                        </span>
                       </div>
-                      <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                      <label className="flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer" style={{ color: theme.pageText }}>
                         <input
                           type="checkbox"
                           checked={formData.isSameShippingAddress}
@@ -2339,7 +2378,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                               shippingAddress: checked ? prev.address : prev.shippingAddress
                             }));
                           }}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 cursor-pointer"
+                          className="rounded border-slate-300 text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 cursor-pointer"
                         />
                         <span>Cari / Fatura Adresi ile Aynı</span>
                       </label>
@@ -2347,7 +2386,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
                     {!formData.isSameShippingAddress && (
                       <div className="space-y-1 animate-fadeIn">
-                        <label className="block text-[11px] font-semibold text-slate-700">
+                        <label className="block text-[11px] font-semibold" style={{ color: theme.pageText }}>
                           Depo / Sevkiyat / Mal Teslim Adresi
                         </label>
                         <textarea
@@ -2355,15 +2394,19 @@ export const Contacts: React.FC<ContactsProps> = ({
                           placeholder="ör: Organize Sanayi Bölgesi 4. Cadde No: 18 Depo 2, Tuzla / İstanbul (Teslim Yetkilisi: Depo Sorumlusu)"
                           value={formData.shippingAddress}
                           onChange={(e) => setFormData({ ...formData, shippingAddress: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                          className="w-full rounded-xl p-2 text-xs border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                         />
                       </div>
                     )}
                   </div>
 
-                  {/* Ekstra: Özel Notlar */}
-                  <div className="space-y-2 bg-slate-50/80 p-3 rounded-xl border border-slate-200/80">
-                    <label className="block text-xs font-semibold text-slate-700">
+                  {/* 7. Özel Notlar */}
+                  <div
+                    className="space-y-2 p-4 rounded-2xl border"
+                    style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+                  >
+                    <label className="block text-xs font-semibold" style={{ color: theme.pageText }}>
                       Özel Cari Notları &amp; Sözleşme Şartları (İsteğe Bağlı)
                     </label>
                     <textarea
@@ -2371,13 +2414,17 @@ export const Contacts: React.FC<ContactsProps> = ({
                       placeholder="Özel iskonto oranı, vade günü (30 gün/60 gün), banka IBAN bilgileri veya sözleşme notları..."
                       value={formData.notes}
                       onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      className="w-full rounded-xl p-2 text-xs border"
+                      style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                     />
                   </div>
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 bg-slate-50 border-t border-slate-200 rounded-2xl flex items-center justify-between gap-2">
+                <div
+                  className="p-4 border-t rounded-2xl flex items-center justify-between gap-2"
+                  style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+                >
                   <div className="text-xs font-medium text-slate-500 hidden sm:block">
                     Hesap Kodu: <span className="font-mono font-bold text-purple-900">{currentComputedAccountCode}</span>
                   </div>
@@ -2477,12 +2524,21 @@ export const Contacts: React.FC<ContactsProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl p-4 sm:p-6 md:p-8 border border-purple-200 shadow-sm max-w-6xl mx-auto space-y-6">
+          <div
+            className="rounded-3xl p-4 sm:p-6 md:p-8 border shadow-sm max-w-6xl mx-auto space-y-6"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
 
             {/* 2. Interactive Control Bar (no-print) */}
-            <div className="bg-purple-50/80 border-b border-purple-200/80 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0 no-print">
+            <div
+              className="border rounded-2xl px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0 no-print"
+              style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+            >
               {/* Movement Filter Tabs */}
-              <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-purple-200 shadow-2xs flex-wrap">
+              <div
+                className="flex items-center gap-1 p-0.5 rounded-xl border shadow-2xs flex-wrap"
+                style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+              >
                 <button
                   type="button"
                   onClick={() => setEkstreTab("all")}
@@ -2523,13 +2579,14 @@ export const Contacts: React.FC<ContactsProps> = ({
 
               {/* Search input */}
               <div className="relative w-48 sm:w-64">
-                <Search className="w-3.5 h-3.5 text-purple-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="Evrak No veya Açıklama Ara..."
                   value={ekstreSearch}
                   onChange={(e) => setEkstreSearch(e.target.value)}
-                  className="w-full bg-white border border-purple-200 text-slate-900 text-xs rounded-lg pl-8 pr-2 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  className="w-full rounded-xl pl-8 pr-2 py-1.5 text-xs border focus:outline-none"
+                  style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                 />
               </div>
             </div>
