@@ -1,6 +1,38 @@
 @import "tailwindcss";
+:root {
+  --theme-sidebar-bg: #0f172a;
+  --theme-sidebar-text: #94a3b8;
+  --theme-sidebar-active-bg: #8252f6;
+  --theme-sidebar-active-text: #ffffff;
+  --theme-sidebar-border: #1e293b;
+  --theme-header-bg: #ffffff;
+  --theme-header-text: #0f172a;
+  --theme-header-border: #f1f5f9;
+  --theme-page-bg: #f8fafc;
+  --theme-card-bg: #ffffff;
+  --theme-card-border: #f1f5f9;
+  --theme-primary: #8252f6;
+  --theme-primary-hover: #703ee5;
+  --theme-text-primary: #0f172a;
+  --theme-text-secondary: #64748b;
+}
 
 @layer utilities {
+  .bg-theme-sidebar { background-color: var(--theme-sidebar-bg); }
+  .text-theme-sidebar { color: var(--theme-sidebar-text); }
+  .border-theme-sidebar { border-color: var(--theme-sidebar-border); }
+  .bg-theme-header { background-color: var(--theme-header-bg); }
+  .text-theme-header { color: var(--theme-header-text); }
+  .border-theme-header { border-color: var(--theme-header-border); }
+  .bg-theme-page { background-color: var(--theme-page-bg); }
+  .bg-theme-card { background-color: var(--theme-card-bg); }
+  .border-theme-card { border-color: var(--theme-card-border); }
+  .bg-theme-primary { background-color: var(--theme-primary); }
+  .text-theme-primary { color: var(--theme-primary); }
+  .border-theme-primary { border-color: var(--theme-primary); }
+  .text-theme-primary-text { color: var(--theme-text-primary); }
+  .text-theme-secondary-text { color: var(--theme-text-secondary); }
+
   .bg-brand-purple {
     background-color: #8252f6;
   }
@@ -57,8 +89,8 @@
 
 body {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: var(--theme-page-bg, #f8fafc);
+  color: var(--theme-text-primary, #0f172a);
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.01em;
 }

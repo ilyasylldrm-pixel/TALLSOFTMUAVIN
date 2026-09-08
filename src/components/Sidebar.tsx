@@ -47,6 +47,7 @@ import { CompanySettings } from "../types";
 import { Logo } from "./Logo";
 import { FinanceSubModule } from "./Accounts";
 import { UserProfile } from "./AuthModal";
+import { useTheme } from "../context/ThemeContext";
 
 export type NavItem =
   | "dashboard"
@@ -117,6 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   onToggleCollapse,
 }) => {
+  const { theme } = useTheme();
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = isCollapsed !== undefined ? isCollapsed : internalCollapsed;
   const handleToggleCollapse = onToggleCollapse || (() => setInternalCollapsed((prev) => !prev));
@@ -210,10 +212,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const renderNavContent = () => (
     <>
       {/* Brand Header */}
-      <div className="p-3.5 border-b border-slate-200 flex items-center justify-between gap-2 min-h-[64px]">
+      <div
+        className="p-3.5 border-b flex items-center justify-between gap-2 min-h-[64px]"
+        style={{ borderColor: theme.sidebarBorder }}
+      >
         <div className="min-w-0 flex-1">
           <Logo size="md" />
-          <p className="text-xs text-slate-500 font-medium truncate mt-1">
+          <p className="text-xs font-medium truncate mt-1 opacity-75" style={{ color: theme.sidebarText }}>
             {settings.companyName}
           </p>
         </div>
@@ -249,9 +254,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onOpenQuickAdd();
             if (onCloseMobile) onCloseMobile();
           }}
-          className="w-full bg-[#8252F6] hover:bg-[#703EE5] active:scale-[0.98] text-white font-medium text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+          className="w-full active:scale-[0.98] text-white font-medium text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer hover:opacity-90"
+          style={{ backgroundColor: theme.primaryColor }}
         >
-          <Plus className="w-4 h-4 text-[#EF7D2C]" />
+          <Plus className="w-4 h-4 text-white" />
           <span>Hızlı İşlem Ekle</span>
         </button>
       </div>
@@ -328,15 +334,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   isActive
-                    ? "bg-[#F3EFFF] text-[#8252F6] border border-[#E4D7FF] shadow-2xs font-semibold"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    ? "shadow-2xs font-semibold"
+                    : "hover:opacity-80"
                 }`}
+                style={
+                  isActive
+                    ? { backgroundColor: theme.sidebarActiveBg, color: theme.sidebarActiveText }
+                    : { color: theme.sidebarText }
+                }
               >
                 <div className="flex items-center gap-3">
                   <Icon
-                    className={`w-4 h-4 ${
-                      isActive ? "text-[#8252F6]" : "text-slate-500"
-                    }`}
+                    className="w-4 h-4 shrink-0"
+                    style={{ color: isActive ? theme.sidebarActiveText : theme.sidebarText }}
                   />
                   <span>{item.label}</span>
                 </div>
@@ -375,7 +385,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-modules for Sipariş & Proforma */}
               {isOrderItem && isOrdersExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
+                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
                   {orderSubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive = currentTab === sub.id;
@@ -386,14 +396,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => onSelectTab(sub.id)}
                         className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                           isSubActive
-                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                            ? "shadow-2xs font-semibold"
+                            : "hover:opacity-80"
                         }`}
+                        style={
+                          isSubActive
+                            ? { backgroundColor: theme.sidebarActiveBg, color: theme.sidebarActiveText }
+                            : { color: theme.sidebarText }
+                        }
                       >
                         <SubIcon
-                          className={`w-3.5 h-3.5 ${
-                            isSubActive ? "text-white" : "text-slate-400"
-                          }`}
+                          className="w-3.5 h-3.5"
+                          style={{ color: isSubActive ? theme.sidebarActiveText : theme.sidebarText, opacity: isSubActive ? 1 : 0.7 }}
                         />
                         <span>{sub.label}</span>
                       </button>
@@ -404,7 +418,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-modules for Faturalar & İrsaliyeler */}
               {isInvoiceItem && isInvoicesExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
+                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
                   {invoiceSubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive = currentTab === sub.id;
@@ -415,14 +429,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => onSelectTab(sub.id)}
                         className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                           isSubActive
-                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                            ? "shadow-2xs font-semibold"
+                            : "hover:opacity-80"
                         }`}
+                        style={
+                          isSubActive
+                            ? { backgroundColor: theme.sidebarActiveBg, color: theme.sidebarActiveText }
+                            : { color: theme.sidebarText }
+                        }
                       >
                         <SubIcon
-                          className={`w-3.5 h-3.5 ${
-                            isSubActive ? "text-white" : "text-slate-400"
-                          }`}
+                          className="w-3.5 h-3.5"
+                          style={{ color: isSubActive ? theme.sidebarActiveText : theme.sidebarText, opacity: isSubActive ? 1 : 0.7 }}
                         />
                         <span>{sub.label}</span>
                       </button>
@@ -433,7 +451,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-modules for Finans Yönetimi */}
               {isFinanceItem && isFinanceExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 border-slate-100 ml-5">
+                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
                   {financeSubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive = isActive && activeFinanceSubTab === sub.id;
@@ -449,14 +467,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }}
                         className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                           isSubActive
-                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                            ? "shadow-2xs font-semibold"
+                            : "hover:opacity-80"
                         }`}
+                        style={
+                          isSubActive
+                            ? { backgroundColor: theme.sidebarActiveBg, color: theme.sidebarActiveText }
+                            : { color: theme.sidebarText }
+                        }
                       >
                         <SubIcon
-                          className={`w-3.5 h-3.5 ${
-                            isSubActive ? "text-white" : "text-slate-400"
-                          }`}
+                          className="w-3.5 h-3.5"
+                          style={{ color: isSubActive ? theme.sidebarActiveText : theme.sidebarText, opacity: isSubActive ? 1 : 0.7 }}
                         />
                         <span>{sub.label}</span>
                       </button>
@@ -467,7 +489,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-modules for Firma Bilgileri */}
               {isCompanyItem && isCompanyExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 border-purple-100 ml-5">
+                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
                   {companySubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive = currentTab === sub.id;
@@ -478,14 +500,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => onSelectTab(sub.id)}
                         className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                           isSubActive
-                            ? "bg-[#8252F6] text-white shadow-2xs font-semibold"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                            ? "shadow-2xs font-semibold"
+                            : "hover:opacity-80"
                         }`}
+                        style={
+                          isSubActive
+                            ? { backgroundColor: theme.sidebarActiveBg, color: theme.sidebarActiveText }
+                            : { color: theme.sidebarText }
+                        }
                       >
                         <SubIcon
-                          className={`w-3.5 h-3.5 ${
-                            isSubActive ? "text-white" : "text-slate-400"
-                          }`}
+                          className="w-3.5 h-3.5"
+                          style={{ color: isSubActive ? theme.sidebarActiveText : theme.sidebarText, opacity: isSubActive ? 1 : 0.7 }}
                         />
                         <span>{sub.label}</span>
                       </button>
@@ -499,16 +525,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Company Info Footer */}
-      <div className="p-4 border-t border-slate-200 bg-slate-50 text-xs text-slate-600">
+      <div
+        className="p-4 border-t text-xs"
+        style={{ borderColor: theme.sidebarBorder, color: theme.sidebarText }}
+      >
         <div className="flex items-center gap-2.5 mb-1.5">
-          <Building2 className="w-4 h-4 text-[#8252F6] shrink-0" />
-          <span className="font-medium text-slate-800 truncate">
+          <Building2 className="w-4 h-4 shrink-0" style={{ color: theme.primaryColor }} />
+          <span className="font-medium truncate" style={{ color: theme.sidebarText }}>
             {settings.companyName}
           </span>
         </div>
-        <div className="text-[11px] text-slate-500 flex justify-between">
+        <div className="text-[11px] flex justify-between opacity-80">
           <span>VKN: {settings.taxNumber}</span>
-          <span className="text-emerald-600 font-medium">Bakiye Aktif</span>
+          <span className="text-emerald-500 font-medium">Bakiye Aktif</span>
         </div>
       </div>
     </>
@@ -517,7 +546,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const renderCollapsedContent = () => (
     <>
       {/* Brand Header (Collapsed) */}
-      <div className="p-3 border-b border-slate-200 flex flex-col items-center justify-center gap-2 min-h-[64px] bg-slate-50/60">
+      <div
+        className="p-3 border-b flex flex-col items-center justify-center gap-2 min-h-[64px]"
+        style={{ borderColor: theme.sidebarBorder }}
+      >
         <button
           type="button"
           onClick={() => onSelectTab("dashboard")}
@@ -530,7 +562,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={handleToggleCollapse}
-            className="p-1.5 rounded-lg text-purple-700 hover:text-purple-950 hover:bg-purple-100 transition-colors cursor-pointer border border-purple-200 shadow-2xs"
+            className="p-1.5 rounded-lg transition-colors cursor-pointer border shadow-2xs hover:opacity-80"
+            style={{
+              color: theme.primaryColor,
+              borderColor: `${theme.primaryColor}30`,
+              backgroundColor: `${theme.primaryColor}10`,
+            }}
             title="Kenar Çubuğunu Genişlet (Yana Aç)"
             aria-label="Kenar Çubuğunu Genişlet"
           >
@@ -544,7 +581,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           type="button"
           onClick={() => onOpenQuickAdd()}
-          className="w-11 h-11 bg-[#8252F6] hover:bg-[#703EE5] active:scale-95 text-white rounded-xl flex items-center justify-center shadow-xs transition-all cursor-pointer relative group"
+          className="w-11 h-11 active:scale-95 text-white rounded-xl flex items-center justify-center shadow-xs transition-all cursor-pointer relative group"
+          style={{ backgroundColor: theme.primaryColor }}
           title="Hızlı İşlem Ekle"
           aria-label="Hızlı İşlem Ekle"
         >
@@ -626,16 +664,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={handleCollapsedClick}
                 className={`w-11 h-11 flex items-center justify-center rounded-xl transition-all cursor-pointer relative ${
                   isActive
-                    ? "bg-[#F3EFFF] text-[#8252F6] border border-[#E4D7FF] shadow-2xs font-semibold"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    ? "shadow-2xs font-semibold"
+                    : "hover:opacity-80"
                 }`}
+                style={
+                  isActive
+                    ? { backgroundColor: theme.sidebarActiveBg, color: theme.sidebarActiveText }
+                    : { color: theme.sidebarText }
+                }
                 title={item.label}
                 aria-label={item.label}
               >
                 <Icon
-                  className={`w-5 h-5 ${
-                    isActive ? "text-[#8252F6]" : "text-slate-500 group-hover:text-slate-900"
-                  }`}
+                  className="w-5 h-5"
+                  style={{ color: isActive ? theme.sidebarActiveText : theme.sidebarText }}
                 />
                 {item.badge && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#EF7D2C] ring-2 ring-white animate-pulse" />
@@ -675,11 +717,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               onSelectTab(sub.id);
                             }
                           }}
-                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left hover:bg-slate-800"
+                          style={
                             isSubActive
-                              ? "bg-[#8252F6] text-white font-bold"
-                              : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                          }`}
+                              ? { backgroundColor: theme.primaryColor, color: "#ffffff", fontWeight: 700 }
+                              : { color: "#cbd5e1" }
+                          }
                         >
                           <SubIcon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                           <span className="truncate">{sub.label}</span>
@@ -699,11 +742,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Company Info Footer (Collapsed) */}
-      <div className="p-3 border-t border-slate-200 bg-slate-50 flex flex-col items-center justify-center relative group">
+      <div
+        className="p-3 border-t flex flex-col items-center justify-center relative group"
+        style={{ borderColor: theme.sidebarBorder }}
+      >
         <button
           type="button"
           onClick={() => onSelectTab("company_profile")}
-          className="w-10 h-10 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 flex items-center justify-center text-[#8252F6] cursor-pointer transition-colors shadow-2xs"
+          className="w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+          style={{ backgroundColor: `${theme.primaryColor}15`, color: theme.primaryColor }}
           title={`${settings.companyName} (VKN: ${settings.taxNumber})`}
         >
           <Building2 className="w-5 h-5" />
@@ -722,9 +769,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden md:flex bg-white text-slate-800 flex-col shrink-0 h-screen sticky top-0 border-r border-slate-200 shadow-sm z-20 transition-all duration-300 ease-in-out relative ${
+        className={`hidden md:flex flex-col shrink-0 h-screen sticky top-0 shadow-sm z-20 transition-all duration-300 ease-in-out relative ${
           collapsed ? "w-20" : "w-64"
         }`}
+        style={{
+          backgroundColor: theme.sidebarBg,
+          color: theme.sidebarText,
+          borderColor: theme.sidebarBorder,
+          borderRightWidth: "1px",
+        }}
       >
         {/* Border edge toggle handle */}
         <button
@@ -754,9 +807,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Mobile Sidebar Slide-Over Drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 w-72 bg-white text-slate-800 flex flex-col z-50 shadow-2xl md:hidden transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 w-72 flex flex-col z-50 shadow-2xl md:hidden transition-transform duration-300 ease-in-out ${
           isMobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
+        style={{
+          backgroundColor: theme.sidebarBg,
+          color: theme.sidebarText,
+          borderColor: theme.sidebarBorder,
+          borderRightWidth: "1px",
+        }}
       >
         {renderNavContent()}
       </aside>

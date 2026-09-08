@@ -10,6 +10,7 @@ export default defineConfig(() => {
       dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
+        '@assets': path.resolve(__dirname, 'assets'),
       },
     },
     optimizeDeps: {

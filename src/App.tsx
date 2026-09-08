@@ -1571,7 +1571,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-100 text-slate-900 font-sans antialiased">
+    <div className="flex min-h-screen bg-theme-page text-slate-900 font-sans antialiased">
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
@@ -1606,7 +1606,7 @@ export default function App() {
           onToggleSidebarCollapse={toggleSidebarCollapsed}
         />
 
-        <main className="flex-1 pb-12 bg-slate-100">
+        <main className="flex-1 pb-12 bg-theme-page">
           <ErrorBoundary key={currentTab}>
             <Suspense fallback={<TabLoadingSkeleton />}>
             {currentTab === "dashboard" && (

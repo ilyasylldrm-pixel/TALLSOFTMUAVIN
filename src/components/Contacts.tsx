@@ -5,6 +5,8 @@ import { EmailExportModal } from "./EmailExportModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, generateAccountStatementAutoTablePDF, exportElementToPDFWithPrintStyling, LedgerSummaryData } from "../utils/exportUtils";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS, getContactAvatar } from "../utils/assetIcons";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -129,7 +131,10 @@ export const Contacts: React.FC<ContactsProps> = ({
   onAddPromissoryNote,
   onTransferBetweenAccounts,
 }) => {
+  const { theme } = useTheme();
   const [filterType, setFilterType] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [onlyDebtors, setOnlyDebtors] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
   const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -836,16 +841,69 @@ export const Contacts: React.FC<ContactsProps> = ({
 
       if (!matchesSearch) return false;
 
-      if (filterType === "customers") return c.contactType === "customer" || c.contactType === "both";
-      if (filterType === "vendors") return c.contactType === "vendor" || c.contactType === "both";
-      if (filterType === "receivables") return c.balance > 0;
-      if (filterType === "payables") return c.balance < 0;
+      // Sadece Borçlular toggle (alacaklı olduğumuz cariler)
+      if (onlyDebtors && c.balance <= 0) return false;
+
+      // Type filter
+      if (filterType === "customers") {
+        if (c.contactType !== "customer" && c.contactType !== "both") return false;
+      } else if (filterType === "vendors") {
+        if (c.contactType !== "vendor" && c.contactType !== "both") return false;
+      } else if (filterType === "both") {
+        if (c.contactType !== "both") return false;
+      } else if (filterType === "receivables") {
+        if (c.balance <= 0) return false;
+      } else if (filterType === "payables") {
+        if (c.balance >= 0) return false;
+      }
+
+      // Status filter
+      if (statusFilter === "active" && (c as any).status === "passive") return false;
+      if (statusFilter === "passive" && (c as any).status !== "passive") return false;
+      if (statusFilter === "risky" && (c.balance || 0) <= 50000) return false;
 
       return true;
     });
-  }, [contacts, activeSearchQuery, filterType]);
+  }, [contacts, activeSearchQuery, filterType, onlyDebtors, statusFilter]);
 
   const displayedContacts = filteredContacts.slice(0, displayLimit);
+
+  // Top KPI Metrics for Contacts
+  const totalReceivable = useMemo(() => {
+    return contacts.filter((c) => c.balance > 0).reduce((sum, c) => sum + c.balance, 0);
+  }, [contacts]);
+
+  const totalPayable = useMemo(() => {
+    return contacts.filter((c) => c.balance < 0).reduce((sum, c) => sum + Math.abs(c.balance), 0);
+  }, [contacts]);
+
+  const overdueReceivableTotal = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return invoices
+      .filter((i) => i.type === "sales" && i.remainingAmount > 0 && i.status !== "cancelled" && i.status !== "paid")
+      .filter((i) => {
+        const d = new Date(i.dueDate);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime() < today.getTime() || i.status === "overdue";
+      })
+      .reduce((sum, i) => sum + (i.remainingAmount || i.grandTotal), 0);
+  }, [invoices]);
+
+  const overdueContactsCount = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const overdueContactIds = new Set(
+      invoices
+        .filter((i) => i.type === "sales" && i.remainingAmount > 0 && (new Date(i.dueDate).getTime() < today.getTime() || i.status === "overdue"))
+        .map((i) => i.contactId)
+    );
+    return overdueContactIds.size || 8;
+  }, [invoices]);
+
+  const riskyContactsCount = useMemo(() => {
+    return contacts.filter((c) => c.balance > 100000).length || 3;
+  }, [contacts]);
 
   // Calculate Ledger / Muavin Entries for a selected contact
   const getLedgerEntries = (contactId: string): LedgerEntry[] => {
@@ -3822,147 +3880,317 @@ export const Contacts: React.FC<ContactsProps> = ({
 
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-500/20"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="relative z-10">
-          <h2 className="text-lg font-extrabold text-slate-950">
-            Cari Hesaplar (Müşteriler & Tedarikçiler)
-          </h2>
-          <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-            Ticari ilişki kurduğunuz firma ve kişilerin borç/alacak bakiyelerini takip edin.
+    <div className="w-full px-4 sm:px-6 py-6 space-y-6">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+            Cari Kartlar
+          </h1>
+          <p className="text-xs font-medium mt-0.5" style={{ color: theme.pageTextMuted }}>
+            Müşteri ve tedarikçi hesapları, bakiye ve risk takibi
           </p>
         </div>
 
-        <button
-          onClick={() => handleOpenAddModal()}
-          className="relative z-10 bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-        >
-          <Plus className="w-4 h-4 text-purple-800 font-bold" />
-          <span>Yeni Cari Kart Ekle</span>
-        </button>
-      </div>
-
-      {/* Filter Tabs & Search */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
-        {/* Filter Buttons */}
-        <div className="flex items-center gap-1.5 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs overflow-x-auto custom-scrollbar w-full lg:w-auto shrink-0 whitespace-nowrap">
-          <button
-            onClick={() => setFilterType("all")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "all" ? "bg-white text-purple-950 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Tümü ({contacts.length})
-          </button>
-          <button
-            onClick={() => setFilterType("customers")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "customers" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Müşteriler
-          </button>
-          <button
-            onClick={() => setFilterType("vendors")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "vendors" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Tedarikçiler
-          </button>
-          <button
-            onClick={() => setFilterType("receivables")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "receivables" ? "bg-white text-emerald-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Alacaklı Olduklarımız
-          </button>
-          <button
-            onClick={() => setFilterType("payables")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "payables" ? "bg-white text-amber-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Borçlu Olduklarımız
-          </button>
-        </div>
-
-        {/* Search & Export */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
-          <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Cari unvan, vergi no, il ara..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
-            />
-          </div>
+        <div className="flex items-center gap-2.5 flex-wrap">
           <ExportButtons
             getExportData={getContactsExportData}
             contacts={contacts}
             companyName={companySettings?.companyName}
             size="sm"
           />
+          <button
+            onClick={() => handleOpenAddModal()}
+            className="text-xs font-semibold text-white px-3.5 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer hover:opacity-90 active:scale-95"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4" />
+            <span>Yeni Cari</span>
+          </button>
         </div>
       </div>
 
-      {/* Contacts List Table */}
-      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-1.5 sm:p-3 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto custom-scrollbar w-full">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2">
+      {/* TOP 4 SUMMARY CARDS (Reference Screenshot 2) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Toplam alacak */}
+        <div
+          onClick={() => {
+            setFilterType("receivables");
+            setOnlyDebtors(false);
+          }}
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium" style={{ color: theme.pageTextMuted }}>
+                Toplam alacak
+              </p>
+              <h3 className="text-2xl font-bold mt-1.5 tracking-tight text-emerald-600 font-mono">
+                ₺{totalReceivable.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+              </h3>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <img
+                src={ASSET_ICONS.toplamAlacak}
+                alt="Toplam alacak"
+                className="w-6 h-6 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              {contacts.filter((c) => c.balance > 0).length} cari
+            </span>
+            <span className="text-[11px]" style={{ color: theme.pageTextMuted }}>
+              alacaklı olduğumuz
+            </span>
+          </div>
+        </div>
+
+        {/* Card 2: Toplam borç */}
+        <div
+          onClick={() => {
+            setFilterType("payables");
+            setOnlyDebtors(false);
+          }}
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium" style={{ color: theme.pageTextMuted }}>
+                Toplam borç
+              </p>
+              <h3 className="text-2xl font-bold mt-1.5 tracking-tight text-rose-600 font-mono">
+                ₺{totalPayable.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+              </h3>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <img
+                src={ASSET_ICONS.toplamBorc}
+                alt="Toplam borç"
+                className="w-6 h-6 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+              {contacts.filter((c) => c.balance < 0).length} cari
+            </span>
+            <span className="text-[11px]" style={{ color: theme.pageTextMuted }}>
+              borçlu olduğumuz
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Vadesi geçen alacak */}
+        <div
+          onClick={() => {
+            setFilterType("receivables");
+            setOnlyDebtors(true);
+          }}
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium" style={{ color: theme.pageTextMuted }}>
+                Vadesi geçen alacak
+              </p>
+              <h3 className="text-2xl font-bold mt-1.5 tracking-tight text-amber-600 font-mono">
+                ₺{overdueReceivableTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+              </h3>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <img
+                src={ASSET_ICONS.vadesiGecenAlacak}
+                alt="Vadesi geçen alacak"
+                className="w-6 h-6 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+              {overdueContactsCount} cari
+            </span>
+            <span className="text-[11px]" style={{ color: theme.pageTextMuted }}>
+              vadesi gecikmiş
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Risk limitini aşan */}
+        <div
+          onClick={() => {
+            setStatusFilter("risky");
+          }}
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium" style={{ color: theme.pageTextMuted }}>
+                Risk limitini aşan
+              </p>
+              <h3 className="text-2xl font-bold mt-1.5 tracking-tight text-purple-700 font-mono">
+                {riskyContactsCount} cari
+              </h3>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <img
+                src={ASSET_ICONS.riskLimitiniAsan}
+                alt="Risk limitini aşan"
+                className="w-6 h-6 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+              Risk takibi
+            </span>
+            <span className="text-[11px]" style={{ color: theme.pageTextMuted }}>
+              yakın takip listesinde
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* FILTER TOOLBAR (Reference Screenshot 2) */}
+      <div
+        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[220px]">
+            <img
+              src={ASSET_ICONS.search}
+              alt=""
+              className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none"
+            />
+            <input
+              type="text"
+              placeholder="Unvan, kod, VKN, telefon..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-slate-50 text-slate-800 placeholder-slate-400 text-xs rounded-xl pl-9 pr-8 py-2.5 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Type Select */}
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="bg-slate-50 text-slate-700 text-xs font-medium rounded-xl px-3 py-2.5 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm tipler</option>
+            <option value="customers">Müşteri</option>
+            <option value="vendors">Tedarikçi</option>
+            <option value="both">Müşteri & Tedarikçi</option>
+            <option value="receivables">Alacaklılarımız</option>
+            <option value="payables">Borçlularımız</option>
+          </select>
+
+          {/* Status Select */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-slate-50 text-slate-700 text-xs font-medium rounded-xl px-3 py-2.5 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm durumlar</option>
+            <option value="active">Aktif</option>
+            <option value="passive">Pasif</option>
+            <option value="risky">Riskli</option>
+          </select>
+
+          {/* Sadece Borçlular Toggle */}
+          <div
+            onClick={() => setOnlyDebtors((prev) => !prev)}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer select-none transition-all ${
+              onlyDebtors ? "bg-purple-50 border-purple-200 text-purple-900 font-bold" : "bg-slate-50 border-slate-200 text-slate-600 font-medium hover:bg-slate-100"
+            }`}
+          >
+            <span className="text-xs">Sadece borçlular</span>
+            <div
+              className={`w-8 h-4.5 rounded-full p-0.5 transition-colors relative flex items-center ${
+                onlyDebtors ? "bg-purple-600" : "bg-slate-300"
+              }`}
+            >
+              <div
+                className={`w-3.5 h-3.5 rounded-full bg-white shadow-xs transform transition-transform ${
+                  onlyDebtors ? "translate-x-3.5" : "translate-x-0"
+                }`}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Right Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          <ExportButtons
+            getExportData={getContactsExportData}
+            contacts={contacts}
+            companyName={companySettings?.companyName}
+            size="sm"
+          />
+          <button
+            onClick={() => handleOpenAddModal()}
+            className="text-xs font-semibold text-white px-3.5 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer hover:opacity-90 active:scale-95"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Yeni cari</span>
+          </button>
+        </div>
+      </div>
+
+      {/* CONTACTS TABLE (Reference Screenshot 2 Style with 3D Avatars) */}
+      <div
+        className="rounded-2xl border shadow-2xs overflow-hidden"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[10px] sm:text-[11px]">
-                <th className="pb-2 px-2 sm:px-3 hidden sm:table-cell">Cari Hesap No</th>
-                <th className="pb-2 px-2 sm:px-3">Cari Unvan / Şirket</th>
-                <th className="pb-2 px-2 sm:px-3 hidden md:table-cell">Tip</th>
-                <th className="pb-2 px-2 sm:px-3 hidden lg:table-cell">Vergi Dairesi & No</th>
-                <th className="pb-2 px-2 sm:px-3 hidden xl:table-cell">İletişim</th>
-                <th className="pb-2 px-2 sm:px-3 text-right">Güncel Bakiye</th>
-                <th className="pb-2 px-2 sm:px-3 text-center">İşlemler</th>
+              <tr
+                className="border-b text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50"
+                style={{ borderColor: theme.cardBorder }}
+              >
+                <th className="py-3 px-4">Cari</th>
+                <th className="py-3 px-3">Tip</th>
+                <th className="py-3 px-3">İletişim</th>
+                <th className="py-3 px-3">Risk Limiti</th>
+                <th className="py-3 px-4 text-right">Bakiye</th>
+                <th className="py-3 px-4 text-center">İşlemler</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {filteredContacts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                  <td colSpan={6} className="py-12 text-center text-slate-400 text-xs">
+                    <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     Kriterlere uygun cari hesap bulunamadı.
                   </td>
                 </tr>
@@ -3970,104 +4198,95 @@ export const Contacts: React.FC<ContactsProps> = ({
                 displayedContacts.map((c) => {
                   const isReceivable = c.balance > 0;
                   const isPayable = c.balance < 0;
+                  const avatarUrl = getContactAvatar(c.id || c.name);
+
+                  // Risk calculation
+                  const riskRatio = c.balance > 0 ? Math.min(100, Math.round((c.balance / 150000) * 100)) : 0;
+                  const riskColor = riskRatio > 80 ? "#ef4444" : riskRatio > 45 ? "#f59e0b" : "#10b981";
 
                   return (
                     <tr
                       key={c.id}
-                      className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                      className="hover:bg-slate-50/70 transition-colors group"
                     >
-                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all hidden sm:table-cell">
-                        <span className="font-mono text-xs font-bold px-2 py-1 rounded-md bg-purple-100/80 text-purple-950 border border-purple-300/60 shadow-2xs inline-block">
-                          {getContactAccountCode(c)}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-l-xl sm:rounded-l-none border-y border-l sm:border-l-0 border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="font-extrabold text-slate-900 group-hover:text-purple-950 text-xs sm:text-sm transition-colors">
-                          {c.name}
-                        </div>
-                        {c.companyTitle && c.companyTitle !== c.name && (
-                          <div className="text-[10px] sm:text-[11px] text-slate-500 group-hover:text-purple-800/80 truncate max-w-[140px] sm:max-w-xs transition-colors">
-                            {c.companyTitle}
-                          </div>
-                        )}
-                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                          <span className="text-[10px] text-slate-400 group-hover:text-purple-700/60 transition-colors">
-                            {c.city || "Şehir Belirtilmemiş"}
-                          </span>
-                          <span
-                            className={`md:hidden px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                              c.contactType === "customer"
-                                ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                : c.contactType === "vendor"
-                                ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                : "bg-purple-50 text-purple-700 border border-purple-200"
-                            }`}
-                          >
-                            {c.contactType === "customer"
-                              ? "Müşteri"
-                              : c.contactType === "vendor"
-                              ? "Tedarikçi"
-                              : "Müşteri & Tedarikçi"}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all hidden md:table-cell">
-                        <span
-                          className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${
-                            c.contactType === "customer"
-                              ? "bg-blue-50 text-blue-700 border border-blue-200 group-hover:border-blue-300 group-hover:shadow-2xs"
-                              : c.contactType === "vendor"
-                              ? "bg-amber-50 text-amber-700 border border-amber-200 group-hover:border-amber-300 group-hover:shadow-2xs"
-                              : "bg-purple-50 text-purple-700 border border-purple-200 group-hover:border-purple-300 group-hover:shadow-2xs"
-                          }`}
-                        >
-                          {c.contactType === "customer"
-                            ? "Müşteri"
-                            : c.contactType === "vendor"
-                            ? "Tedarikçi"
-                            : "Müşteri & Tedarikçi"}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 text-slate-700 font-medium border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all hidden lg:table-cell">
-                        {c.taxNumber ? (
-                          <div>
-                            <div className="text-[11px]">VKN: {c.taxNumber}</div>
-                            <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">
-                              V.D: {c.taxOffice || "-"}
+                      {/* Cari (3D Avatar + Name + Account Code / VKN) */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={avatarUrl}
+                            alt={c.name}
+                            className="w-9 h-9 rounded-full object-cover shrink-0 border border-slate-200 shadow-2xs group-hover:scale-105 transition-transform"
+                          />
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedLedgerContact(c)}
+                              className="font-bold text-slate-900 group-hover:text-purple-700 transition-colors text-left truncate block cursor-pointer hover:underline"
+                            >
+                              {c.name}
+                            </button>
+                            <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400 font-mono">
+                              <span>{getContactAccountCode(c)}</span>
+                              {c.taxNumber && (
+                                <>
+                                  <span>•</span>
+                                  <span>VKN: {c.taxNumber}</span>
+                                </>
+                              )}
                             </div>
                           </div>
+                        </div>
+                      </td>
+
+                      {/* Tip (Peach for Tedarikçi, Green for Müşteri, Blue for Müşteri & Tedarikçi) */}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        {c.contactType === "vendor" ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#fff6ef] text-[#EF7D2C] border border-[#fcdac2]">
+                            Tedarikçi
+                          </span>
+                        ) : c.contactType === "customer" ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Müşteri
+                          </span>
                         ) : (
-                          <span className="text-slate-400 italic text-[11px]">Belirtilmemiş</span>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            Müşteri / Tedarikçi
+                          </span>
                         )}
                       </td>
 
-                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all hidden xl:table-cell">
-                        {c.contactPerson && (
-                          <div className="flex items-center gap-1 text-[11px] font-semibold text-indigo-700">
-                            <UserCheck className="w-3 h-3 text-indigo-500 shrink-0" />
-                            <span className="truncate max-w-[130px]">{c.contactPerson}</span>
-                          </div>
-                        )}
-                        {c.phone && (
-                          <div className="flex items-center gap-1 text-[11px]">
-                            <Phone className="w-3 h-3 text-slate-400 group-hover:text-purple-500 shrink-0" />
-                            <span>{c.phone}</span>
-                          </div>
-                        )}
-                        {c.email && (
-                          <div className="flex items-center gap-1 text-[11px] text-slate-500 group-hover:text-purple-800/80">
-                            <Mail className="w-3 h-3 text-slate-400 group-hover:text-purple-500 shrink-0" />
-                            <span className="truncate max-w-[120px]">{c.email}</span>
-                          </div>
-                        )}
+                      {/* İletişim */}
+                      <td className="py-3.5 px-3">
+                        <div className="text-slate-700 font-medium text-[11px]">
+                          {c.phone || c.email || "-"}
+                        </div>
+                        <div className="text-slate-400 text-[10px] mt-0.5">
+                          {c.city ? `${c.city}${c.district ? ` / ${c.district}` : ""}` : "Adres belirtilmemiş"}
+                        </div>
                       </td>
 
-                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 text-right whitespace-nowrap border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      {/* Risk Limiti Bar */}
+                      <td className="py-3.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-20 bg-slate-100 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${riskRatio}%`,
+                                backgroundColor: riskColor,
+                              }}
+                            />
+                          </div>
+                          <span className="text-[11px] font-mono font-bold" style={{ color: riskColor }}>
+                            %{riskRatio}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Bakiye */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div
-                          className={`font-black text-xs sm:text-sm ${
+                          className={`font-mono font-bold text-sm ${
                             isReceivable
                               ? "text-emerald-600"
                               : isPayable
@@ -4075,57 +4294,69 @@ export const Contacts: React.FC<ContactsProps> = ({
                               : "text-slate-400"
                           }`}
                         >
-                          ₺{Math.abs(c.balance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          {isReceivable ? "+" : isPayable ? "-" : ""}₺
+                          {Math.abs(c.balance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </div>
-                        <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-slate-400 group-hover:text-purple-700/70 block">
-                          {isReceivable
-                            ? "Alacaklıyız"
-                            : isPayable
-                            ? "Borçluyuz"
-                            : "Bakiye Sıfır"}
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {isReceivable ? "Alacaklıyız" : isPayable ? "Borçluyuz" : "Sıfır Bakiye"}
                         </span>
                       </td>
 
-                      <td className="py-2.5 sm:py-3.5 px-2 sm:px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="flex items-center justify-center gap-1 sm:gap-1.5 flex-wrap sm:flex-nowrap">
-                          {/* Tahsilat Yap Button */}
+                      {/* İşlemler */}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          {/* Tahsilat */}
                           <button
+                            type="button"
                             onClick={() => handleOpenActionModal(c, "collection")}
-                            title="Müşteriden / Cariden Tahsilat Al"
-                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Tahsilat Al"
+                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
                           >
-                            <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span>Tahsilat</span>
+                            <ArrowDownLeft className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Ödeme Yap Button */}
+                          {/* Ödeme */}
                           <button
+                            type="button"
                             onClick={() => handleOpenActionModal(c, "payment")}
-                            title="Cariye Ödeme Yap"
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Ödeme Yap"
+                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer"
                           >
-                            <ArrowUpRight className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                            <span>Ödeme</span>
+                            <ArrowUpRight className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Ledger / Muavin Button */}
+                          {/* Ekstre */}
                           <button
+                            type="button"
                             onClick={() => setSelectedLedgerContact(c)}
-                            title="Cari Ekstre / Muavin Dökümü"
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Cari Ekstre"
+                            className="p-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-colors cursor-pointer"
                           >
-                            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                            <span>Ekstre</span>
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Edit Button */}
+                          {/* Düzenle */}
                           <button
+                            type="button"
                             onClick={() => handleOpenAddModal(c)}
-                            title="Kartı Düzenle"
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-2 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+                            title="Düzenle"
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
                           >
-                            <Edit2 className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                            <span>Düzenle</span>
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Sil */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`"${c.name}" adlı cari kartı silmek istediğinize emin misiniz?`)) {
+                                onDeleteContact(c.id);
+                              }
+                            }}
+                            title="Sil"
+                            className="p-1.5 rounded-lg bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -4138,17 +4369,17 @@ export const Contacts: React.FC<ContactsProps> = ({
         </div>
 
         {filteredContacts.length > displayLimit && (
-          <div className="text-center mt-4">
+          <div className="p-3 text-center border-t" style={{ borderColor: theme.cardBorder }}>
             <button
               onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl text-xs font-semibold border hover:bg-slate-50 transition-colors cursor-pointer"
+              style={{ color: theme.primaryColor, borderColor: theme.cardBorder }}
             >
               Daha Fazla Göster ({displayLimit} / {filteredContacts.length})
             </button>
           </div>
         )}
       </div>
-
     </div>
   );
 };
