@@ -50,8 +50,6 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
   branches = [],
   warehouses = [],
 }) => {
-  if (!isOpen) return null;
-
   const custodyNav = useDetailNavigation({
     moduleKey: "asset-custody",
     initialMode: editingAsset ? "edit" : "create",
@@ -360,6 +358,8 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
     onSave(newAsset);
     onClose();
   };
+
+  if (!isOpen) return null;
 
   return (
     <DetailPageLayout

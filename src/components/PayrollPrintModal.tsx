@@ -87,8 +87,6 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
   const [includeMissingDayForm, setIncludeMissingDayForm] = useState<boolean>(true);
   const [includeDeductionForm, setIncludeDeductionForm] = useState<boolean>(true);
 
-  if (!isOpen) return null;
-
   // Active Employee
   const currentEmp = employees.find((e) => e.id === selectedEmpId) || sortedEmployees[0];
 
@@ -367,6 +365,8 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
       setIsDownloadingPDF(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <DetailPageLayout

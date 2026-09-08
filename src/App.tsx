@@ -45,7 +45,7 @@ const Settings = lazyWithRetry(() => import("./components/Settings").then((m) =>
 const CompanyManagement = lazyWithRetry(() => import("./components/CompanyManagement").then((m) => ({ default: m.CompanyManagement })));
 const EServices = lazyWithRetry(() => import("./components/EServices").then((m) => ({ default: m.EServices })));
 const EDocuments = lazyWithRetry(() => import("./components/EDocuments"));
-const HRManagement = lazyWithRetry(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement })));
+const HRManagement = lazyWithRetry(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement || (m as any).default })));
 const FileManager = lazyWithRetry(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
 const AdminDashboard = lazyWithRetry(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
 const WhatsAppCenter = lazyWithRetry(() => import("./components/WhatsAppCenter").then((m) => ({ default: m.WhatsAppCenter })));

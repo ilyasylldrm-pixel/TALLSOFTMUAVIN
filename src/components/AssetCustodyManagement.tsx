@@ -1245,37 +1245,43 @@ export const AssetCustodyManagement: React.FC<AssetCustodyManagementProps> = ({
       )}
 
       {/* Modals */}
-      <AssetCustodyModal
-        isOpen={isFormModalOpen}
-        onClose={() => setIsFormModalOpen(false)}
-        onSave={(newOrUpdated) => {
-          if (editingAsset) {
-            onUpdateAsset(newOrUpdated);
-          } else {
-            onAddAsset(newOrUpdated);
-          }
-        }}
-        editingAsset={editingAsset}
-        employees={employees}
-        branches={branches}
-        warehouses={warehouses}
-      />
+      {isFormModalOpen && (
+        <AssetCustodyModal
+          isOpen={isFormModalOpen}
+          onClose={() => setIsFormModalOpen(false)}
+          onSave={(newOrUpdated) => {
+            if (editingAsset) {
+              onUpdateAsset(newOrUpdated);
+            } else {
+              onAddAsset(newOrUpdated);
+            }
+          }}
+          editingAsset={editingAsset}
+          employees={employees}
+          branches={branches}
+          warehouses={warehouses}
+        />
+      )}
 
-      <AssetCustodyPrintModal
-        isOpen={isPrintModalOpen}
-        onClose={() => setIsPrintModalOpen(false)}
-        asset={printingAsset}
-        employee={employees.find((e) => e.id === printingAsset?.employeeId)}
-        companySettings={companySettings}
-        isReturnProtocol={isReturnProtocol}
-      />
+      {isPrintModalOpen && (
+        <AssetCustodyPrintModal
+          isOpen={isPrintModalOpen}
+          onClose={() => setIsPrintModalOpen(false)}
+          asset={printingAsset}
+          employee={employees.find((e) => e.id === printingAsset?.employeeId)}
+          companySettings={companySettings}
+          isReturnProtocol={isReturnProtocol}
+        />
+      )}
 
-      <AssetReturnModal
-        isOpen={isReturnModalOpen}
-        onClose={() => setIsReturnModalOpen(false)}
-        asset={returningAsset}
-        onConfirmReturn={handleConfirmReturn}
-      />
+      {isReturnModalOpen && (
+        <AssetReturnModal
+          isOpen={isReturnModalOpen}
+          onClose={() => setIsReturnModalOpen(false)}
+          asset={returningAsset}
+          onConfirmReturn={handleConfirmReturn}
+        />
+      )}
     </div>
   );
 };

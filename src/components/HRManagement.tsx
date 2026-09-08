@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import {
@@ -539,7 +539,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
   const nav = useDetailNavigation<Employee>({ moduleKey: "hr" });
 
-  const handleBackToList = React.useCallback(() => {
+  const handleBackToList = useCallback(() => {
     setIsAddEmployeeOpen(false);
     setSelectedEmployeeForDetail(null);
     setEditingPayrollEmp(null);
@@ -548,7 +548,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     nav.backToList();
   }, [nav]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (nav.mode === "list") {
       setIsAddEmployeeOpen(false);
       setSelectedEmployeeForDetail(null);
@@ -6190,3 +6190,5 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     </div>
   );
 };
+
+export default HRManagement;

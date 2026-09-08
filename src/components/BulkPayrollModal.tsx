@@ -96,8 +96,6 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
   onApplyBatchPayroll,
   onOpenPayrollPrintModal,
 }) => {
-  if (!isOpen) return null;
-
   const [selectedMonth, setSelectedMonth] = useState<string>(payrollMonth || "2026-07");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
@@ -758,6 +756,8 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
   }, [currentActiveData, daysInMonth]);
 
   const activeEmployeePuantajMap = currentActiveData?.customAdjustment.puantajDays || {};
+
+  if (!isOpen) return null;
 
   return (
     <DetailPageLayout
