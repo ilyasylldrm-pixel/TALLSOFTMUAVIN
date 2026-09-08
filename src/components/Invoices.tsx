@@ -21,6 +21,8 @@ import { InvoiceTaxSettingsModal } from "./InvoiceTaxSettingsModal";
 import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerModal";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS, getContactAvatar } from "../utils/assetIcons";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import {
@@ -162,6 +164,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   onCollectAllInvoices,
   onSelectTab,
 }) => {
+  const { theme } = useTheme();
   const [filterType, setFilterType] = useState<string>(forcedType || "all");
   const [docSubTab, setDocSubTab] = useState<"invoices" | "receipts" | "all">("invoices");
   const [formDocKind, setFormDocKind] = useState<"invoice" | "receipt">("invoice");
@@ -1306,6 +1309,40 @@ export const Invoices: React.FC<InvoicesProps> = ({
   });
 
   const displayedInvoices = filteredInvoices.slice(0, displayLimit);
+
+  const kpiStats = React.useMemo(() => {
+    const relevant = forcedType
+      ? invoices.filter((i) => i.type === forcedType)
+      : invoices;
+
+    let totalAmount = 0;
+    let paidAmount = 0;
+    let remainingAmount = 0;
+    let overdueAmount = 0;
+    let overdueCount = 0;
+
+    relevant.forEach((inv) => {
+      const gTotal = inv.grandTotal || 0;
+      const paid = inv.paidAmount || 0;
+      const remaining = inv.remainingAmount !== undefined ? inv.remainingAmount : Math.max(0, gTotal - paid);
+      totalAmount += gTotal;
+      paidAmount += paid;
+      remainingAmount += remaining;
+      if (inv.status === "overdue" || (remaining > 0 && inv.dueDate && new Date(inv.dueDate) < new Date())) {
+        overdueAmount += remaining;
+        overdueCount += 1;
+      }
+    });
+
+    return {
+      totalAmount,
+      paidAmount,
+      remainingAmount,
+      overdueAmount,
+      overdueCount,
+      totalCount: relevant.length,
+    };
+  }, [invoices, forcedType]);
 
   const { subtotal, totalVat, grandTotal } = calculateTotals();
 
@@ -3424,144 +3461,200 @@ export const Invoices: React.FC<InvoicesProps> = ({
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Top Header (Lila Bal Peteği & Geometrik Desen) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-400/10"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="relative z-10">
-          <h2 className="text-lg font-extrabold text-slate-950">
+    <div className="p-3 sm:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* 1. Modern Clean Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
             {forcedType === "sales"
-               ? "Gelir Faturaları"
-               : forcedType === "purchase"
-               ? "Gider Faturaları"
-               : "Gelir & Gider Faturaları"}
-          </h2>
-          <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
+              ? "Gelir Faturaları"
+              : forcedType === "purchase"
+              ? "Gider Faturaları"
+              : "Faturalar & Belgeler"}
+          </h1>
+          <p className="text-xs font-medium text-slate-400 mt-1">
             {forcedType === "sales"
-              ? "Müşterilerinize düzenlediğiniz satış faturaları ve tahsilat takibi."
+              ? "Müşterilerinize düzenlenen satış faturaları ve tahsilat takibi."
               : forcedType === "purchase"
               ? "Tedarikçilerden gelen alış/gider faturaları ve ödeme takibi."
               : "Resmi e-Fatura / e-Arşiv uyumlu faturalarınızı oluşturun ve ödeme takibi yapın."}
           </p>
         </div>
 
-        <div className="relative z-10 flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setIsCollectAllModalOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-2xs cursor-pointer transition-all shrink-0"
             title="Tüm açık/ödenmemiş faturaları topluca tahsil et"
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-100" />
             <span>Tümünü Tahsil Et</span>
           </button>
 
-          {forcedType === "sales" ? (
+          {(forcedType === "purchase" || !forcedType) && (
             <button
-              onClick={() => handleOpenNewInvoiceModal("invoice", "sales")}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
+              onClick={() => setIsAiScannerModalOpen(true)}
+              className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-2xs cursor-pointer transition-all shrink-0"
+              title="Yapay Zeka (AI OCR) ile fatura tara"
             >
-              <Plus className="w-4 h-4" />
-              <span>+ Yeni Gelir Faturası Kes</span>
+              <Sparkles className="w-4 h-4 text-amber-100" />
+              <span>AI Fatura Tara</span>
             </button>
-          ) : forcedType === "purchase" ? (
-            <>
-              <button
-                onClick={() => setIsAiScannerModalOpen(true)}
-                className="bg-gradient-to-r from-amber-600 via-orange-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all shrink-0 hover:scale-[1.02] active:scale-98 ring-2 ring-amber-300/40"
-                title="Yapay Zeka (AI OCR) ile fatura fotoğrafı veya PDF yükleyip otomatik ayrıştırın"
-              >
-                <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
-                <span>✨ AI Fatura Tara & Ekle</span>
-              </button>
-              <button
-                onClick={() => handleOpenNewInvoiceModal("invoice", "purchase")}
-                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Yeni Gider Faturası</span>
-              </button>
-            </>
-          ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsAiScannerModalOpen(true)}
-                className="bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0"
-                title="Yapay Zeka ile Fatura Tara"
-              >
-                <Sparkles className="w-4 h-4 text-amber-200" />
-                <span>✨ AI Fatura Tara</span>
-              </button>
-              <button
-                onClick={() => handleOpenNewInvoiceModal("invoice", forcedType || "sales")}
-                className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-              >
-                <Plus className="w-4 h-4 text-purple-800 font-bold" />
-                <span>Yeni Fatura Kes / Kaydet</span>
-              </button>
-            </div>
           )}
+
+          <button
+            onClick={() => handleOpenNewInvoiceModal("invoice", forcedType || "sales")}
+            className="text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all shrink-0"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4" />
+            <span>
+              {forcedType === "sales"
+                ? "+ Yeni Gelir Faturası Kes"
+                : forcedType === "purchase"
+                ? "+ Yeni Gider Faturası"
+                : "+ Yeni Fatura Kes / Kaydet"}
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* Filter Tabs & Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* 2. Top 4 KPI Summary Cards Grid (Reference Design) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Ciro / Toplam Tutar */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">
+                {forcedType === "purchase"
+                  ? "Toplam Gider / Alış"
+                  : forcedType === "sales"
+                  ? "Toplam Ciro / Satış"
+                  : "Genel Fatura Hacmi"}
+              </p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-slate-900 mt-2">
+                ₺{kpiStats.totalAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.ciro} alt="Ciro" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="font-semibold text-purple-700">{kpiStats.totalCount}</span>
+            <span>fatura kaydı</span>
+          </div>
+        </div>
+
+        {/* Card 2: Tahsil Edilen */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">
+                {forcedType === "purchase" ? "Ödenen Gider Tutarı" : "Tahsil Edilen Tutar"}
+              </p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-emerald-600 mt-2">
+                ₺{kpiStats.paidAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.tahsilat} alt="Tahsilat" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Kapanmış / Ödenmiş</span>
+          </div>
+        </div>
+
+        {/* Card 3: Bekleyen / Açık Alacak */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">
+                {forcedType === "purchase" ? "Ödenecek Borç Bakiye" : "Açık / Bekleyen Alacak"}
+              </p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-blue-600 mt-2">
+                ₺{kpiStats.remainingAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.alacak} alt="Alacak" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+            <span>Tahsilat / Ödeme bekleyen</span>
+          </div>
+        </div>
+
+        {/* Card 4: Vadesi Geçen */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">Vadesi Geçen Tutar</p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-rose-600 mt-2">
+                ₺{kpiStats.overdueAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.vadesiGecenAlacak} alt="Gecikmiş" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="font-semibold text-rose-600">{kpiStats.overdueCount}</span>
+            <span>fatura gecikmede</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Filter & Action Toolbar */}
+      <div
+        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
         {/* Filter Buttons */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
           {!forcedType ? (
             <>
               <button
                 onClick={() => setFilterType("all")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === "all" ? "bg-white text-purple-950 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  filterType === "all"
+                    ? "bg-slate-900 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                Tüm Faturalar ({invoices.length})
+                Tümü ({invoices.length})
               </button>
               <button
                 onClick={() => setFilterType("sales")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === "sales" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  filterType === "sales"
+                    ? "bg-purple-600 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 Gelir Faturaları
               </button>
               <button
                 onClick={() => setFilterType("purchase")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  filterType === "purchase" ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  filterType === "purchase"
+                    ? "bg-amber-600 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 Gider Faturaları
@@ -3570,91 +3663,86 @@ export const Invoices: React.FC<InvoicesProps> = ({
           ) : (
             <button
               onClick={() => setFilterType(forcedType)}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                filterType === forcedType ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                filterType === forcedType
+                  ? "bg-slate-900 text-white font-bold shadow-2xs"
+                  : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               Tümü ({invoices.filter((i) => i.type === forcedType).length})
             </button>
           )}
+
           <button
             onClick={() => setFilterType("pending")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "pending" ? "bg-white text-blue-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+              filterType === "pending"
+                ? "bg-blue-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
             Bekleyenler
           </button>
           <button
             onClick={() => setFilterType("overdue")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "overdue" ? "bg-white text-amber-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+              filterType === "overdue"
+                ? "bg-rose-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
             Vadesi Geçenler
           </button>
           <button
             onClick={() => setFilterType("paid")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              filterType === "paid" ? "bg-white text-emerald-600 font-bold shadow-2xs border border-purple-200/60" : "text-purple-900/70 hover:text-purple-950"
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+              filterType === "paid"
+                ? "bg-emerald-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
             Ödenmiş
           </button>
         </div>
 
-        {/* Search, Year/Month & Export */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          {/* Yıl Filtresi */}
-          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
-            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-            <span className="text-slate-400 font-bold">Yıl:</span>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
-            >
-              <option value="all">Tüm Yıllar</option>
-              {availableYears.map((y) => (
-                <option key={y} value={y.toString()}>{y}</option>
-              ))}
-            </select>
-          </div>
+        {/* Filter Controls: Year, Month, Masraf, Search, Export */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Yıl Dropdown */}
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="rounded-xl px-2.5 py-1.5 border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm Yıllar</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y.toString()}>{y}</option>
+            ))}
+          </select>
 
-          {/* Ay Filtresi */}
-          <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
-            <Filter className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-            <span className="text-slate-400 font-bold">Ay:</span>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
-            >
-              <option value="all">Tüm Aylar</option>
-              {TURKISH_MONTHS.map((m) => (
-                <option key={m.id} value={m.id.toString()}>{m.name}</option>
-              ))}
-            </select>
-          </div>
+          {/* Ay Dropdown */}
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="rounded-xl px-2.5 py-1.5 border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm Aylar</option>
+            {TURKISH_MONTHS.map((m) => (
+              <option key={m.id} value={m.id.toString()}>{m.name}</option>
+            ))}
+          </select>
 
-          {/* Masraf Kalemi Filtresi (Gider Modülü veya Gider Seçiliyken) */}
+          {/* Masraf Kalemi (Gider Modülü veya Gider Seçiliyken) */}
           {(forcedType === "purchase" || filterType === "purchase") && (
-            <div className="flex items-center gap-1.5 bg-white border border-amber-300/80 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
-              <Tag className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span className="text-slate-400 font-bold">Masraf:</span>
-              <select
-                value={selectedExpenseCategoryFilter}
-                onChange={(e) => setSelectedExpenseCategoryFilter(e.target.value)}
-                className="bg-transparent font-extrabold text-amber-900 focus:outline-none cursor-pointer max-w-[150px] truncate"
-              >
-                <option value="all">Tüm Kalemler ({EXPENSE_CATEGORIES.length})</option>
-                {EXPENSE_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              value={selectedExpenseCategoryFilter}
+              onChange={(e) => setSelectedExpenseCategoryFilter(e.target.value)}
+              className="rounded-xl px-2.5 py-1.5 border border-amber-200 bg-amber-50/50 text-xs font-semibold text-amber-900 focus:outline-none cursor-pointer max-w-[140px] truncate"
+            >
+              <option value="all">Tüm Masraflar ({EXPENSE_CATEGORIES.length})</option>
+              {EXPENSE_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
           )}
 
           {(selectedYear !== "all" || selectedMonth !== "all" || selectedExpenseCategoryFilter !== "all") && (
@@ -3664,7 +3752,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 setSelectedMonth("all");
                 setSelectedExpenseCategoryFilter("all");
               }}
-              className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              className="text-xs text-rose-600 hover:text-rose-800 font-semibold bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors"
               title="Filtreleri temizle"
             >
               <X className="w-3.5 h-3.5" />
@@ -3672,65 +3760,70 @@ export const Invoices: React.FC<InvoicesProps> = ({
             </button>
           )}
 
-          <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          {/* Search Box */}
+          <div className="relative min-w-[200px] flex-1 sm:flex-initial">
+            <img
+              src={ASSET_ICONS.search}
+              alt="Search"
+              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none"
+            />
             <input
               type="text"
-              placeholder="Fatura No veya Müşteri ara..."
+              placeholder="Fatura No veya Cari ara..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
+              className="w-full bg-slate-50 text-slate-800 placeholder-slate-400 text-xs rounded-xl pl-9 pr-8 py-2 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-300 transition-all"
             />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
+
           <ExportButtons getExportData={getInvoicesExportData} size="sm" />
         </div>
       </div>
 
-      {/* Invoice Table */}
-      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+      {/* 4. Modern Invoices Table */}
+      <div
+        className="rounded-2xl border shadow-2xs overflow-hidden"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
         <div className="overflow-x-auto custom-scrollbar w-full">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
+          <table className="w-full text-left text-xs min-w-[750px]">
             <thead>
-              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                <th className="pb-2 px-4">Fatura No / Tip</th>
-                <th className="pb-2 px-4">Cari Hesap</th>
-                <th className="pb-2 px-4">Tarih / Vade</th>
-                <th className="pb-2 px-4 text-right">KDV Hariç</th>
-                <th className="pb-2 px-4 text-right">Genel Toplam</th>
-                <th className="pb-2 px-4 text-center">Durum</th>
-                <th className="pb-2 px-4 text-center">İşlemler</th>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="py-3.5 px-4">Fatura No / Tip</th>
+                <th className="py-3.5 px-4">Cari Hesap</th>
+                <th className="py-3.5 px-4">Tarih / Vade</th>
+                <th className="py-3.5 px-4 text-right">KDV Hariç</th>
+                <th className="py-3.5 px-4 text-right">Genel Toplam</th>
+                <th className="py-3.5 px-4 text-center">Durum</th>
+                <th className="py-3.5 px-4 text-center">İşlemler</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                  <td colSpan={7} className="text-center py-12 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <FileText className="w-8 h-8 text-purple-200" />
+                      <FileText className="w-10 h-10 text-slate-300 stroke-[1.5]" />
                       <p className="font-semibold text-slate-600">
                         {forcedType === "sales"
-                          ? docSubTab === "receipts"
-                            ? "Kayıtlı gelir fişi bulunamadı."
-                            : docSubTab === "invoices"
-                            ? "Kayıtlı gelir faturası bulunamadı."
-                            : "Kayıtlı gelir faturası veya fişi bulunamadı."
+                          ? "Kayıtlı gelir faturası bulunamadı."
                           : forcedType === "purchase"
-                          ? docSubTab === "receipts"
-                            ? "Kayıtlı gider fişi bulunamadı."
-                            : docSubTab === "invoices"
-                            ? "Kayıtlı gider faturası bulunamadı."
-                            : "Kayıtlı gider faturası veya fişi bulunamadı."
+                          ? "Kayıtlı gider faturası bulunamadı."
                           : "Kayıtlı fatura bulunamadı."}
                       </p>
                       <p className="text-xs text-slate-400">
                         {forcedType === "sales"
-                          ? docSubTab === "receipts"
-                            ? "Yukarıdaki '+ Yeni Gelir Fişi Ekle' butonuyla yeni fiş ekleyebilirsiniz."
-                            : "Yukarıdaki '+ Yeni Gelir Faturası Kes' butonuyla yeni fatura oluşturabilirsiniz."
+                          ? "Yukarıdaki '+ Yeni Gelir Faturası Kes' butonuyla yeni fatura oluşturabilirsiniz."
                           : forcedType === "purchase"
-                          ? docSubTab === "receipts"
-                            ? "Yukarıdaki '+ Yeni Gider Fişi Ekle' butonuyla yeni fiş ekleyebilirsiniz."
-                            : "Yukarıdaki '+ Yeni Gider Faturası Kaydet' butonuyla yeni fatura oluşturabilirsiniz."
+                          ? "Yukarıdaki '+ Yeni Gider Faturası' butonuyla yeni fatura kaydedebilirsiniz."
                           : "Yeni fatura eklemek için yukarıdaki butonu kullanabilirsiniz."}
                       </p>
                     </div>
@@ -3740,52 +3833,42 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 displayedInvoices.map((inv) => (
                   <tr
                     key={inv.id}
-                    className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                    className="hover:bg-slate-50/70 transition-colors group"
                   >
-                    <td className="py-3.5 px-4 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-extrabold text-slate-900 group-hover:text-purple-950 font-mono text-sm transition-colors">
+                    <td className="py-3.5 px-4">
+                      <div className="font-bold text-slate-900 font-mono text-xs">
                         {inv.invoiceNumber}
                       </div>
-                      <div className="flex items-center gap-1 mt-0.5">
+                      <div className="flex items-center gap-1 mt-1">
                         {inv.type === "sales" ? (
                           inv.docKind === "receipt" ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 group-hover:border-indigo-300">
-                              <FileSpreadsheet className="w-2.5 h-2.5 text-indigo-600" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
                               Gelir Fişi
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-200 group-hover:border-purple-300">
-                              <FileText className="w-2.5 h-2.5 text-purple-600" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-50 text-purple-700 border border-purple-200">
                               Gelir Faturası
                             </span>
                           )
                         ) : inv.docKind === "receipt" ? (
                           <div className="flex flex-wrap items-center gap-1">
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-orange-50 text-orange-700 border border-orange-200 group-hover:border-orange-300">
-                              <FileSpreadsheet className="w-2.5 h-2.5 text-orange-600" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-orange-50 text-orange-700 border border-orange-200">
                               Gider Fişi
                             </span>
-                            {(inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory) && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-900 border border-amber-200 group-hover:border-amber-300">
-                                <Tag className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                                <span className="truncate max-w-[130px]">
-                                  {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
-                                </span>
+                            {(inv.expenseCategory || inv.items?.find((i) => i.expenseCategory)?.expenseCategory) && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-900 border border-amber-200 truncate max-w-[130px]">
+                                {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
                               </span>
                             )}
                           </div>
                         ) : (
                           <div className="flex flex-wrap items-center gap-1">
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200 group-hover:border-amber-300">
-                              <FileText className="w-2.5 h-2.5 text-amber-600" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                               Gider Faturası
                             </span>
-                            {(inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory) && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-900 border border-amber-200 group-hover:border-amber-300">
-                                <Tag className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                                <span className="truncate max-w-[130px]">
-                                  {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
-                                </span>
+                            {(inv.expenseCategory || inv.items?.find((i) => i.expenseCategory)?.expenseCategory) && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-900 border border-amber-200 truncate max-w-[130px]">
+                                {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
                               </span>
                             )}
                           </div>
@@ -3793,132 +3876,107 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      {/* Cari (Contact) link */}
-                      {onSelectTab ? (
-                        <button
-                          type="button"
-                          onClick={() => onSelectTab("contacts")}
-                          className="text-left font-extrabold text-slate-900 group-hover:text-purple-950 hover:text-purple-700 hover:underline cursor-pointer inline-flex items-center gap-1.5 transition-colors group/carilink text-xs"
-                          title="Cari Hesaplar Listesine Git"
-                        >
-                          <span>{inv.contactName}</span>
-                          <Users className="w-3.5 h-3.5 text-purple-600 opacity-70 group-hover/carilink:opacity-100 group-hover/carilink:scale-110 transition-all shrink-0" />
-                        </button>
-                      ) : (
-                        <div className="font-extrabold text-slate-900 group-hover:text-purple-950 text-xs">
-                          {inv.contactName}
-                        </div>
-                      )}
-
-                      {/* Item / Stock shortcut */}
-                      {inv.items.length > 0 && (
-                        <div className="mt-0.5">
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={getContactAvatar(inv.contactId || inv.contactName)}
+                          alt={inv.contactName}
+                          className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0 bg-slate-100"
+                        />
+                        <div className="min-w-0">
                           {onSelectTab ? (
                             <button
                               type="button"
-                              onClick={() => onSelectTab("products")}
-                              className="text-[10px] text-slate-500 hover:text-purple-700 hover:underline cursor-pointer flex items-center gap-1 transition-colors group/itemlink truncate max-w-[220px]"
-                              title="Stok & Hizmet Listesine Git"
+                              onClick={() => onSelectTab("contacts")}
+                              className="text-left font-bold text-slate-900 hover:text-purple-600 transition-colors truncate block text-xs cursor-pointer"
+                              title="Cari detayı"
                             >
-                              <Package className="w-3 h-3 text-purple-500 shrink-0 opacity-70 group-hover/itemlink:opacity-100" />
-                              <span className="truncate">{inv.items[0]?.description}</span>
-                              {inv.items.length > 1 && (
-                                <span className="text-slate-400 text-[9px] shrink-0 font-medium">
-                                  (+{inv.items.length - 1})
-                                </span>
-                              )}
+                              {inv.contactName}
                             </button>
                           ) : (
-                            <div className="text-[10px] text-slate-500 truncate max-w-[220px]">
-                              {inv.items[0]?.description}
+                            <div className="font-bold text-slate-900 truncate text-xs">
+                              {inv.contactName}
                             </div>
                           )}
-                        </div>
-                      )}
 
-                      {inv.taxNumber && (
-                        <div className="text-[10px] font-normal text-slate-400 group-hover:text-purple-700/60 mt-0.5">
-                          VKN: {inv.taxNumber}
+                          <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                            {inv.taxNumber && <span>VKN: {inv.taxNumber}</span>}
+                            {inv.items?.[0] && (
+                              <span className="truncate max-w-[140px] text-slate-400">
+                                • {inv.items[0].description}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </td>
 
-                    <td className="py-3.5 px-4 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-medium text-slate-800 group-hover:text-slate-900">{formatDate(inv.issueDate)}</div>
-                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">Vade: {formatDate(inv.dueDate)}</div>
+                    <td className="py-3.5 px-4">
+                      <div className="font-medium text-slate-800">{formatDate(inv.issueDate)}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Vade: {formatDate(inv.dueDate)}</div>
                     </td>
 
-                    <td className="py-3.5 px-4 text-right font-medium text-slate-700 group-hover:text-slate-900 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                    <td className="py-3.5 px-4 text-right font-mono font-medium text-slate-700">
                       ₺{inv.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                     </td>
 
-                    <td className="py-3.5 px-4 text-right font-black text-sm text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                    <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 text-sm">
                       ₺{inv.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                     </td>
 
-                    <td className="py-3.5 px-4 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                    <td className="py-3.5 px-4 text-center">
                       <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
                           inv.status === "paid"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200 group-hover:border-emerald-300"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                             : inv.status === "overdue"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200 group-hover:border-amber-300"
-                            : "bg-blue-50 text-blue-700 border border-blue-200 group-hover:border-blue-300"
+                            ? "bg-rose-50 text-rose-700 border border-rose-200"
+                            : "bg-blue-50 text-blue-700 border border-blue-200"
                         }`}
                       >
-                        {inv.status === "paid" ? (
-                          <>
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            Ödendi
-                          </>
-                        ) : inv.status === "overdue" ? (
-                          <>
-                            <AlertTriangle className="w-3 h-3 text-amber-600" />
-                            Vadesi Geçti
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="w-3 h-3 text-blue-600" />
-                            Bekliyor
-                          </>
-                        )}
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            inv.status === "paid"
+                              ? "bg-emerald-500"
+                              : inv.status === "overdue"
+                              ? "bg-rose-500"
+                              : "bg-blue-500"
+                          }`}
+                        />
+                        {inv.status === "paid"
+                          ? "Ödendi"
+                          : inv.status === "overdue"
+                          ? "Vadesi Geçti"
+                          : "Bekliyor"}
                       </span>
                     </td>
 
-                    <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {/* Edit Button */}
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => handleOpenEditInvoiceModal(inv)}
                           title={inv.docKind === "receipt" ? "Fişi Düzenle" : "Faturayı Düzenle"}
-                          className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-600 hover:text-amber-700 transition-colors cursor-pointer"
                         >
-                          <Edit2 className="w-3.5 h-3.5 text-amber-700" />
-                          <span>Düzenle</span>
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Print / View Modal */}
                         <button
                           onClick={() => setPrintingInvoice(inv)}
                           title="Faturayı Görüntüle & e-Fatura Yazdır"
-                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 transition-colors cursor-pointer"
                         >
                           <Printer className="w-3.5 h-3.5" />
-                          <span>Baskı / e-Fatura</span>
                         </button>
 
-                        {/* Direct WhatsApp Share */}
                         <button
                           onClick={() => setWhatsAppInvoice(inv)}
                           title="Faturayı WhatsApp ile Paylaş"
-                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
                         >
-                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="hidden xl:inline">WhatsApp</span>
+                          <MessageCircle className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Add Payment / Collection */}
                         {inv.status !== "paid" && (
                           <button
                             onClick={() => {
@@ -3926,17 +3984,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               setPaymentAmount(inv.remainingAmount);
                             }}
                             title="Tahsilat / Ödeme Ekle"
-                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-1.5 rounded-lg text-xs transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
                           >
                             <CreditCard className="w-3.5 h-3.5" />
                           </button>
                         )}
 
-                        {/* Delete */}
                         <button
                           onClick={() => onDeleteInvoice(inv.id)}
                           title="Faturayı Sil"
-                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg border border-transparent hover:border-rose-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -3950,17 +4007,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
         </div>
 
         {filteredInvoices.length > displayLimit && (
-          <div className="text-center mt-4">
+          <div className="text-center py-4 border-t border-slate-100">
             <button
               onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
             >
               Daha Fazla Göster ({displayLimit} / {filteredInvoices.length})
             </button>
           </div>
         )}
       </div>
-
     </div>
   );
 };
