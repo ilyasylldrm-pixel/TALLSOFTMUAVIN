@@ -6,6 +6,8 @@ import { formatOrderWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS, getContactAvatar } from "../utils/assetIcons";
 import {
   ShoppingCart,
   Plus,
@@ -65,6 +67,7 @@ export const Orders: React.FC<OrdersProps> = ({
   onConvertOrderToInvoice,
   onDeleteOrder,
 }) => {
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<"all" | "sales" | "purchase">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -1129,177 +1132,210 @@ export const Orders: React.FC<OrdersProps> = ({
 
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Top Header Controls (Lila Bal Peteği & Geometrik Desen - Cari Hesaplar Stili) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-500/20"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="relative z-10">
-          <h2 className="text-lg font-extrabold text-slate-950">
-            Sipariş Yönetimi (Satış & Alış Siparişleri)
-          </h2>
-          <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-            Müşterilerinizden aldığınız satış ve tedarikçilerinize verdiğiniz alış siparişlerini takip edin ve faturaya dönüştürün.
+      {/* 1. TOP TITLE & ACTION HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+            Sipariş Yönetimi
+          </h1>
+          <p className="text-xs font-medium text-slate-400 mt-1">
+            Satış ve alış sipariş havuzu, teslimat tarihleri ve tek tıkla e-faturaya dönüştürme operasyonları
           </p>
         </div>
 
-        <div className="relative z-10 flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => handleOpenNewOrderModal("sales")}
-            className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all shrink-0"
-          >
-            <Plus className="w-4 h-4 text-purple-800 font-bold" />
-            <span>Yeni Satış Siparişi</span>
-          </button>
-          <button
+            type="button"
             onClick={() => handleOpenNewOrderModal("purchase")}
-            className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-2xs cursor-pointer transition-all shrink-0"
+            className="px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer shadow-2xs hover:bg-slate-50"
+            style={{ borderColor: theme.cardBorder, color: theme.pageText }}
           >
-            <Plus className="w-4 h-4" />
+            <ArrowUpRight className="w-4 h-4 text-indigo-600" />
             <span>Yeni Alış Siparişi</span>
           </button>
+          <button
+            type="button"
+            onClick={() => handleOpenNewOrderModal("sales")}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>+ Yeni Satış Siparişi</span>
+          </button>
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
+      {/* 2. TOP 4 KPI SUMMARY CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Orders */}
-        <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs flex items-center justify-between hover:border-purple-300 transition-all">
-          <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam Sipariş</span>
-            <div className="text-2xl font-bold text-slate-950 mt-1">{totalOrdersCount} Adet</div>
-            <span className="text-[11px] text-purple-700 font-medium mt-1 inline-block">Aktif sipariş havuzu</span>
-          </div>
-          <div className="p-3 bg-purple-50 text-purple-700 rounded-2xl border border-purple-100">
-            <ShoppingCart className="w-6 h-6" />
-          </div>
-        </div>
-
-        {/* Sales Orders Total */}
-        <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs flex items-center justify-between hover:border-purple-300 transition-all">
-          <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Alınan Satış Siparişleri</span>
-            <div className="text-xl font-bold text-emerald-600 mt-1">
-              ₺{salesOrdersTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+        {/* Card 1: Toplam Sipariş */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam Sipariş</span>
+              <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                {totalOrdersCount}
+              </div>
             </div>
-            <span className="text-[11px] text-emerald-600 font-medium mt-1 inline-block">Müşterilerden gelen siparişler</span>
-          </div>
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
-            <ArrowDownLeft className="w-6 h-6" />
-          </div>
-        </div>
-
-        {/* Purchase Orders Total */}
-        <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs flex items-center justify-between hover:border-purple-300 transition-all">
-          <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Verilen Alış Siparişleri</span>
-            <div className="text-xl font-bold text-indigo-600 mt-1">
-              ₺{purchaseOrdersTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+            <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.ciro }} className="w-6 h-6 flex items-center justify-center" />
             </div>
-            <span className="text-[11px] text-indigo-600 font-medium mt-1 inline-block">Tedarikçilere verilen siparişler</span>
           </div>
-          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100">
-            <ArrowUpRight className="w-6 h-6" />
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+              {orders.length} Kayıt
+            </span>
+            <span className="text-slate-400 text-[11px]">Aktif sipariş havuzu</span>
           </div>
         </div>
 
-        {/* Converted Orders */}
-        <div className="bg-white p-5 rounded-2xl border border-purple-200/60 shadow-2xs flex items-center justify-between hover:border-purple-300 transition-all">
-          <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Faturaya Dönüşenler</span>
-            <div className="text-2xl font-bold text-teal-700 mt-1">{convertedOrdersCount} Adet</div>
-            <span className="text-[11px] text-teal-600 font-medium mt-1 inline-block">Resmileşen siparişler</span>
+        {/* Card 2: Alınan Satış Siparişleri */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Alınan Satış Siparişleri</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                ₺{salesOrdersTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.nakit }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
           </div>
-          <div className="p-3 bg-teal-50 text-teal-700 rounded-2xl border border-teal-100">
-            <FileText className="w-6 h-6" />
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-emerald-600">
+              {orders.filter((o) => o.type === "sales").length} Satış
+            </span>
+            <span className="text-slate-400 text-[11px]">• Müşteri siparişleri</span>
+          </div>
+        </div>
+
+        {/* Card 3: Verilen Alış Siparişleri */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Verilen Alış Siparişleri</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-indigo-600">
+                ₺{purchaseOrdersTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamBorc }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-indigo-600">
+              {orders.filter((o) => o.type === "purchase").length} Alış
+            </span>
+            <span className="text-slate-400 text-[11px]">• Tedarikçi siparişleri</span>
+          </div>
+        </div>
+
+        {/* Card 4: Faturaya Dönüşenler */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Faturaya Dönüşenler</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-teal-600">
+                {convertedOrdersCount}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamAlacak }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
+              Resmileşti
+            </span>
+            <span className="text-slate-400 text-[11px]">Faturalanan siparişler</span>
           </div>
         </div>
       </div>
 
-      {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Filter Buttons */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-purple-50/50 p-1.5 rounded-xl border border-purple-200/50 text-xs font-semibold shadow-2xs">
-          <button
-            onClick={() => setActiveTab("all")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              activeTab === "all"
-                ? "bg-white text-purple-950 font-bold shadow-2xs border border-purple-200/60"
-                : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Tümü ({orders.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("sales")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              activeTab === "sales"
-                ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60"
-                : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Satış Siparişleri (Alınan) ({orders.filter((o) => o.type === "sales").length})
-          </button>
-          <button
-            onClick={() => setActiveTab("purchase")}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              activeTab === "purchase"
-                ? "bg-white text-purple-700 font-bold shadow-2xs border border-purple-200/60"
-                : "text-purple-900/70 hover:text-purple-950"
-            }`}
-          >
-            Alış Siparişleri (Verilen) ({orders.filter((o) => o.type === "purchase").length})
-          </button>
-        </div>
+      {/* 3. FILTER & ACTION TOOLBAR */}
+      <div
+        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Active Tab Pills */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab("all")}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                activeTab === "all"
+                  ? "bg-white text-slate-900 shadow-2xs"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Tümü ({orders.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("sales")}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                activeTab === "sales"
+                  ? "bg-white text-emerald-700 shadow-2xs"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Satış ({orders.filter((o) => o.type === "sales").length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("purchase")}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                activeTab === "purchase"
+                  ? "bg-white text-indigo-700 shadow-2xs"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Alış ({orders.filter((o) => o.type === "purchase").length})
+            </button>
+          </div>
 
-        {/* Search, Status & Export */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          <div className="relative w-full md:w-56">
-            <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <div
+              dangerouslySetInnerHTML={{ __html: ASSET_ICONS.search }}
+              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+            />
             <input
               type="text"
-              placeholder="Sipariş No, Cari, Ürün ara..."
+              placeholder="Sipariş no, cari veya ürün ara..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200/50 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
+          {/* Status Dropdown */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-white text-slate-900 text-xs rounded-xl px-3 py-2 border border-purple-200/60 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20 shadow-2xs transition-all"
+            className="rounded-xl px-3 py-2 border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
           >
             <option value="all">Tüm Durumlar</option>
             <option value="pending">Bekleyenler</option>
@@ -1310,162 +1346,191 @@ export const Orders: React.FC<OrdersProps> = ({
             <option value="converted">Faturaya Dönüşenler</option>
             <option value="cancelled">İptal Edilenler</option>
           </select>
+        </div>
 
+        <div className="flex items-center gap-2 shrink-0">
           <ExportButtons getExportData={getOrdersExportData} size="sm" />
         </div>
       </div>
 
-      {/* Orders Table Container */}
-      <div className="bg-slate-50/60 rounded-2xl border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-        <div className="overflow-x-auto custom-scrollbar w-full">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[800px]">
+      {/* 4. ORDERS DATA TABLE */}
+      <div
+        className="rounded-2xl border shadow-2xs overflow-hidden"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left text-xs">
             <thead>
-              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                <th className="pb-2 px-4">Sipariş No / Tarih</th>
-                <th className="pb-2 px-4">Sipariş Tipi</th>
-                <th className="pb-2 px-4">Cari Firma / İlgili</th>
-                <th className="pb-2 px-4">Teslimat Tarihi / Depo</th>
-                <th className="pb-2 px-4 text-center">Kalem</th>
-                <th className="pb-2 px-4 text-right">Genel Toplam</th>
-                <th className="pb-2 px-4">Durum</th>
-                <th className="pb-2 px-4 text-right">İşlemler</th>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="py-3 px-4">Sipariş No / Tarih</th>
+                <th className="py-3 px-4">Sipariş Tipi</th>
+                <th className="py-3 px-4">Cari Firma / İlgili</th>
+                <th className="py-3 px-4">Teslimat Tarihi / Depo</th>
+                <th className="py-3 px-4 text-center">Kalem</th>
+                <th className="py-3 px-4 text-right">Genel Toplam</th>
+                <th className="py-3 px-4">Durum</th>
+                <th className="py-3 px-4 text-right">İşlemler</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-10 text-slate-400 bg-white rounded-xl border border-purple-100/80">
-                    <ShoppingCart className="w-10 h-10 mx-auto mb-2 text-purple-300" />
-                    <p className="font-semibold text-slate-600">Kriterlere uygun sipariş kaydı bulunamadı.</p>
+                  <td colSpan={8} className="text-center py-12 text-slate-400">
+                    <ShoppingCart className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                    <p className="font-semibold text-slate-700">Kriterlere uygun sipariş kaydı bulunamadı.</p>
                     <p className="text-[11px] text-slate-400 mt-1">
                       Yeni bir satış veya alış siparişi oluşturmak için yukarıdaki butonları kullanabilirsiniz.
                     </p>
                   </td>
                 </tr>
               ) : (
-                displayedOrders.map((order) => (
-                  <tr
-                    key={order.id}
-                    className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
-                  >
-                    <td className="py-3.5 px-4 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-extrabold text-slate-900 group-hover:text-purple-950 text-sm transition-colors">
-                        {order.orderNumber}
-                      </div>
-                      <div className="text-[11px] text-slate-500 group-hover:text-purple-800/80 flex items-center gap-1 mt-0.5">
-                        <Calendar className="w-3 h-3 text-purple-400" />
-                        <span>{formatDate(order.orderDate)}</span>
-                      </div>
-                    </td>
-
-                    <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      {order.type === "sales" ? (
-                        <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-md text-[11px] font-bold inline-flex items-center gap-1 shadow-2xs">
-                          <ArrowDownLeft className="w-3 h-3 text-purple-600" /> Satış Siparişi
-                        </span>
-                      ) : (
-                        <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-md text-[11px] font-bold inline-flex items-center gap-1 shadow-2xs">
-                          <ArrowUpRight className="w-3 h-3 text-indigo-600" /> Alış Siparişi
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-extrabold text-slate-900 group-hover:text-purple-950 transition-colors">
-                        {order.contactName}
-                      </div>
-                      {order.taxNumber && (
-                        <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">
-                          VKN/TCKN: {order.taxNumber}
+                displayedOrders.map((order) => {
+                  const avatar = getContactAvatar(order.contactName || order.orderNumber);
+                  return (
+                    <tr
+                      key={order.id}
+                      className="hover:bg-slate-50/60 transition-colors group"
+                    >
+                      {/* Order Number & Date */}
+                      <td className="py-3.5 px-4">
+                        <div className="font-mono font-bold text-slate-900 text-sm">
+                          {order.orderNumber}
                         </div>
-                      )}
-                    </td>
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5 font-medium">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          <span>{formatDate(order.orderDate)}</span>
+                        </div>
+                      </td>
 
-                    <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="text-slate-800 font-semibold">{formatDate(order.deliveryDate)}</div>
-                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60 flex items-center gap-1 mt-0.5">
-                        <WarehouseIcon className="w-3 h-3 text-purple-400" />
-                        <span>{order.warehouseName || "Genel Depo"}</span>
-                      </div>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
-                        {order.items.length} Kalem
-                      </span>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-black text-slate-900 group-hover:text-purple-950 text-sm">
-                        ₺{order.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                      </div>
-                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">
-                        KDV: ₺{order.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                      </div>
-                    </td>
-
-                    <td className="py-3.5 px-4 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      {getStatusBadge(order.status)}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* View Order Detail */}
-                        <button
-                          onClick={() => setSelectedOrderForView(order)}
-                          className="p-1.5 bg-purple-50 hover:bg-purple-100 rounded-lg text-purple-700 border border-purple-200 transition-colors cursor-pointer"
-                          title="Sipariş Detayı / Belge Yazdır"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-
-                        {/* WhatsApp Share */}
-                        <button
-                          onClick={() => setWhatsAppOrder(order)}
-                          className="p-1.5 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
-                          title="Siparişi WhatsApp ile Paylaş"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                        </button>
-
-                        {/* Convert to Invoice */}
-                        {order.status !== "cancelled" && (
-                          <button
-                            onClick={() => setConvertConfirmOrder(order)}
-                            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
-                            title="Siparişi Faturaya Dönüştür"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span>Faturaya Dönüştür</span>
-                          </button>
+                      {/* Order Type */}
+                      <td className="py-3.5 px-4">
+                        {order.type === "sales" ? (
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1">
+                            <ArrowDownLeft className="w-3 h-3 text-emerald-600" /> Satış Siparişi
+                          </span>
+                        ) : (
+                          <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1">
+                            <ArrowUpRight className="w-3 h-3 text-indigo-600" /> Alış Siparişi
+                          </span>
                         )}
+                      </td>
 
-                        {/* Delete Order */}
-                        <button
-                          onClick={() => {
-                            if (confirm(`'${order.orderNumber}' numaralı siparişi silmek istediğinize emin misiniz?`)) {
-                              onDeleteOrder(order.id);
-                            }
-                          }}
-                          className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                          title="Siparişi Sil"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      {/* Contact with 3D Avatar */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={avatar}
+                            alt=""
+                            className="w-8 h-8 rounded-full border border-slate-100 shadow-2xs object-cover shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 truncate max-w-[200px]" title={order.contactName}>
+                              {order.contactName}
+                            </div>
+                            {order.taxNumber && (
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                VKN: {order.taxNumber}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Delivery Date & Warehouse */}
+                      <td className="py-3.5 px-4">
+                        <div className="text-slate-800 font-semibold">{formatDate(order.deliveryDate)}</div>
+                        <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                          <WarehouseIcon className="w-3 h-3 text-slate-400" />
+                          <span>{order.warehouseName || "Genel Depo"}</span>
+                        </div>
+                      </td>
+
+                      {/* Item Count */}
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-bold text-[11px] font-mono">
+                          {order.items.length} Kalem
+                        </span>
+                      </td>
+
+                      {/* Grand Total */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="font-mono font-bold text-slate-900 text-sm">
+                          ₺{order.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          KDV: ₺{order.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3.5 px-4">
+                        {getStatusBadge(order.status)}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* View Order Detail */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderForView(order)}
+                            className="p-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg text-slate-700 border border-slate-200 transition-colors cursor-pointer"
+                            title="Sipariş Detayı / Belge Yazdır"
+                          >
+                            <Eye className="w-4 h-4 text-slate-600" />
+                          </button>
+
+                          {/* WhatsApp Share */}
+                          <button
+                            type="button"
+                            onClick={() => setWhatsAppOrder(order)}
+                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
+                            title="Siparişi WhatsApp ile Paylaş"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
+
+                          {/* Convert to Invoice */}
+                          {order.status !== "cancelled" && (
+                            <button
+                              type="button"
+                              onClick={() => setConvertConfirmOrder(order)}
+                              className="px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                              title="Siparişi Faturaya Dönüştür"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Faturaya Dönüştür</span>
+                            </button>
+                          )}
+
+                          {/* Delete Order */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`'${order.orderNumber}' numaralı siparişi silmek istediğinize emin misiniz?`)) {
+                                onDeleteOrder(order.id);
+                              }
+                            }}
+                            className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            title="Siparişi Sil"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
         {filteredOrders.length > displayLimit && (
-          <div className="text-center mt-4">
+          <div className="p-4 border-t border-slate-100 text-center">
             <button
               onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
+              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
             >
               Daha Fazla Göster ({displayLimit} / {filteredOrders.length})
             </button>
