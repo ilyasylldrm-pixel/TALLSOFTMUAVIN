@@ -65,6 +65,8 @@ import { BulkPayrollModal } from "./BulkPayrollModal";
 import { AssetCustodyManagement } from "./AssetCustodyManagement";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS, getContactAvatar } from "../utils/assetIcons";
 
 interface HRManagementProps {
   employees: Employee[];
@@ -115,6 +117,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   onUpdateAsset = () => {},
   onDeleteAsset = () => {},
 }) => {
+  const { theme } = useTheme();
   const [activeSubTab, setActiveSubTab] = useState<"employees" | "payroll" | "leaves" | "advances" | "sgk" | "severance" | "zimmet">("employees");
   const [advanceInnerTab, setAdvanceInnerTab] = useState<"requests" | "legal_deductions">("requests");
 
@@ -3953,138 +3956,166 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* HEADER BANNER */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs">
-        {/* Lila Bal Peteği Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-500/20"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-purple-100/90 text-purple-900 border border-purple-300/80 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
-                <UserCheck className="w-3.5 h-3.5 text-purple-700" />
-                İnsan Kaynakları & Personel Yönetimi
-              </span>
-              <span className="bg-emerald-100/90 text-emerald-900 border border-emerald-300/80 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-2xs">
-                SGK & Bordro Uyumlu
-              </span>
-            </div>
-            <h1 className="text-xl lg:text-2xl font-extrabold text-slate-950 flex items-center gap-2">
-              <span>Personel, Bordro ve Özlük Takibi</span>
-            </h1>
-            <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed max-w-2xl">
-              Çalışan özlük dosyaları, kanuni SGK bordro matrahları, yıllık izin hakkı ve masraf/avans taleplerini tek ekrandan yönetin.
-            </p>
+      {/* 1. TOP TITLE & ACTION HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+              <UserCheck className="w-3.5 h-3.5 text-purple-600" />
+              İnsan Kaynakları & Personel Yönetimi
+            </span>
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold px-2.5 py-0.5 rounded-full">
+              SGK & Bordro Uyumlu
+            </span>
           </div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+            Personel, Bordro ve Özlük Takibi
+          </h1>
+          <p className="text-xs font-medium text-slate-400 mt-1 leading-relaxed max-w-2xl">
+            Çalışan özlük dosyaları, kanuni SGK bordro matrahları, yıllık izin hakkı ve masraf/avans taleplerini tek ekrandan yönetin.
+          </p>
+        </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
-            <button
-              onClick={() => setIsAddEmployeeOpen(true)}
-              className="bg-purple-700 hover:bg-purple-800 text-white font-bold px-3.5 py-2 rounded-xl shadow-2xs transition-all flex items-center gap-1.5 text-xs cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              Yeni Personel Ekle
-            </button>
-            <button
-              onClick={() => setIsBulkPayrollModalOpen(true)}
-              className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold px-3.5 py-2 rounded-xl shadow-2xs transition-all flex items-center gap-1.5 text-xs cursor-pointer active:scale-95"
-              title="Tüm Aktif Personeller İçin Toplu Puantaj ve Bordro Hakedişi Hazırla"
-            >
-              <Layers className="w-4 h-4 text-purple-200" />
-              Toplu Bordro Hazırla
-            </button>
-            <button
-              onClick={() => setIsAddLeaveOpen(true)}
-              className="bg-white hover:bg-purple-50 text-purple-950 border border-purple-200/80 font-bold px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 text-xs cursor-pointer shadow-2xs"
-            >
-              <Calendar className="w-4 h-4 text-purple-700" />
-              İzin Talebi
-            </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsAddEmployeeOpen(true)}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <UserPlus className="w-4 h-4 stroke-[2.5]" />
+            <span>+ Yeni Personel</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsBulkPayrollModalOpen(true)}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Tüm Aktif Personeller İçin Toplu Puantaj ve Bordro Hakedişi Hazırla"
+          >
+            <Layers className="w-4 h-4 text-purple-600" />
+            <span>Toplu Bordro</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsAddLeaveOpen(true)}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <Calendar className="w-4 h-4 text-purple-600" />
+            <span>İzin Talebi</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. TOP 4 KPI SUMMARY CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Toplam Kadro */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam Kadro</span>
+              <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                {employees.length} Çalışan
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamAlacak }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+              {activeCount} Aktif
+            </span>
+            <span className="text-slate-400 text-[11px]">· {onLeaveCount} İzinli personel</span>
           </div>
         </div>
 
-        {/* METRIC CARDS */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-purple-200/60 relative z-10">
-          <div className="bg-white/80 backdrop-blur-xs border border-purple-200/70 rounded-xl p-3.5 shadow-2xs">
-            <div className="text-purple-900 text-xs font-bold flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-purple-700" /> Toplam Kadro
+        {/* Card 2: Aylık Net Maaş Toplamı */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Aylık Net Maaş Hakedişi</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                {formatTRY(totalMonthlyNetSalary)}
+              </div>
             </div>
-            <div className="text-xl font-black text-slate-950 mt-1">{employees.length} Çalışan</div>
-            <div className="text-[11px] text-emerald-700 mt-0.5 font-bold">{activeCount} Aktif · {onLeaveCount} İzinli</div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.nakit }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
           </div>
-
-          <div className="bg-white/80 backdrop-blur-xs border border-purple-200/70 rounded-xl p-3.5 shadow-2xs">
-            <div className="text-purple-900 text-xs font-bold flex items-center gap-1.5">
-              <DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Aylık Net Maaş Toplamı
-            </div>
-            <div className="text-xl font-black text-slate-950 mt-1">
-              {formatTRY(totalMonthlyNetSalary)}
-            </div>
-            <div className="text-[11px] text-purple-900/70 font-semibold mt-0.5">Net ödenen toplam personel hakedişi</div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-emerald-600">
+              Net Ödeme
+            </span>
+            <span className="text-slate-400 text-[11px]">• Personel net hakedişleri</span>
           </div>
+        </div>
 
-          <div className="bg-white/80 backdrop-blur-xs border border-purple-200/70 rounded-xl p-3.5 shadow-2xs">
-            <div className="text-purple-900 text-xs font-bold flex items-center gap-1.5">
-              <Receipt className="w-3.5 h-3.5 text-amber-600" /> Toplam İşveren Maliyeti
+        {/* Card 3: Toplam İşveren Maliyeti */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam İşveren Maliyeti</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-rose-600">
+                {formatTRY(totalEmployerMonthlyCost)}
+              </div>
             </div>
-            <div className="text-xl font-black text-slate-950 mt-1">
-              {formatTRY(totalEmployerMonthlyCost)}
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamBorc }} className="w-6 h-6 flex items-center justify-center" />
             </div>
-            <div className="text-[11px] text-purple-900/70 font-semibold mt-0.5">Maaş + SGK İşveren + Yan Haklar</div>
           </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-rose-600">
+              Maaş + SGK + Yan Hak
+            </span>
+            <span className="text-slate-400 text-[11px]">• Toplam şirket yükü</span>
+          </div>
+        </div>
 
-          <div className="bg-white/80 backdrop-blur-xs border border-purple-200/70 rounded-xl p-3.5 shadow-2xs">
-            <div className="text-purple-900 text-xs font-bold flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-cyan-700" /> SGK İşyeri Dosyası
+        {/* Card 4: SGK İşyeri Dosyası */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">SGK İşyeri Dosyası</span>
+              <div className="text-sm font-bold font-mono tracking-tight truncate max-w-[180px]" style={{ color: theme.pageText }}>
+                {companySettings.sgkCredentials?.workplaceRegistrationNo || "SGK Sicil Tanımlı"}
+              </div>
             </div>
-            <div className="text-xs font-bold text-slate-950 mt-1 truncate">
-              {companySettings.sgkCredentials?.workplaceRegistrationNo || "SGK Sicil Tanımlı"}
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.alacak }} className="w-6 h-6 flex items-center justify-center" />
             </div>
-            <div className="text-[11px] text-emerald-700 mt-0.5 font-bold">5510 %5 Teşvik Aktif</div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+              5510 %5 Teşvik Aktif
+            </span>
           </div>
         </div>
       </div>
 
       {/* SUB-TABS NAVIGATION */}
-      <div className="flex items-center justify-between bg-white rounded-2xl p-1.5 border border-purple-200/60 shadow-2xs overflow-x-auto">
+      <div
+        className="flex items-center justify-between rounded-2xl p-1.5 border shadow-2xs overflow-x-auto"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
         <div className="flex items-center gap-1 min-w-max">
           <button
             onClick={() => setActiveSubTab("employees")}
             className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === "employees"
                 ? "bg-purple-700 text-white shadow-xs"
-                : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
             <Users className="w-4 h-4" />
@@ -4096,7 +4127,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === "payroll"
                 ? "bg-purple-700 text-white shadow-xs"
-                : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
             <Receipt className="w-4 h-4" />
@@ -4108,7 +4139,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === "leaves"
                 ? "bg-purple-700 text-white shadow-xs"
-                : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
             <Calendar className="w-4 h-4" />
@@ -4120,7 +4151,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === "advances"
                 ? "bg-purple-700 text-white shadow-xs"
-                : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
             <CreditCard className="w-4 h-4" />
@@ -4132,7 +4163,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === "sgk"
                 ? "bg-purple-700 text-white shadow-xs"
-                : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
@@ -4144,16 +4175,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === "severance"
                 ? "bg-purple-700 text-white shadow-xs"
-                : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
-            <Scale className="w-4 h-4 text-amber-500" />
+            <Scale className="w-4 h-4" />
             <span>Kıdem & İhbar Tazminatı</span>
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
-              activeSubTab === "severance" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-900"
-            }`}>
-              Hesaplama
-            </span>
           </button>
 
           <button
@@ -4161,16 +4187,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === "zimmet"
                 ? "bg-purple-700 text-white shadow-xs"
-                : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
-            <Laptop className="w-4 h-4 text-purple-300" />
+            <Laptop className="w-4 h-4" />
             <span>Zimmet & Demirbaş Takibi</span>
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
-              activeSubTab === "zimmet" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-900"
-            }`}>
-              {assetCustodies.length}
-            </span>
           </button>
         </div>
       </div>
@@ -4327,11 +4348,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   >
                     <td className="py-3 px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 font-black flex items-center justify-center text-sm border border-purple-200 overflow-hidden shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 shadow-2xs">
                           {emp.photoUrl ? (
                             <img src={emp.photoUrl} alt={emp.fullName} className="w-full h-full object-cover" />
                           ) : (
-                            emp.fullName.split(" ").map((n) => n[0]).join("")
+                            <img src={getContactAvatar(emp.fullName)} alt={emp.fullName} className="w-full h-full object-cover" />
                           )}
                         </div>
                         <div>
