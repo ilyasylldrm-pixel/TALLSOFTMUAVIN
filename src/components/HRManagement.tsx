@@ -58,7 +58,19 @@ import {
   Gift,
   Utensils,
   Bus,
+  ArrowDownCircle,
+  RefreshCw,
+  Sparkles,
   X,
+  ArrowDown,
+  ArrowUp,
+  Target,
+  LocateFixed,
+  Scissors,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
+  Pin,
 } from "lucide-react";
 import { Employee, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction, CompanySettings, Branch, Warehouse, CostProject, AssetCustody, AdditionalPaymentItem } from "../types";
 import { sgkOccupations } from "../data/sgkOccupations";
@@ -201,6 +213,50 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       setToastNotification(null);
     }, 6000);
   };
+
+  // Auto-scroll & Highlight States for Leaves, Deductions & Advances
+  const [highlightedLeaveId, setHighlightedLeaveId] = useState<string | null>(null);
+  const [highlightedDeductionId, setHighlightedDeductionId] = useState<string | null>(null);
+  const [highlightedAdvanceId, setHighlightedAdvanceId] = useState<string | null>(null);
+
+  // Reusable Smooth Auto-Scroll & Focus Helper
+  const scrollToElement = useCallback((elementId: string, onFocus?: () => void) => {
+    const attemptScroll = () => {
+      const el = document.getElementById(elementId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (onFocus) onFocus();
+        return true;
+      }
+      return false;
+    };
+
+    if (!attemptScroll()) {
+      setTimeout(attemptScroll, 120);
+      setTimeout(attemptScroll, 350);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (highlightedLeaveId) {
+      const timer = setTimeout(() => setHighlightedLeaveId(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedLeaveId]);
+
+  useEffect(() => {
+    if (highlightedDeductionId) {
+      const timer = setTimeout(() => setHighlightedDeductionId(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedDeductionId]);
+
+  useEffect(() => {
+    if (highlightedAdvanceId) {
+      const timer = setTimeout(() => setHighlightedAdvanceId(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedAdvanceId]);
 
   // ----------------------------------------------------
   // PUANTAJ TAKVİMİ & RESMİ TATİL & FAZLA MESAİ YÖNETİMİ
@@ -508,9 +564,13 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     missingDayReason?: string;
     missingDayCode?: string;
     besDeduction?: number;
+    besReason?: string;
     executionDeduction?: number;
+    executionReason?: string;
     alimonyDeduction?: number;
+    alimonyReason?: string;
     otherDeductions?: number;
+    otherReason?: string;
     deductionReason?: string;
     isCustomized?: boolean;
     notes?: string;
@@ -523,6 +583,64 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [isPayrollFullscreen, setIsPayrollFullscreen] = useState(true);
   const [isBulkPayrollModalOpen, setIsBulkPayrollModalOpen] = useState(false);
   const [isAdditionalPaymentsModalOpen, setIsAdditionalPaymentsModalOpen] = useState(false);
+
+  // Auto-scroll state for deduction quick navigation
+  const [activeScrollDeductionField, setActiveScrollDeductionField] = useState<string | null>(null);
+
+  // Sabitlenen / Kayan Kesinti Paneli (Floating/Pinned deduction box) state
+  const [isFloatingDeductionBoxOpen, setIsFloatingDeductionBoxOpen] = useState(true);
+  const [isFloatingDeductionBoxMinimized, setIsFloatingDeductionBoxMinimized] = useState(false);
+  const [floatingSelectedDeduction, setFloatingSelectedDeduction] = useState<
+    "advance" | "unpaidLeave" | "bes" | "execution" | "alimony" | "other"
+  >("advance");
+
+  // Post-save modal / quick print dialog state
+  const [savedPayrollForPrintModal, setSavedPayrollForPrintModal] = useState<{
+    emp: Employee;
+    form: CustomPayrollAdjustment;
+    hasAdvance: boolean;
+    hasUnpaidLeave: boolean;
+    hasLegalDeductions: boolean;
+    advAmount: number;
+    unpaidDays: number;
+    nextEmp: Employee | null;
+  } | null>(null);
+
+  const handleScrollToDeduction = (fieldId: string, _inputId?: string) => {
+    let targetType: "advance" | "unpaidLeave" | "bes" | "execution" | "alimony" | "other" = "advance";
+    if (fieldId.includes("advance")) targetType = "advance";
+    else if (fieldId.includes("unpaid") || fieldId.includes("leave")) targetType = "unpaidLeave";
+    else if (fieldId.includes("bes")) targetType = "bes";
+    else if (fieldId.includes("execution")) targetType = "execution";
+    else if (fieldId.includes("alimony")) targetType = "alimony";
+    else if (fieldId.includes("other")) targetType = "other";
+
+    setFloatingSelectedDeduction(targetType);
+    setActiveScrollDeductionField(targetType);
+    setIsFloatingDeductionBoxOpen(true);
+    setIsFloatingDeductionBoxMinimized(false);
+
+    // Sabit paneldeki giriş alanına odaklan
+    setTimeout(() => {
+      const input = document.getElementById("floating-deduction-value-input");
+      if (input instanceof HTMLElement) {
+        input.focus();
+        if ("select" in input && typeof (input as any).select === "function") {
+          (input as any).select();
+        }
+      }
+    }, 100);
+
+    // Bordro özet alanına da yumuşak kaydır
+    const summaryCard = document.getElementById("payroll-deductions-summary-section");
+    if (summaryCard) {
+      summaryCard.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    setTimeout(() => {
+      setActiveScrollDeductionField((curr) => (curr === targetType ? null : curr));
+    }, 2500);
+  };
 
   const handleApplyBatchPayroll = (
     updatedCustomizations: Record<string, CustomPayrollAdjustment>,
@@ -742,17 +860,23 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     return { unpaidDays, count: empLeaves.length, items: empLeaves, reasons, primaryCode };
   };
 
-  // Helper: Auto-detect active legal deductions (icra/nafaka) for an employee
+  // Helper: Auto-detect active legal deductions (icra/nafaka/bes/diğer) for an employee
   const getAutoLegalDeductionsForEmployee = (empId: string, approxNet: number) => {
-    const activeDeductions = legalDeductions.filter(
+    const activeDeductions = (legalDeductions || []).filter(
       (d) => d.employeeId === empId && d.status === "active"
     );
 
     let executionDeduction = 0;
     let alimonyDeduction = 0;
+    let besDeduction = 0;
+    let otherDeductions = 0;
 
-    const execs = activeDeductions.filter((d) => d.type === "İcra Kesintisi");
-    const alimonies = activeDeductions.filter((d) => d.type === "Nafaka Kesintisi");
+    const execs = activeDeductions.filter((d) => (d.type || "").toLowerCase().includes("icra"));
+    const alimonies = activeDeductions.filter((d) => (d.type || "").toLowerCase().includes("nafaka"));
+    const besItems = activeDeductions.filter((d) => (d.type || "").toLowerCase().includes("bes"));
+    const others = activeDeductions.filter(
+      (d) => !execs.includes(d) && !alimonies.includes(d) && !besItems.includes(d)
+    );
 
     execs.forEach((d) => {
       let amt = 0;
@@ -772,7 +896,32 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       alimonyDeduction += d.monthlyAmount || 0;
     });
 
-    return { executionDeduction, alimonyDeduction, activeDeductions, execs, alimonies };
+    besItems.forEach((d) => {
+      besDeduction += d.monthlyAmount || 0;
+    });
+
+    others.forEach((d) => {
+      otherDeductions += d.monthlyAmount || 0;
+    });
+
+    const reasonsList = activeDeductions
+      .map((d) => {
+        return [d.type, d.fileNumber ? `Dosya No: ${d.fileNumber}` : "", d.courtOffice || ""].filter(Boolean).join(" - ");
+      })
+      .filter(Boolean);
+
+    return {
+      executionDeduction,
+      alimonyDeduction,
+      besDeduction,
+      otherDeductions,
+      activeDeductions,
+      execs,
+      alimonies,
+      besItems,
+      others,
+      reasonsSummary: reasonsList.join(" | "),
+    };
   };
 
   // Helper Turkish Payroll Calculator (Standard SGK formulas with Leave & Advance & Legal Deductions Integration)
@@ -825,11 +974,34 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
     const besDeduction = custom.besDeduction !== undefined
       ? custom.besDeduction
-      : (emp.hasBes ? Math.round(baseGross * 0.03) : 0);
+      : (autoLegal.besDeduction > 0 ? autoLegal.besDeduction : (emp.hasBes ? Math.round(baseGross * 0.03) : 0));
 
     const executionDeduction = custom.executionDeduction !== undefined ? custom.executionDeduction : autoLegal.executionDeduction;
     const alimonyDeduction = custom.alimonyDeduction !== undefined ? custom.alimonyDeduction : autoLegal.alimonyDeduction;
-    const otherDeductions = custom.otherDeductions ?? 0;
+    const otherDeductions = custom.otherDeductions !== undefined ? custom.otherDeductions : autoLegal.otherDeductions;
+
+    const advanceReason = custom.advanceReason !== undefined
+      ? custom.advanceReason
+      : (autoAdv.reasons.length > 0 ? autoAdv.reasons.join(", ") : "");
+    const missingDayReason = custom.missingDayReason !== undefined
+      ? custom.missingDayReason
+      : (autoLvs.reasons.length > 0 ? autoLvs.reasons.join(", ") : "");
+    const missingDayCode = custom.missingDayCode !== undefined
+      ? custom.missingDayCode
+      : (autoLvs.primaryCode || "21");
+    const besReason = custom.besReason !== undefined
+      ? custom.besReason
+      : (emp.hasBes ? "%3 BES Otomatik Katılım" : "");
+    const executionReason = custom.executionReason !== undefined
+      ? custom.executionReason
+      : (autoLegal.executionDeduction > 0 ? autoLegal.reasonsSummary : "");
+    const alimonyReason = custom.alimonyReason !== undefined
+      ? custom.alimonyReason
+      : (autoLegal.alimonyDeduction > 0 ? autoLegal.reasonsSummary : "");
+    const otherReason = custom.otherReason !== undefined ? custom.otherReason : "";
+    const deductionReason = custom.deductionReason !== undefined
+      ? custom.deductionReason
+      : autoLegal.reasonsSummary;
 
     const payableNetSalary = Math.max(0, netSalary - advanceDeduction - besDeduction - executionDeduction - alimonyDeduction - otherDeductions);
 
@@ -856,12 +1028,20 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       customPayments,
       customPaymentsTotal,
       advanceDeduction,
+      advanceReason,
       unpaidLeaveDays,
       unpaidLeaveDeduction,
+      missingDayReason,
+      missingDayCode,
       besDeduction,
+      besReason,
       executionDeduction,
+      executionReason,
       alimonyDeduction,
+      alimonyReason,
       otherDeductions,
+      otherReason,
+      deductionReason,
       grossSalary: Math.round(grossSalary),
       sgkEmployeeShare,
       unemploymentEmployeeShare,
@@ -988,6 +1168,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
     onAddLeaveRequest(created);
     setIsAddLeaveOpen(false);
+    setActiveSubTab("leaves");
+    setHighlightedLeaveId(created.id);
+    showToast(`✅ "${created.employeeName}" için ${created.daysCount} günlük ${created.type} kaydı oluşturuldu. Yeni kayda odaklanıldı.`);
+    setTimeout(() => {
+      scrollToElement(`leave-row-${created.id}`);
+    }, 150);
   };
 
   const handleCreateAdvanceSubmit = (e: React.FormEvent) => {
@@ -1009,6 +1195,13 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
     onAddAdvanceRequest(created);
     setIsAddAdvanceOpen(false);
+    setActiveSubTab("advances");
+    setAdvanceInnerTab("requests");
+    setHighlightedAdvanceId(created.id);
+    showToast(`✅ "${created.employeeName}" için ${formatTRY(created.amount)} tutarında ${created.type} talebi oluşturuldu. Yeni kayda odaklanıldı.`);
+    setTimeout(() => {
+      scrollToElement(`advance-row-${created.id}`);
+    }, 150);
   };
 
   // Legal Deductions Core Logic & Handlers
@@ -1131,8 +1324,17 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       if (updated.totalDebtAmount > 0 && updated.paidAmount >= updated.totalDebtAmount && updated.status !== "completed") {
         processDebtCompletionAndQueue(updated);
       } else {
-        showToast(`✅ "${updated.fileNumber}" yasal kesinti kaydı güncellendi.`);
+        showToast(`✅ "${updated.fileNumber}" yasal kesinti kaydı güncellendi. Yeni kayda odaklanıldı.`);
       }
+
+      setIsAddLegalDeductionOpen(false);
+      setEditingLegalDeduction(null);
+      setActiveSubTab("advances");
+      setAdvanceInnerTab("legal_deductions");
+      setHighlightedDeductionId(updated.id);
+      setTimeout(() => {
+        scrollToElement(`deduction-row-${updated.id}`);
+      }, 150);
     } else {
       const newDeduction: LegalDeduction = {
         id: `leg_${Date.now()}`,
@@ -1148,12 +1350,18 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       if (newDeduction.totalDebtAmount > 0 && newDeduction.paidAmount >= newDeduction.totalDebtAmount) {
         processDebtCompletionAndQueue(newDeduction);
       } else {
-        showToast(`✅ "${newDeduction.fileNumber}" kesinti kaydı başarıyla oluşturuldu.`);
+        showToast(`✅ "${newDeduction.fileNumber}" kesinti kaydı başarıyla oluşturuldu. Yeni kayda odaklanıldı.`);
       }
-    }
 
-    setIsAddLegalDeductionOpen(false);
-    setEditingLegalDeduction(null);
+      setIsAddLegalDeductionOpen(false);
+      setEditingLegalDeduction(null);
+      setActiveSubTab("advances");
+      setAdvanceInnerTab("legal_deductions");
+      setHighlightedDeductionId(newDeduction.id);
+      setTimeout(() => {
+        scrollToElement(`deduction-row-${newDeduction.id}`);
+      }, 150);
+    }
   };
 
   const handleExecutePaymentModalSubmit = (e: React.FormEvent) => {
@@ -1182,6 +1390,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     setIsPaymentModalOpen(false);
     setPaymentModalDeduction(null);
     setPaymentAmountInput(0);
+    setActiveSubTab("advances");
+    setAdvanceInnerTab("legal_deductions");
+    setHighlightedDeductionId(updated.id);
+    setTimeout(() => {
+      scrollToElement(`deduction-row-${updated.id}`);
+    }, 150);
   };
 
   // Editable Payroll Handlers
@@ -1205,6 +1419,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
     const stats = calculatePuantajStats(puantajMap, daysInMonth, baseGrossVal);
 
+    // Approximate net salary for legal deductions (e.g. 1/4 quarter salary calculation)
+    const approxNet = (existing.salaryType ?? emp.salaryType) === "net"
+      ? (existing.baseSalary ?? emp.salaryAmount)
+      : Math.round(baseGrossVal * 0.71);
+    const autoLegal = getAutoLegalDeductionsForEmployee(emp.id, approxNet);
+
     setEditingPayrollEmp(emp);
     setEditingPayrollForm({
       salaryType: existing.salaryType ?? emp.salaryType,
@@ -1218,48 +1438,165 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       foodAllowance: existing.foodAllowance ?? (emp.foodAllowance || 0),
       roadAllowance: existing.roadAllowance ?? (emp.roadAllowance || 0),
       advanceDeduction: existing.advanceDeduction !== undefined ? existing.advanceDeduction : autoAdv.totalAdvance,
+      advanceReason: existing.advanceReason ?? (autoAdv.reasons.length > 0 ? autoAdv.reasons.join(", ") : "Personel maaş avansı mahsubu"),
       unpaidLeaveDays: existing.unpaidLeaveDays !== undefined ? existing.unpaidLeaveDays : (stats.unpaidDays > 0 ? stats.unpaidDays : autoLvs.unpaidDays),
-      besDeduction: existing.besDeduction !== undefined ? existing.besDeduction : (emp.hasBes ? Math.round((emp.salaryAmount * (emp.salaryType === "net" ? 1.38 : 1)) * 0.03) : 0),
-      executionDeduction: existing.executionDeduction ?? 0,
-      alimonyDeduction: existing.alimonyDeduction ?? 0,
-      otherDeductions: existing.otherDeductions ?? 0,
+      missingDayReason: existing.missingDayReason ?? (autoLvs.reasons.length > 0 ? autoLvs.reasons.join(", ") : ""),
+      missingDayCode: existing.missingDayCode ?? (autoLvs.primaryCode || "21"),
+      besDeduction: existing.besDeduction !== undefined
+        ? existing.besDeduction
+        : (autoLegal.besDeduction > 0 ? autoLegal.besDeduction : (emp.hasBes ? Math.round((emp.salaryAmount * (emp.salaryType === "net" ? 1.38 : 1)) * 0.03) : 0)),
+      besReason: existing.besReason ?? (emp.hasBes ? "%3 Otomatik BES Katılımı" : ""),
+      executionDeduction: existing.executionDeduction !== undefined ? existing.executionDeduction : autoLegal.executionDeduction,
+      executionReason: existing.executionReason ?? (autoLegal.executionDeduction > 0 ? autoLegal.reasonsSummary : ""),
+      alimonyDeduction: existing.alimonyDeduction !== undefined ? existing.alimonyDeduction : autoLegal.alimonyDeduction,
+      alimonyReason: existing.alimonyReason ?? (autoLegal.alimonyDeduction > 0 ? autoLegal.reasonsSummary : ""),
+      otherDeductions: existing.otherDeductions !== undefined ? existing.otherDeductions : autoLegal.otherDeductions,
+      otherReason: existing.otherReason ?? "",
+      deductionReason: existing.deductionReason ?? autoLegal.reasonsSummary,
       notes: existing.notes ?? "",
       puantajDays: puantajMap,
+      customPayments: existing.customPayments || [],
+      customPaymentsTotal: existing.customPaymentsTotal || 0,
     });
+    setIsFloatingDeductionBoxOpen(true);
+    setIsFloatingDeductionBoxMinimized(false);
   };
 
-  const handleSaveEditPayroll = (e?: React.FormEvent, shouldAdvanceToNext: boolean = true) => {
+  const handleSaveEditPayroll = (
+    e?: React.FormEvent,
+    shouldAdvanceToNext: boolean = false,
+    openPrintAfterSave: boolean = false
+  ) => {
     if (e) e.preventDefault();
     if (!editingPayrollEmp) return;
 
-    // Mevcut personelin bordro ve puantaj ayarlarını kaydet
+    const currentEmp = editingPayrollEmp;
+    const currentForm = { ...editingPayrollForm };
+
+    // 1. Manuel girilen veya güncellenen Avans Kesintisi varsa Avans Yönetimine otomatik aktar & kaydet
+    const advAmount = currentForm.advanceDeduction ?? 0;
+    if (advAmount > 0) {
+      const existingAdv = advanceRequests.find(
+        (a) => a.employeeId === currentEmp.id && Math.abs(a.amount - advAmount) < 1
+      );
+      if (!existingAdv && onAddAdvanceRequest) {
+        onAddAdvanceRequest({
+          id: `adv-auto-${currentEmp.id}-${Date.now()}`,
+          employeeId: currentEmp.id,
+          employeeName: currentEmp.fullName,
+          type: "Avans",
+          amount: advAmount,
+          requestDate: new Date().toISOString().split("T")[0],
+          description: currentForm.advanceReason || `${payrollMonth} maaş hakedişinden mahsup edilmek üzere avans`,
+          status: "approved",
+          installmentCount: 1,
+          notes: `${payrollMonth} bordrosundan otomatik senkronize edildi`,
+        });
+      }
+    }
+
+    // 2. Manuel girilen veya güncellenen Ücretsiz İzin varsa İzin Yönetimine otomatik aktar & kaydet
+    const unpaidDays = currentForm.unpaidLeaveDays ?? 0;
+    if (unpaidDays > 0) {
+      const existingLeave = leaveRequests.find(
+        (l) => l.employeeId === currentEmp.id && l.type === "unpaid" && l.daysCount === unpaidDays
+      );
+      if (!existingLeave && onAddLeaveRequest) {
+        onAddLeaveRequest({
+          id: `leave-auto-${currentEmp.id}-${Date.now()}`,
+          employeeId: currentEmp.id,
+          employeeName: currentEmp.fullName,
+          type: "unpaid",
+          startDate: `${payrollMonth}-01`,
+          endDate: `${payrollMonth}-${String(Math.min(28, unpaidDays)).padStart(2, "0")}`,
+          daysCount: unpaidDays,
+          reason: currentForm.missingDayReason || "Ücretsiz mazeret izni / bordro puantaj eksik günü",
+          status: "approved",
+        });
+      }
+    }
+
+    // 3. Kesinti açıklamalarını bordroya aktar ve birleşik açıklama oluştur
+    const reasonParts: string[] = [];
+    if ((currentForm.advanceDeduction ?? 0) > 0 && currentForm.advanceReason) {
+      reasonParts.push(`Avans: ${currentForm.advanceReason}`);
+    }
+    if ((currentForm.unpaidLeaveDays ?? 0) > 0 && currentForm.missingDayReason) {
+      reasonParts.push(`Eksik Gün (${currentForm.missingDayCode || "21"}): ${currentForm.missingDayReason}`);
+    }
+    if ((currentForm.executionDeduction ?? 0) > 0 && currentForm.executionReason) {
+      reasonParts.push(`İcra: ${currentForm.executionReason}`);
+    }
+    if ((currentForm.alimonyDeduction ?? 0) > 0 && currentForm.alimonyReason) {
+      reasonParts.push(`Nafaka: ${currentForm.alimonyReason}`);
+    }
+    if ((currentForm.besDeduction ?? 0) > 0 && currentForm.besReason) {
+      reasonParts.push(`BES: ${currentForm.besReason}`);
+    }
+    if ((currentForm.otherDeductions ?? 0) > 0 && currentForm.otherReason) {
+      reasonParts.push(`Diğer: ${currentForm.otherReason}`);
+    }
+    if (!currentForm.deductionReason && reasonParts.length > 0) {
+      currentForm.deductionReason = reasonParts.join(" | ");
+    }
+
+    // 4. Mevcut personelin bordro ve puantaj ayarlarını kaydet
     setPayrollCustomizations((prev) => ({
       ...prev,
-      [editingPayrollEmp.id]: {
-        ...editingPayrollForm,
+      [currentEmp.id]: {
+        ...currentForm,
         isCustomized: true,
       },
     }));
+
+    // 4. Doğrudan veya butonla hemen yazdırma istenmişse
+    if (openPrintAfterSave) {
+      setPayrollPrintSelectedEmpId(currentEmp.id);
+      setPayrollPrintInitialMode("month");
+      setIsPayrollPrintModalOpen(true);
+      showToast(`✅ ${currentEmp.fullName} bordrosu kaydedildi. Bordro ve ekli evraklar yazdırmaya hazır.`);
+      return;
+    }
+
+    // 5. Post-Save Print Dialog: Avans, İzin veya Kesinti varsa hemen yazdırma penceresi sun
+    const hasAdvance = advAmount > 0;
+    const hasUnpaidLeave = unpaidDays > 0;
+    const hasLegalDeductions =
+      (currentForm.executionDeduction ?? 0) > 0 ||
+      (currentForm.alimonyDeduction ?? 0) > 0 ||
+      (currentForm.otherDeductions ?? 0) > 0;
 
     // Personelleri Türkçe alfabeye göre sırala
     const sortedEmployeesAlphabetical = [...employees].sort((a, b) =>
       a.fullName.localeCompare(b.fullName, "tr")
     );
-    const currentIndex = sortedEmployeesAlphabetical.findIndex((emp) => emp.id === editingPayrollEmp.id);
+    const currentIndex = sortedEmployeesAlphabetical.findIndex((emp) => emp.id === currentEmp.id);
+    const nextEmployee =
+      currentIndex !== -1 && currentIndex + 1 < sortedEmployeesAlphabetical.length
+        ? sortedEmployeesAlphabetical[currentIndex + 1]
+        : null;
 
-    if (shouldAdvanceToNext && currentIndex !== -1 && currentIndex + 1 < sortedEmployeesAlphabetical.length) {
-      const nextEmployee = sortedEmployeesAlphabetical[currentIndex + 1];
+    setSavedPayrollForPrintModal({
+      emp: currentEmp,
+      form: currentForm,
+      hasAdvance,
+      hasUnpaidLeave,
+      hasLegalDeductions,
+      advAmount,
+      unpaidDays,
+      nextEmp: nextEmployee,
+    });
+
+    if (shouldAdvanceToNext && nextEmployee) {
       handleOpenEditPayroll(nextEmployee);
       showToast(
-        `✅ ${editingPayrollEmp.fullName} bordrosu kaydedildi. Alfabetik sıradaki sonraki personel (${nextEmployee.fullName}) açıldı (${currentIndex + 2}/${sortedEmployeesAlphabetical.length}).`
+        `✅ ${currentEmp.fullName} bordrosu kaydedildi. Alfabetik sıradaki sonraki personel (${nextEmployee.fullName}) açıldı (${currentIndex + 2}/${sortedEmployeesAlphabetical.length}).`
       );
+    } else if (!shouldAdvanceToNext) {
+      showToast(`✅ ${currentEmp.fullName} bordrosu başarıyla kaydedildi. Belge ve yazdırma seçenekleri açıldı.`);
     } else {
       setEditingPayrollEmp(null);
-      if (currentIndex !== -1 && currentIndex + 1 >= sortedEmployeesAlphabetical.length) {
-        showToast(`🎉 ${editingPayrollEmp.fullName} bordrosu kaydedildi. Listedeki tüm personellerin bordro düzenlemesi tamamlandı!`);
-      } else {
-        showToast(`✅ ${editingPayrollEmp.fullName} bordrosu kaydedildi.`);
-      }
+      showToast(`🎉 ${currentEmp.fullName} bordrosu kaydedildi. Listedeki tüm personellerin bordroları hazır!`);
     }
   };
 
@@ -1755,9 +2092,29 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <button
                 type="button"
                 onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+                className="px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
                 Vazgeç
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSaveEditPayroll(undefined, false, true)}
+                className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all hover:shadow-md"
+                title="Bordroyu kaydet ve hemen ardından Bordro, Avans ve Ek Formlar yazdırma penceresini aç"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Kaydet &</span> Hemen Yazdır
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSaveEditPayroll(undefined, false, false)}
+                className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
+                title="Bordroyu kaydet"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Kaydet</span>
               </button>
             </div>
           }
@@ -2404,7 +2761,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 })()}
 
                 {/* Ek Ödemeler & Yan Haklar Bölümü (Yemek, Yol, Elle Girilen Ödemeler) */}
-                <div className="bg-purple-50/50 p-4 rounded-3xl border border-purple-200/90 space-y-3 shadow-2xs col-span-1 sm:col-span-2">
+                <div className="bg-purple-50/50 p-4 rounded-3xl border border-purple-200/90 space-y-3 shadow-2xs col-span-1 sm:col-span-2 lg:col-span-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-200/60 pb-2.5">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-xl bg-purple-700 text-white flex items-center justify-center shadow-xs">
@@ -2423,14 +2780,29 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setIsAdditionalPaymentsModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black transition-all cursor-pointer shadow-xs hover:shadow-md shrink-0"
-                    >
-                      <Gift className="w-3.5 h-3.5 text-amber-300" />
-                      Ek Ödemeler Seç & Aktar
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFloatingDeductionBoxOpen(true);
+                          setIsFloatingDeductionBoxMinimized(false);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-950 border border-purple-300 text-xs font-bold transition-all cursor-pointer shadow-2xs shrink-0"
+                        title="Sabit Kesinti Yönetim Panelini Aç"
+                      >
+                        <Scissors className="w-3.5 h-3.5 text-purple-700" />
+                        <span>Kesinti Paneli</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsAdditionalPaymentsModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black transition-all cursor-pointer shadow-xs hover:shadow-md shrink-0"
+                      >
+                        <Gift className="w-3.5 h-3.5 text-amber-300" />
+                        Ek Ödemeler Seç & Aktar
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
@@ -2523,134 +2895,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   )}
                 </div>
 
-                {/* Advance Deduction (Entegre) */}
-                <div className="bg-amber-50/60 p-3.5 rounded-2xl border border-amber-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block font-bold text-amber-900 uppercase text-[11px]">Avans Kesintisi (₺)</label>
-                    <span className="text-[10px] text-amber-700 font-bold">Avans Yönetimi Entegre</span>
-                  </div>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.advanceDeduction ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, advanceDeduction: Number(e.target.value) })}
-                    className="w-full bg-white border border-amber-300 rounded-xl p-2 font-black text-amber-900 text-sm focus:outline-none focus:border-amber-500"
-                  />
-                  {(editingPayrollForm.advanceDeduction ?? 0) > 0 && (
-                    <div className="pt-1">
-                      <input
-                        type="text"
-                        value={editingPayrollForm.advanceReason || ""}
-                        onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, advanceReason: e.target.value })}
-                        placeholder="Avans nedeni (Otomatik Mahsup Formu için örn: Nakit avans mahsubu)"
-                        className="w-full bg-white border border-amber-200 rounded-lg p-1.5 text-xs text-amber-950 placeholder:text-amber-400"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Unpaid Leave Days (Entegre & Puantaj ile Otomatik) */}
-                <div className="bg-rose-50/60 p-3.5 rounded-2xl border border-rose-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block font-bold text-rose-900 uppercase text-[11px]">Ücretsiz İzin / Eksik Gün (Gün)</label>
-                    <span className="text-[10px] text-rose-700 font-bold">Puantaj Takvimi Entegre</span>
-                  </div>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.unpaidLeaveDays ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, unpaidLeaveDays: Number(e.target.value) })}
-                    className="w-full bg-white border border-rose-300 rounded-xl p-2 font-black text-rose-900 text-sm focus:outline-none focus:border-rose-500"
-                  />
-                  {(editingPayrollForm.unpaidLeaveDays ?? 0) > 0 && (
-                    <div className="pt-1 grid grid-cols-3 gap-1.5">
-                      <select
-                        value={editingPayrollForm.missingDayCode || "21"}
-                        onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, missingDayCode: e.target.value })}
-                        className="col-span-1 bg-white border border-rose-200 rounded-lg p-1.5 text-xs text-rose-950"
-                        title="SGK Eksik Gün Kodu"
-                      >
-                        <option value="21">21 - Ücretsiz İzin</option>
-                        <option value="01">01 - İstirahat / Rapor</option>
-                        <option value="03">03 - Disiplin Cezası</option>
-                        <option value="07">07 - Puantaj Kaydı</option>
-                        <option value="13">13 - Diğer Nedenler</option>
-                        <option value="15">15 - Devamsızlık</option>
-                      </select>
-                      <input
-                        type="text"
-                        value={editingPayrollForm.missingDayReason || ""}
-                        onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, missingDayReason: e.target.value })}
-                        placeholder="Eksik gün gerekçesi (SGK Formu Eki)"
-                        className="col-span-2 bg-white border border-rose-200 rounded-lg p-1.5 text-xs text-rose-950 placeholder:text-rose-400"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* BES Kesintisi */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">BES Kesintisi (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.besDeduction ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, besDeduction: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                {/* İcra Kesintisi */}
-                <div className="bg-red-50/60 p-3.5 rounded-2xl border border-red-200 space-y-2">
-                  <label className="block font-bold text-red-900 uppercase text-[11px]">İcra Kesintisi (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.executionDeduction ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, executionDeduction: Number(e.target.value) })}
-                    className="w-full bg-white border border-red-300 rounded-xl p-2 font-black text-red-900 text-sm focus:outline-none focus:border-red-500"
-                    placeholder="0"
-                  />
-                </div>
-
-                {/* Nafaka Kesintisi */}
-                <div className="bg-purple-50/60 p-3.5 rounded-2xl border border-purple-200 space-y-2">
-                  <label className="block font-bold text-purple-900 uppercase text-[11px]">Nafaka Kesintisi (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.alimonyDeduction ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, alimonyDeduction: Number(e.target.value) })}
-                    className="w-full bg-white border border-purple-300 rounded-xl p-2 font-black text-purple-900 text-sm focus:outline-none focus:border-purple-500"
-                    placeholder="0"
-                  />
-                </div>
-
-                {/* Diğer Kesintiler */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Diğer Kesintiler (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.otherDeductions ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, otherDeductions: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                    placeholder="0"
-                  />
-                </div>
               </div>
-
-              {/* Kesinti Nedeni & Açıklaması Girişi (Elle Girilen Kesintiler İçin Otomatik Form Tevsiki) */}
-              {((editingPayrollForm.executionDeduction ?? 0) > 0 ||
-                (editingPayrollForm.alimonyDeduction ?? 0) > 0 ||
-                (editingPayrollForm.otherDeductions ?? 0) > 0) && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-1">
-                  <label className="block font-bold text-slate-800 text-xs">
-                    📋 Kesinti Gerekçesi / Dosya No (Personel Kesinti Bildirim Formu İçin)
-                  </label>
-                  <input
-                    type="text"
-                    value={editingPayrollForm.deductionReason || ""}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, deductionReason: e.target.value })}
-                    placeholder="Örn: 2026/142 Esas sayılı İcra Müdürlüğü Haciz Müzekkeresi veya personel yazılı muvafakati"
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-purple-500 font-medium"
-                  />
-                </div>
-              )}
 
               {/* Calculated Live Breakdown Summary */}
               {(() => {
@@ -2683,7 +2928,10 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 const payableNet = Math.max(0, netHak - advDeduct - besDed - execDed - aliDed - othDed);
 
                 return (
-                  <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
+                  <div
+                    id="payroll-deductions-summary-section"
+                    className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[11px] uppercase font-bold text-purple-300 block">Canlı Bordro Hakediş Özeti</span>
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -2768,17 +3016,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      handleSaveEditPayroll(undefined, false);
-                      setPayrollPrintSelectedEmpId(editingPayrollEmp.id);
-                      setPayrollPrintInitialMode("month");
-                      setIsPayrollPrintModalOpen(true);
-                    }}
-                    className="px-3.5 py-2 rounded-xl border border-purple-300 bg-purple-100/70 hover:bg-purple-200 text-purple-950 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                    title="Bordro ve otomatik eklenen SGK eksik gün / kesinti formlarını önizle, PDF indir veya yazdır"
+                    onClick={() => handleSaveEditPayroll(undefined, false, true)}
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black transition-all cursor-pointer flex items-center gap-2 shadow-md hover:shadow-lg"
+                    title="Bordroyu kaydet ve hemen ardından Bordro, Avans ve Ek Formlar yazdırma penceresini aç"
                   >
-                    <Printer className="w-3.5 h-3.5 text-purple-700" />
-                    <span>Bordro & Ekleri Yazdır</span>
+                    <Printer className="w-4 h-4" />
+                    <span>Kaydet & Hemen Yazdır</span>
                   </button>
 
                   <button
@@ -2791,11 +3034,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => handleSaveEditPayroll(undefined, false)}
+                    onClick={() => handleSaveEditPayroll(undefined, false, false)}
                     className="px-3.5 py-2 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-950 text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                    title="Sadece bu personeli kaydet ve pencereyi kapat"
+                    title="Bu personeli kaydet ve evrak yazdırma seçeneklerini göster"
                   >
-                    Kaydet ve Kapat
+                    Kaydet
                   </button>
 
                   {(() => {
@@ -2848,6 +3091,742 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 showToast("🎁 Ek ödemeler bordro hesaplamasına başarıyla aktarıldı!");
               }}
             />
+          )}
+
+          {/* -------------------------------------------------------------------- */}
+          {/* KAYAN KUTUCUK (FLOATING WIDGET) İÇERİSİNDE MANUEL KESİNTİ SEÇİMİ PANELİ */}
+          {/* -------------------------------------------------------------------- */}
+          {/* -------------------------------------------------------------------- */}
+          {/* SABİT KAYAN MANUEL KESİNTİ VE AKTARIM PANELİ */}
+          {/* -------------------------------------------------------------------- */}
+          {isFloatingDeductionBoxOpen && (
+            <aside
+              id="floating-manual-deduction-widget"
+              aria-label="Sabitlenmiş Kesinti ve Aktarım Paneli"
+              className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 transition-all duration-300 ${
+                isFloatingDeductionBoxMinimized
+                  ? "w-auto"
+                  : "w-[calc(100vw-2rem)] sm:w-[410px] max-w-[440px]"
+              }`}
+            >
+              {isFloatingDeductionBoxMinimized ? (
+                /* KÜÇÜLTÜLMÜŞ SABİT BUTON: DAİMA ERİŞİLEBİLİRDİR */
+                <button
+                  type="button"
+                  onClick={() => setIsFloatingDeductionBoxMinimized(false)}
+                  className="group flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 text-white border-2 border-purple-500 shadow-2xl hover:scale-105 transition-all cursor-pointer ring-4 ring-purple-600/30"
+                  title="Sabit Kesinti Panelini Genişlet"
+                >
+                  <span className="w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-white text-xs font-black shadow-xs group-hover:rotate-12 transition-transform">
+                    <Pin className="w-3.5 h-3.5 text-amber-300" />
+                  </span>
+                  <div className="text-left leading-tight">
+                    <div className="text-[11px] font-black text-purple-200 flex items-center gap-1">
+                      <span>Sabit Kesinti Paneli</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    </div>
+                    <div className="text-xs font-black text-amber-300">
+                      Toplam: {formatTRY(
+                        (editingPayrollForm.advanceDeduction ?? 0) +
+                        (editingPayrollForm.besDeduction ?? 0) +
+                        (editingPayrollForm.executionDeduction ?? 0) +
+                        (editingPayrollForm.alimonyDeduction ?? 0) +
+                        (editingPayrollForm.otherDeductions ?? 0)
+                      )}
+                    </div>
+                  </div>
+                  <ChevronUp className="w-4 h-4 text-purple-300 group-hover:-translate-y-0.5 transition-transform" />
+                </button>
+              ) : (
+                /* GENİŞLETİLMİŞ SABİT PANEL: MANUEL KESİNTİ SEÇİMİ, CANLI GİRİŞ & BORDROYA AKTARIM */
+                <div className="bg-slate-950/95 backdrop-blur-md rounded-3xl border-2 border-purple-500 shadow-2xl text-white overflow-hidden ring-4 ring-purple-900/40 flex flex-col">
+                  {/* Başlık Çubuğu */}
+                  <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-slate-900 p-3 sm:p-3.5 border-b border-purple-700/80 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-purple-600 flex items-center justify-center text-white shadow-xs">
+                        <Scissors className="w-4 h-4 text-purple-200" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-xs font-black text-white">
+                            Manuel Kesinti Paneli
+                          </h4>
+                          <span className="text-[9px] font-black text-amber-300 bg-amber-950/90 border border-amber-500/50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Pin className="w-2.5 h-2.5 text-amber-400" />
+                            Sabit Konum
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-purple-200/80">
+                          Kesintileri girip açıklamalarıyla bordroya aktarın
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsFloatingDeductionBoxMinimized(true)}
+                        className="p-1.5 rounded-lg text-purple-300 hover:text-white hover:bg-purple-800/80 transition-colors cursor-pointer"
+                        title="Kutucuğu Küçült (Simge durumuna getir)"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsFloatingDeductionBoxOpen(false)}
+                        className="p-1.5 rounded-lg text-purple-300 hover:text-rose-300 hover:bg-rose-950/50 transition-colors cursor-pointer"
+                        title="Kutucuğu Kapat"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Kayan Gövde */}
+                  <div className="p-3.5 space-y-3 max-h-[72vh] overflow-y-auto custom-scrollbar">
+                    {/* 1. Kesinti Tipi Seçici Açılır Menü (Dropdown) */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-purple-200 uppercase tracking-wider flex items-center justify-between">
+                        <span>Kesinti Türü Seçin:</span>
+                        <span className="text-[10px] font-bold text-amber-300">
+                          Manuel Seçim Aktif
+                        </span>
+                      </label>
+
+                      {/* Açılır Menü (Select) */}
+                      <select
+                        id="floating-deduction-select"
+                        value={floatingSelectedDeduction}
+                        onChange={(e) => {
+                          const val = e.target.value as any;
+                          setFloatingSelectedDeduction(val);
+                          if (val === "advance") handleScrollToDeduction("deduction-card-advance", "input-advance-deduction");
+                          else if (val === "unpaidLeave") handleScrollToDeduction("deduction-card-unpaid-leave", "input-unpaid-leave-days");
+                          else if (val === "bes") handleScrollToDeduction("deduction-card-bes", "input-bes-deduction");
+                          else if (val === "execution") handleScrollToDeduction("deduction-card-execution", "input-execution-deduction");
+                          else if (val === "alimony") handleScrollToDeduction("deduction-card-alimony", "input-alimony-deduction");
+                          else if (val === "other") handleScrollToDeduction("deduction-card-other", "input-other-deductions");
+                        }}
+                        className="w-full bg-slate-900 border-2 border-purple-500/80 rounded-xl p-2.5 text-xs font-black text-white focus:outline-none focus:ring-2 focus:ring-purple-400 cursor-pointer shadow-inner"
+                      >
+                        <option value="advance">💰 1. Avans Kesintisi (₺)</option>
+                        <option value="unpaidLeave">📅 2. Ücretsiz İzin / Eksik Gün (Gün)</option>
+                        <option value="bes">🛡️ 3. BES (%3 Otomatik Katılım Kesintisi)</option>
+                        <option value="execution">⚖️ 4. İcra Kesintisi (Maaş Haczi)</option>
+                        <option value="alimony">🏛️ 5. Nafaka Kesintisi (Mahkeme İlamı)</option>
+                        <option value="other">📋 6. Diğer / Özel Kesintiler (Sendika, Ceza vb.)</option>
+                      </select>
+
+                      {/* Hızlı Seçim Çipleri (6 Buton) */}
+                      <div className="grid grid-cols-3 gap-1 pt-1">
+                        {[
+                          { id: "advance", label: "Avans", icon: "💰", cardId: "deduction-card-advance", inputId: "input-advance-deduction" },
+                          { id: "unpaidLeave", label: "Eksik Gün", icon: "📅", cardId: "deduction-card-unpaid-leave", inputId: "input-unpaid-leave-days" },
+                          { id: "bes", label: "BES", icon: "🛡️", cardId: "deduction-card-bes", inputId: "input-bes-deduction" },
+                          { id: "execution", label: "İcra", icon: "⚖️", cardId: "deduction-card-execution", inputId: "input-execution-deduction" },
+                          { id: "alimony", label: "Nafaka", icon: "🏛️", cardId: "deduction-card-alimony", inputId: "input-alimony-deduction" },
+                          { id: "other", label: "Diğer", icon: "📋", cardId: "deduction-card-other", inputId: "input-other-deductions" },
+                        ].map((item) => {
+                          const isSelected = floatingSelectedDeduction === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setFloatingSelectedDeduction(item.id as any);
+                                handleScrollToDeduction(item.cardId, item.inputId);
+                              }}
+                              className={`py-1.5 px-2 rounded-xl text-[10px] font-black border transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                                isSelected
+                                  ? "bg-purple-600 text-white border-white ring-2 ring-purple-400 shadow-md scale-[1.02]"
+                                  : "bg-slate-900/90 hover:bg-slate-800 text-slate-300 border-slate-700"
+                              }`}
+                            >
+                              <span>{item.icon}</span>
+                              <span>{item.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 2. Seçili Kesintiyi Kayan Kutucuk İçinde Doğrudan Düzenleme */}
+                    <div className="bg-slate-900/95 rounded-2xl border border-purple-500/60 p-3 space-y-2.5 shadow-inner">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black text-amber-300 flex items-center gap-1.5">
+                          <Target className="w-3.5 h-3.5 text-amber-400" />
+                          Seçili Kesinti Değeri (Canlı Giriş):
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (floatingSelectedDeduction === "advance") handleScrollToDeduction("deduction-card-advance", "input-advance-deduction");
+                            else if (floatingSelectedDeduction === "unpaidLeave") handleScrollToDeduction("deduction-card-unpaid-leave", "input-unpaid-leave-days");
+                            else if (floatingSelectedDeduction === "bes") handleScrollToDeduction("deduction-card-bes", "input-bes-deduction");
+                            else if (floatingSelectedDeduction === "execution") handleScrollToDeduction("deduction-card-execution", "input-execution-deduction");
+                            else if (floatingSelectedDeduction === "alimony") handleScrollToDeduction("deduction-card-alimony", "input-alimony-deduction");
+                            else if (floatingSelectedDeduction === "other") handleScrollToDeduction("deduction-card-other", "input-other-deductions");
+                          }}
+                          className="text-[10px] font-bold text-purple-300 hover:text-white underline cursor-pointer flex items-center gap-1"
+                          title="Sayfayı bu kesinti kartına kaydır ve kutuyu aydınlat"
+                        >
+                          <span>Formda Odakla</span>
+                          <LocateFixed className="w-3 h-3 text-purple-300" />
+                        </button>
+                      </div>
+
+                      {/* Dinamik Canlı İnput & Açıklama */}
+                      {floatingSelectedDeduction === "advance" && (
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs text-amber-200">
+                              <span className="font-bold">Avans Kesinti Tutarı:</span>
+                              <span className="text-[10px] text-amber-400">₺ Cinsinden</span>
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-2 text-slate-400 font-bold text-sm">₺</span>
+                              <input
+                                id="floating-deduction-value-input"
+                                type="number"
+                                min="0"
+                                value={editingPayrollForm.advanceDeduction ?? 0}
+                                onChange={(e) =>
+                                  setEditingPayrollForm({
+                                    ...editingPayrollForm,
+                                    advanceDeduction: Math.max(0, Number(e.target.value)),
+                                  })
+                                }
+                                className="w-full bg-slate-950 border border-amber-500/80 rounded-xl py-1.5 pl-7 pr-3 font-black text-amber-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-amber-300 block">
+                              Avans Açıklaması / Mahsup Gerekçesi:
+                            </label>
+                            <input
+                              type="text"
+                              value={editingPayrollForm.advanceReason || ""}
+                              onChange={(e) =>
+                                setEditingPayrollForm({
+                                  ...editingPayrollForm,
+                                  advanceReason: e.target.value,
+                                })
+                              }
+                              className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl py-1.5 px-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                              placeholder="Örn: Personel maaş avansı mahsubu"
+                            />
+                          </div>
+
+                          <p className="text-[10px] text-slate-400">
+                            {getAutoAdvanceForEmployee(editingPayrollEmp.id).totalAdvance > 0
+                              ? `✓ Sistem Kaydı: ${formatTRY(getAutoAdvanceForEmployee(editingPayrollEmp.id).totalAdvance)}`
+                              : "Manuel avans kesintisi girilmektedir."}
+                          </p>
+                        </div>
+                      )}
+
+                      {floatingSelectedDeduction === "unpaidLeave" && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between text-xs text-rose-200">
+                                <span className="font-bold">Eksik Gün:</span>
+                                <span className="text-[10px] text-rose-400">Gün</span>
+                              </div>
+                              <input
+                                id="floating-deduction-value-input"
+                                type="number"
+                                min="0"
+                                max="30"
+                                value={editingPayrollForm.unpaidLeaveDays ?? 0}
+                                onChange={(e) =>
+                                  setEditingPayrollForm({
+                                    ...editingPayrollForm,
+                                    unpaidLeaveDays: Math.max(0, Number(e.target.value)),
+                                  })
+                                }
+                                className="w-full bg-slate-950 border border-rose-500/80 rounded-xl py-1.5 px-3 font-black text-rose-300 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400"
+                                placeholder="0"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-xs font-bold text-slate-300 block">SGK Kodu:</span>
+                              <select
+                                value={editingPayrollForm.missingDayCode || "21"}
+                                onChange={(e) =>
+                                  setEditingPayrollForm({
+                                    ...editingPayrollForm,
+                                    missingDayCode: e.target.value,
+                                  })
+                                }
+                                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-1.5 px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-rose-400"
+                              >
+                                <option value="21">21 - Ücretsiz İzin</option>
+                                <option value="01">01 - İstirahat / Rapor</option>
+                                <option value="03">03 - Disiplin Cezası</option>
+                                <option value="07">07 - Puantaj Kaydı</option>
+                                <option value="13">13 - Diğer Nedenler</option>
+                                <option value="15">15 - Devamsızlık</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-rose-300 block">
+                              Eksik Gün Gerekçesi / Rapor Açıklaması:
+                            </label>
+                            <input
+                              type="text"
+                              value={editingPayrollForm.missingDayReason || ""}
+                              onChange={(e) =>
+                                setEditingPayrollForm({
+                                  ...editingPayrollForm,
+                                  missingDayReason: e.target.value,
+                                })
+                              }
+                              className="w-full bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl py-1.5 px-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-rose-400"
+                              placeholder="Örn: 3 gün ücretsiz mazeret izni"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {floatingSelectedDeduction === "bes" && (
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs text-indigo-200">
+                              <span className="font-bold">Bireysel Emeklilik (BES):</span>
+                              <span className="text-[10px] text-indigo-400">%3 Otomatik</span>
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-2 text-slate-400 font-bold text-sm">₺</span>
+                              <input
+                                id="floating-deduction-value-input"
+                                type="number"
+                                min="0"
+                                value={editingPayrollForm.besDeduction ?? 0}
+                                onChange={(e) =>
+                                  setEditingPayrollForm({
+                                    ...editingPayrollForm,
+                                    besDeduction: Math.max(0, Number(e.target.value)),
+                                  })
+                                }
+                                className="w-full bg-slate-950 border border-indigo-500/80 rounded-xl py-1.5 pl-7 pr-3 font-black text-indigo-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-indigo-300 block">
+                              BES Planı / Kesinti Açıklaması:
+                            </label>
+                            <input
+                              type="text"
+                              value={editingPayrollForm.besReason || ""}
+                              onChange={(e) =>
+                                setEditingPayrollForm({
+                                  ...editingPayrollForm,
+                                  besReason: e.target.value,
+                                })
+                              }
+                              className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl py-1.5 px-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                              placeholder="Örn: Otomatik Katılım BES (%3)"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {floatingSelectedDeduction === "execution" && (
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs text-red-200">
+                              <span className="font-bold">İcra / Maaş Haczi Tutarı:</span>
+                              <span className="text-[10px] text-red-400">1/4 Haciz</span>
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-2 text-slate-400 font-bold text-sm">₺</span>
+                              <input
+                                id="floating-deduction-value-input"
+                                type="number"
+                                min="0"
+                                value={editingPayrollForm.executionDeduction ?? 0}
+                                onChange={(e) =>
+                                  setEditingPayrollForm({
+                                    ...editingPayrollForm,
+                                    executionDeduction: Math.max(0, Number(e.target.value)),
+                                  })
+                                }
+                                className="w-full bg-slate-950 border border-red-500/80 rounded-xl py-1.5 pl-7 pr-3 font-black text-red-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-red-300 block">
+                              İcra Dairesi, Dosya No & Gerekçe:
+                            </label>
+                            <input
+                              type="text"
+                              value={editingPayrollForm.executionReason || ""}
+                              onChange={(e) =>
+                                setEditingPayrollForm({
+                                  ...editingPayrollForm,
+                                  executionReason: e.target.value,
+                                })
+                              }
+                              className="w-full bg-slate-950 border border-slate-700 focus:border-red-500 rounded-xl py-1.5 px-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-red-400"
+                              placeholder="Örn: İstanbul 4. İcra 2026/142 Esas"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {floatingSelectedDeduction === "alimony" && (
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs text-purple-200">
+                              <span className="font-bold">Nafaka Kesintisi Tutarı:</span>
+                              <span className="text-[10px] text-purple-400">Öncelikli</span>
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-2 text-slate-400 font-bold text-sm">₺</span>
+                              <input
+                                id="floating-deduction-value-input"
+                                type="number"
+                                min="0"
+                                value={editingPayrollForm.alimonyDeduction ?? 0}
+                                onChange={(e) =>
+                                  setEditingPayrollForm({
+                                    ...editingPayrollForm,
+                                    alimonyDeduction: Math.max(0, Number(e.target.value)),
+                                  })
+                                }
+                                className="w-full bg-slate-950 border border-purple-500/80 rounded-xl py-1.5 pl-7 pr-3 font-black text-purple-300 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-purple-300 block">
+                              Mahkeme İlamı & Dosya Açıklaması:
+                            </label>
+                            <input
+                              type="text"
+                              value={editingPayrollForm.alimonyReason || ""}
+                              onChange={(e) =>
+                                setEditingPayrollForm({
+                                  ...editingPayrollForm,
+                                  alimonyReason: e.target.value,
+                                })
+                              }
+                              className="w-full bg-slate-950 border border-slate-700 focus:border-purple-500 rounded-xl py-1.5 px-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                              placeholder="Örn: Ankara 2. Aile Mahkemesi 2025/314 K."
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {floatingSelectedDeduction === "other" && (
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs text-slate-200">
+                              <span className="font-bold">Diğer Kesinti Tutarı:</span>
+                              <span className="text-[10px] text-slate-400">₺ Cinsinden</span>
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-2 text-slate-400 font-bold text-sm">₺</span>
+                              <input
+                                id="floating-deduction-value-input"
+                                type="number"
+                                min="0"
+                                value={editingPayrollForm.otherDeductions ?? 0}
+                                onChange={(e) =>
+                                  setEditingPayrollForm({
+                                    ...editingPayrollForm,
+                                    otherDeductions: Math.max(0, Number(e.target.value)),
+                                  })
+                                }
+                                className="w-full bg-slate-950 border border-slate-500 rounded-xl py-1.5 pl-7 pr-3 font-black text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-300 block">
+                              Kesinti Türü ve Açıklaması:
+                            </label>
+                            <input
+                              type="text"
+                              value={editingPayrollForm.otherReason || ""}
+                              onChange={(e) =>
+                                setEditingPayrollForm({
+                                  ...editingPayrollForm,
+                                  otherReason: e.target.value,
+                                })
+                              }
+                              className="w-full bg-slate-950 border border-slate-700 focus:border-slate-400 rounded-xl py-1.5 px-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                              placeholder="Örn: Sendika aidatı, lojman/yemek kesintisi vb."
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* BORDROYA AÇIKLAMALARI İLE BİRLİKTE AKTAR BUTONU */}
+                      <button
+                        type="button"
+                        id="transfer-deductions-to-payroll-button"
+                        onClick={() => {
+                          const reasons: string[] = [];
+                          if ((editingPayrollForm.advanceDeduction ?? 0) > 0) {
+                            reasons.push(`Avans: ${editingPayrollForm.advanceReason || "Personel maaş avansı mahsubu"} (${formatTRY(editingPayrollForm.advanceDeduction ?? 0)})`);
+                          }
+                          if ((editingPayrollForm.unpaidLeaveDays ?? 0) > 0) {
+                            reasons.push(`Eksik Gün (${editingPayrollForm.missingDayCode || "21"}): ${editingPayrollForm.missingDayReason || "Ücretsiz İzin"} (${editingPayrollForm.unpaidLeaveDays} Gün)`);
+                          }
+                          if ((editingPayrollForm.besDeduction ?? 0) > 0) {
+                            reasons.push(`BES (%3): ${editingPayrollForm.besReason || "Otomatik Katılım BES"} (${formatTRY(editingPayrollForm.besDeduction ?? 0)})`);
+                          }
+                          if ((editingPayrollForm.executionDeduction ?? 0) > 0) {
+                            reasons.push(`İcra: ${editingPayrollForm.executionReason || "İcra Dairesi Haciz Müzekkeresi"} (${formatTRY(editingPayrollForm.executionDeduction ?? 0)})`);
+                          }
+                          if ((editingPayrollForm.alimonyDeduction ?? 0) > 0) {
+                            reasons.push(`Nafaka: ${editingPayrollForm.alimonyReason || "Aile Mahkemesi Nafaka İlamı"} (${formatTRY(editingPayrollForm.alimonyDeduction ?? 0)})`);
+                          }
+                          if ((editingPayrollForm.otherDeductions ?? 0) > 0) {
+                            reasons.push(`Diğer: ${editingPayrollForm.otherReason || "Diğer kesintiler"} (${formatTRY(editingPayrollForm.otherDeductions ?? 0)})`);
+                          }
+
+                          const compiledSummary = reasons.join(" | ");
+                          setEditingPayrollForm((prev) => ({
+                            ...prev,
+                            deductionReason: compiledSummary || prev.deductionReason,
+                          }));
+
+                          showToast("📥 Kesintiler ve açıklamaları bordroya başarıyla aktarıldı!");
+
+                          // Bordrodaki özet bölümüne kaydır
+                          const target = document.getElementById("manual-deduction-selection-section") || document.getElementById("payroll-deductions-summary-section");
+                          if (target) {
+                            target.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }
+                        }}
+                        className="w-full mt-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-xs font-black shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] border border-emerald-400/40"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                        <span>Bordroya Açıklamaları ile Birlikte Aktar</span>
+                      </button>
+                    </div>
+
+                    {/* 3. Tüm Kesintilerin Canlı İcmali (Tıklanıp Seçilebilir Liste) */}
+                    <div className="space-y-1 pt-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 px-1">
+                        <span>KESİNTİ LİSTESİ</span>
+                        <span>TUTAR / GÜN</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 text-xs">
+                        {/* Avans */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFloatingSelectedDeduction("advance");
+                            handleScrollToDeduction("deduction-card-advance", "input-advance-deduction");
+                          }}
+                          className={`p-1.5 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                            floatingSelectedDeduction === "advance"
+                              ? "bg-amber-950/90 border-amber-400 text-amber-200 ring-1 ring-amber-400 shadow-xs"
+                              : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
+                          }`}
+                        >
+                          <span className="text-[10px] font-medium">💰 Avans</span>
+                          <span className="text-[11px] font-black text-amber-300">
+                            {formatTRY(editingPayrollForm.advanceDeduction ?? 0)}
+                          </span>
+                        </button>
+
+                        {/* Eksik Gün */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFloatingSelectedDeduction("unpaidLeave");
+                            handleScrollToDeduction("deduction-card-unpaid-leave", "input-unpaid-leave-days");
+                          }}
+                          className={`p-1.5 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                            floatingSelectedDeduction === "unpaidLeave"
+                              ? "bg-rose-950/90 border-rose-400 text-rose-200 ring-1 ring-rose-400 shadow-xs"
+                              : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
+                          }`}
+                        >
+                          <span className="text-[10px] font-medium">📅 Eksik Gün</span>
+                          <span className="text-[11px] font-black text-rose-300">
+                            {editingPayrollForm.unpaidLeaveDays ?? 0} Gün
+                          </span>
+                        </button>
+
+                        {/* BES */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFloatingSelectedDeduction("bes");
+                            handleScrollToDeduction("deduction-card-bes", "input-bes-deduction");
+                          }}
+                          className={`p-1.5 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                            floatingSelectedDeduction === "bes"
+                              ? "bg-indigo-950/90 border-indigo-400 text-indigo-200 ring-1 ring-indigo-400 shadow-xs"
+                              : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
+                          }`}
+                        >
+                          <span className="text-[10px] font-medium">🛡️ BES (%3)</span>
+                          <span className="text-[11px] font-black text-indigo-300">
+                            {formatTRY(editingPayrollForm.besDeduction ?? 0)}
+                          </span>
+                        </button>
+
+                        {/* İcra */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFloatingSelectedDeduction("execution");
+                            handleScrollToDeduction("deduction-card-execution", "input-execution-deduction");
+                          }}
+                          className={`p-1.5 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                            floatingSelectedDeduction === "execution"
+                              ? "bg-red-950/90 border-red-400 text-red-200 ring-1 ring-red-400 shadow-xs"
+                              : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
+                          }`}
+                        >
+                          <span className="text-[10px] font-medium">⚖️ İcra</span>
+                          <span className="text-[11px] font-black text-red-300">
+                            {formatTRY(editingPayrollForm.executionDeduction ?? 0)}
+                          </span>
+                        </button>
+
+                        {/* Nafaka */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFloatingSelectedDeduction("alimony");
+                            handleScrollToDeduction("deduction-card-alimony", "input-alimony-deduction");
+                          }}
+                          className={`p-1.5 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                            floatingSelectedDeduction === "alimony"
+                              ? "bg-purple-950/90 border-purple-400 text-purple-200 ring-1 ring-purple-400 shadow-xs"
+                              : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
+                          }`}
+                        >
+                          <span className="text-[10px] font-medium">🏛️ Nafaka</span>
+                          <span className="text-[11px] font-black text-purple-300">
+                            {formatTRY(editingPayrollForm.alimonyDeduction ?? 0)}
+                          </span>
+                        </button>
+
+                        {/* Diğer */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFloatingSelectedDeduction("other");
+                            handleScrollToDeduction("deduction-card-other", "input-other-deductions");
+                          }}
+                          className={`p-1.5 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                            floatingSelectedDeduction === "other"
+                              ? "bg-slate-800 border-slate-400 text-slate-200 ring-1 ring-slate-400 shadow-xs"
+                              : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
+                          }`}
+                        >
+                          <span className="text-[10px] font-medium">📋 Diğer</span>
+                          <span className="text-[11px] font-black text-slate-200">
+                            {formatTRY(editingPayrollForm.otherDeductions ?? 0)}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 4. Alt Toplam & Hızlı Aksiyonlar */}
+                    <div className="pt-2 border-t border-purple-800/80 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="block text-[9px] text-purple-300 uppercase font-extrabold">
+                          TOPLAM KESİNTİ:
+                        </span>
+                        <span className="text-sm font-black text-emerald-300">
+                          {formatTRY(
+                            (editingPayrollForm.advanceDeduction ?? 0) +
+                            (editingPayrollForm.besDeduction ?? 0) +
+                            (editingPayrollForm.executionDeduction ?? 0) +
+                            (editingPayrollForm.alimonyDeduction ?? 0) +
+                            (editingPayrollForm.otherDeductions ?? 0)
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const autoAdv = getAutoAdvanceForEmployee(editingPayrollEmp.id);
+                            const autoLvs = getAutoLeavesForEmployee(editingPayrollEmp.id);
+                            const baseGrossVal = (editingPayrollForm.salaryType ?? editingPayrollEmp.salaryType) === "gross"
+                              ? (editingPayrollForm.baseSalary ?? editingPayrollEmp.salaryAmount)
+                              : (editingPayrollForm.baseSalary ?? editingPayrollEmp.salaryAmount) * 1.38;
+                            const approxNet = (editingPayrollForm.salaryType ?? editingPayrollEmp.salaryType) === "net"
+                              ? (editingPayrollForm.baseSalary ?? editingPayrollEmp.salaryAmount)
+                              : Math.round(baseGrossVal * 0.71);
+                            const autoLegal = getAutoLegalDeductionsForEmployee(editingPayrollEmp.id, approxNet);
+
+                            setEditingPayrollForm((prev) => ({
+                              ...prev,
+                              advanceDeduction: autoAdv.totalAdvance,
+                              advanceReason: autoAdv.reasons.length > 0 ? autoAdv.reasons.join(", ") : "Personel maaş avansı mahsubu",
+                              unpaidLeaveDays: autoLvs.unpaidDays,
+                              missingDayReason: autoLvs.reasons.length > 0 ? autoLvs.reasons.join(", ") : "",
+                              missingDayCode: autoLvs.primaryCode || "21",
+                              besDeduction: autoLegal.besDeduction > 0 ? autoLegal.besDeduction : (editingPayrollEmp.hasBes ? Math.round((editingPayrollEmp.salaryAmount * (editingPayrollEmp.salaryType === "net" ? 1.38 : 1)) * 0.03) : 0),
+                              executionDeduction: autoLegal.executionDeduction,
+                              alimonyDeduction: autoLegal.alimonyDeduction,
+                              otherDeductions: autoLegal.otherDeductions,
+                              deductionReason: autoLegal.reasonsSummary,
+                            }));
+                            showToast("⚡ Tüm kesintiler sistem kayıtlarından otomatik yenilendi.");
+                          }}
+                          className="px-2 py-1 rounded-lg bg-purple-800 hover:bg-purple-700 text-purple-200 text-[10px] font-bold border border-purple-600 transition-colors cursor-pointer flex items-center gap-1"
+                          title="İzin, Avans ve İcra sistem kayıtlarından otomatik doldur"
+                        >
+                          <RefreshCw className="w-2.5 h-2.5" />
+                          <span>Oto-Doldur</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPayrollForm((prev) => ({
+                              ...prev,
+                              advanceDeduction: 0,
+                              unpaidLeaveDays: 0,
+                              besDeduction: 0,
+                              executionDeduction: 0,
+                              alimonyDeduction: 0,
+                              otherDeductions: 0,
+                              deductionReason: "",
+                            }));
+                            showToast("🧹 Tüm kesintiler sıfırlandı.");
+                          }}
+                          className="px-2 py-1 rounded-lg bg-rose-950/70 hover:bg-rose-900 text-rose-200 text-[10px] font-bold border border-rose-700 transition-colors cursor-pointer"
+                          title="Tüm kesintileri sıfırla (0 ₺)"
+                        >
+                          Sıfırla
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </aside>
           )}
         </DetailPageLayout>
     );
@@ -5094,7 +6073,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 </div>
 
                 {/* KIDEME GÖRE KALAN YILLIK İZİN HAK EDİŞ TABLOSU */}
-                <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-3">
+                <div id="leave-entitlements-table" className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-3">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-purple-100 pb-3">
                     <div className="flex items-center gap-2">
                       <Award className="w-5 h-5 text-purple-700" />
@@ -5303,7 +6282,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           })()}
 
           {/* 2. MEVCUT İZİN TALEPLERİ LİSTESİ */}
-          <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
+          <div id="leave-requests-section" className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div className="text-xs text-purple-900/80 font-semibold bg-purple-50/60 px-3 py-1.5 rounded-xl border border-purple-200/50">
@@ -5356,6 +6335,122 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </div>
 
+            {/* AUTO-SCROLL & HIZLI ODAKLANMA REHBER ÇUBUĞU */}
+            <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-3 sm:p-3.5 border border-purple-700/60 shadow-md">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-purple-600/80 text-white flex items-center justify-center shadow-xs">
+                    <LocateFixed className="w-4 h-4 text-purple-200 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-white">Auto-Scroll & Akıllı Odaklanma</span>
+                      <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+                        Çoklu İzin Rehberi
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-purple-200/70">
+                      Çok sayıda kayıt arasında aradığınız izin öğesine anında otomatik kaydırın ve görsel odaklama ile tespit edin.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* Son Eklenen İzin */}
+                  {leaveRequests.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const latest = leaveRequests[leaveRequests.length - 1];
+                        if (latest) {
+                          setHighlightedLeaveId(latest.id);
+                          scrollToElement(`leave-row-${latest.id}`);
+                          showToast(`🎯 Son eklenen izin kaydına odaklanıldı (${latest.employeeName}).`);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-purple-800 hover:bg-purple-700 text-white text-[11px] font-bold border border-purple-600 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:scale-105 active:scale-95"
+                      title="Son eklenen izin talebine otomatik kaydır ve odaklan"
+                    >
+                      <Target className="w-3.5 h-3.5 text-purple-300" />
+                      <span>Son Eklenen İzin</span>
+                    </button>
+                  )}
+
+                  {/* Onay Bekleyenler */}
+                  {leaveRequests.some((l) => l.status === "pending") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const pendingItem = leaveRequests.find((l) => l.status === "pending");
+                        if (pendingItem) {
+                          setHighlightedLeaveId(pendingItem.id);
+                          scrollToElement(`leave-row-${pendingItem.id}`);
+                          showToast(`🎯 Onay bekleyen izin talebine odaklanıldı (${pendingItem.employeeName}).`);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-amber-900/80 hover:bg-amber-800 text-amber-200 text-[11px] font-bold border border-amber-600/60 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:scale-105 active:scale-95"
+                      title="İlk onay bekleyen izin talebine otomatik kaydır"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Bekleyenler ({leaveRequests.filter((l) => l.status === "pending").length})</span>
+                    </button>
+                  )}
+
+                  {/* Ücretsiz İzinler (Maaş Kesintililer) */}
+                  {leaveRequests.some((l) => l.type === "Ücretsiz İzin" || l.type === "unpaid") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const unpaidItem = leaveRequests.find((l) => l.type === "Ücretsiz İzin" || l.type === "unpaid");
+                        if (unpaidItem) {
+                          setHighlightedLeaveId(unpaidItem.id);
+                          scrollToElement(`leave-row-${unpaidItem.id}`);
+                          showToast(`🎯 Ücretsiz izin / bordro puantaj kesintisi kaydına odaklanıldı.`);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-900/80 hover:bg-rose-800 text-rose-200 text-[11px] font-bold border border-rose-600/60 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:scale-105 active:scale-95"
+                      title="Maaştan kesilen ücretsiz izin kaydına otomatik kaydır"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-300" />
+                      <span>Ücretsiz İzinler</span>
+                    </button>
+                  )}
+
+                  {/* Hak Ediş Tablosuna Git */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      scrollToElement("leave-entitlements-table");
+                      showToast("📊 Kıdem & Yıllık İzin Hak Ediş Tablosuna kaydırıldı.");
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold border border-slate-600 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                    title="Kıdem ve Kalan İzin Hak Ediş Takip Tablosuna git"
+                  >
+                    <Award className="w-3.5 h-3.5 text-purple-300" />
+                    <span>Hak Ediş Tablosu</span>
+                  </button>
+
+                  {/* Listenin Sonu & Başa Dön */}
+                  <button
+                    type="button"
+                    onClick={() => scrollToElement("leave-requests-table-bottom")}
+                    className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer shadow-2xs"
+                    title="Listenin en altına kaydır"
+                  >
+                    <ArrowDown className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToElement("leave-requests-section")}
+                    className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer shadow-2xs"
+                    title="Listenin başına kaydır"
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
               <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[800px]">
                 <thead>
@@ -5370,13 +6465,32 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                {leaveRequests.map((req) => (
+                {leaveRequests.map((req) => {
+                  const isHighlighted = highlightedLeaveId === req.id;
+                  return (
                   <tr
                     key={req.id}
-                    className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                    id={`leave-row-${req.id}`}
+                    className={`transition-all duration-300 group rounded-xl relative ${
+                      isHighlighted
+                        ? "bg-purple-100 ring-2 ring-purple-600 shadow-xl z-20 scale-[1.006]"
+                        : "bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 z-0 hover:z-10"
+                    }`}
                   >
-                    <td className="py-3 px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all font-bold text-slate-900 group-hover:text-purple-950">
-                      {req.employeeName}
+                    <td className={`py-3 px-3 rounded-l-xl border-y border-l transition-all font-bold ${
+                      isHighlighted
+                        ? "border-purple-500 bg-purple-100/90 text-purple-950"
+                        : "border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 text-slate-900 group-hover:text-purple-950"
+                    }`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{req.employeeName}</span>
+                        {isHighlighted && (
+                          <span className="inline-flex items-center gap-1 bg-purple-700 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs animate-pulse">
+                            <Target className="w-3 h-3" />
+                            <span>Odaklandı</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
                       <div className="font-bold text-purple-950 text-xs flex items-center gap-1.5 flex-wrap">
@@ -5475,13 +6589,23 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                         {req.status === "pending" && (
                           <>
                             <button
-                              onClick={() => onUpdateLeaveStatus(req.id, "approved")}
+                              onClick={() => {
+                                onUpdateLeaveStatus(req.id, "approved");
+                                setHighlightedLeaveId(req.id);
+                                showToast(`✅ "${req.employeeName}" izin talebi onaylandı.`);
+                                setTimeout(() => scrollToElement(`leave-row-${req.id}`), 100);
+                              }}
                               className="bg-emerald-600 text-white font-bold px-2.5 py-1 rounded-xl text-xs hover:bg-emerald-700 transition-all cursor-pointer shadow-2xs"
                             >
                               Onayla
                             </button>
                             <button
-                              onClick={() => onUpdateLeaveStatus(req.id, "rejected")}
+                              onClick={() => {
+                                onUpdateLeaveStatus(req.id, "rejected");
+                                setHighlightedLeaveId(req.id);
+                                showToast(`❌ "${req.employeeName}" izin talebi reddedildi.`);
+                                setTimeout(() => scrollToElement(`leave-row-${req.id}`), 100);
+                              }}
                               className="bg-rose-600 text-white font-bold px-2.5 py-1 rounded-xl text-xs hover:bg-rose-700 transition-all cursor-pointer shadow-2xs"
                             >
                               Reddet
@@ -5491,10 +6615,42 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
+            <div id="leave-requests-table-bottom" />
           </div>
+
+          {/* FLOATING QUICK AUTO-SCROLL GUIDANCE ACTION */}
+          {leaveRequests.length >= 4 && (
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-purple-100/60">
+              <span className="text-[11px] text-slate-500 font-medium">Hızlı Gezinme:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const latest = leaveRequests[leaveRequests.length - 1];
+                  if (latest) {
+                    setHighlightedLeaveId(latest.id);
+                    scrollToElement(`leave-row-${latest.id}`);
+                    showToast(`🎯 Son eklenen izin talebine kaydırıldı (${latest.employeeName}).`);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              >
+                <Target className="w-3.5 h-3.5 text-purple-200" />
+                <span>Son Eklenen İzne Git</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToElement("leave-requests-section")}
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+                <span>Listenin Başı</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )}
@@ -5634,7 +6790,89 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
           {/* INNER VIEW 1: AVANS & MASRAF TALEPLERİ */}
           {advanceInnerTab === "requests" && (
-            <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
+            <div id="advance-requests-section" className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
+              {/* AUTO-SCROLL & HIZLI ODAKLANMA REHBER ÇUBUĞU */}
+              <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-3 sm:p-3.5 border border-purple-700/60 shadow-md">
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-purple-600/80 text-white flex items-center justify-center shadow-xs">
+                      <LocateFixed className="w-4 h-4 text-purple-200 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-white">Auto-Scroll & Avans Odaklanma</span>
+                        <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-2 py-0.5 rounded-full">
+                          Avans & Masraf Rehberi
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-purple-200/70">
+                        Çok sayıda avans ve masraf talebi arasında yeni eklenen veya onay bekleyen kayda anında otomatik kaydırın.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Son Eklenen Avans */}
+                    {advanceRequests.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const latest = advanceRequests[advanceRequests.length - 1];
+                          if (latest) {
+                            setHighlightedAdvanceId(latest.id);
+                            scrollToElement(`advance-row-${latest.id}`);
+                            showToast(`🎯 Son eklenen avans kaydına odaklanıldı (${latest.employeeName}).`);
+                          }
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-purple-800 hover:bg-purple-700 text-white text-[11px] font-bold border border-purple-600 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:scale-105 active:scale-95"
+                        title="Son eklenen avans/masraf talebine otomatik kaydır ve odaklan"
+                      >
+                        <Target className="w-3.5 h-3.5 text-purple-300" />
+                        <span>Son Eklenen Avans</span>
+                      </button>
+                    )}
+
+                    {/* Onay Bekleyen Avanslar */}
+                    {advanceRequests.some((a) => a.status === "pending") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pendingAdv = advanceRequests.find((a) => a.status === "pending");
+                          if (pendingAdv) {
+                            setHighlightedAdvanceId(pendingAdv.id);
+                            scrollToElement(`advance-row-${pendingAdv.id}`);
+                            showToast(`🎯 Onay bekleyen avans talebine odaklanıldı (${pendingAdv.employeeName}).`);
+                          }
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-amber-900/80 hover:bg-amber-800 text-amber-200 text-[11px] font-bold border border-amber-600/60 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:scale-105 active:scale-95"
+                        title="İlk onay bekleyen avans talebine otomatik kaydır"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Bekleyenler ({advanceRequests.filter((a) => a.status === "pending").length})</span>
+                      </button>
+                    )}
+
+                    {/* Listenin Sonu & Başa Dön */}
+                    <button
+                      type="button"
+                      onClick={() => scrollToElement("advance-requests-table-bottom")}
+                      className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer shadow-2xs"
+                      title="Avans listesinin en altına kaydır"
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToElement("advance-requests-section")}
+                      className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer shadow-2xs"
+                      title="Avans listesinin başına kaydır"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
                 <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
                   <thead>
@@ -5649,13 +6887,32 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {advanceRequests.map((adv) => (
+                    {advanceRequests.map((adv) => {
+                      const isHighlighted = highlightedAdvanceId === adv.id;
+                      return (
                       <tr
                         key={adv.id}
-                        className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                        id={`advance-row-${adv.id}`}
+                        className={`transition-all duration-300 group rounded-xl relative ${
+                          isHighlighted
+                            ? "bg-amber-100 ring-2 ring-amber-600 shadow-xl z-20 scale-[1.006]"
+                            : "bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 z-0 hover:z-10"
+                        }`}
                       >
-                        <td className="py-3 px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all font-bold text-slate-900 group-hover:text-purple-950">
-                          {adv.employeeName}
+                        <td className={`py-3 px-3 rounded-l-xl border-y border-l transition-all font-bold ${
+                          isHighlighted
+                            ? "border-amber-500 bg-amber-100/90 text-amber-950"
+                            : "border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 text-slate-900 group-hover:text-purple-950"
+                        }`}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{adv.employeeName}</span>
+                            {isHighlighted && (
+                              <span className="inline-flex items-center gap-1 bg-amber-700 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs animate-pulse">
+                                <Target className="w-3 h-3" />
+                                <span>Odaklandı</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all font-semibold text-purple-900">
                           {adv.type}
@@ -5747,7 +7004,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                             )}
                             {adv.status === "pending" && (
                               <button
-                                onClick={() => onUpdateAdvanceStatus(adv.id, "paid")}
+                                onClick={() => {
+                                  onUpdateAdvanceStatus(adv.id, "paid");
+                                  setHighlightedAdvanceId(adv.id);
+                                  showToast(`✅ "${adv.employeeName}" avans ödemesi onaylandı.`);
+                                  setTimeout(() => scrollToElement(`advance-row-${adv.id}`), 100);
+                                }}
                                 className="bg-emerald-600 text-white font-bold px-3 py-1 rounded-xl text-xs hover:bg-emerald-700 transition-all cursor-pointer shadow-2xs"
                               >
                                 Ödemeyi Onayla
@@ -5756,10 +7018,42 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
+                <div id="advance-requests-table-bottom" />
               </div>
+
+              {/* FLOATING QUICK SCROLL ACTION */}
+              {advanceRequests.length >= 4 && (
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-purple-100/60">
+                  <span className="text-[11px] text-slate-500 font-medium">Hızlı Gezinme:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const latest = advanceRequests[advanceRequests.length - 1];
+                      if (latest) {
+                        setHighlightedAdvanceId(latest.id);
+                        scrollToElement(`advance-row-${latest.id}`);
+                        showToast(`🎯 Son eklenen avans kaydına kaydırıldı (${latest.employeeName}).`);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <Target className="w-3.5 h-3.5 text-purple-200" />
+                    <span>Son Eklenen Avanse Git</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToElement("advance-requests-section")}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    <span>Listenin Başı</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -5826,7 +7120,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
 
               {/* Deductions Main Table */}
-              <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
+              <div id="legal-deductions-section" className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm">
@@ -5835,6 +7129,128 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                     <p className="text-xs text-slate-500 mt-0.5">
                       1. sıradaki icra borcu bittiğinde sıradaki dosya otomatik olarak 1. sıraya alınır ve bordroya yansıtılır.
                     </p>
+                  </div>
+                </div>
+
+                {/* AUTO-SCROLL & HIZLI ODAKLANMA REHBER ÇUBUĞU */}
+                <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-3 sm:p-3.5 border border-purple-700/60 shadow-md">
+                  <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-purple-600/80 text-white flex items-center justify-center shadow-xs">
+                        <LocateFixed className="w-4 h-4 text-purple-200 animate-pulse" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-white">Auto-Scroll & Kesinti Odaklanma</span>
+                          <span className="text-[10px] font-bold text-rose-300 bg-rose-950/80 border border-rose-500/40 px-2 py-0.5 rounded-full">
+                            İcra & Nafaka Rehberi
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-purple-200/70">
+                          Personel yasal kesinti ve icra dosyaları arasında aradığınız dosyaya veya yeni eklenen kayda doğrudan odaklanın.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* Son Eklenen Kesinti */}
+                      {legalDeductions.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const latest = legalDeductions[legalDeductions.length - 1];
+                            if (latest) {
+                              setHighlightedDeductionId(latest.id);
+                              scrollToElement(`deduction-row-${latest.id}`);
+                              showToast(`🎯 Son eklenen kesinti dosyasına odaklanıldı (${latest.employeeName} - ${latest.fileNumber}).`);
+                            }
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-purple-800 hover:bg-purple-700 text-white text-[11px] font-bold border border-purple-600 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:scale-105 active:scale-95"
+                          title="Son eklenen icra/nafaka dosyasına otomatik kaydır ve odaklan"
+                        >
+                          <Target className="w-3.5 h-3.5 text-purple-300" />
+                          <span>Son Eklenen Kesinti</span>
+                        </button>
+                      )}
+
+                      {/* Aktif İcralar */}
+                      {legalDeductions.some((d) => d.type === "İcra Kesintisi" && d.status === "active") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const activeIcra = legalDeductions.find((d) => d.type === "İcra Kesintisi" && d.status === "active");
+                            if (activeIcra) {
+                              setHighlightedDeductionId(activeIcra.id);
+                              scrollToElement(`deduction-row-${activeIcra.id}`);
+                              showToast(`🎯 1. sıra aktif icra kesintisine odaklanıldı (${activeIcra.employeeName}).`);
+                            }
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-rose-900/80 hover:bg-rose-800 text-rose-200 text-[11px] font-bold border border-rose-600/60 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:scale-105 active:scale-95"
+                          title="Maaştan aktif kesilen icra dosyasına otomatik kaydır"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 text-rose-300" />
+                          <span>Aktif İcralar ({legalDeductions.filter((d) => d.type === "İcra Kesintisi" && d.status === "active").length})</span>
+                        </button>
+                      )}
+
+                      {/* Aktif Nafakalar */}
+                      {legalDeductions.some((d) => d.type === "Nafaka Kesintisi" && d.status === "active") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const activeNafaka = legalDeductions.find((d) => d.type === "Nafaka Kesintisi" && d.status === "active");
+                            if (activeNafaka) {
+                              setHighlightedDeductionId(activeNafaka.id);
+                              scrollToElement(`deduction-row-${activeNafaka.id}`);
+                              showToast(`🎯 Aktif nafaka kesintisi dosyasına odaklanıldı (${activeNafaka.employeeName}).`);
+                            }
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-indigo-900/80 hover:bg-indigo-800 text-indigo-200 text-[11px] font-bold border border-indigo-600/60 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:scale-105 active:scale-95"
+                          title="Aktif nafaka kesintisi dosyasına otomatik kaydır"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-indigo-300" />
+                          <span>Aktif Nafaka ({legalDeductions.filter((d) => d.type === "Nafaka Kesintisi" && d.status === "active").length})</span>
+                        </button>
+                      )}
+
+                      {/* Sırada Bekleyenler */}
+                      {legalDeductions.some((d) => d.status === "queued") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const queued = legalDeductions.find((d) => d.status === "queued");
+                            if (queued) {
+                              setHighlightedDeductionId(queued.id);
+                              scrollToElement(`deduction-row-${queued.id}`);
+                              showToast(`🎯 Sırada bekleyen icra dosyasına odaklanıldı (${queued.employeeName}).`);
+                            }
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-amber-900/80 hover:bg-amber-800 text-amber-200 text-[11px] font-bold border border-amber-600/60 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:scale-105 active:scale-95"
+                          title="Sırada bekleyen sonraki icra dosyasına otomatik kaydır"
+                        >
+                          <Clock className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Sıradakiler ({legalDeductions.filter((d) => d.status === "queued").length})</span>
+                        </button>
+                      )}
+
+                      {/* Listenin Sonu & Başa Dön */}
+                      <button
+                        type="button"
+                        onClick={() => scrollToElement("legal-deductions-table-bottom")}
+                        className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer shadow-2xs"
+                        title="Kesinti listesinin en altına kaydır"
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scrollToElement("legal-deductions-section")}
+                        className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer shadow-2xs"
+                        title="Kesinti listesinin başına kaydır"
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -5862,14 +7278,32 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                         legalDeductions.map((ded) => {
                           const remainingDebt = Math.max(0, ded.totalDebtAmount - ded.paidAmount);
                           const progress = ded.totalDebtAmount > 0 ? Math.min(100, Math.round((ded.paidAmount / ded.totalDebtAmount) * 100)) : 0;
+                          const isHighlighted = highlightedDeductionId === ded.id;
 
                           return (
                             <tr
                               key={ded.id}
-                              className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                              id={`deduction-row-${ded.id}`}
+                              className={`transition-all duration-300 group rounded-xl relative ${
+                                isHighlighted
+                                  ? "bg-rose-100 ring-2 ring-rose-600 shadow-xl z-20 scale-[1.006]"
+                                  : "bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 z-0 hover:z-10"
+                              }`}
                             >
-                              <td className="py-3 px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all font-bold text-slate-900 group-hover:text-purple-950">
-                                <div>{ded.employeeName}</div>
+                              <td className={`py-3 px-3 rounded-l-xl border-y border-l transition-all font-bold ${
+                                isHighlighted
+                                  ? "border-rose-500 bg-rose-100/90 text-rose-950"
+                                  : "border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 text-slate-900 group-hover:text-purple-950"
+                              }`}>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span>{ded.employeeName}</span>
+                                  {isHighlighted && (
+                                    <span className="inline-flex items-center gap-1 bg-rose-700 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs animate-pulse">
+                                      <Target className="w-3 h-3" />
+                                      <span>Odaklandı</span>
+                                    </span>
+                                  )}
+                                </div>
                               </td>
 
                               <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
@@ -6029,7 +7463,38 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       )}
                     </tbody>
                   </table>
+                  <div id="legal-deductions-table-bottom" />
                 </div>
+
+                {/* FLOATING QUICK SCROLL ACTION */}
+                {legalDeductions.length >= 4 && (
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-purple-100/60">
+                    <span className="text-[11px] text-slate-500 font-medium">Hızlı Gezinme:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const latest = legalDeductions[legalDeductions.length - 1];
+                        if (latest) {
+                          setHighlightedDeductionId(latest.id);
+                          scrollToElement(`deduction-row-${latest.id}`);
+                          showToast(`🎯 Son eklenen kesinti dosyasına kaydırıldı (${latest.employeeName}).`);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                    >
+                      <Target className="w-3.5 h-3.5 text-purple-200" />
+                      <span>Son Eklenen Kesintiye Git</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToElement("legal-deductions-section")}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                      <span>Listenin Başı</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -6185,6 +7650,201 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           leaveRequests={leaveRequests}
           legalDeductions={legalDeductions}
         />
+      )}
+
+      {/* POST-SAVE DIALOG: BORDRO KAYIT SONRASI OTOMATİK BELGE & YAZDIRMA AKIŞI */}
+      {savedPayrollForPrintModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-purple-200 shadow-2xl max-w-xl w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-xs">
+                  <CheckCircle2 className="w-7 h-7 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">
+                    Bordro Başarıyla Kaydedildi!
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    <span className="font-bold text-purple-900">{savedPayrollForPrintModal.emp.fullName}</span> • {payrollMonth} Dönemi Bordrosu ve İlgili Kesinti/Talep Evrakları Hazırlandı
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSavedPayrollForPrintModal(null)}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer"
+                title="Kapat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Otomatik Doldurulan Belgeler Bilgi Kutusu */}
+            <div className="bg-purple-50/70 border border-purple-200 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="font-black text-purple-950 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                Otomatik Doldurulan ve Bağlanan Belgeler:
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-purple-100 shadow-2xs">
+                  <span className="font-bold text-slate-800 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-purple-600" />
+                    Resmi Bordro / Maaş Pusulası
+                  </span>
+                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                    Hazır
+                  </span>
+                </div>
+
+                {savedPayrollForPrintModal.hasAdvance && (
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50/70 border border-amber-200 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-amber-600" />
+                      <div>
+                        <span className="font-bold text-amber-950 block">
+                          Personel Avans Talep & Mahsup Formu
+                        </span>
+                        <span className="text-[10px] text-amber-800">
+                          Tutar: {formatTRY(savedPayrollForPrintModal.advAmount)} • Avans Yönetimine otomatik işlendi
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
+                      Otomatik Eklendi
+                    </span>
+                  </div>
+                )}
+
+                {savedPayrollForPrintModal.hasUnpaidLeave && (
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-rose-50/70 border border-rose-200 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-rose-600" />
+                      <div>
+                        <span className="font-bold text-rose-950 block">
+                          Ücretsiz İzin & SGK Eksik Gün Bildirim Belgesi
+                        </span>
+                        <span className="text-[10px] text-rose-800">
+                          Süre: {savedPayrollForPrintModal.unpaidDays} Gün • Kod: {savedPayrollForPrintModal.form.missingDayCode || "21"}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black text-rose-800 bg-rose-100 px-2 py-0.5 rounded-md">
+                      Otomatik Eklendi
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Hızlı Yazdırma Seçenekleri Butonları */}
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const empId = savedPayrollForPrintModal.emp.id;
+                  setSavedPayrollForPrintModal(null);
+                  setPayrollPrintSelectedEmpId(empId);
+                  setPayrollPrintInitialMode("month");
+                  setIsPayrollPrintModalOpen(true);
+                }}
+                className="w-full p-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-sm flex items-center justify-between shadow-md hover:shadow-lg transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Printer className="w-5 h-5 text-emerald-100" />
+                  <div className="text-left">
+                    <div className="font-black">Bordroyu ve Ekli Formları Hemen Yazdır</div>
+                    <div className="text-[11px] font-normal text-emerald-100">
+                      Bordro, {savedPayrollForPrintModal.hasAdvance ? "Avans Talep Formu, " : ""}{savedPayrollForPrintModal.hasUnpaidLeave ? "SGK Eksik Gün Bildirimi, " : ""}tek pencerede birlikte yazdırılır
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-emerald-200" />
+              </button>
+
+              {savedPayrollForPrintModal.hasAdvance && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const empId = savedPayrollForPrintModal.emp.id;
+                    setSavedPayrollForPrintModal(null);
+                    setFormsModalEmployeeId(empId);
+                    setFormsModalType("advance_request");
+                    setIsFormsModalOpen(true);
+                  }}
+                  className="w-full p-2.5 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 rounded-xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-amber-600" />
+                    Resmi Avans Talep & Taahhüt Formunu Ayrı Yazdır ({formatTRY(savedPayrollForPrintModal.advAmount)})
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-amber-700" />
+                </button>
+              )}
+
+              {savedPayrollForPrintModal.hasUnpaidLeave && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const empId = savedPayrollForPrintModal.emp.id;
+                    setSavedPayrollForPrintModal(null);
+                    setFormsModalEmployeeId(empId);
+                    setFormsModalType("unpaid_leave");
+                    setIsFormsModalOpen(true);
+                  }}
+                  className="w-full p-2.5 bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-300 rounded-xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-rose-600" />
+                    Ücretsiz İzin Talep Dilekçesi & SGK Bildirimini Ayrı Yazdır ({savedPayrollForPrintModal.unpaidDays} Gün)
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-rose-700" />
+                </button>
+              )}
+            </div>
+
+            {/* Footer Navigation */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setSavedPayrollForPrintModal(null);
+                  handleBackToList();
+                }}
+                className="px-3 py-2 text-slate-600 hover:text-slate-900 font-bold transition-colors cursor-pointer"
+              >
+                Kapat & Listeye Dön
+              </button>
+
+              {savedPayrollForPrintModal.nextEmp ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = savedPayrollForPrintModal.nextEmp;
+                    setSavedPayrollForPrintModal(null);
+                    if (next) handleOpenEditPayroll(next);
+                  }}
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-black rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Sıradaki Personele Geç ({savedPayrollForPrintModal.nextEmp.fullName})</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSavedPayrollForPrintModal(null);
+                    handleBackToList();
+                  }}
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                >
+                  Tamamla
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

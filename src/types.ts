@@ -723,6 +723,10 @@ export interface PayrollRecord {
   deductionReason?: string; // Yasal ve özel kesinti gerekçesi / icra nafaka detayı
   missingDayReason?: string; // Eksik gün gerekçesi / SGK eksik gün nedeni
   missingDayCode?: string; // SGK Eksik Gün Bildirim Kodu (örn: "01", "21")
+  besReason?: string; // BES kesintisi açıklaması
+  executionReason?: string; // İcra kesintisi dosya ve mahkeme açıklaması
+  alimonyReason?: string; // Nafaka kesintisi mahkeme ilamı ve açıklama
+  otherReason?: string; // Diğer kesintiler açıklaması
   grossSalary: number;
   sgkEmployeeShare: number; // %14
   unemploymentEmployeeShare: number; // %1
@@ -779,9 +783,13 @@ export type CustomPayrollAdjustment = {
   missingDayReason?: string;
   missingDayCode?: string;
   besDeduction?: number;
+  besReason?: string;
   executionDeduction?: number;
+  executionReason?: string;
   alimonyDeduction?: number;
+  alimonyReason?: string;
   otherDeductions?: number;
+  otherReason?: string;
   deductionReason?: string;
   isCustomized?: boolean;
   notes?: string;

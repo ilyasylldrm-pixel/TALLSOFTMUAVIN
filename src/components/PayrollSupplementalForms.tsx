@@ -438,7 +438,7 @@ export const DeductionAuthorizationForm: React.FC<DeductionFormProps> = ({
                     İcra Kesintisi (Haciz)
                   </td>
                   <td className="p-2 text-slate-800 border-r border-slate-200">
-                    {record.deductionReason || "İcra Müdürlüğü Haciz Müzekkeresi uyarınca maaşın 1/4 yasal kesintisi."}
+                    {record.executionReason || record.deductionReason || "İcra Müdürlüğü Haciz Müzekkeresi uyarınca maaşın 1/4 yasal kesintisi."}
                   </td>
                   <td className="p-2 text-slate-600 border-r border-slate-200 text-[11px]">
                     İİK Md. 83 (1/4 Yasal Sınır)
@@ -456,7 +456,7 @@ export const DeductionAuthorizationForm: React.FC<DeductionFormProps> = ({
                     Nafaka Kesintisi
                   </td>
                   <td className="p-2 text-slate-800 border-r border-slate-200">
-                    {record.deductionReason || "Aile Mahkemesi Tedbir / İştirak / Yoksulluk Nafakası İlamı gereği kesinti."}
+                    {record.alimonyReason || record.deductionReason || "Aile Mahkemesi Tedbir / İştirak / Yoksulluk Nafakası İlamı gereği kesinti."}
                   </td>
                   <td className="p-2 text-slate-600 border-r border-slate-200 text-[11px]">
                     TMK Md. 175-182 (Öncelikli Alacak)
@@ -474,7 +474,7 @@ export const DeductionAuthorizationForm: React.FC<DeductionFormProps> = ({
                     Diğer Özel Kesintiler
                   </td>
                   <td className="p-2 text-slate-800 border-r border-slate-200">
-                    {record.deductionReason || "Çalışan yazılı mutabakatı veya şirket iç yönetmeliği kapsamındaki kesinti."}
+                    {record.otherReason || record.deductionReason || "Çalışan yazılı mutabakatı veya şirket iç yönetmeliği kapsamındaki kesinti."}
                   </td>
                   <td className="p-2 text-slate-600 border-r border-slate-200 text-[11px]">
                     4857 S.K. Md. 38
@@ -492,7 +492,7 @@ export const DeductionAuthorizationForm: React.FC<DeductionFormProps> = ({
                     BES (%3) Kesintisi
                   </td>
                   <td className="p-2 text-slate-800 border-r border-slate-200">
-                    Otomatik Katılımlı Bireysel Emeklilik Sistemi yasal katkı payı.
+                    {record.besReason || "Otomatik Katılımlı Bireysel Emeklilik Sistemi yasal katkı payı."}
                   </td>
                   <td className="p-2 text-slate-600 border-r border-slate-200 text-[11px]">
                     4632 S.K. Ek Md. 2
@@ -566,3 +566,186 @@ export const DeductionAuthorizationForm: React.FC<DeductionFormProps> = ({
     </div>
   );
 };
+
+/**
+ * 3. PERSONEL MAAŞ AVANSI TALEP VE MAHSUP MAKBUZU
+ * 4857 Sayılı İş Kanunu Md. 32 uyarınca resmi avans talep, tahakkuk ve mahsup formu
+ */
+export interface AdvanceRequestFormProps {
+  companySettings: CompanySettings;
+  employee: Employee;
+  record: PayrollRecord;
+  monthStr: string;
+  showSignatures?: boolean;
+}
+
+export const AdvanceRequestPrintForm: React.FC<AdvanceRequestFormProps> = ({
+  companySettings,
+  employee,
+  record,
+  monthStr,
+  showSignatures = true,
+}) => {
+  const [yearStr, mStr] = (monthStr || record.monthYear || "2026-07").split("-");
+  const year = parseInt(yearStr, 10) || 2026;
+  const monthNum = parseInt(mStr, 10) || 7;
+  const monthName = MONTH_NAMES_TR[monthNum - 1] || "Temmuz";
+  const advanceAmount = record.advanceDeduction || 0;
+  const advanceReason = record.advanceReason || "Personelin yazılı avans talebi doğrultusunda bankadan ödenen nakit maaş avansı";
+
+  return (
+    <div
+      id={`advance-request-form-${employee.id}`}
+      className="page-break-always print:page-break-before bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-slate-300 text-slate-900 print:shadow-none print:border-0 print:p-0 mt-8"
+    >
+      {/* Üst Antet */}
+      <div className="border-b-2 border-slate-900 pb-3 mb-4 flex flex-col sm:flex-row items-start justify-between gap-4">
+        <div>
+          <div className="inline-block bg-amber-800 text-white font-black text-[10px] px-2.5 py-0.5 rounded uppercase tracking-wider mb-1">
+            4857 S.K. MD. 32 · RESMİ EVRAK EKLERİ
+          </div>
+          <h1 className="text-base sm:text-lg font-black uppercase text-slate-950 tracking-tight">
+            PERSONEL MAAŞ AVANSI TALEP VE MAHSUP MAKBUZU
+          </h1>
+          <p className="text-xs text-slate-600">
+            Maaş Hakedişinden Mahsup Edilmek Üzere Ödenen Avans Dilekçesi ve Muvafakat Belgesi
+          </p>
+        </div>
+
+        <div className="sm:text-right shrink-0">
+          <div className="text-xs font-black text-slate-900">
+            MAHSUP AYI: {monthName.toUpperCase()} {year}
+          </div>
+          <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+            Tanzim Tarihi: {formatDate(new Date())}
+          </div>
+          <div className="text-xs font-black text-amber-900 mt-1">
+            Avans Tutarı: {formatCurrency(advanceAmount, "TRY")}
+          </div>
+        </div>
+      </div>
+
+      {/* İşveren & Personel Tablosu */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-xs">
+        <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+          <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">İŞVEREN ŞİRKET BİLGİLERİ</span>
+          <div className="font-bold text-slate-900 text-sm">
+            {companySettings.companyTitle || companySettings.companyName || "ŞİRKET ÜNVANI"}
+          </div>
+          <div className="text-slate-600 mt-1">
+            VKN: {companySettings.taxNumber} · SGK No: {companySettings.sgkCredentials?.workplaceRegistrationNo || "—"}
+          </div>
+          <div className="text-slate-500 text-[11px] mt-0.5">
+            {companySettings.address} {companySettings.city}
+          </div>
+        </div>
+
+        <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+          <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">TALEPTE BULUNAN ÇALIŞAN</span>
+          <div className="font-black text-slate-900 text-sm">
+            {employee.fullName}
+          </div>
+          <div className="text-slate-700 mt-1 font-mono">
+            T.C. Kimlik: <strong>{employee.tckn}</strong> · SGK Sicil: {employee.sgkNo || employee.tckn}
+          </div>
+          <div className="text-slate-600 text-[11px] mt-0.5">
+            Bölüm: {employee.department} · Görev: {employee.title} | IBAN: {employee.iban || "Kayıtlı Banka Hesabı"}
+          </div>
+        </div>
+      </div>
+
+      {/* Avans Talep Ayrıntıları */}
+      <div className="mb-4">
+        <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg mb-2">
+          AVANS TALEP VE MAHSUP DETAYLARI
+        </h2>
+        <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+          <table className="w-full text-left border-collapse">
+            <tbody className="divide-y divide-slate-200">
+              <tr>
+                <td className="p-2.5 font-bold text-slate-700 w-1/3 bg-slate-50 border-r border-slate-200">
+                  Talep Edilen Avans Türü:
+                </td>
+                <td className="p-2.5 font-bold text-slate-900">
+                  Maaş / Ücret Avansı (4857 S.K. Md. 32)
+                </td>
+              </tr>
+              <tr>
+                <td className="p-2.5 font-bold text-slate-700 bg-slate-50 border-r border-slate-200">
+                  Avans Tutarı:
+                </td>
+                <td className="p-2.5 font-black text-amber-900 text-sm">
+                  {formatCurrency(advanceAmount, "TRY")}
+                </td>
+              </tr>
+              <tr>
+                <td className="p-2.5 font-bold text-slate-700 bg-slate-50 border-r border-slate-200">
+                  Mahsup Edileceği Bordro Dönemi:
+                </td>
+                <td className="p-2.5 font-bold text-slate-900">
+                  {monthName} {year} Dönemi Maaş Hakedişi
+                </td>
+              </tr>
+              <tr>
+                <td className="p-2.5 font-bold text-slate-700 bg-slate-50 border-r border-slate-200">
+                  Avans Talep Nedeni / Gerekçesi:
+                </td>
+                <td className="p-2.5 text-slate-800 font-medium">
+                  {advanceReason}
+                </td>
+              </tr>
+              <tr>
+                <td className="p-2.5 font-bold text-slate-700 bg-slate-50 border-r border-slate-200">
+                  Ödeme Yöntemi:
+                </td>
+                <td className="p-2.5 text-slate-800">
+                  Banka Havalesi / EFT ({employee.bankName || "Maaş Bankası"} · {employee.iban || "Personel Maaş Hesabı"})
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Avans Mahsup Taahhütnamesi */}
+      <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-3.5 text-[11px] text-amber-950 space-y-1.5 mb-6">
+        <p className="font-black text-amber-900 uppercase">AVANS TAAHHÜT VE MAHSUP MUVAFAKATNAMESİ:</p>
+        <p>
+          Şirketinizden yukarıda belirtilen gerekçe ile talep ettiğim <strong>{formatCurrency(advanceAmount, "TRY")}</strong> tutarındaki
+          avans bedelini eksiksiz teslim aldığımı / banka hesabıma aktarılacağını; söz konusu tutarın <strong>{monthName} {year}</strong> ayı
+          maaş hesabımdan (ücret bordromdan) defaten kesilerek mahsup edilmesini, herhangi bir nedenle iş akdimin sona ermesi halinde
+          ise kıdem, ihbar, yıllık izin veya son hakedişimden tenzil edilmesini peşinen gayrikabili rücu kabul, beyan ve taahhüt ederim.
+        </p>
+      </div>
+
+      {/* İmzalar */}
+      {showSignatures && (
+        <div className="border-t border-slate-300 pt-3">
+          <div className="grid grid-cols-2 gap-8">
+            <div className="border border-slate-300 rounded-xl p-4 text-center min-h-[110px] flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-black text-slate-900 block">ŞİRKET YETKİLİSİ / ONAYLAYAN</span>
+                <span className="text-[10px] text-slate-500">
+                  {companySettings.companyTitle || companySettings.companyName}
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-400 mt-6">İmza / Kaşe</div>
+            </div>
+
+            <div className="border border-slate-300 rounded-xl p-4 text-center min-h-[110px] flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-black text-slate-900 block">AVANSI TALEP EDEN ÇALIŞAN</span>
+                <span className="text-[10px] text-slate-700 font-bold">{employee.fullName}</span>
+              </div>
+              <div className="text-[10px] text-slate-500 font-medium">
+                Okudum, anladım, avansı teslim aldım.
+              </div>
+              <div className="text-[10px] text-slate-400 mt-2">İmza / Tarih: ..... / ..... / {year}</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+

@@ -22,7 +22,7 @@ import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { Zap, MessageCircle } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { calculatePayrollRecordHelper, generateDefaultPuantaj, calculatePuantajStats } from "../utils/puantajUtils";
-import { MissingDayNotificationForm, DeductionAuthorizationForm } from "./PayrollSupplementalForms";
+import { MissingDayNotificationForm, DeductionAuthorizationForm, AdvanceRequestPrintForm } from "./PayrollSupplementalForms";
 
 export type PayrollPrintMode =
   | "single_monthly_slip"    // Seçilen Personel - Seçilen Ay Ücret Pusulası
@@ -86,6 +86,7 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
   const [showCompanyHeader, setShowCompanyHeader] = useState<boolean>(true);
   const [includeMissingDayForm, setIncludeMissingDayForm] = useState<boolean>(true);
   const [includeDeductionForm, setIncludeDeductionForm] = useState<boolean>(true);
+  const [includeAdvanceForm, setIncludeAdvanceForm] = useState<boolean>(true);
 
   // Active Employee
   const currentEmp = employees.find((e) => e.id === selectedEmpId) || sortedEmployees[0];
@@ -264,11 +265,13 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
   }, [singleMonthlyRecord, currentEmployeePuantaj, monthStr]);
 
   const hasMissingDays = Boolean(singleMonthlyRecord && (singleMonthlyRecord.unpaidLeaveDays || 0) > 0);
+  const hasAdvances = Boolean(singleMonthlyRecord && (singleMonthlyRecord.advanceDeduction || 0) > 0);
   const hasDeductionsOrAdvances = Boolean(
     singleMonthlyRecord &&
     ((singleMonthlyRecord.advanceDeduction || 0) > 0 ||
      (singleMonthlyRecord.executionDeduction || 0) > 0 ||
      (singleMonthlyRecord.alimonyDeduction || 0) > 0 ||
+     (singleMonthlyRecord.besDeduction || 0) > 0 ||
      (singleMonthlyRecord.otherDeductions || 0) > 0)
   );
 
@@ -591,16 +594,30 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
               </label>
             )}
 
-            {scope === "single" && periodType === "month" && hasDeductionsOrAdvances && (
+            {scope === "single" && periodType === "month" && hasAdvances && (
               <label className="flex items-center gap-1.5 cursor-pointer bg-amber-950/60 hover:bg-amber-900/80 px-2 py-0.5 rounded-lg border border-amber-400/40 text-amber-200 hover:text-white transition-colors">
+                <input
+                  type="checkbox"
+                  checked={includeAdvanceForm}
+                  onChange={(e) => setIncludeAdvanceForm(e.target.checked)}
+                  className="rounded text-amber-500 focus:ring-0 cursor-pointer"
+                />
+                <span className="font-bold">
+                  💳 Personel Avans Talep & Mahsup Formu ({formatTRY(singleMonthlyRecord?.advanceDeduction)})
+                </span>
+              </label>
+            )}
+
+            {scope === "single" && periodType === "month" && hasDeductionsOrAdvances && (
+              <label className="flex items-center gap-1.5 cursor-pointer bg-purple-950/60 hover:bg-purple-900/80 px-2 py-0.5 rounded-lg border border-purple-400/40 text-purple-200 hover:text-white transition-colors">
                 <input
                   type="checkbox"
                   checked={includeDeductionForm}
                   onChange={(e) => setIncludeDeductionForm(e.target.checked)}
-                  className="rounded text-amber-500 focus:ring-0 cursor-pointer"
+                  className="rounded text-purple-500 focus:ring-0 cursor-pointer"
                 />
                 <span className="font-bold">
-                  📋 Kesinti ve Avans Mahsup Formu Eki
+                  📋 Kesinti ve Mahsup Muvafakatnamesi
                 </span>
               </label>
             )}
@@ -921,32 +938,59 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
                         {/* Özel Kesintiler */}
                         {Boolean(singleMonthlyRecord.advanceDeduction) && (
                           <tr className="border-b border-slate-200 bg-amber-50 text-amber-900">
-                            <td className="p-2 font-bold">- Avans Kesintisi:</td>
-                            <td className="p-2 text-right font-bold">-{formatTRY(singleMonthlyRecord.advanceDeduction)}</td>
+                            <td className="p-2 font-bold">
+                              <div>- Avans Kesintisi:</div>
+                              {singleMonthlyRecord.advanceReason && (
+                                <div className="text-[10px] text-amber-700 font-normal">↳ {singleMonthlyRecord.advanceReason}</div>
+                              )}
+                            </td>
+                            <td className="p-2 text-right font-bold align-top">-{formatTRY(singleMonthlyRecord.advanceDeduction)}</td>
                           </tr>
                         )}
                         {Boolean(singleMonthlyRecord.besDeduction) && (
                           <tr className="border-b border-slate-200">
-                            <td className="p-2 text-slate-700">- Otomatik BES Kesintisi (%3):</td>
-                            <td className="p-2 text-right text-slate-900">-{formatTRY(singleMonthlyRecord.besDeduction)}</td>
+                            <td className="p-2 text-slate-700">
+                              <div>- Otomatik BES Kesintisi (%3):</div>
+                              {singleMonthlyRecord.besReason && (
+                                <div className="text-[10px] text-slate-500 font-normal">↳ {singleMonthlyRecord.besReason}</div>
+                              )}
+                            </td>
+                            <td className="p-2 text-right text-slate-900 align-top">-{formatTRY(singleMonthlyRecord.besDeduction)}</td>
                           </tr>
                         )}
                         {Boolean(singleMonthlyRecord.executionDeduction) && (
                           <tr className="border-b border-slate-200 bg-red-50 text-red-900">
-                            <td className="p-2 font-bold">- İcra Maaş Haczi Kesintisi:</td>
-                            <td className="p-2 text-right font-bold">-{formatTRY(singleMonthlyRecord.executionDeduction)}</td>
+                            <td className="p-2 font-bold">
+                              <div>- İcra Maaş Haczi Kesintisi:</div>
+                              {singleMonthlyRecord.executionReason && (
+                                <div className="text-[10px] text-red-700 font-normal">↳ {singleMonthlyRecord.executionReason}</div>
+                              )}
+                            </td>
+                            <td className="p-2 text-right font-bold align-top">-{formatTRY(singleMonthlyRecord.executionDeduction)}</td>
                           </tr>
                         )}
                         {Boolean(singleMonthlyRecord.alimonyDeduction) && (
                           <tr className="border-b border-slate-200 bg-purple-50 text-purple-900">
-                            <td className="p-2 font-bold">- Nafaka Kesintisi:</td>
-                            <td className="p-2 text-right font-bold">-{formatTRY(singleMonthlyRecord.alimonyDeduction)}</td>
+                            <td className="p-2 font-bold">
+                              <div>- Nafaka Kesintisi:</div>
+                              {singleMonthlyRecord.alimonyReason && (
+                                <div className="text-[10px] text-purple-700 font-normal">↳ {singleMonthlyRecord.alimonyReason}</div>
+                              )}
+                            </td>
+                            <td className="p-2 text-right font-bold align-top">-{formatTRY(singleMonthlyRecord.alimonyDeduction)}</td>
                           </tr>
                         )}
                         {Boolean(singleMonthlyRecord.otherDeductions) && (
                           <tr className="border-b border-slate-200">
-                            <td className="p-2 text-slate-700">- Diğer Kesintiler:</td>
-                            <td className="p-2 text-right text-slate-900">-{formatTRY(singleMonthlyRecord.otherDeductions)}</td>
+                            <td className="p-2 text-slate-700">
+                              <div>- Diğer Kesintiler:</div>
+                              {(singleMonthlyRecord.otherReason || singleMonthlyRecord.deductionReason) && (
+                                <div className="text-[10px] text-slate-500 font-normal">
+                                  ↳ {singleMonthlyRecord.otherReason || singleMonthlyRecord.deductionReason}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-2 text-right text-slate-900 align-top">-{formatTRY(singleMonthlyRecord.otherDeductions)}</td>
                           </tr>
                         )}
                         <tr className="bg-slate-100 font-bold text-slate-900">
@@ -1034,6 +1078,17 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
                   record={singleMonthlyRecord}
                   monthStr={monthStr}
                   puantajDays={currentEmployeePuantaj}
+                  showSignatures={showSignatures}
+                />
+              )}
+
+              {/* OTOMATİK EKLENEN PERSONEL AVANS TALEP VE MAHSUP FORMU */}
+              {hasAdvances && includeAdvanceForm && (
+                <AdvanceRequestPrintForm
+                  companySettings={companySettings}
+                  employee={currentEmp}
+                  record={singleMonthlyRecord}
+                  monthStr={monthStr}
                   showSignatures={showSignatures}
                 />
               )}
