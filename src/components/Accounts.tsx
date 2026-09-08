@@ -5,6 +5,8 @@ import { ExportButtons } from "./ExportButtons";
 import { BankStatementImportModal } from "./BankStatementImportModal";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF } from "../utils/exportUtils";
 import { exportElementToPDFWithPrintStyling } from "../utils/pdfService";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS, getContactAvatar } from "../utils/assetIcons";
 import {
   Account,
   Transaction,
@@ -286,6 +288,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   onDeletePromissoryNote,
   onEndorsePromissoryNote,
 }) => {
+  const { theme } = useTheme();
   const [internalSubModule, setInternalSubModule] = useState<FinanceSubModule>("kasa");
   const activeSubModule = activeFinanceSubTab || internalSubModule;
 
@@ -3695,286 +3698,286 @@ export const Accounts: React.FC<AccountsProps> = ({
 
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* MODULE HEADER & TOP SUMMARY (Lila Bal Peteği & Geometrik Desen) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-6 border border-purple-200/60 shadow-2xs space-y-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
+    <div className="p-3 sm:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* 1. Modern Clean Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+            Finans & Nakit Yönetimi
+          </h1>
+          <p className="text-xs font-medium text-slate-400 mt-1">
+            Nakit Kasa, Banka Hesapları, Çek, Senet ve Hesaplar Arası Virman Yönetimi.
+          </p>
+        </div>
 
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => {
+              setIsTransferModalOpen(true);
+              detailNav.openTransfer();
+            }}
+            className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs"
+          >
+            <ArrowRightLeft className="w-4 h-4 text-purple-600" />
+            <span>Hızlı Virman</span>
+          </button>
 
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-400/10"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-purple-100/90 border border-purple-200/90 flex items-center justify-center text-purple-700 shadow-2xs backdrop-blur-2xs font-bold shrink-0">
-                <Landmark className="w-5 h-5 text-purple-700" />
-              </div>
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-950">
-                  Finans Yönetimi
-                </h2>
-                <p className="text-xs font-semibold text-purple-950/90 mt-1 leading-relaxed">
-                  Nakit Kasa, Banka Hesapları, Çek, Senet ve Hesaplar Arası Virman Yönetimi.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+          {activeSubModule === "cek" && (
             <button
               onClick={() => {
-                setIsTransferModalOpen(true);
-                detailNav.openTransfer();
+                setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
+                setIsChequeModalOpen(true);
               }}
-              className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-xs"
+              className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all"
+              style={{ backgroundColor: theme.primaryColor }}
             >
-              <ArrowRightLeft className="w-4 h-4 text-purple-800 font-bold" />
-              <span>Hızlı Virman</span>
+              <Plus className="w-4 h-4" />
+              <span>Yeni Çek Girişi</span>
             </button>
+          )}
 
-            {activeSubModule === "cek" && (
-              <button
-                onClick={() => {
-                  setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
-                  setIsChequeModalOpen(true);
-                }}
-                className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all"
-              >
-                <Plus className="w-4 h-4 text-purple-800 font-bold" />
-                <span>Yeni Çek Girişi</span>
-              </button>
-            )}
+          {activeSubModule === "senet" && (
+            <button
+              onClick={() => {
+                setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
+                setIsNoteModalOpen(true);
+              }}
+              className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all"
+              style={{ backgroundColor: theme.primaryColor }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Yeni Senet Girişi</span>
+            </button>
+          )}
 
-            {activeSubModule === "senet" && (
-              <button
-                onClick={() => {
-                  setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
-                  setIsNoteModalOpen(true);
-                }}
-                className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all"
-              >
-                <Plus className="w-4 h-4 text-purple-800 font-bold" />
-                <span>Yeni Senet Girişi</span>
-              </button>
-            )}
-
-            {activeSubModule === "banka" && (
+          {activeSubModule === "banka" && (
+            <>
               <button
                 onClick={() => setIsBankStatementModalOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all"
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all"
               >
-                <FileSpreadsheet className="w-4 h-4 text-blue-100" />
+                <FileSpreadsheet className="w-4 h-4 text-blue-600" />
                 <span>Banka Ekstresi Yükle</span>
               </button>
-            )}
-
-            {(activeSubModule === "kasa" || activeSubModule === "banka") && (
               <button
                 onClick={() => {
-                  setAccType(activeSubModule === "kasa" ? "cash" : "bank");
+                  setAccType("bank");
                   setIsAccountModalOpen(true);
                   detailNav.openCreate();
                 }}
-                className="bg-purple-700/15 hover:bg-purple-700/25 text-purple-950 border border-purple-400/50 backdrop-blur-md font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all"
+                className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all"
+                style={{ backgroundColor: theme.primaryColor }}
               >
-                <Plus className="w-4 h-4 text-purple-800 font-bold" />
-                <span>
-                  {activeSubModule === "kasa" ? "Yeni Kasa Ekle" : "Yeni Banka Hesabı"}
-                </span>
+                <Plus className="w-4 h-4" />
+                <span>Yeni Banka Hesabı</span>
               </button>
-            )}
+            </>
+          )}
+
+          {activeSubModule === "kasa" && (
+            <button
+              onClick={() => {
+                setAccType("cash");
+                setIsAccountModalOpen(true);
+                detailNav.openCreate();
+              }}
+              className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all"
+              style={{ backgroundColor: theme.primaryColor }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Yeni Kasa Ekle</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Top 4 KPI Summary Cards Grid (Reference Design) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Nakit Kasalar */}
+        <div
+          onClick={() => {
+            setActiveSubModule("kasa");
+            setSelectedCashAccountId(null);
+          }}
+          className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ${
+            activeSubModule === "kasa" ? "ring-2 ring-amber-500/50" : ""
+          }`}
+          style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "kasa" ? "#f59e0b" : theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">Nakit Kasa Bakiyesi</p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-amber-600 mt-2">
+                ₺{totalCashBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.nakit} alt="Nakit" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="font-semibold text-amber-600">
+              {accounts.filter((a) => a.type === "cash").length}
+            </span>
+            <span>aktif nakit kasa</span>
           </div>
         </div>
 
-        {/* FINANCIAL SUMMARY CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-2 relative z-10">
-          {/* Nakit Kasalar */}
+        {/* Card 2: Banka Bakiyeleri */}
+        <div
+          onClick={() => {
+            setActiveSubModule("banka");
+            setSelectedBankAccountId(null);
+          }}
+          className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ${
+            activeSubModule === "banka" ? "ring-2 ring-blue-500/50" : ""
+          }`}
+          style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "banka" ? "#3b82f6" : theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">Banka & POS Bakiyesi</p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-blue-600 mt-2">
+                ₺{totalBankBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.nakit} alt="Banka" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="font-semibold text-blue-600">
+              {accounts.filter((a) => a.type === "bank" || a.type === "credit_card").length}
+            </span>
+            <span>banka hesabı</span>
+          </div>
+        </div>
+
+        {/* Card 3: Çek & Senet Portföyü */}
+        <div
+          onClick={() => setActiveSubModule("cek")}
+          className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ${
+            activeSubModule === "cek" || activeSubModule === "senet" ? "ring-2 ring-indigo-500/50" : ""
+          }`}
+          style={{ backgroundColor: theme.cardBg, borderColor: (activeSubModule === "cek" || activeSubModule === "senet") ? "#6366f1" : theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">Çek / Senet Portföyü</p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-indigo-600 mt-2">
+                ₺{(portfolioChequesTotal + portfolioNotesTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.toplamAlacak} alt="Portföy" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="font-semibold text-indigo-600">
+              {cheques.filter((c) => c.status === "portfolio").length} çek
+            </span>
+            <span>•</span>
+            <span className="font-semibold text-indigo-600">
+              {promissoryNotes.filter((n) => n.status === "portfolio").length} senet
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Toplam Net Likidite */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">Kullanılabilir Net Likidite</p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-emerald-600 mt-2">
+                ₺{(totalCashBalance + totalBankBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.ciro} alt="Likidite" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Kasa + Banka toplam fon</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Sub-Module Navigation Toolbar */}
+      <div
+        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-wrap items-center justify-between gap-3"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
           <button
             onClick={() => {
               setActiveSubModule("kasa");
               setSelectedCashAccountId(null);
             }}
-            className={`group relative overflow-hidden rounded-2xl p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
               activeSubModule === "kasa"
-                ? "bg-gradient-to-br from-amber-500/20 via-orange-500/10 to-amber-100/80 border-2 border-amber-500 ring-2 ring-amber-500/30 shadow-md"
-                : "bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-amber-50/70 border-amber-300/70 hover:border-amber-400 hover:shadow-md"
+                ? "bg-amber-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold uppercase text-amber-950 tracking-wider flex items-center gap-1.5">
-                <span>Nakit Kasalar</span>
-              </span>
-              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
-                <Banknote className="w-5 h-5 text-amber-700" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="text-2xl font-black text-amber-950 font-mono tracking-tight">
-                ₺{totalCashBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-              </div>
-              <p className="text-xs font-semibold text-amber-900/80 mt-1 flex items-center gap-1">
-                <span className="text-amber-950 font-bold bg-amber-200/80 px-1.5 py-0.5 rounded border border-amber-300/80">
-                  {accounts.filter((a) => a.type === "cash").length} Kasa
-                </span>{" "}
-                aktif
-              </p>
-            </div>
+            <Banknote className="w-4 h-4" />
+            <span>Nakit Kasalar ({accounts.filter((a) => a.type === "cash").length})</span>
           </button>
 
-          {/* Banka Bakiyeleri */}
           <button
             onClick={() => {
               setActiveSubModule("banka");
               setSelectedBankAccountId(null);
             }}
-            className={`group relative overflow-hidden rounded-2xl p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
               activeSubModule === "banka"
-                ? "bg-gradient-to-br from-blue-500/20 via-sky-500/10 to-blue-100/80 border-2 border-blue-500 ring-2 ring-blue-500/30 shadow-md"
-                : "bg-gradient-to-br from-blue-500/10 via-sky-500/5 to-blue-50/70 border-blue-300/70 hover:border-blue-400 hover:shadow-md"
+                ? "bg-blue-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold uppercase text-blue-950 tracking-wider flex items-center gap-1.5">
-                <span>Banka Bakiyeleri</span>
-              </span>
-              <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-400/40 text-blue-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
-                <Building className="w-5 h-5 text-blue-700" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="text-2xl font-black text-blue-950 font-mono tracking-tight">
-                ₺{totalBankBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-              </div>
-              <p className="text-xs font-semibold text-blue-900/80 mt-1 flex items-center gap-1">
-                <span className="text-blue-950 font-bold bg-blue-200/80 px-1.5 py-0.5 rounded border border-blue-300/80">
-                  {accounts.filter((a) => a.type === "bank" || a.type === "credit_card").length} Banka
-                </span>{" "}
-                hesabı
-              </p>
-            </div>
+            <Building className="w-4 h-4" />
+            <span>Banka & POS ({accounts.filter((a) => a.type === "bank" || a.type === "credit_card").length})</span>
           </button>
 
-          {/* Portföydeki Çekler */}
           <button
             onClick={() => setActiveSubModule("cek")}
-            className={`group relative overflow-hidden rounded-2xl p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
               activeSubModule === "cek"
-                ? "bg-gradient-to-br from-indigo-500/20 via-violet-500/10 to-indigo-100/80 border-2 border-indigo-500 ring-2 ring-indigo-500/30 shadow-md"
-                : "bg-gradient-to-br from-indigo-500/10 via-violet-500/5 to-indigo-50/70 border-indigo-300/70 hover:border-indigo-400 hover:shadow-md"
+                ? "bg-indigo-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold uppercase text-indigo-950 tracking-wider flex items-center gap-1.5">
-                <span>Portföydeki Çekler</span>
-              </span>
-              <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/40 text-indigo-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
-                <FileCheck2 className="w-5 h-5 text-indigo-700" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="text-2xl font-black text-indigo-950 font-mono tracking-tight">
-                ₺{portfolioChequesTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-              </div>
-              <p className="text-xs font-semibold text-indigo-900/80 mt-1 flex items-center gap-1">
-                <span className="text-indigo-950 font-bold bg-indigo-200/80 px-1.5 py-0.5 rounded border border-indigo-300/80">
-                  {cheques.filter((c) => c.status === "portfolio").length} Çek
-                </span>{" "}
-                portföyde
-              </p>
-            </div>
+            <FileCheck2 className="w-4 h-4" />
+            <span>Çek Portföyü ({cheques.filter((c) => c.status === "portfolio").length})</span>
           </button>
 
-          {/* Portföydeki Senetler */}
           <button
             onClick={() => setActiveSubModule("senet")}
-            className={`group relative overflow-hidden rounded-2xl p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
               activeSubModule === "senet"
-                ? "bg-gradient-to-br from-fuchsia-500/20 via-pink-500/10 to-fuchsia-100/80 border-2 border-fuchsia-500 ring-2 ring-fuchsia-500/30 shadow-md"
-                : "bg-gradient-to-br from-fuchsia-500/10 via-pink-500/5 to-fuchsia-50/70 border-fuchsia-300/70 hover:border-fuchsia-400 hover:shadow-md"
+                ? "bg-fuchsia-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold uppercase text-fuchsia-950 tracking-wider flex items-center gap-1.5">
-                <span>Portföydeki Senetler</span>
-              </span>
-              <div className="w-9 h-9 rounded-xl bg-fuchsia-500/20 border border-fuchsia-400/40 text-fuchsia-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
-                <Stamp className="w-5 h-5 text-fuchsia-700" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="text-2xl font-black text-fuchsia-950 font-mono tracking-tight">
-                ₺{portfolioNotesTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-              </div>
-              <p className="text-xs font-semibold text-fuchsia-900/80 mt-1 flex items-center gap-1">
-                <span className="text-fuchsia-950 font-bold bg-fuchsia-200/80 px-1.5 py-0.5 rounded border border-fuchsia-300/80">
-                  {promissoryNotes.filter((n) => n.status === "portfolio").length} Senet
-                </span>{" "}
-                portföyde
-              </p>
-            </div>
+            <Stamp className="w-4 h-4" />
+            <span>Senet Portföyü ({promissoryNotes.filter((n) => n.status === "portfolio").length})</span>
           </button>
 
-          {/* Hesaplar Arası Virman */}
           <button
             onClick={() => setActiveSubModule("virman")}
-            className={`group relative overflow-hidden rounded-2xl p-5 text-left transition-all cursor-pointer backdrop-blur-md border ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
               activeSubModule === "virman"
-                ? "bg-gradient-to-br from-emerald-500/20 via-teal-500/10 to-emerald-100/80 border-2 border-emerald-500 ring-2 ring-emerald-500/30 shadow-md"
-                : "bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-emerald-50/70 border-emerald-300/70 hover:border-emerald-400 hover:shadow-md"
+                ? "bg-emerald-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold uppercase text-emerald-950 tracking-wider flex items-center gap-1.5">
-                <span>Hesaplar Arası Virman</span>
-              </span>
-              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-800 flex items-center justify-center group-hover:scale-110 transition-transform font-bold">
-                <ArrowRightLeft className="w-5 h-5 text-emerald-700" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="text-2xl font-black text-emerald-950 font-mono tracking-tight">
-                {virmanTransactions.length} Kayıt
-              </div>
-              <p className="text-xs font-semibold text-emerald-900/80 mt-1 flex items-center gap-1">
-                <span className="text-emerald-950 font-bold bg-emerald-200/80 px-1.5 py-0.5 rounded border border-emerald-300/80">
-                  Transfer
-                </span>{" "}
-                hareketleri
-              </p>
-            </div>
+            <ArrowRightLeft className="w-4 h-4" />
+            <span>Virman / Transfer ({virmanTransactions.length})</span>
           </button>
         </div>
-
-
       </div>
 
       {/* SUB-MODULE 1: KASA */}
@@ -4120,23 +4123,26 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-              <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[750px]">
+            <div
+              className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <table className="w-full text-left text-xs min-w-[750px]">
                 <thead>
-                  <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                    <th className="pb-2 px-3">Tarih</th>
-                    <th className="pb-2 px-3">Evrak / Makbuz No</th>
-                    <th className="pb-2 px-3">Kasa</th>
-                    <th className="pb-2 px-3">İşlem / Cari</th>
-                    <th className="pb-2 px-3">Açıklama</th>
-                    <th className="pb-2 px-3 text-right">Tutar</th>
-                    <th className="pb-2 px-3 text-center">İşlem</th>
+                  <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">Tarih</th>
+                    <th className="py-3 px-4">Evrak / Makbuz No</th>
+                    <th className="py-3 px-4">Kasa</th>
+                    <th className="py-3 px-4">İşlem / Cari</th>
+                    <th className="py-3 px-4">Açıklama</th>
+                    <th className="py-3 px-4 text-right">Tutar</th>
+                    <th className="py-3 px-4 text-center">İşlem</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {kasaTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                      <td colSpan={7} className="text-center py-8 text-slate-400">
                         Kasa hareketi bulunamadı.
                       </td>
                     </tr>
@@ -4146,12 +4152,12 @@ export const Accounts: React.FC<AccountsProps> = ({
                       return (
                         <tr
                           key={tx.id}
-                          className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                          className="hover:bg-slate-50/70 transition-colors group"
                         >
-                          <td className="py-2.5 px-3 font-medium text-slate-500 group-hover:text-purple-900 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 font-medium text-slate-600">
                             {formatDate(tx.date)}
                           </td>
-                          <td className="py-2.5 px-3 font-mono font-semibold text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 font-mono font-semibold text-slate-700">
                             {tx.documentNo ? (
                               <span className="bg-amber-50 text-amber-800 border border-amber-200/80 px-2 py-0.5 rounded text-[11px]">
                                 {tx.documentNo}
@@ -4160,24 +4166,24 @@ export const Accounts: React.FC<AccountsProps> = ({
                               <span className="text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 font-bold text-slate-800 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 font-bold text-slate-800">
                             {tx.accountName}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-700 group-hover:text-purple-900 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 text-slate-700 font-medium">
                             {tx.contactName || tx.category}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-500 group-hover:text-purple-800/80 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 text-slate-500">
                             {tx.description}
                           </td>
                           <td
-                            className={`py-2.5 px-3 text-right font-black border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all ${
+                            className={`py-3 px-4 text-right font-mono font-bold ${
                               isIncome ? "text-emerald-600" : "text-rose-600"
                             }`}
                           >
                             {isIncome ? "+" : "-"}₺
                             {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 text-center">
                             <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                               <button
                                 type="button"
@@ -4406,23 +4412,26 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-              <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[750px]">
+            <div
+              className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <table className="w-full text-left text-xs min-w-[750px]">
                 <thead>
-                  <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                    <th className="pb-2 px-3">Tarih</th>
-                    <th className="pb-2 px-3">Dekont No</th>
-                    <th className="pb-2 px-3">Banka Hesabı</th>
-                    <th className="pb-2 px-3">İşlem / Cari</th>
-                    <th className="pb-2 px-3">Açıklama</th>
-                    <th className="pb-2 px-3 text-right">Tutar</th>
-                    <th className="pb-2 px-3 text-center">İşlem</th>
+                  <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">Tarih</th>
+                    <th className="py-3 px-4">Dekont No</th>
+                    <th className="py-3 px-4">Banka Hesabı</th>
+                    <th className="py-3 px-4">İşlem / Cari</th>
+                    <th className="py-3 px-4">Açıklama</th>
+                    <th className="py-3 px-4 text-right">Tutar</th>
+                    <th className="py-3 px-4 text-center">İşlem</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {bankTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80 font-medium">
+                      <td colSpan={7} className="text-center py-8 text-slate-400 font-medium">
                         Seçilen tarih aralığında veya bu banka hesabına ait işlem hareketi bulunmuyor.
                       </td>
                     </tr>
@@ -4432,12 +4441,12 @@ export const Accounts: React.FC<AccountsProps> = ({
                       return (
                         <tr
                           key={tx.id}
-                          className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                          className="hover:bg-slate-50/70 transition-colors group"
                         >
-                          <td className="py-2.5 px-3 font-medium text-slate-500 group-hover:text-purple-900 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 font-medium text-slate-600">
                             {formatDate(tx.date)}
                           </td>
-                          <td className="py-2.5 px-3 font-mono font-semibold text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 font-mono font-semibold text-slate-700">
                             {tx.documentNo ? (
                               <span className="bg-blue-50 text-blue-800 border border-blue-200/80 px-2 py-0.5 rounded text-[11px]">
                                 {tx.documentNo}
@@ -4446,24 +4455,24 @@ export const Accounts: React.FC<AccountsProps> = ({
                               <span className="text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 font-bold text-slate-800 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 font-bold text-slate-800">
                             {tx.accountName}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-700 group-hover:text-purple-900 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 text-slate-700 font-medium">
                             {tx.contactName || tx.category}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-500 group-hover:text-purple-800/80 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 text-slate-500">
                             {tx.description}
                           </td>
                           <td
-                            className={`py-2.5 px-3 text-right font-black border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all ${
+                            className={`py-3 px-4 text-right font-mono font-bold ${
                               isIncome ? "text-emerald-600" : "text-rose-600"
                             }`}
                           >
                             {isIncome ? "+" : "-"}₺
                             {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                          <td className="py-3 px-4 text-center">
                             <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                               <button
                                 type="button"
@@ -4616,23 +4625,26 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
           </div>
 
-          <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-            <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[800px]">
+          <div
+            className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <table className="w-full text-left text-xs min-w-[800px]">
               <thead>
-                <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                  <th className="pb-2 px-3">Çek No & Tipi</th>
-                  <th className="pb-2 px-3">Banka / Şube</th>
-                  <th className="pb-2 px-3">Keşideci / Cari</th>
-                  <th className="pb-2 px-3">Vade Tarihi</th>
-                  <th className="pb-2 px-3 text-right">Tutar</th>
-                  <th className="pb-2 px-3 text-center">Durum</th>
-                  <th className="pb-2 px-3 text-center">İşlem</th>
+                <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4">Çek No & Tipi</th>
+                  <th className="py-3 px-4">Banka / Şube</th>
+                  <th className="py-3 px-4">Keşideci / Cari</th>
+                  <th className="py-3 px-4">Vade Tarihi</th>
+                  <th className="py-3 px-4 text-right">Tutar</th>
+                  <th className="py-3 px-4 text-center">Durum</th>
+                  <th className="py-3 px-4 text-center">İşlem</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {filteredCheques.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                    <td colSpan={7} className="text-center py-8 text-slate-400">
                       Kayıtlı çek bulunamadı.
                     </td>
                   </tr>
@@ -4640,36 +4652,47 @@ export const Accounts: React.FC<AccountsProps> = ({
                   displayedCheques.map((c) => (
                     <tr
                       key={c.id}
-                      className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                      className="hover:bg-slate-50/70 transition-colors group"
                     >
-                      <td className="py-2.5 px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="font-mono font-bold text-slate-900 group-hover:text-purple-950">{c.chequeNumber}</div>
+                      <td className="py-3 px-4">
+                        <div className="font-mono font-bold text-slate-900">{c.chequeNumber}</div>
                         <span
-                          className={`text-[10px] font-bold ${
-                            c.type === "received" ? "text-emerald-600" : "text-amber-600"
+                          className={`inline-block mt-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            c.type === "received"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-amber-50 text-amber-800 border border-amber-200"
                           }`}
                         >
-                          {c.type === "received" ? "Müşteri Çeki" : "Borç / Firma Çeki"}
+                          {c.type === "received" ? "Müşteri Çeki" : "Firma Çeki"}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="font-bold text-slate-800 group-hover:text-purple-950">{c.bankName}</div>
-                        <div className="text-[10px] text-slate-500 group-hover:text-purple-700/60">{c.branchName || "-"}</div>
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-800">{c.bankName}</div>
+                        <div className="text-[10px] text-slate-400">{c.branchName || "-"}</div>
                       </td>
-                      <td className="py-2.5 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="font-bold text-slate-900 group-hover:text-purple-950">{c.contactName}</div>
-                        <div className="text-[10px] text-slate-500 group-hover:text-purple-700/60">{c.drawerName}</div>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={getContactAvatar(c.contactName || c.drawerName)}
+                            alt={c.contactName}
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 bg-slate-100"
+                          />
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 truncate">{c.contactName}</div>
+                            <div className="text-[10px] text-slate-400 truncate">{c.drawerName}</div>
+                          </div>
+                        </div>
                       </td>
-                      <td className="py-2.5 px-3 font-mono font-semibold text-slate-700 group-hover:text-purple-900 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-3 px-4 font-mono font-semibold text-slate-700">
                         {formatDate(c.dueDate)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-black font-mono text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-3 px-4 text-right font-bold font-mono text-slate-900">
                         ₺{c.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="py-2.5 px-3 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-3 px-4 text-center">
                         {getChequeStatusBadge(c.status, c.endorsedToContactName)}
                       </td>
-                      <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                           <button
                             type="button"
@@ -4726,7 +4749,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                                 onUpdateChequeStatus(c.id, val);
                               }
                             }}
-                            className="text-xs bg-slate-100 font-bold text-slate-800 rounded-lg border border-slate-200 px-2 py-1.5 cursor-pointer shadow-2xs shrink-0"
+                            className="text-xs bg-slate-50 font-bold text-slate-800 rounded-lg border border-slate-200 px-2 py-1.5 cursor-pointer shadow-2xs shrink-0"
                           >
                             <option value="portfolio">Portföyde</option>
                             <option value="collected">Tahsil Edildi</option>
@@ -4747,11 +4770,10 @@ export const Accounts: React.FC<AccountsProps> = ({
                           )}
                         </div>
                       </td>
-                  </tr>
-                )
-              )
-            )}
-          </tbody>
+                    </tr>
+                  ))
+                )}
+              </tbody>
             </table>
           </div>
 
@@ -4852,23 +4874,26 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
           </div>
 
-          <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-            <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[800px]">
+          <div
+            className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <table className="w-full text-left text-xs min-w-[800px]">
               <thead>
-                <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                  <th className="pb-2 px-3">Senet No & Tipi</th>
-                  <th className="pb-2 px-3">Borçlu / Cari</th>
-                  <th className="pb-2 px-3">Keşide / Düzenleme</th>
-                  <th className="pb-2 px-3">Vade Tarihi</th>
-                  <th className="pb-2 px-3 text-right">Tutar</th>
-                  <th className="pb-2 px-3 text-center">Durum</th>
-                  <th className="pb-2 px-3 text-center">İşlem</th>
+                <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4">Senet No & Tipi</th>
+                  <th className="py-3 px-4">Borçlu / Cari</th>
+                  <th className="py-3 px-4">Keşide / Düzenleme</th>
+                  <th className="py-3 px-4">Vade Tarihi</th>
+                  <th className="py-3 px-4 text-right">Tutar</th>
+                  <th className="py-3 px-4 text-center">Durum</th>
+                  <th className="py-3 px-4 text-center">İşlem</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {filteredNotes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                    <td colSpan={7} className="text-center py-8 text-slate-400">
                       Kayıtlı senet bulunamadı.
                     </td>
                   </tr>
@@ -4876,33 +4901,46 @@ export const Accounts: React.FC<AccountsProps> = ({
                   displayedNotes.map((n) => (
                     <tr
                       key={n.id}
-                      className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                      className="hover:bg-slate-50/70 transition-colors group"
                     >
-                      <td className="py-2.5 px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="font-mono font-bold text-slate-900 group-hover:text-purple-950">{n.noteNumber}</div>
+                      <td className="py-3 px-4">
+                        <div className="font-mono font-bold text-slate-900">{n.noteNumber}</div>
                         <span
-                          className={`text-[10px] font-bold ${
-                            n.type === "received" ? "text-emerald-600" : "text-amber-600"
+                          className={`inline-block mt-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            n.type === "received"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-amber-50 text-amber-800 border border-amber-200"
                           }`}
                         >
-                          {n.type === "received" ? "Müşteri Seneti" : "Borç Seneti"}
+                          {n.type === "received" ? "Müşteri Senedi" : "Borç Senedi"}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                        <div className="font-bold text-slate-900 group-hover:text-purple-950">{n.contactName}</div>
-                        <div className="text-[10px] text-slate-500 group-hover:text-purple-700/60">{n.debtorName}</div>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={getContactAvatar(n.contactName || n.debtorName)}
+                            alt={n.contactName}
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 bg-slate-100"
+                          />
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 truncate">{n.contactName}</div>
+                            <div className="text-[10px] text-slate-400 truncate">{n.debtorName}</div>
+                          </div>
+                        </div>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-500 group-hover:text-purple-800/80 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">{formatDate(n.issueDate)}</td>
-                      <td className="py-2.5 px-3 font-mono font-semibold text-slate-700 group-hover:text-purple-900 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-3 px-4 font-mono text-slate-500">
+                        {formatDate(n.issueDate)}
+                      </td>
+                      <td className="py-3 px-4 font-mono font-semibold text-slate-700">
                         {formatDate(n.dueDate)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-black font-mono text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-3 px-4 text-right font-bold font-mono text-slate-900">
                         ₺{n.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="py-2.5 px-3 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-3 px-4 text-center">
                         {getNoteStatusBadge(n.status, n.endorsedToContactName)}
                       </td>
-                      <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                      <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                           <button
                             type="button"
@@ -4959,7 +4997,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                                 onUpdateNoteStatus(n.id, val);
                               }
                             }}
-                            className="text-xs bg-slate-100 font-bold text-slate-800 rounded-lg border border-slate-200 px-2 py-1.5 cursor-pointer shadow-2xs shrink-0"
+                            className="text-xs bg-slate-50 font-bold text-slate-800 rounded-lg border border-slate-200 px-2 py-1.5 cursor-pointer shadow-2xs shrink-0"
                           >
                             <option value="portfolio">Portföyde</option>
                             <option value="collected">Tahsil Edildi</option>
@@ -4980,11 +5018,10 @@ export const Accounts: React.FC<AccountsProps> = ({
                           )}
                         </div>
                       </td>
-                  </tr>
-                )
-              )
-            )}
-          </tbody>
+                    </tr>
+                  ))
+                )}
+              </tbody>
             </table>
           </div>
 
@@ -5125,21 +5162,24 @@ export const Accounts: React.FC<AccountsProps> = ({
           <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
             <h3 className="text-sm font-extrabold text-slate-900">Virman Transfer Geçmişi</h3>
 
-            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-              <table className="w-full text-left text-xs border-separate border-spacing-y-2 min-w-[700px]">
+            <div
+              className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <table className="w-full text-left text-xs min-w-[700px]">
                 <thead>
-                  <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                    <th className="pb-2 px-3">Tarih</th>
-                    <th className="pb-2 px-3">Hesap</th>
-                    <th className="pb-2 px-3">Kategori / Açıklama</th>
-                    <th className="pb-2 px-3 text-right">Tutar</th>
-                    <th className="pb-2 px-3 text-center">İşlem</th>
+                  <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">Tarih</th>
+                    <th className="py-3 px-4">Hesap</th>
+                    <th className="py-3 px-4">Kategori / Açıklama</th>
+                    <th className="py-3 px-4 text-right">Tutar</th>
+                    <th className="py-3 px-4 text-center">İşlem</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {virmanTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
+                      <td colSpan={5} className="text-center py-8 text-slate-400">
                         Seçilen tarih aralığında virman transfer hareketi bulunmuyor.
                       </td>
                     </tr>
@@ -5147,26 +5187,26 @@ export const Accounts: React.FC<AccountsProps> = ({
                     displayedVirmanTransactions.map((tx) => (
                       <tr
                         key={tx.id}
-                        className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
+                        className="hover:bg-slate-50/70 transition-colors group"
                       >
-                        <td className="py-2.5 px-3 font-medium text-slate-500 group-hover:text-purple-900 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                        <td className="py-3 px-4 font-medium text-slate-600">
                           {formatDate(tx.date)}
                         </td>
-                        <td className="py-2.5 px-3 font-bold text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                        <td className="py-3 px-4 font-bold text-slate-900">
                           {tx.accountName}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-700 group-hover:text-purple-900 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                        <td className="py-3 px-4 text-slate-700">
                           {tx.description}
                         </td>
                         <td
-                          className={`py-2.5 px-3 text-right font-black font-mono border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all ${
+                          className={`py-3 px-4 text-right font-bold font-mono ${
                             tx.type === "income" ? "text-emerald-600" : "text-rose-600"
                           }`}
                         >
                           {tx.type === "income" ? "+" : "-"}₺
                           {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-2.5 px-3 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
+                        <td className="py-3 px-4 text-center">
                           <div className="flex items-center justify-center gap-1.5 flex-wrap sm:flex-nowrap">
                             <button
                               type="button"
@@ -5201,7 +5241,6 @@ export const Accounts: React.FC<AccountsProps> = ({
                               <Pencil className="w-3.5 h-3.5 text-purple-700 shrink-0" />
                               <span>Düzenle</span>
                             </button>
-
                             {onDeleteTransaction && (
                               <button
                                 type="button"
