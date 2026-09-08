@@ -1180,7 +1180,7 @@ export const Orders: React.FC<OrdersProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.ciro }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.ciro} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -1204,7 +1204,7 @@ export const Orders: React.FC<OrdersProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.nakit }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.nakit} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -1228,7 +1228,7 @@ export const Orders: React.FC<OrdersProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamBorc }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.toplamBorc} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -1252,7 +1252,7 @@ export const Orders: React.FC<OrdersProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamAlacak }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.toplamAlacak} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -1269,15 +1269,15 @@ export const Orders: React.FC<OrdersProps> = ({
         className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
         style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
       >
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Active Tab Pills */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Type Tabs */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs">
             <button
               type="button"
               onClick={() => setActiveTab("all")}
               className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                 activeTab === "all"
-                  ? "bg-white text-slate-900 shadow-2xs"
+                  ? "bg-white text-purple-700 shadow-2xs"
                   : "text-slate-500 hover:text-slate-900"
               }`}
             >
@@ -1309,10 +1309,7 @@ export const Orders: React.FC<OrdersProps> = ({
 
           {/* Search Box */}
           <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <div
-              dangerouslySetInnerHTML={{ __html: ASSET_ICONS.search }}
-              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
-            />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder="Sipariş no, cari veya ürün ara..."

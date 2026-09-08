@@ -4021,7 +4021,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamAlacak }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.toplamAlacak} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -4045,7 +4045,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.nakit }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.nakit} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -4069,7 +4069,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamBorc }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.toplamBorc} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -4093,7 +4093,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.alacak }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.alacak} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">

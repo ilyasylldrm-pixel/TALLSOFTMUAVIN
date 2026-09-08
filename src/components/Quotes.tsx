@@ -905,7 +905,7 @@ export const Quotes: React.FC<QuotesProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.ciro }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.ciro} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -929,7 +929,7 @@ export const Quotes: React.FC<QuotesProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.nakit }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.nakit} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -953,7 +953,7 @@ export const Quotes: React.FC<QuotesProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamAlacak }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.toplamAlacak} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -977,7 +977,7 @@ export const Quotes: React.FC<QuotesProps> = ({
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
-              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamBorc }} className="w-6 h-6 flex items-center justify-center" />
+              <img src={ASSET_ICONS.toplamBorc} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs">
@@ -997,10 +997,7 @@ export const Quotes: React.FC<QuotesProps> = ({
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Search Box */}
           <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <div
-              dangerouslySetInnerHTML={{ __html: ASSET_ICONS.search }}
-              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
-            />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder="Proforma no veya müşteri ara..."

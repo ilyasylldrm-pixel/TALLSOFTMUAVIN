@@ -37,7 +37,7 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
 
   return (
     <div
-      className={`min-h-screen flex flex-col animate-fadeIn transition-colors ${className}`}
+      className={`min-h-screen w-full max-w-full overflow-x-hidden min-w-0 flex flex-col animate-fadeIn transition-colors ${className}`}
       style={{ backgroundColor: theme.pageBg, color: theme.pageText }}
     >
       {/* Top Sticky Header Bar */}
@@ -127,8 +127,8 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
       </header>
 
       {/* Main Content Body */}
-      <main className="flex-1 py-6">
-        <div className={fullWidth ? "px-4 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-4 sm:px-6"}>
+      <main className="flex-1 py-6 w-full min-w-0">
+        <div className={`${fullWidth ? "px-4 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-4 sm:px-6"} w-full min-w-0`}>
           {children}
         </div>
       </main>

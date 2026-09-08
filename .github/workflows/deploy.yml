@@ -47,7 +47,50 @@ jobs:
           } > /tmp/muavin.env
       - name: FTP deploy
         env:
+          FTP_HOST: ${{ secrets.FTP_HOST || '31.186.11.163' }}
+          FTP_USER: ${{ secrets.FTP_USER || 'tal2e0ftorg' }}
           FTP_PASS: ${{ secrets.FTP_PASS }}
         run: |
+          if [ -z "$FTP_PASS" ]; then
+            echo "::error::GitHub Secrets icinde FTP_PASS tanimli degil!"
+            exit 1
+          fi
           sudo apt-get update -qq && sudo apt-get install -y -qq lftp
-          lftp -u "tal2e0ftorg,$FTP_PASS" "31.186.11.163" -e "set ftp:ssl-allow no; set net:max-retries 3; set net:timeout 30; mirror -R --delete --no-perms dist httpdocs/dist; put server.ts -o httpdocs/server.ts; put /tmp/muavin.env -o httpdocs/muavin.env; put /tmp/muavin.env -o httpdocs/dist/muavin.env; put /tmp/muavin.env -o muavin.env; get httpdocs/web.config -o /tmp/wc; printf '\n<!-- recycle %s -->\n' \"$(date -u +%FT%TZ)\" >> /tmp/wc; put /tmp/wc -o httpdocs/web.config; bye"
+          lftp <<EOF
+          set ftp:ssl-allow yes
+          set ssl:verify-certificate no
+          set ftp:passive-mode on
+          set net:max-retries 3
+          set net:timeout 30
+          open -u "$FTP_USER","$FTP_PASS" "$FTP_HOST"
+          mirror -R --delete --no-perms dist httpdocs/dist
+          put server.ts -o httpdocs/server.ts
+          put /tmp/muavin.env -o httpdocs/muavin.env
+          put /tmp/muavin.env -o httpdocs/dist/muavin.env
+          put /tmp/muavin.env -o muavin.env
+          bye
+          EOF
+
+          # web.config dosyasini guncelleyerek IIS uygulamasini guvenle recycle et
+          lftp <<EOF || true
+          set ftp:ssl-allow yes
+          set ssl:verify-certificate no
+          set ftp:passive-mode on
+          set net:max-retries 2
+          set net:timeout 15
+          open -u "$FTP_USER","$FTP_PASS" "$FTP_HOST"
+          get httpdocs/web.config -o /tmp/wc || exit 0
+          bye
+          EOF
+
+          if [ -f /tmp/wc ]; then
+            printf '\n<!-- recycle %s -->\n' "$(date -u +%FT%TZ)" >> /tmp/wc
+            lftp <<EOF || true
+            set ftp:ssl-allow yes
+            set ssl:verify-certificate no
+            set ftp:passive-mode on
+            open -u "$FTP_USER","$FTP_PASS" "$FTP_HOST"
+            put /tmp/wc -o httpdocs/web.config
+            bye
+            EOF
+          fi
