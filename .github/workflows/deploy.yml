@@ -55,14 +55,16 @@ jobs:
             echo "::error::GitHub Secrets icinde FTP_PASS tanimli degil!"
             exit 1
           fi
+          echo "FTP baglantisi baslatiliyor: Kullanici: $FTP_USER -> Sunucu: $FTP_HOST"
           sudo apt-get update -qq && sudo apt-get install -y -qq lftp
           lftp <<EOF
           set ftp:ssl-allow yes
           set ssl:verify-certificate no
           set ftp:passive-mode on
-          set net:max-retries 3
+          set net:max-retries 2
           set net:timeout 30
-          open -u "$FTP_USER","$FTP_PASS" "$FTP_HOST"
+          open "$FTP_HOST"
+          user "$FTP_USER" "$FTP_PASS"
           mirror -R --delete --no-perms dist httpdocs/dist
           put server.ts -o httpdocs/server.ts
           put /tmp/muavin.env -o httpdocs/muavin.env
@@ -78,7 +80,8 @@ jobs:
           set ftp:passive-mode on
           set net:max-retries 2
           set net:timeout 15
-          open -u "$FTP_USER","$FTP_PASS" "$FTP_HOST"
+          open "$FTP_HOST"
+          user "$FTP_USER" "$FTP_PASS"
           get httpdocs/web.config -o /tmp/wc || exit 0
           bye
           EOF
@@ -89,7 +92,8 @@ jobs:
             set ftp:ssl-allow yes
             set ssl:verify-certificate no
             set ftp:passive-mode on
-            open -u "$FTP_USER","$FTP_PASS" "$FTP_HOST"
+            open "$FTP_HOST"
+            user "$FTP_USER" "$FTP_PASS"
             put /tmp/wc -o httpdocs/web.config
             bye
             EOF
