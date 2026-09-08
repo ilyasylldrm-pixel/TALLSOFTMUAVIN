@@ -6,6 +6,8 @@ import { formatQuoteWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS, getContactAvatar } from "../utils/assetIcons";
 import {
   FileSpreadsheet,
   Plus,
@@ -102,7 +104,40 @@ export const Quotes: React.FC<QuotesProps> = ({
   const [printingQuote, setPrintingQuote] = useState<Quote | null>(null);
   const [whatsAppQuote, setWhatsAppQuote] = useState<Quote | null>(null);
   const [isDownloadingQuotePDF, setIsDownloadingQuotePDF] = useState(false);
+  const { theme } = useTheme();
   const [formType, setFormType] = useState<"proforma" | "quote">("proforma");
+
+  const kpiStats = React.useMemo(() => {
+    let totalVolume = 0;
+    let acceptedVolume = 0;
+    let pendingVolume = 0;
+    let invoicedCount = 0;
+    let acceptedCount = 0;
+    let pendingCount = 0;
+
+    quotes.forEach((q) => {
+      const amount = q.grandTotal || 0;
+      totalVolume += amount;
+      if (q.status === "approved" || q.status === "accepted") {
+        acceptedVolume += amount;
+        acceptedCount++;
+      } else if (q.status === "converted" || q.status === "invoiced") {
+        invoicedCount++;
+      } else {
+        pendingVolume += amount;
+        pendingCount++;
+      }
+    });
+
+    return {
+      totalVolume,
+      acceptedVolume,
+      pendingVolume,
+      invoicedCount,
+      acceptedCount,
+      pendingCount,
+    };
+  }, [quotes]);
 
   const nav = useDetailNavigation<Quote>({ moduleKey: "quotes" });
 
@@ -829,6 +864,398 @@ export const Quotes: React.FC<QuotesProps> = ({
     );
   }
 
+  return (
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
+      {/* 1. TOP TITLE & ACTION HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: theme.pageText }}>
+            Teklifler & Proforma Faturalar
+          </h1>
+          <p className="text-xs font-medium text-slate-400 mt-1">
+            Müşterilere sunulan proforma faturalar, teklifler ve onaylanan belgelerin faturaya/siparişe dönüşümü
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openNewFormModal("proforma")}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>+ Yeni Proforma / Teklif</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. TOP 4 KPI SUMMARY CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Toplam Teklif Hacmi */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam Teklif Hacmi</span>
+              <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                ₺{kpiStats.totalVolume.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.ciro }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+              {quotes.length} Kayıt
+            </span>
+            <span className="text-slate-400 text-[11px]">Düzenlenen belgeler</span>
+          </div>
+        </div>
+
+        {/* Card 2: Kabul Edilen Teklifler */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Kabul Edilen Teklifler</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                ₺{kpiStats.acceptedVolume.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.nakit }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-emerald-600">
+              {kpiStats.acceptedCount} Onaylandı
+            </span>
+            <span className="text-slate-400 text-[11px]">• Müşteri onayı alındı</span>
+          </div>
+        </div>
+
+        {/* Card 3: Onay Bekleyenler */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Onay Bekleyenler</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-indigo-600">
+                ₺{kpiStats.pendingVolume.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamAlacak }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-indigo-600">
+              {kpiStats.pendingCount} İncelemede
+            </span>
+            <span className="text-slate-400 text-[11px]">• Karar aşamasında</span>
+          </div>
+        </div>
+
+        {/* Card 4: Faturaya / Siparişe Dönüşen */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Faturaya Dönüşenler</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-teal-600">
+                {kpiStats.invoicedCount}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
+              <div dangerouslySetInnerHTML={{ __html: ASSET_ICONS.toplamBorc }} className="w-6 h-6 flex items-center justify-center" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
+              Resmileşti
+            </span>
+            <span className="text-slate-400 text-[11px]">Resmi faturaya dönüştü</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. FILTER & ACTION TOOLBAR */}
+      <div
+        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <div
+              dangerouslySetInnerHTML={{ __html: ASSET_ICONS.search }}
+              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+            />
+            <input
+              type="text"
+              placeholder="Proforma no veya müşteri ara..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200/50 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Year Filter */}
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="rounded-xl px-3 py-2 border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm Yıllar</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y.toString()}>{y}</option>
+            ))}
+          </select>
+
+          {/* Month Filter */}
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="rounded-xl px-3 py-2 border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm Aylar</option>
+            {TURKISH_MONTHS.map((m) => (
+              <option key={m.id} value={m.id.toString()}>{m.name}</option>
+            ))}
+          </select>
+
+          {(selectedYear !== "all" || selectedMonth !== "all") && (
+            <button
+              onClick={() => {
+                setSelectedYear("all");
+                setSelectedMonth("all");
+              }}
+              className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              title="Filtreyi temizle"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Temizle</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <ExportButtons
+            getExportData={() => ({
+              filename: `Proforma_Faturalar_${new Date().toISOString().split("T")[0]}`,
+              title: "PROFORMA FATURALAR LİSTESİ",
+              subtitle: `Toplam ${filteredQuotes.length} Adet Kayıt`,
+              headers: [
+                "Belge No",
+                "Belge Türü",
+                "Cari / Müşteri",
+                "Tarih",
+                "Son Geçerlilik Tarihi",
+                "Ara Toplam",
+                "KDV Toplamı",
+                "Genel Toplam",
+                "Durum",
+                "Açıklama / Şartlar",
+              ],
+              rows: filteredQuotes.map((q) => [
+                q.quoteNumber,
+                q.quoteNumber.startsWith("TEK") ? "Fiyat Teklifi" : "Proforma Fatura",
+                q.contactName,
+                formatDate(q.issueDate),
+                formatDate(q.validUntil),
+                formatCurrency(q.subtotal || 0),
+                formatCurrency(q.taxTotal || 0),
+                formatCurrency(q.grandTotal),
+                q.status === "converted"
+                  ? "Faturaya Dönüştü"
+                  : q.status === "approved"
+                  ? "Onaylandı"
+                  : "Onay Bekliyor",
+                q.notes || "-",
+              ]),
+            })}
+          />
+        </div>
+      </div>
+
+      {/* 4. MODERN DATA TABLE */}
+      <div
+        className="rounded-2xl border shadow-2xs overflow-hidden"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="py-3.5 px-4 font-bold">Belge No</th>
+                <th className="py-3.5 px-4 font-bold">Cari / Müşteri</th>
+                <th className="py-3.5 px-4 font-bold">Tarih / Geçerlilik</th>
+                <th className="py-3.5 px-4 font-bold text-right">Genel Toplam</th>
+                <th className="py-3.5 px-4 font-bold text-center">Durum</th>
+                <th className="py-3.5 px-4 font-bold text-right">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {displayedQuotes.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    Kayıtlı proforma fatura veya teklif bulunamadı.
+                  </td>
+                </tr>
+              ) : (
+                displayedQuotes.map((q) => {
+                  const avatar = getContactAvatar(q.contactName);
+                  return (
+                    <tr
+                      key={q.id}
+                      className="hover:bg-slate-50/80 transition-colors group"
+                    >
+                      {/* Quote Number & Icon */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1 rounded-lg bg-purple-50 text-purple-600">
+                            <FileText className="w-3.5 h-3.5" />
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setPrintingQuote(q)}
+                            className="hover:underline hover:text-purple-600 cursor-pointer font-mono font-bold text-left"
+                            title="Proforma Detayı ve Önizleme Sayfasını Aç"
+                          >
+                            {q.quoteNumber}
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Contact Name with 3D Avatar */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={avatar}
+                            alt=""
+                            className="w-8 h-8 rounded-full border border-slate-100 shadow-2xs object-cover shrink-0"
+                          />
+                          <span className="font-bold text-slate-900 truncate max-w-[220px]" title={q.contactName}>
+                            {q.contactName}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Issue Date & Validity */}
+                      <td className="py-3.5 px-4 text-slate-700">
+                        <div>{formatDate(q.issueDate)}</div>
+                        <div className="text-[10px] text-slate-400">
+                          Geçerlilik: {formatDate(q.validUntil)}
+                        </div>
+                      </td>
+
+                      {/* Grand Total */}
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-sm text-slate-900 whitespace-nowrap">
+                        ₺{q.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </td>
+
+                      {/* Status Badge */}
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                            q.status === "converted"
+                              ? "bg-purple-50 text-purple-700 border border-purple-200"
+                              : q.status === "approved"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-blue-50 text-blue-700 border border-blue-200"
+                          }`}
+                        >
+                          {q.status === "converted"
+                            ? "Faturaya Dönüştü"
+                            : q.status === "approved"
+                            ? "Onaylandı"
+                            : "Gönderildi"}
+                        </span>
+                      </td>
+
+                      {/* Action Buttons */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setPrintingQuote(q)}
+                            title="Yazdır / Resmi PDF Önizleme"
+                            className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-slate-600" />
+                          </button>
+                          <button
+                            onClick={() => setWhatsAppQuote(q)}
+                            title="Teklifi WhatsApp ile Paylaş"
+                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          </button>
+                          {onConvertQuoteToOrder && (
+                            <button
+                              onClick={() => onConvertQuoteToOrder(q)}
+                              title="Bu belgeyi yeni Satış Siparişine dönüştür"
+                              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                            >
+                              <ShoppingCart className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Siparişe Gönder</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => onConvertQuoteToInvoice(q)}
+                            className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                            title="Gelir Faturasına Dönüştür"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Faturaya Dönüştür</span>
+                          </button>
+                          <button
+                            onClick={() => onDeleteQuote(q.id)}
+                            className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            title="Sil"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredQuotes.length > displayLimit && (
+          <div className="p-4 border-t border-slate-100 text-center">
+            <button
+              onClick={() => setDisplayLimit((prev) => prev + 100)}
+              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              Daha Fazla Göster ({displayLimit} / {filteredQuotes.length})
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* WhatsApp Share Modal */}
       {whatsAppQuote && (
         <UniversalWhatsAppModal
@@ -873,299 +1300,7 @@ export const Quotes: React.FC<QuotesProps> = ({
             return generateAutoTableFromExportData(expData);
           }}
         />
-    );
-  }
-
-
-  return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Top Header (Lila Bal Peteği & Geometrik Desen) */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 via-fuchsia-50/40 to-slate-50/80 rounded-2xl p-5 border border-purple-200/60 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        {/* Lila Bal Peteği ve Geometrik Desen Kaplaması */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-15 mix-blend-multiply"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='42' viewBox='0 0 24 42'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 0l12 7v14l-12 7L0 21V7z M12 21l12 7v14l-12 7L0 42V28z' stroke='%239333ea' stroke-width='1' stroke-opacity='0.4'/%3E%3Cpath d='M0 7l12 7 12-7 M0 28l12 7 12-7 M12 0v14 M12 21v14' stroke='%23a855f7' stroke-width='0.7' stroke-opacity='0.3' stroke-dasharray='2,2'/%3E%3Cpath d='M0 0l24 42 M24 0L0 42' stroke='%23c084fc' stroke-width='0.4' stroke-opacity='0.2'/%3E%3Ccircle cx='12' cy='14' r='1.2' fill='%237e22ce' fill-opacity='0.5' stroke='none'/%3E%3Ccircle cx='0' cy='21' r='1' fill='%23a855f7' fill-opacity='0.5' stroke='none'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: "20px 35px",
-          }}
-        />
-
-        {/* Dekoratif Geometrik Vektör Şekiller */}
-        <svg
-          className="absolute -right-6 -bottom-10 w-48 h-48 pointer-events-none text-purple-400/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <polygon points="100,10 180,55 180,145 100,190 20,145 20,55" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-          <polygon points="100,35 155,67 155,133 100,165 45,133 45,67" stroke="currentColor" strokeWidth="1" />
-          <line x1="100" y1="10" x2="100" y2="190" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="55" x2="180" y2="145" stroke="currentColor" strokeWidth="0.8" />
-          <line x1="20" y1="145" x2="180" y2="55" stroke="currentColor" strokeWidth="0.8" />
-          <circle cx="100" cy="100" r="25" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-
-        <svg
-          className="absolute -left-10 -top-12 w-40 h-40 pointer-events-none text-fuchsia-500/20"
-          viewBox="0 0 160 160"
-          fill="none"
-        >
-          <polygon points="80,10 150,80 80,150 10,80" stroke="currentColor" strokeWidth="1.2" />
-          <polygon points="80,30 130,80 80,130 30,80" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" />
-          <line x1="80" y1="10" x2="80" y2="150" stroke="currentColor" strokeWidth="0.6" />
-          <line x1="10" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="0.6" />
-        </svg>
-
-        <div className="relative z-10">
-          <p className="text-xs font-semibold text-purple-950/90 leading-relaxed">
-            Müşterilerinize sunduğunuz ön fatura (proforma) kayıtlarını takip edin ve onaylandığında tek tıkla gelir faturasına dönüştürün.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0 relative z-10">
-          <button
-            onClick={() => openNewFormModal("proforma")}
-            className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-2xs cursor-pointer transition-all shrink-0"
-          >
-            <Plus className="w-4 h-4 text-white font-bold" />
-            <span>Yeni Proforma Fatura Hazırla</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Table & Filter Bar */}
-      <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs overflow-hidden space-y-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-            {/* Yıl Filtresi */}
-            <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
-              <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-              <span className="text-slate-400 font-bold">Yıl:</span>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
-              >
-                <option value="all">Tüm Yıllar</option>
-                {availableYears.map((y) => (
-                  <option key={y} value={y.toString()}>{y}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Ay Filtresi */}
-            <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
-              <Filter className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-              <span className="text-slate-400 font-bold">Ay:</span>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
-              >
-                <option value="all">Tüm Aylar</option>
-                {TURKISH_MONTHS.map((m) => (
-                  <option key={m.id} value={m.id.toString()}>{m.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {(selectedYear !== "all" || selectedMonth !== "all") && (
-              <button
-                onClick={() => {
-                  setSelectedYear("all");
-                  setSelectedMonth("all");
-                }}
-                className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                title="Yıl ve Ay filtresini temizle"
-              >
-                <X className="w-3.5 h-3.5" />
-                <span>Temizle</span>
-              </button>
-            )}
-
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Proforma no veya Müşteri ara..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
-              />
-            </div>
-          </div>
-          <ExportButtons
-            getExportData={() => ({
-              filename: `Proforma_Faturalar_${new Date().toISOString().split("T")[0]}`,
-              title: "PROFORMA FATURALAR LİSTESİ",
-              subtitle: `Toplam ${filteredQuotes.length} Adet Kayıt`,
-              headers: [
-                "Belge No",
-                "Belge Türü",
-                "Cari / Müşteri",
-                "Tarih",
-                "Son Geçerlilik Tarihi",
-                "Ara Toplam",
-                "KDV Toplamı",
-                "Genel Toplam",
-                "Para Birimi",
-                "Durum",
-              ],
-              rows: filteredQuotes.map((q) => {
-                const qCurr = (q as any).currency || "TRY";
-                return [
-                  q.number,
-                  "Proforma Fatura",
-                  q.contactName,
-                  q.issueDate,
-                  q.validUntil,
-                  formatCurrency(q.subtotal || 0, qCurr),
-                  formatCurrency(q.taxTotal || 0, qCurr),
-                  formatCurrency(q.grandTotal || 0, qCurr),
-                  qCurr,
-                  q.status === "approved" ? "Onaylandı" : q.status === "invoiced" ? "Faturaya Dönüştü" : q.status === "rejected" ? "Reddedildi" : "Beklemede",
-                ];
-              }),
-            })}
-            size="sm"
-          />
-        </div>
-
-        <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-          <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[750px]">
-            <thead>
-              <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                <th className="pb-2 px-4">Belge No</th>
-                <th className="pb-2 px-4">Cari Müşteri</th>
-                <th className="pb-2 px-4">Tarih / Geçerlilik</th>
-                <th className="pb-2 px-4 text-right">Tutar</th>
-                <th className="pb-2 px-4 text-center">Durum</th>
-                <th className="pb-2 px-4 text-center">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredQuotes.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-400 bg-white rounded-xl border border-purple-100/80">
-                    Kayıtlı proforma fatura bulunmuyor.
-                  </td>
-                </tr>
-              ) : (
-                displayedQuotes.map((q) => (
-                  <tr
-                    key={q.id}
-                    className="bg-white hover:bg-gradient-to-r hover:from-purple-50/90 hover:via-fuchsia-50/60 hover:to-purple-50/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group rounded-xl relative z-0 hover:z-10"
-                  >
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900 group-hover:text-purple-950 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${q.quoteNumber.startsWith("TEK") ? "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200" : "bg-purple-100 text-purple-800 border-purple-200"}`}>
-                          {q.quoteNumber.startsWith("TEK") ? "TEKLİF" : "PROFORMA"}
-                        </span>
-                        <button
-                        type="button"
-                        onClick={() => setPrintingQuote(q)}
-                        className="hover:underline hover:text-purple-700 cursor-pointer font-mono font-bold text-left"
-                        title="Proforma Detayı ve Önizleme Sayfasını Aç"
-                      >
-                        {q.quoteNumber}
-                      </button>
-                      </div>
-                    </td>
-
-                    <td className="py-3.5 px-4 font-extrabold text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      {q.contactName}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-slate-700 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div>{formatDate(q.issueDate)}</div>
-                      <div className="text-[10px] text-slate-400 group-hover:text-purple-700/60">
-                        Geçerlilik: {formatDate(q.validUntil)}
-                      </div>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right font-black text-sm text-slate-900 group-hover:text-purple-950 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      ₺{q.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-center border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
-                          q.status === "converted"
-                            ? "bg-purple-50 text-purple-700 border border-purple-200 group-hover:border-purple-300"
-                            : q.status === "approved"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200 group-hover:border-emerald-300"
-                            : "bg-blue-50 text-blue-700 border border-blue-200 group-hover:border-blue-300"
-                        }`}
-                      >
-                        {q.status === "converted"
-                          ? "Faturaya Dönüştü"
-                          : q.status === "approved"
-                          ? "Onaylandı"
-                          : "Gönderildi"}
-                      </span>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-center rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => setPrintingQuote(q)}
-                          title="Yazdır / Resmi PDF Önizleme"
-                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                        >
-                          <Printer className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>Yazdır</span>
-                        </button>
-                        <button
-                          onClick={() => setWhatsAppQuote(q)}
-                          title="Teklifi WhatsApp ile Paylaş"
-                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>WhatsApp</span>
-                        </button>
-                        {onConvertQuoteToOrder && (
-                          <button
-                            onClick={() => onConvertQuoteToOrder(q)}
-                            title="Bu belgeyi yeni Satış Siparişine dönüştür"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                          >
-                            <ShoppingCart className="w-3.5 h-3.5" />
-                            <span>Siparişe Gönder</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => onConvertQuoteToInvoice(q)}
-                          className="bg-purple-700 hover:bg-purple-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>Gelir Faturasına Dönüştür</span>
-                        </button>
-                        <button
-                          onClick={() => onDeleteQuote(q.id)}
-                          className="text-slate-400 hover:text-rose-600 p-1.5 cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredQuotes.length > displayLimit && (
-          <div className="text-center mt-4">
-            <button
-              onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
-            >
-              Daha Fazla Göster ({displayLimit} / {filteredQuotes.length})
-            </button>
-          </div>
-        )}
-      </div>
-
+      )}
     </div>
   );
 };
