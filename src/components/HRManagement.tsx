@@ -54,8 +54,13 @@ import {
   ArrowUpDown,
   Laptop,
   Layers,
+  Coins,
+  Gift,
+  Utensils,
+  Bus,
+  X,
 } from "lucide-react";
-import { Employee, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction, CompanySettings, Branch, Warehouse, CostProject, AssetCustody } from "../types";
+import { Employee, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction, CompanySettings, Branch, Warehouse, CostProject, AssetCustody, AdditionalPaymentItem } from "../types";
 import { sgkOccupations } from "../data/sgkOccupations";
 import { sgkTerminationReasons } from "../data/sgkTerminationReasons";
 import { HRDocumentFormsModal, HRFormType } from "./HRDocumentFormsModal";
@@ -63,6 +68,7 @@ import { SeveranceNoticeCalculator } from "./SeveranceNoticeCalculator";
 import { PayrollPrintModal } from "./PayrollPrintModal";
 import { BulkPayrollModal } from "./BulkPayrollModal";
 import { AssetCustodyManagement } from "./AssetCustodyManagement";
+import { AdditionalPaymentsModal } from "./AdditionalPaymentsModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { useTheme } from "../context/ThemeContext";
@@ -494,12 +500,18 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     overtimeHolidayHours?: number;
     foodAllowance?: number;
     roadAllowance?: number;
+    customPayments?: AdditionalPaymentItem[];
+    customPaymentsTotal?: number;
     advanceDeduction?: number;
+    advanceReason?: string;
     unpaidLeaveDays?: number;
+    missingDayReason?: string;
+    missingDayCode?: string;
     besDeduction?: number;
     executionDeduction?: number;
     alimonyDeduction?: number;
     otherDeductions?: number;
+    deductionReason?: string;
     isCustomized?: boolean;
     notes?: string;
     puantajDays?: Record<number, DayPuantajDetail>;
@@ -510,6 +522,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [editingPayrollForm, setEditingPayrollForm] = useState<CustomPayrollAdjustment>({});
   const [isPayrollFullscreen, setIsPayrollFullscreen] = useState(true);
   const [isBulkPayrollModalOpen, setIsBulkPayrollModalOpen] = useState(false);
+  const [isAdditionalPaymentsModalOpen, setIsAdditionalPaymentsModalOpen] = useState(false);
 
   const handleApplyBatchPayroll = (
     updatedCustomizations: Record<string, CustomPayrollAdjustment>,
@@ -764,23 +777,13 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
   // Helper Turkish Payroll Calculator (Standard SGK formulas with Leave & Advance & Legal Deductions Integration)
   const calculatePayrollForEmployee = (emp: Employee): PayrollRecord => {
-    const custom = payrollCustomizations[emp.id] || {};
+    const custom = (payrollCustomizations[payrollMonth]?.[emp.id] || payrollCustomizations[emp.id]) || {};
     const autoAdv = getAutoAdvanceForEmployee(emp.id);
     const autoLvs = getAutoLeavesForEmployee(emp.id);
 
     const salaryType = custom.salaryType ?? emp.salaryType;
     const baseSalary = custom.baseSalary ?? emp.salaryAmount;
     const bonusAmount = custom.bonusAmount ?? 0;
-    const overtimePay = custom.overtimePay ?? 0;
-    const overtimeNormalHours = custom.overtimeNormalHours ?? 0;
-    const overtimeWeekendHours = custom.overtimeWeekendHours ?? 0;
-    const overtimeHolidayDays = custom.overtimeHolidayDays ?? 0;
-    const overtimeHolidayHours = custom.overtimeHolidayHours ?? 0;
-    const foodAllowance = custom.foodAllowance ?? (emp.foodAllowance || 0);
-    const roadAllowance = custom.roadAllowance ?? (emp.roadAllowance || 0);
-
-    const advanceDeduction = custom.advanceDeduction !== undefined ? custom.advanceDeduction : autoAdv.totalAdvance;
-    const unpaidLeaveDays = custom.unpaidLeaveDays !== undefined ? custom.unpaidLeaveDays : autoLvs.unpaidDays;
 
     let baseGross = 0;
     if (salaryType === "gross") {
@@ -789,8 +792,24 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       baseGross = baseSalary * 1.38;
     }
 
+    let overtimePay = custom.overtimePay ?? 0;
+    let overtimeNormalHours = custom.overtimeNormalHours ?? 0;
+    let overtimeWeekendHours = custom.overtimeWeekendHours ?? 0;
+    let overtimeHolidayDays = custom.overtimeHolidayDays ?? 0;
+    let overtimeHolidayHours = custom.overtimeHolidayHours ?? 0;
+
+    const foodAllowance = custom.foodAllowance ?? (emp.foodAllowance || 0);
+    const roadAllowance = custom.roadAllowance ?? (emp.roadAllowance || 0);
+    const customPayments = custom.customPayments || [];
+    const customPaymentsTotal = custom.customPaymentsTotal !== undefined
+      ? custom.customPaymentsTotal
+      : customPayments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+
+    const advanceDeduction = custom.advanceDeduction !== undefined ? custom.advanceDeduction : autoAdv.totalAdvance;
+    const unpaidLeaveDays = custom.unpaidLeaveDays !== undefined ? custom.unpaidLeaveDays : autoLvs.unpaidDays;
+
     const unpaidLeaveDeduction = Math.round((baseGross / 30) * unpaidLeaveDays);
-    const grossSalary = Math.max(0, baseGross + bonusAmount + overtimePay + foodAllowance + roadAllowance - unpaidLeaveDeduction);
+    const grossSalary = Math.max(0, baseGross + bonusAmount + overtimePay + foodAllowance + roadAllowance + customPaymentsTotal - unpaidLeaveDeduction);
 
     const sgkEmployeeShare = Math.round(grossSalary * 0.14);
     const unemploymentEmployeeShare = Math.round(grossSalary * 0.01);
@@ -834,6 +853,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       overtimeHolidayHours,
       foodAllowance,
       roadAllowance,
+      customPayments,
+      customPaymentsTotal,
       advanceDeduction,
       unpaidLeaveDays,
       unpaidLeaveDeduction,
@@ -2034,15 +2055,41 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleResetToAutoPuantaj}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-purple-200 text-purple-900 text-xs font-bold hover:bg-purple-50 hover:border-purple-300 transition-all cursor-pointer shadow-2xs"
-                      title="Resmi tatil ve onaylı izinlere göre puantajı yeniden oluşturur"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      Puantajı Otomatik Yenile
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsAdditionalPaymentsModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-700 text-white text-xs font-black hover:bg-purple-800 transition-all cursor-pointer shadow-xs hover:shadow-md"
+                        title="Yemek yardımı, ulaşım ve serbest ek ödemeleri yapılandır ve bordroya aktar"
+                      >
+                        <Coins className="w-3.5 h-3.5 text-amber-300" />
+                        Ek Ödemeler
+                        {((editingPayrollForm.foodAllowance || 0) > 0 ||
+                          (editingPayrollForm.roadAllowance || 0) > 0 ||
+                          (editingPayrollForm.customPaymentsTotal || 0) > 0 ||
+                          (editingPayrollForm.customPayments?.length || 0) > 0) && (
+                          <span className="bg-amber-400 text-purple-950 text-[10px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">
+                            {formatTRY(
+                              (editingPayrollForm.foodAllowance || 0) +
+                                (editingPayrollForm.roadAllowance || 0) +
+                                (editingPayrollForm.customPaymentsTotal ||
+                                  editingPayrollForm.customPayments?.reduce((s, p) => s + p.amount, 0) ||
+                                  0)
+                            )}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleResetToAutoPuantaj}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-purple-200 text-purple-900 text-xs font-bold hover:bg-purple-50 hover:border-purple-300 transition-all cursor-pointer shadow-2xs"
+                        title="Resmi tatil ve onaylı izinlere göre puantajı yeniden oluşturur"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Puantajı Otomatik Yenile
+                      </button>
+                    </div>
                   </div>
 
                   {/* PUANTAJ KODLARI & AÇIKLAMA LEJANTI (LEGEND) */}
@@ -2356,26 +2403,124 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   );
                 })()}
 
-                {/* Food Allowance */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Yemek Yardımı (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.foodAllowance ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, foodAllowance: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                  />
-                </div>
+                {/* Ek Ödemeler & Yan Haklar Bölümü (Yemek, Yol, Elle Girilen Ödemeler) */}
+                <div className="bg-purple-50/50 p-4 rounded-3xl border border-purple-200/90 space-y-3 shadow-2xs col-span-1 sm:col-span-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-200/60 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-purple-700 text-white flex items-center justify-center shadow-xs">
+                        <Coins className="w-4 h-4 text-amber-300" />
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-900 text-sm flex items-center gap-2">
+                          Ek Ödemeler & Yan Haklar
+                          <span className="text-[11px] font-bold text-purple-700 bg-purple-100 px-2 py-0.2 rounded-full border border-purple-200">
+                            Yemek, Ulaşım & Özel Yardımlar
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          Yemek ve yol yardımlarını doğrudan girebilir ya da detaylı ek ödemeler butonunu kullanarak fiili çalışma gününe göre hesaplayıp aktarabilirsiniz.
+                        </p>
+                      </div>
+                    </div>
 
-                {/* Road Allowance */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="block font-bold text-slate-800 uppercase text-[11px]">Yol / Ulaşım Yardımı (₺)</label>
-                  <input
-                    type="number"
-                    value={editingPayrollForm.roadAllowance ?? 0}
-                    onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, roadAllowance: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500"
-                  />
+                    <button
+                      type="button"
+                      onClick={() => setIsAdditionalPaymentsModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black transition-all cursor-pointer shadow-xs hover:shadow-md shrink-0"
+                    >
+                      <Gift className="w-3.5 h-3.5 text-amber-300" />
+                      Ek Ödemeler Seç & Aktar
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Food Allowance */}
+                    <div className="bg-white p-3 rounded-2xl border border-slate-200 space-y-1.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-1.5 font-bold text-slate-800 uppercase text-[11px]">
+                          <Utensils className="w-3.5 h-3.5 text-orange-600" />
+                          Yemek Yardımı (₺)
+                        </label>
+                        {(editingPayrollForm.foodAllowance || 0) > 0 && (
+                          <span className="text-[10px] font-black text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md">
+                            Aktif
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editingPayrollForm.foodAllowance ?? 0}
+                        onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, foodAllowance: Math.max(0, Number(e.target.value)) })}
+                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500 focus:bg-white"
+                      />
+                    </div>
+
+                    {/* Road Allowance */}
+                    <div className="bg-white p-3 rounded-2xl border border-slate-200 space-y-1.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-1.5 font-bold text-slate-800 uppercase text-[11px]">
+                          <Bus className="w-3.5 h-3.5 text-blue-600" />
+                          Yol / Ulaşım Yardımı (₺)
+                        </label>
+                        {(editingPayrollForm.roadAllowance || 0) > 0 && (
+                          <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                            Aktif
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editingPayrollForm.roadAllowance ?? 0}
+                        onChange={(e) => setEditingPayrollForm({ ...editingPayrollForm, roadAllowance: Math.max(0, Number(e.target.value)) })}
+                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-sm focus:outline-none focus:border-purple-500 focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Elle Yazılan Ek Ödeme Kalemleri Varsa Göster */}
+                  {editingPayrollForm.customPayments && editingPayrollForm.customPayments.length > 0 && (
+                    <div className="bg-white p-3 rounded-2xl border border-purple-200 space-y-2 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-purple-950 flex items-center gap-1.5">
+                          <Gift className="w-3.5 h-3.5 text-purple-600" />
+                          Elle Tanımlanan Serbest Ek Ödemeler ({editingPayrollForm.customPayments.length} Kalem):
+                        </span>
+                        <span className="text-xs font-black text-purple-800 bg-purple-50 px-2.5 py-0.5 rounded-lg border border-purple-200">
+                          Toplam: {formatTRY(editingPayrollForm.customPayments.reduce((s, p) => s + (p.amount || 0), 0))}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {editingPayrollForm.customPayments.map((cp) => (
+                          <div
+                            key={cp.id}
+                            className="inline-flex items-center gap-2 px-2.5 py-1 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-950 font-bold"
+                          >
+                            <span>{cp.name}:</span>
+                            <span className="text-emerald-700 font-black">{formatTRY(cp.amount)}</span>
+                            {cp.description && <span className="text-[10px] text-purple-600 font-normal">({cp.description})</span>}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = (editingPayrollForm.customPayments || []).filter((p) => p.id !== cp.id);
+                                const total = updated.reduce((s, p) => s + (p.amount || 0), 0);
+                                setEditingPayrollForm({
+                                  ...editingPayrollForm,
+                                  customPayments: updated,
+                                  customPaymentsTotal: total,
+                                });
+                              }}
+                              className="text-slate-400 hover:text-red-600 ml-1 cursor-pointer"
+                              title="Kalemi Çıkar"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Advance Deduction (Entegre) */}
@@ -2515,12 +2660,15 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 const overtime = editingPayrollForm.overtimePay ?? 0;
                 const food = editingPayrollForm.foodAllowance ?? 0;
                 const road = editingPayrollForm.roadAllowance ?? 0;
+                const customPaymentsTotal = editingPayrollForm.customPaymentsTotal !== undefined
+                  ? editingPayrollForm.customPaymentsTotal
+                  : (editingPayrollForm.customPayments ? editingPayrollForm.customPayments.reduce((s, p) => s + (p.amount || 0), 0) : 0);
                 const advDeduct = editingPayrollForm.advanceDeduction ?? 0;
                 const lvsDays = editingPayrollForm.unpaidLeaveDays ?? 0;
 
                 const baseGross = salType === "gross" ? baseSal : baseSal * 1.38;
                 const unpaidLeaveDeduction = Math.round((baseGross / 30) * lvsDays);
-                const grossSal = Math.max(0, baseGross + bonus + overtime + food + road - unpaidLeaveDeduction);
+                const grossSal = Math.max(0, baseGross + bonus + overtime + food + road + customPaymentsTotal - unpaidLeaveDeduction);
 
                 const sgkEmp = Math.round(grossSal * 0.14);
                 const unempEmp = Math.round(grossSal * 0.01);
@@ -2542,6 +2690,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                         {lvsDays > 0 && (
                           <span className="text-[10px] bg-rose-500/30 text-rose-200 border border-rose-400/40 px-2 py-0.5 rounded-full font-bold">
                             ✓ SGK Eksik Gün Formu Eklendi ({lvsDays} Gün)
+                          </span>
+                        )}
+                        {(food > 0 || road > 0 || customPaymentsTotal > 0) && (
+                          <span className="text-[10px] bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 px-2 py-0.5 rounded-full font-bold">
+                            ✓ Ek Ödemeler Dahil (+{formatTRY(food + road + customPaymentsTotal)})
                           </span>
                         )}
                         {(advDeduct > 0 || execDed > 0 || aliDed > 0 || othDed > 0) && (
@@ -2669,6 +2822,33 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </form>
           </div>
+
+          {isAdditionalPaymentsModalOpen && editingPayrollEmp && (
+            <AdditionalPaymentsModal
+              isOpen={isAdditionalPaymentsModalOpen}
+              onClose={() => setIsAdditionalPaymentsModalOpen(false)}
+              employeeName={editingPayrollEmp.fullName}
+              actualWorkDays={
+                editingPayrollForm.puantajDays
+                  ? Object.values(editingPayrollForm.puantajDays as Record<string, { code?: string }>).filter((d) => d.code === "N").length || 22
+                  : 22
+              }
+              initialFoodAllowance={editingPayrollForm.foodAllowance ?? editingPayrollEmp.foodAllowance ?? 0}
+              initialRoadAllowance={editingPayrollForm.roadAllowance ?? editingPayrollEmp.roadAllowance ?? 0}
+              initialCustomPayments={editingPayrollForm.customPayments ?? []}
+              onApply={({ foodAllowance, roadAllowance, customPayments, customPaymentsTotal, notesSummary }) => {
+                setEditingPayrollForm((prev) => ({
+                  ...prev,
+                  foodAllowance,
+                  roadAllowance,
+                  customPayments,
+                  customPaymentsTotal,
+                  notes: notesSummary ? (prev.notes ? `${prev.notes} | ${notesSummary}` : notesSummary) : prev.notes,
+                }));
+                showToast("🎁 Ek ödemeler bordro hesaplamasına başarıyla aktarıldı!");
+              }}
+            />
+          )}
         </DetailPageLayout>
     );
   }

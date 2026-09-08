@@ -374,17 +374,6 @@ export const calculatePayrollRecordHelper = (
   const salaryType = custom.salaryType ?? emp.salaryType;
   const baseSalary = custom.baseSalary ?? emp.salaryAmount;
   const bonusAmount = custom.bonusAmount ?? 0;
-  const overtimePay = custom.overtimePay ?? 0;
-  const overtimeNormalHours = custom.overtimeNormalHours ?? 0;
-  const overtimeWeekendHours = custom.overtimeWeekendHours ?? 0;
-  const overtimeHolidayDays = custom.overtimeHolidayDays ?? 0;
-  const overtimeHolidayHours = custom.overtimeHolidayHours ?? 0;
-  const foodAllowance = custom.foodAllowance ?? (emp.foodAllowance || 0);
-  const roadAllowance = custom.roadAllowance ?? (emp.roadAllowance || 0);
-
-  const advanceDeduction = custom.advanceDeduction !== undefined ? custom.advanceDeduction : autoAdv.totalAdvance;
-  const unpaidLeaveDays = custom.unpaidLeaveDays !== undefined ? custom.unpaidLeaveDays : autoLvs.unpaidDays;
-
   let baseGross = 0;
   if (salaryType === "gross") {
     baseGross = baseSalary;
@@ -392,8 +381,47 @@ export const calculatePayrollRecordHelper = (
     baseGross = baseSalary * 1.38;
   }
 
+  let overtimePay = custom.overtimePay ?? 0;
+  let overtimeNormalHours = custom.overtimeNormalHours ?? 0;
+  let overtimeWeekendHours = custom.overtimeWeekendHours ?? 0;
+  let overtimeHolidayDays = custom.overtimeHolidayDays ?? 0;
+  let overtimeHolidayHours = custom.overtimeHolidayHours ?? 0;
+
+  if (custom.puantajDays) {
+    const parts = (payrollMonth || "").split("-");
+    const y = parseInt(parts[0], 10) || 2026;
+    const m = parseInt(parts[1], 10) || 7;
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const stats = calculatePuantajStats(custom.puantajDays, daysInMonth, baseGross);
+    if (custom.overtimePay === undefined || custom.overtimePay === null) {
+      overtimePay = stats.calculatedOvertimePay;
+    }
+    if (custom.overtimeNormalHours === undefined || custom.overtimeNormalHours === null) {
+      overtimeNormalHours = stats.overtimeNormalHours;
+    }
+    if (custom.overtimeWeekendHours === undefined || custom.overtimeWeekendHours === null) {
+      overtimeWeekendHours = stats.overtimeWeekendHours;
+    }
+    if (custom.overtimeHolidayDays === undefined || custom.overtimeHolidayDays === null) {
+      overtimeHolidayDays = stats.overtimeHolidayDays;
+    }
+    if (custom.overtimeHolidayHours === undefined || custom.overtimeHolidayHours === null) {
+      overtimeHolidayHours = stats.overtimeHolidayHours;
+    }
+  }
+
+  const foodAllowance = custom.foodAllowance ?? (emp.foodAllowance || 0);
+  const roadAllowance = custom.roadAllowance ?? (emp.roadAllowance || 0);
+  const customPayments = custom.customPayments || [];
+  const customPaymentsTotal = custom.customPaymentsTotal !== undefined
+    ? custom.customPaymentsTotal
+    : customPayments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+
+  const advanceDeduction = custom.advanceDeduction !== undefined ? custom.advanceDeduction : autoAdv.totalAdvance;
+  const unpaidLeaveDays = custom.unpaidLeaveDays !== undefined ? custom.unpaidLeaveDays : autoLvs.unpaidDays;
+
   const unpaidLeaveDeduction = Math.round((baseGross / 30) * unpaidLeaveDays);
-  const grossSalary = Math.max(0, baseGross + bonusAmount + overtimePay + foodAllowance + roadAllowance - unpaidLeaveDeduction);
+  const grossSalary = Math.max(0, baseGross + bonusAmount + overtimePay + foodAllowance + roadAllowance + customPaymentsTotal - unpaidLeaveDeduction);
 
   const sgkEmployeeShare = Math.round(grossSalary * 0.14);
   const unemploymentEmployeeShare = Math.round(grossSalary * 0.01);
@@ -480,6 +508,8 @@ export const calculatePayrollRecordHelper = (
     overtimeHolidayHours,
     foodAllowance,
     roadAllowance,
+    customPayments,
+    customPaymentsTotal,
     advanceDeduction,
     advanceReason,
     unpaidLeaveDays,

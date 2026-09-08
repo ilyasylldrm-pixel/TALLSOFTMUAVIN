@@ -56,7 +56,11 @@ import {
   CalendarDays,
   Wallet,
   Check,
+  Gift,
+  Utensils,
+  Bus,
 } from "lucide-react";
+import { AdditionalPaymentsModal } from "./AdditionalPaymentsModal";
 
 interface BulkPayrollModalProps {
   isOpen: boolean;
@@ -122,6 +126,8 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
   const [activeEmpId, setActiveEmpId] = useState<string>(() => {
     return activeEmployees.length > 0 ? activeEmployees[0].id : "";
   });
+
+  const [isAdditionalPaymentsModalOpen, setIsAdditionalPaymentsModalOpen] = useState<boolean>(false);
 
   // Manual adjustments per employee
   const [manualAdjustments, setManualAdjustments] = useState<
@@ -1236,6 +1242,31 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdditionalPaymentsModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-700 text-white text-xs font-black hover:bg-purple-800 transition-all cursor-pointer shadow-xs hover:shadow-md"
+                    title="Yemek yardımı, yol yardımı ve serbest ek ödemeleri yapılandır ve bordroya aktar"
+                  >
+                    <Coins className="w-3.5 h-3.5 text-amber-300" />
+                    Ek Ödemeler
+                    {((currentActiveData.customAdjustment.foodAllowance || 0) > 0 ||
+                      (currentActiveData.customAdjustment.roadAllowance || 0) > 0 ||
+                      (currentActiveData.customAdjustment.customPaymentsTotal || 0) > 0 ||
+                      (currentActiveData.customAdjustment.customPayments?.length || 0) > 0) && (
+                      <span className="bg-amber-400 text-purple-950 text-[10px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">
+                        {formatCurrency(
+                          (currentActiveData.customAdjustment.foodAllowance || 0) +
+                            (currentActiveData.customAdjustment.roadAllowance || 0) +
+                            (currentActiveData.customAdjustment.customPaymentsTotal ||
+                              currentActiveData.customAdjustment.customPayments?.reduce((s, p) => s + p.amount, 0) ||
+                              0),
+                          "TRY"
+                        )}
+                      </span>
+                    )}
+                  </button>
+
                   <span className="text-xs font-bold text-purple-900 bg-white px-2.5 py-1 rounded-xl border border-purple-200 shadow-2xs">
                     SGK Prim Günü: <strong>{activePuantajStats.sgkDays} / 30</strong>
                   </span>
@@ -1532,37 +1563,74 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Yemek Yardımı (₺):
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      value={currentActiveData.customAdjustment.foodAllowance || ""}
-                      onChange={(e) =>
-                        handleUpdateCurrentManual("foodAllowance", Math.max(0, Number(e.target.value)))
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
-                    />
+                <div className="space-y-2.5 p-3 bg-purple-50/50 rounded-2xl border border-purple-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-purple-950 flex items-center gap-1.5">
+                      <Coins className="w-3.5 h-3.5 text-amber-500" />
+                      Ek Ödemeler & Yan Haklar
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAdditionalPaymentsModalOpen(true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-[11px] font-black transition-all cursor-pointer shadow-2xs"
+                    >
+                      <Gift className="w-3 h-3 text-amber-300" />
+                      Ek Ödemeler Seç & Aktar
+                    </button>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Yol Yardımı (₺):
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      value={currentActiveData.customAdjustment.roadAllowance || ""}
-                      onChange={(e) =>
-                        handleUpdateCurrentManual("roadAllowance", Math.max(0, Number(e.target.value)))
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
-                    />
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Yemek Yardımı (₺):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={currentActiveData.customAdjustment.foodAllowance || ""}
+                        onChange={(e) =>
+                          handleUpdateCurrentManual("foodAllowance", Math.max(0, Number(e.target.value)))
+                        }
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:border-purple-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Yol Yardımı (₺):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={currentActiveData.customAdjustment.roadAllowance || ""}
+                        onChange={(e) =>
+                          handleUpdateCurrentManual("roadAllowance", Math.max(0, Number(e.target.value)))
+                        }
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:border-purple-500 focus:outline-none"
+                      />
+                    </div>
                   </div>
+
+                  {/* Elle Yazılan Ek Ödeme Kalemleri Varsa Göster */}
+                  {currentActiveData.customAdjustment.customPayments && currentActiveData.customAdjustment.customPayments.length > 0 && (
+                    <div className="pt-1 space-y-1">
+                      <span className="text-[10px] font-extrabold text-slate-500 uppercase block">
+                        Elle Girilen Ek Ödemeler ({currentActiveData.customAdjustment.customPayments.length} Kalem):
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {currentActiveData.customAdjustment.customPayments.map((cp) => (
+                          <span
+                            key={cp.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-purple-200 text-[11px] font-bold text-purple-950"
+                          >
+                            <span>{cp.name}:</span>
+                            <span className="text-emerald-700 font-black">{formatCurrency(cp.amount, "TRY")}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2110,6 +2178,43 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
           </div>
         </div>
       </div>
+
+      {isAdditionalPaymentsModalOpen && currentActiveData && (
+        <AdditionalPaymentsModal
+          isOpen={isAdditionalPaymentsModalOpen}
+          onClose={() => setIsAdditionalPaymentsModalOpen(false)}
+          employeeName={currentActiveData.employee.fullName}
+          actualWorkDays={activePuantajStats.countN || 22}
+          initialFoodAllowance={
+            currentActiveData.customAdjustment.foodAllowance !== undefined
+              ? currentActiveData.customAdjustment.foodAllowance
+              : (currentActiveData.employee.foodAllowance || 0)
+          }
+          initialRoadAllowance={
+            currentActiveData.customAdjustment.roadAllowance !== undefined
+              ? currentActiveData.customAdjustment.roadAllowance
+              : (currentActiveData.employee.roadAllowance || 0)
+          }
+          initialCustomPayments={currentActiveData.customAdjustment.customPayments ?? []}
+          onApply={({ foodAllowance, roadAllowance, customPayments, customPaymentsTotal, notesSummary }) => {
+            setManualAdjustments((prev) => {
+              const current = prev[currentActiveData.employee.id] || {};
+              return {
+                ...prev,
+                [currentActiveData.employee.id]: {
+                  ...current,
+                  foodAllowance,
+                  roadAllowance,
+                  customPayments,
+                  customPaymentsTotal,
+                  notes: notesSummary ? (current.notes ? `${current.notes} | ${notesSummary}` : notesSummary) : current.notes,
+                  isCustomized: true,
+                },
+              };
+            });
+          }}
+        />
+      )}
     </DetailPageLayout>
   );
 };

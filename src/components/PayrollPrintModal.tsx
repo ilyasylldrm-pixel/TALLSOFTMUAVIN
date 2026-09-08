@@ -21,7 +21,7 @@ import { formatPayrollWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { Zap, MessageCircle } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
-import { calculatePayrollRecordHelper, generateDefaultPuantaj } from "../utils/puantajUtils";
+import { calculatePayrollRecordHelper, generateDefaultPuantaj, calculatePuantajStats } from "../utils/puantajUtils";
 import { MissingDayNotificationForm, DeductionAuthorizationForm } from "./PayrollSupplementalForms";
 
 export type PayrollPrintMode =
@@ -200,6 +200,70 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
       generateDefaultPuantaj(currentEmp.id, monthStr, leaveRequests)
     );
   }, [currentEmp, monthStr, payrollCustomizations, leaveRequests]);
+
+  // Overtime calculations & breakdown for the singleMonthlyRecord
+  const overtimeInfo = useMemo(() => {
+    if (!singleMonthlyRecord) return null;
+
+    const baseGross =
+      singleMonthlyRecord.salaryType === "gross"
+        ? singleMonthlyRecord.baseSalary
+        : singleMonthlyRecord.baseSalary * 1.38;
+    const hourlyGross = baseGross > 0 ? baseGross / 225 : 0;
+    const dailyGross = baseGross > 0 ? baseGross / 30 : 0;
+
+    let normalHours = singleMonthlyRecord.overtimeNormalHours || 0;
+    let weekendHours = singleMonthlyRecord.overtimeWeekendHours || 0;
+    let holidayDays = singleMonthlyRecord.overtimeHolidayDays || 0;
+    let holidayHours = singleMonthlyRecord.overtimeHolidayHours || 0;
+    let totalPay = singleMonthlyRecord.overtimePay || 0;
+
+    // Eğer puantajdan henüz aktarılmamış saatler varsa puantaj günlerinden de kontrol et
+    if (normalHours === 0 && weekendHours === 0 && holidayDays === 0 && holidayHours === 0 && currentEmployeePuantaj) {
+      const parts = (monthStr || "").split("-");
+      const y = parseInt(parts[0], 10) || 2026;
+      const m = parseInt(parts[1], 10) || 7;
+      const daysInMonth = new Date(y, m, 0).getDate();
+      const stats = calculatePuantajStats(currentEmployeePuantaj, daysInMonth, baseGross);
+      if (stats.calculatedOvertimePay > 0 || stats.totalOvertimeHours > 0 || stats.overtimeHolidayDays > 0) {
+        normalHours = stats.overtimeNormalHours;
+        weekendHours = stats.overtimeWeekendHours;
+        holidayHours = stats.overtimeHolidayHours;
+        holidayDays = stats.overtimeHolidayDays;
+        if (totalPay === 0) {
+          totalPay = stats.calculatedOvertimePay;
+        }
+      }
+    }
+
+    const normalPay = Math.round(hourlyGross * 1.5 * normalHours);
+    const weekendPay = Math.round(hourlyGross * 2.0 * weekendHours);
+    const holidayHoursPay = Math.round(hourlyGross * 2.0 * holidayHours);
+    const holidayDaysPay = Math.round(dailyGross * 1.0 * holidayDays);
+
+    const calculatedSum = normalPay + weekendPay + holidayHoursPay + holidayDaysPay;
+    if (totalPay === 0 && calculatedSum > 0) {
+      totalPay = calculatedSum;
+    }
+
+    const hasOvertime = totalPay > 0 || normalHours > 0 || weekendHours > 0 || holidayDays > 0 || holidayHours > 0;
+
+    return {
+      hasOvertime,
+      normalHours,
+      weekendHours,
+      holidayDays,
+      holidayHours,
+      normalPay,
+      weekendPay,
+      holidayHoursPay,
+      holidayDaysPay,
+      totalPay,
+      totalHours: normalHours + weekendHours + holidayHours,
+      hourlyGross,
+      dailyGross,
+    };
+  }, [singleMonthlyRecord, currentEmployeePuantaj, monthStr]);
 
   const hasMissingDays = Boolean(singleMonthlyRecord && (singleMonthlyRecord.unpaidLeaveDays || 0) > 0);
   const hasDeductionsOrAdvances = Boolean(
@@ -676,18 +740,102 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
                             <td className="p-2 text-right font-bold text-emerald-900">+{formatTRY(singleMonthlyRecord.bonusAmount)}</td>
                           </tr>
                         )}
-                        {Boolean(singleMonthlyRecord.overtimePay) && (
-                          <tr className="border-b border-slate-200 bg-purple-50/50">
-                            <td className="p-2 text-purple-900 font-semibold">
-                              + Fazla Mesai Toplamı
-                              {((singleMonthlyRecord.overtimeNormalHours || 0) + (singleMonthlyRecord.overtimeWeekendHours || 0)) > 0 && (
-                                <span className="text-[10px] block text-purple-700">
-                                  ({(singleMonthlyRecord.overtimeNormalHours || 0) + (singleMonthlyRecord.overtimeWeekendHours || 0)} saat / {singleMonthlyRecord.overtimeHolidayDays || 0} gün)
-                                </span>
+                        {/* FAZLA MESAİ VE ÇALIŞMA HAKEDİŞLERİ */}
+                        {overtimeInfo?.hasOvertime && (
+                          <>
+                            {/* Hafta İçi Fazla Mesai (%50 Zamlı) */}
+                            {overtimeInfo.normalHours > 0 && (
+                              <tr className="border-b border-slate-200 bg-purple-50/40">
+                                <td className="p-2 text-purple-950 font-semibold">
+                                  <span>+ Fazla Mesai (Hafta İçi %50 Zamlı):</span>
+                                  <span className="text-[10px] text-purple-700 font-normal block">
+                                    {overtimeInfo.normalHours} Saat × {formatTRY(overtimeInfo.hourlyGross * 1.5)} / saat
+                                  </span>
+                                </td>
+                                <td className="p-2 text-right font-bold text-purple-950 align-top">
+                                  +{formatTRY(overtimeInfo.normalPay > 0 ? overtimeInfo.normalPay : overtimeInfo.totalPay)}
+                                </td>
+                              </tr>
+                            )}
+
+                            {/* Hafta Tatili Fazla Çalışması (%100 Zamlı) */}
+                            {overtimeInfo.weekendHours > 0 && (
+                              <tr className="border-b border-slate-200 bg-purple-50/40">
+                                <td className="p-2 text-purple-950 font-semibold">
+                                  <span>+ Hafta Tatili Mesaisi (%100 Zamlı):</span>
+                                  <span className="text-[10px] text-purple-700 font-normal block">
+                                    {overtimeInfo.weekendHours} Saat × {formatTRY(overtimeInfo.hourlyGross * 2.0)} / saat
+                                  </span>
+                                </td>
+                                <td className="p-2 text-right font-bold text-purple-950 align-top">
+                                  +{formatTRY(overtimeInfo.weekendPay)}
+                                </td>
+                              </tr>
+                            )}
+
+                            {/* Resmi / Dini Bayram Mesaisi (UBGT) Günlük */}
+                            {overtimeInfo.holidayDays > 0 && (
+                              <tr className="border-b border-slate-200 bg-purple-50/40">
+                                <td className="p-2 text-purple-950 font-semibold">
+                                  <span>+ Resmi / Bayram Çalışması (UBGT):</span>
+                                  <span className="text-[10px] text-purple-700 font-normal block">
+                                    {overtimeInfo.holidayDays} Gün × {formatTRY(overtimeInfo.dailyGross * 1.0)} / gün
+                                  </span>
+                                </td>
+                                <td className="p-2 text-right font-bold text-purple-950 align-top">
+                                  +{formatTRY(overtimeInfo.holidayDaysPay)}
+                                </td>
+                              </tr>
+                            )}
+
+                            {/* Resmi Tatil Saatlik Çalışma */}
+                            {overtimeInfo.holidayHours > 0 && (
+                              <tr className="border-b border-slate-200 bg-purple-50/40">
+                                <td className="p-2 text-purple-950 font-semibold">
+                                  <span>+ Resmi Tatil Saatlik Çalışma:</span>
+                                  <span className="text-[10px] text-purple-700 font-normal block">
+                                    {overtimeInfo.holidayHours} Saat × {formatTRY(overtimeInfo.hourlyGross * 2.0)} / saat
+                                  </span>
+                                </td>
+                                <td className="p-2 text-right font-bold text-purple-950 align-top">
+                                  +{formatTRY(overtimeInfo.holidayHoursPay)}
+                                </td>
+                              </tr>
+                            )}
+
+                            {/* Eğer saat kırılımı girilmemiş ancak doğrudan fazla mesai tutarı eklenmişse */}
+                            {overtimeInfo.normalHours === 0 &&
+                              overtimeInfo.weekendHours === 0 &&
+                              overtimeInfo.holidayDays === 0 &&
+                              overtimeInfo.holidayHours === 0 &&
+                              overtimeInfo.totalPay > 0 && (
+                                <tr className="border-b border-slate-200 bg-purple-50/50">
+                                  <td className="p-2 text-purple-900 font-semibold">
+                                    + Fazla Mesai Hakedişi:
+                                  </td>
+                                  <td className="p-2 text-right font-bold text-purple-950">
+                                    +{formatTRY(overtimeInfo.totalPay)}
+                                  </td>
+                                </tr>
                               )}
-                            </td>
-                            <td className="p-2 text-right font-bold text-purple-950">+{formatTRY(singleMonthlyRecord.overtimePay)}</td>
-                          </tr>
+
+                            {/* Birden fazla mesai türü varsa şık toplam satırı */}
+                            {[
+                              overtimeInfo.normalHours > 0,
+                              overtimeInfo.weekendHours > 0,
+                              overtimeInfo.holidayDays > 0,
+                              overtimeInfo.holidayHours > 0,
+                            ].filter(Boolean).length > 1 && (
+                              <tr className="border-b border-slate-200 bg-purple-100/60 text-xs font-bold">
+                                <td className="p-2 text-purple-950">
+                                  ↳ Toplam Fazla Mesai ({overtimeInfo.totalHours} Saat{overtimeInfo.holidayDays > 0 ? ` + ${overtimeInfo.holidayDays} Gün` : ""}):
+                                </td>
+                                <td className="p-2 text-right font-black text-purple-950">
+                                  +{formatTRY(overtimeInfo.totalPay)}
+                                </td>
+                              </tr>
+                            )}
+                          </>
                         )}
                         {Boolean(singleMonthlyRecord.foodAllowance) && (
                           <tr className="border-b border-slate-200">
@@ -699,6 +847,19 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
                           <tr className="border-b border-slate-200">
                             <td className="p-2 text-slate-700">+ Yol / Ulaşım Yardımı:</td>
                             <td className="p-2 text-right font-semibold text-slate-900">+{formatTRY(singleMonthlyRecord.roadAllowance)}</td>
+                          </tr>
+                        )}
+                        {Boolean(singleMonthlyRecord.customPayments && singleMonthlyRecord.customPayments.length > 0) &&
+                          singleMonthlyRecord.customPayments.map((cp) => (
+                            <tr key={cp.id} className="border-b border-slate-200">
+                              <td className="p-2 text-slate-700">+ {cp.name} (Ek Ödeme):</td>
+                              <td className="p-2 text-right font-semibold text-slate-900">+{formatTRY(cp.amount)}</td>
+                            </tr>
+                          ))}
+                        {Boolean(!singleMonthlyRecord.customPayments?.length && singleMonthlyRecord.customPaymentsTotal) && (
+                          <tr className="border-b border-slate-200">
+                            <td className="p-2 text-slate-700">+ Diğer Ek Ödemeler:</td>
+                            <td className="p-2 text-right font-semibold text-slate-900">+{formatTRY(singleMonthlyRecord.customPaymentsTotal)}</td>
                           </tr>
                         )}
                         {Boolean(singleMonthlyRecord.unpaidLeaveDays) && (
@@ -713,7 +874,13 @@ export const PayrollPrintModal: React.FC<PayrollPrintModalProps> = ({
                         )}
                         <tr className="bg-slate-100 font-black text-slate-950">
                           <td className="p-2.5">TOPLAM BRÜT KAZANÇ (SPEK):</td>
-                          <td className="p-2.5 text-right text-sm">{formatTRY(singleMonthlyRecord.grossSalary)}</td>
+                          <td className="p-2.5 text-right text-sm">
+                            {formatTRY(
+                              singleMonthlyRecord.overtimePay
+                                ? singleMonthlyRecord.grossSalary
+                                : singleMonthlyRecord.grossSalary + (overtimeInfo?.totalPay || 0)
+                            )}
+                          </td>
                         </tr>
                       </tbody>
                     </table>

@@ -96,11 +96,15 @@ export function formatPayrollWhatsAppMessage(
     attachedForms.push(`📋 Personel Ücret Kesinti ve Avans Mahsup Formu (${formatCurrency(totalDeds, "TRY")})`);
   }
 
+  const overtimeText = (payroll?.overtimePay && payroll.overtimePay > 0)
+    ? `\n⏱️ *Fazla Mesai Hakedişi:* ${formatCurrency(payroll.overtimePay, "TRY")}`
+    : "";
+
   const attachmentsText = attachedForms.length > 0
     ? `\n\n📌 *Bordroya Eklenen Resmi Formlar:*\n${attachedForms.join("\n")}`
     : "";
 
-  return `Sayın *${employee.fullName}* (T.C.: ${employee.tckn}),\n\n*${companyName}* bünyesindeki *${donem}* dönemine ait Resmi Maaş Bordronuz (Ücret Hesap Pusulası - 4857 S.K. Md. 37) düzenlenmiştir.\n\n💵 *Net Ele Geçen Maaş:* ${netPayable}\n📊 *Brüt Ücret:* ${gross}${attachmentsText}\n\nMaaş bordronuz ve ilgili ek formlar bu mesaj ile birlikte PDF olarak iletilmiştir. Lütfen inceleyip tebellüğ ediniz.\nİyi çalışmalar dileriz.`;
+  return `Sayın *${employee.fullName}* (T.C.: ${employee.tckn}),\n\n*${companyName}* bünyesindeki *${donem}* dönemine ait Resmi Maaş Bordronuz (Ücret Hesap Pusulası - 4857 S.K. Md. 37) düzenlenmiştir.\n\n💵 *Net Ele Geçen Maaş:* ${netPayable}\n📊 *Brüt Ücret:* ${gross}${overtimeText}${attachmentsText}\n\nMaaş bordronuz ve ilgili ek formlar bu mesaj ile birlikte PDF olarak iletilmiştir. Lütfen inceleyip tebellüğ ediniz.\nİyi çalışmalar dileriz.`;
 }
 
 export function formatCustodyWhatsAppMessage(

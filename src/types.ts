@@ -710,6 +710,8 @@ export interface PayrollRecord {
   overtimeHolidayHours?: number; // Resmi tatil saatlik mesai saati
   foodAllowance?: number;
   roadAllowance?: number;
+  customPayments?: AdditionalPaymentItem[];
+  customPaymentsTotal?: number;
   advanceDeduction?: number;
   unpaidLeaveDays?: number;
   unpaidLeaveDeduction?: number;
@@ -750,6 +752,14 @@ export interface DayPuantajDetail {
   leaveStatus?: "approved" | "pending" | "rejected";
 }
 
+export interface AdditionalPaymentItem {
+  id: string;
+  name: string;
+  amount: number;
+  type?: "food" | "road" | "custom" | "bonus" | string;
+  description?: string;
+}
+
 export type CustomPayrollAdjustment = {
   salaryType?: "net" | "gross";
   baseSalary?: number;
@@ -761,6 +771,8 @@ export type CustomPayrollAdjustment = {
   overtimeHolidayHours?: number;
   foodAllowance?: number;
   roadAllowance?: number;
+  customPayments?: AdditionalPaymentItem[];
+  customPaymentsTotal?: number;
   advanceDeduction?: number;
   advanceReason?: string;
   unpaidLeaveDays?: number;
