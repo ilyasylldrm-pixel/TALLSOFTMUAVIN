@@ -17,7 +17,6 @@ import {
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
 import { InvoiceCreatePreviewPanel } from "./InvoiceCreatePreviewPanel";
-import { InvoiceCreateFigma } from "./InvoiceCreateFigma";
 import { InvoiceTaxSettingsModal } from "./InvoiceTaxSettingsModal";
 import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerModal";
 import { ExportButtons } from "./ExportButtons";
@@ -1568,25 +1567,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   // If Detail View is active (Create / Edit Invoice), render Full Page Detail Layout directly
   if (detailNav.isDetailView) {
-    // 0. NEW FIGMA INVOICE CREATION DESIGN
-    if (detailNav.mode === "create") {
-      return (
-        <div className="animate-fadeIn">
-          <InvoiceCreateFigma
-            contacts={contacts}
-            products={products}
-            initialType={forcedType || invType || "sales"}
-            initialContactId={initialContactIdForNewInvoice || contactId}
-            onSave={(newInvoice) => {
-              onAddInvoice(newInvoice);
-              handleCloseDetail();
-            }}
-            onClose={handleCloseDetail}
-          />
-        </div>
-      );
-    }
-
     // 1. DRAFT INVOICE PREVIEW
     if (isDraftPreviewOpen) {
       return (

@@ -1591,91 +1591,48 @@ export default function App() {
         return "E-İşlemler (GİB, SGK, E-Devlet)";
       case "admin":
         return "Admin Yönetici Paneli";
-      case "contacts_debtors":
-        return "Alacaklar ve Borçlar";
-      case "contacts_reconciliation":
-        return "Mutabakatlar";
-      case "contacts_risky":
-        return "Takibe Düşenler (Riskli Cariler)";
-      case "reports_ledger":
-        return "KDV Beyannamesi & Mizan";
       default:
         return "Ana Sayfa";
     }
   };
 
-  const getBreadcrumbs = (tab: NavItem) => {
-    switch (tab) {
-      case "dashboard":
-        return { category: "Cari takip", page: "Alacaklar ve borçlar" };
-      case "contacts":
-        return { category: "Cari takip", page: "Cariler" };
-      case "contacts_debtors":
-        return { category: "Cari takip", page: "Alacaklar ve Borçlar" };
-      case "contacts_reconciliation":
-        return { category: "Cari takip", page: "Mutabakatlar" };
-      case "contacts_risky":
-        return { category: "Cari takip", page: "Takibe Düşenler" };
-      case "invoices":
-      case "invoices_sales":
-      case "invoices_purchase":
-        return { category: "Fatura Yönetimi", page: "Faturalar" };
-      case "accounts":
-        return { category: "Finans Yönetimi", page: "Kasa, Banka & Çek" };
-      case "products":
-      case "products_list":
-      case "products_costs":
-        return { category: "Stok & Envanter", page: "Stok & Ürün Listesi" };
-      case "reports":
-        return { category: "Vergilendirmeler", page: "Mali Raporlar & Analizler" };
-      case "reports_ledger":
-        return { category: "Vergilendirmeler", page: "KDV Beyannamesi & Mizan" };
-      default:
-        return { category: "Cari takip", page: getPageTitle(tab) };
-    }
-  };
-
-  const breadcrumbs = getBreadcrumbs(currentTab);
-
   return (
-    <div className="flex flex-col min-h-screen bg-[#F4F5F9] text-slate-900 font-sans antialiased text-[13px]">
-      {/* Full-width top Header on #F4F5F9 */}
-      <Header
-        title={getPageTitle(currentTab)}
-        subtitle="Tall Soft Ön Muhasebe & Finansal Takip Programı"
-        accounts={data.accounts}
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        onOpenAiModal={() => setCurrentTab("ai")}
-        onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+    <div className="flex min-h-screen bg-theme-page text-slate-900 font-sans antialiased">
+      {/* Sidebar Navigation */}
+      <Sidebar
+        currentTab={currentTab}
         onSelectTab={setCurrentTab}
+        activeFinanceSubTab={financeSubTab}
+        onSelectFinanceSubTab={setFinanceSubTab}
+        settings={data.settings}
+        onOpenQuickAdd={() => setIsQuickAddOpen(true)}
         currentUser={currentUser}
-        onOpenAuthModal={handleOpenAuthModal}
-        onLogout={handleLogout}
-        onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
-        isSidebarCollapsed={isSidebarCollapsed}
-        onToggleSidebarCollapse={toggleSidebarCollapsed}
-        breadcrumbCategory={breadcrumbs.category}
-        breadcrumbPage={breadcrumbs.page}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapsed}
       />
 
-      {/* Main App Container: Sidebar on Left, White Card with rounded-tl-[32px] on Right */}
-      <div className="flex-1 flex overflow-hidden">
-        <Sidebar
-          currentTab={currentTab}
-          onSelectTab={setCurrentTab}
-          activeFinanceSubTab={financeSubTab}
-          onSelectFinanceSubTab={setFinanceSubTab}
-          settings={data.settings}
+      {/* Main App Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        <Header
+          title={getPageTitle(currentTab)}
+          subtitle="Muavin Ön Muhasebe & Finansal Takip Programı"
+          accounts={data.accounts}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          onOpenAiModal={() => setCurrentTab("ai")}
           onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+          onSelectTab={setCurrentTab}
           currentUser={currentUser}
-          isMobileOpen={isMobileMenuOpen}
-          onCloseMobile={() => setIsMobileMenuOpen(false)}
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={toggleSidebarCollapsed}
+          onOpenAuthModal={handleOpenAuthModal}
+          onLogout={handleLogout}
+          onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebarCollapse={toggleSidebarCollapsed}
         />
 
-        <main className="flex-1 bg-white rounded-tl-[32px] overflow-y-auto p-4 sm:p-6 lg:p-8 shadow-xs pb-12 text-[13px]">
+        <main className="flex-1 pb-12 bg-theme-page">
           <ErrorBoundary key={currentTab}>
             <Suspense fallback={<TabLoadingSkeleton />}>
             {currentTab === "dashboard" && (
@@ -1692,10 +1649,7 @@ export default function App() {
             />
           )}
 
-          {(currentTab === "contacts" ||
-            currentTab === "contacts_debtors" ||
-            currentTab === "contacts_reconciliation" ||
-            currentTab === "contacts_risky") && (
+          {currentTab === "contacts" && (
             <Contacts
               currentUser={currentUser}
               contacts={data.contacts}
@@ -2031,7 +1985,7 @@ export default function App() {
             />
           )}
 
-          {(currentTab === "reports" || currentTab === "reports_ledger") && (
+          {currentTab === "reports" && (
             <Reports
               contacts={data.contacts}
               invoices={data.invoices}
@@ -2044,7 +1998,6 @@ export default function App() {
               cheques={data.cheques}
               promissoryNotes={data.promissoryNotes}
               employees={data.employees}
-              initialTab={currentTab === "reports_ledger" ? "ledger" : "monthly"}
             />
           )}
 

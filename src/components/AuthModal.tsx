@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
+  Lock,
+  Mail,
+  User,
+  Building,
   Eye,
   EyeOff,
-  ArrowLeft,
+  ArrowRight,
   Loader2,
   Hexagon,
   ShieldCheck,
@@ -11,7 +15,13 @@ import {
   Award,
   Cpu,
   Compass,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Pause,
+  Sparkles,
 } from "lucide-react";
+import { Logo } from "./Logo";
 import {
   auth,
   googleProvider,
@@ -22,32 +32,6 @@ import {
   getUserProfile,
 } from "../lib/firebase";
 import { AppModuleKey } from "../types";
-import { cleanupOversizedStorage } from "../utils/storage";
-import tallsoftLogo from "../assets/auth/tallsoft-muhasebe-logo.png";
-import loginIllustration from "../assets/auth/login-illustration.png";
-
-const persistUserSession = (profile: UserProfile, remember: boolean) => {
-  const serialized = JSON.stringify(profile);
-  try {
-    sessionStorage.setItem("muavin_active_user", serialized);
-  } catch (e) {
-    console.warn("Could not save user to sessionStorage:", e);
-  }
-
-  if (remember) {
-    try {
-      localStorage.setItem("muavin_active_user", serialized);
-    } catch (storageErr) {
-      console.warn("localStorage quota exceeded, cleaning up caches and retrying:", storageErr);
-      cleanupOversizedStorage();
-      try {
-        localStorage.setItem("muavin_active_user", serialized);
-      } catch (retryErr) {
-        console.warn("Could not save user to localStorage even after cleanup:", retryErr);
-      }
-    }
-  }
-};
 
 export interface UserProfile {
   id: string;
@@ -69,7 +53,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLoginSuccess: (user: UserProfile) => void;
-  initialMode?: "login" | "register" | "verify";
+  initialMode?: "login" | "register";
   canClose?: boolean;
 }
 
@@ -93,34 +77,70 @@ export interface BackgroundSlide {
   imageUrl: string;
 }
 
-// Geriye dönük uyumluluk için korunan veri yapıları
+// 6 Birbirinden Farklı Mor Manzara Görselleri (Arka Planda Dönen Slaytlar)
 export const LOGIN_BACKGROUND_SLIDES: BackgroundSlide[] = [
   {
     id: 1,
-    title: "Tall Soft Muhasebe",
+    title: "Mor Fenerli Sahil Manzarası",
     subtitle: "Güvenli ve yüksek teknolojili bulut ön muhasebe altyapımızla 7/24 kesintisiz erişim sağlayın.",
     tag: "GÜVENLİ ALTYAPI",
-    imageUrl: loginIllustration,
+    imageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 2,
+    title: "Japon Bahçesi & Mor Salkım Ormanı",
+    subtitle: "Karmaşık finansal süreçleri huzurlu, sade ve akıllı bir arayüz ile kolayca yönetin.",
+    tag: "AKILLI YÖNETİM",
+    imageUrl: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 3,
+    title: "Samanyolu Altında Mor Çöl Ay Işığı",
+    subtitle: "Yapay zeka ve büyük veri analitiği ile işletmenizin geleceğine ışık tutun.",
+    tag: "YAPAY ZEKA FİNANS",
+    imageUrl: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 4,
+    title: "Büyülü Mor Şelale & Kesintisiz Nakit Akışı",
+    subtitle: "Gelir ve giderlerinizi canlı grafikler ve anlık bildirimlerle tam kontrol altında tutun.",
+    tag: "CANLI NAKİT AKIŞI",
+    imageUrl: "https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 5,
+    title: "Karlı Dağ Yansıması & Mor Lupin Gölu",
+    subtitle: "Zirveye oynayan şirketler için e-Fatura, e-Arşiv ve banka entegrasyon çözümleri.",
+    tag: "E-FATURA & ERP ZİRVESİ",
+    imageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1920&auto=format&fit=crop",
+  },
+  {
+    id: 6,
+    title: "Gün Batımında Mor Lavanta Tarlası",
+    subtitle: "Verimli, bereketli ve dijitalleşmiş ticari operasyonların gücünü keşfedin.",
+    tag: "DİJİTAL DÖNÜŞÜM",
+    imageUrl: "https://images.unsplash.com/photo-1499002238440-d264edd596ec?q=80&w=1920&auto=format&fit=crop",
   },
 ];
 
+// 6 Birbirinden Farklı Resimli Logo Seçeneği
 export const BRAND_LOGOS: LogoOption[] = [
   {
     id: 1,
-    title: "Tall Soft Kurumsal Logo",
+    title: "Modern Gradient Hexagon",
     category: "Kurumsal & İnovatif",
-    description: "Tall Soft Muhasebe resmi kurumsal logosu.",
-    colorClass: "text-[#351F62]",
+    description: "Mor ve lila gradyanlı, dinamik veri akışını simgeleyen altıgen muavin amblemi.",
+    colorClass: "text-purple-600",
     borderClass: "border-purple-300",
-    bgGradient: "from-[#351F62] via-[#8252FC] to-indigo-600",
+    bgGradient: "from-purple-600 via-indigo-600 to-fuchsia-600",
     icon: Hexagon,
-    imageUrl: tallsoftLogo,
+    imageUrl: "https://picsum.photos/seed/muavin-logo-hexagon/300/300",
   },
   {
     id: 2,
     title: "Minimal Tech Shield",
     category: "Teknoloji & Güvenlik",
-    description: "Güvenli finansal altyapıyı temsil eden modern kalkan amblemi.",
+    description: "Güvenli finansal altyapıyı temsil eden modern kalkan ve siber ağ amblemi.",
     colorClass: "text-indigo-600",
     borderClass: "border-indigo-300",
     bgGradient: "from-indigo-600 via-blue-600 to-cyan-600",
@@ -131,7 +151,7 @@ export const BRAND_LOGOS: LogoOption[] = [
     id: 3,
     title: "Golden Infinity Loop",
     category: "Finans & Yatırım",
-    description: "Sonsuz döngü ve kesintisiz sermaye akışını simgeleyen amblem.",
+    description: "Sonsuz döngü ve kesintisiz sermaye akışını simgeleyen premium altın ikon.",
     colorClass: "text-amber-600",
     borderClass: "border-amber-300",
     bgGradient: "from-amber-500 via-orange-600 to-yellow-500",
@@ -142,7 +162,7 @@ export const BRAND_LOGOS: LogoOption[] = [
     id: 4,
     title: "Royal Diamond Crest",
     category: "Lüks & Prestij",
-    description: "Üst düzey şirketler için elmas kesim logo.",
+    description: "Üst düzey holdingler ve prestijli ticari işletmeler için elmas kesim logo.",
     colorClass: "text-emerald-600",
     borderClass: "border-emerald-300",
     bgGradient: "from-emerald-600 via-teal-600 to-cyan-700",
@@ -153,7 +173,7 @@ export const BRAND_LOGOS: LogoOption[] = [
     id: 5,
     title: "Cyber Prism Grid",
     category: "Büyük Veri & Analitik",
-    description: "Yapay zeka entegrasyonlu analiz amblemi.",
+    description: "Yapay zeka entegrasyonlu muhasebe analizlerini temsil eden prizmatik grid amblem.",
     colorClass: "text-blue-600",
     borderClass: "border-blue-300",
     bgGradient: "from-blue-600 via-sky-600 to-indigo-700",
@@ -164,7 +184,7 @@ export const BRAND_LOGOS: LogoOption[] = [
     id: 6,
     title: "Vibrant Compass Wave",
     category: "Büyüme & Strateji",
-    description: "Stratejik finans rotasını simgeleyen pusula ikonu.",
+    description: "Ticari büyümeyi ve stratejik finans rotasını gösteren dinamik pusula ikonu.",
     colorClass: "text-fuchsia-600",
     borderClass: "border-fuchsia-300",
     bgGradient: "from-fuchsia-600 via-pink-600 to-rose-600",
@@ -180,55 +200,72 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialMode = "login",
   canClose = true,
 }) => {
-  const [mode, setMode] = useState<"login" | "register" | "verify">(initialMode);
-  const [previousMode, setPreviousMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Background Carousel State
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [progress, setProgress] = useState(0);
+
   // Form State
-  const [email, setEmail] = useState("demo@tallsoft.com.tr");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
-  const [phone, setPhone] = useState("+90 (212) 555 0100");
-  const [taxNumber, setTaxNumber] = useState("1234567890");
+  const [phone, setPhone] = useState("");
+  const [taxNumber, setTaxNumber] = useState("");
   const [selectedLogoId, setSelectedLogoId] = useState<number>(1);
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [resendNotice, setResendNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // 6-digit OTP verification code state
-  const [otp, setOtp] = useState<string[]>(["2", "2", "2", "2", "", ""]);
-  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  // Sync mode with initialMode prop
+  // Auto Rotation Timer (6 Seconds Interval)
   useEffect(() => {
-    setMode(initialMode);
-    if (initialMode === "login" || initialMode === "register") {
-      setPreviousMode(initialMode);
-    }
-  }, [initialMode]);
+    if (!isAutoPlaying || !isOpen) return;
 
-  // Reset errors when mode or visibility changes
+    const SLIDE_DURATION = 6000;
+    const UPDATE_INTERVAL = 50;
+
+    const timer = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 100) {
+          setCurrentSlideIndex((idx) => (idx + 1) % LOGIN_BACKGROUND_SLIDES.length);
+          return 0;
+        }
+        return prev + (UPDATE_INTERVAL / SLIDE_DURATION) * 100;
+      });
+    }, UPDATE_INTERVAL);
+
+    return () => clearInterval(timer);
+  }, [isAutoPlaying, isOpen]);
+
+  // Reset inputs when modal mode changes
   useEffect(() => {
     setErrorMessage("");
-    setResendNotice("");
   }, [mode, isOpen]);
 
   if (!isOpen) return null;
 
   const selectedLogo = BRAND_LOGOS.find((l) => l.id === selectedLogoId) || BRAND_LOGOS[0];
+  const activeSlide = LOGIN_BACKGROUND_SLIDES[currentSlideIndex];
 
-  const handleBackToWebsite = () => {
-    if (canClose) {
-      onClose();
-    } else {
-      window.open("https://tallsoft.com.tr", "_blank", "noopener,noreferrer");
-    }
+  const handleNextSlide = () => {
+    setCurrentSlideIndex((prev) => (prev + 1) % LOGIN_BACKGROUND_SLIDES.length);
+    setProgress(0);
   };
 
-  // Step 1: User submits Email + Password -> transitions to verification step
-  const handleInitiateEmailAuth = (e: React.FormEvent) => {
+  const handlePrevSlide = () => {
+    setCurrentSlideIndex((prev) => (prev === 0 ? LOGIN_BACKGROUND_SLIDES.length - 1 : prev - 1));
+    setProgress(0);
+  };
+
+  const handleSelectSlide = (index: number) => {
+    setCurrentSlideIndex(index);
+    setProgress(0);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
@@ -242,20 +279,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    setPreviousMode(mode === "verify" ? "login" : mode);
-    setMode("verify");
-    setTimeout(() => {
-      // Focus the 5th input (index 4) if 4 are pre-filled like the mockup, or first empty
-      const firstEmptyIdx = otp.findIndex((val) => !val);
-      const targetIdx = firstEmptyIdx !== -1 ? firstEmptyIdx : 0;
-      otpRefs.current[targetIdx]?.focus();
-    }, 100);
-  };
-
-  // Step 2: Final authentication on code verification
-  const executeFinalAuth = async () => {
     setSubmitting(true);
-    setErrorMessage("");
     const cleanEmail = email.trim().toLowerCase();
     const isSystemAdmin =
       cleanEmail.includes("admin") ||
@@ -266,15 +290,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       let firebaseUid = `usr_${Date.now()}`;
       let finalProfile: UserProfile;
 
-      if (
-        cleanEmail === "admin@muavin.com" ||
-        cleanEmail === "ilyasyildirim@outlook.com.tr" ||
-        cleanEmail.includes("admin")
-      ) {
+      if (cleanEmail === "admin@muavin.com" || cleanEmail === "ilyasyildirim@outlook.com.tr" || cleanEmail.includes("admin")) {
         firebaseUid = "nuT309AyQxQKddnAp1ZJjlSgBXt2";
       }
 
-      if (previousMode === "register") {
+      if (mode === "register") {
         // Firebase Authentication: Create User
         try {
           const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
@@ -294,9 +314,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         finalProfile = {
           id: firebaseUid,
-          name: fullName.trim() || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : (email.split("@")[0] || "Kullanıcı")),
+          name: fullName.trim() || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : "Kullanıcı"),
           email: email.trim(),
-          companyName: isSystemAdmin ? "Tall Soft Muhasebe Genel Merkez" : (companyName.trim() || "Tall Soft Müşterisi"),
+          companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : (companyName.trim() || "Muavin ERP Müşterisi"),
           phone: phone.trim() || "+90 (212) 555 0100",
           taxNumber: taxNumber.trim() || "1234567890",
           selectedLogoId: selectedLogo.id,
@@ -322,6 +342,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         } catch (dbErr) {
           console.error("Firestore user profile save error:", dbErr);
         }
+
       } else {
         // Firebase Authentication: Sign In
         try {
@@ -330,12 +351,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
           } catch (signInErr: any) {
             // Auto-create admin account in Firebase Auth if it doesn't exist yet
-            if (
-              (signInErr.code === "auth/user-not-found" ||
-                signInErr.code === "auth/invalid-credential" ||
-                signInErr.code === "auth/invalid-email") &&
-              isSystemAdmin
-            ) {
+            if ((signInErr.code === "auth/user-not-found" || signInErr.code === "auth/invalid-credential" || signInErr.code === "auth/invalid-email") && isSystemAdmin) {
               try {
                 userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
               } catch (createErr) {
@@ -356,7 +372,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               id: dbProfile.userId,
               name: dbProfile.name || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : "Kullanıcı"),
               email: dbProfile.email || email.trim(),
-              companyName: isSystemAdmin ? "Tall Soft Muhasebe Genel Merkez" : (dbProfile.companyName || "Tall Soft Muhasebe"),
+              companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : (dbProfile.companyName || "Muavin ERP"),
               phone: dbProfile.phone || "+90 (212) 555 0100",
               taxNumber: dbProfile.taxNumber || "1234567890",
               selectedLogoId: dbProfile.selectedLogoId || selectedLogo.id,
@@ -370,7 +386,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               id: firebaseUid,
               name: isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : (email.split("@")[0] || "Müşteri / Yönetici"),
               email: email.trim(),
-              companyName: isSystemAdmin ? "Tall Soft Muhasebe Genel Merkez" : "Tall Soft Bilişim Ltd. Şti.",
+              companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin Bilişim A.Ş.",
               phone: "+90 (212) 555 0100",
               taxNumber: "8470291038",
               selectedLogoId: selectedLogo.id,
@@ -397,12 +413,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             }
           }
         } catch (authErr: any) {
-          // Local fallback for offline/development/demo logins
+          // Local fallback for offline/development logins
           finalProfile = {
             id: isSystemAdmin ? "nuT309AyQxQKddnAp1ZJjlSgBXt2" : `usr_${Date.now()}`,
             name: isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : (email.split("@")[0] || "Müşteri / Yönetici"),
             email: email.trim(),
-            companyName: isSystemAdmin ? "Tall Soft Muhasebe Genel Merkez" : "Tall Soft Bilişim Ltd. Şti.",
+            companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin Bilişim A.Ş.",
             phone: "+90 (212) 555 0100",
             taxNumber: "8470291038",
             selectedLogoId: selectedLogo.id,
@@ -413,7 +429,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       }
 
-      persistUserSession(finalProfile, rememberMe);
+      if (rememberMe) {
+        localStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
+      } else {
+        sessionStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
+      }
 
       setPassword("");
       setSubmitting(false);
@@ -424,47 +444,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setErrorMessage("Giriş işlemi sırasında beklenmeyen bir hata oluştu.");
       setSubmitting(false);
     }
-  };
-
-  const handleVerifySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    executeFinalAuth();
-  };
-
-  const handleOtpChange = (index: number, val: string) => {
-    const digit = val.replace(/\D/g, "").slice(-1);
-    const nextOtp = [...otp];
-    nextOtp[index] = digit;
-    setOtp(nextOtp);
-
-    if (digit && index < 5) {
-      otpRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handleOtpPaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (!pasted) return;
-
-    const nextOtp = [...otp];
-    for (let i = 0; i < pasted.length; i++) {
-      nextOtp[i] = pasted[i];
-    }
-    setOtp(nextOtp);
-    const targetIdx = Math.min(pasted.length, 5);
-    otpRefs.current[targetIdx]?.focus();
-  };
-
-  const handleResendCode = () => {
-    setResendNotice("Doğrulama kodu tekrar e-posta adresinize iletildi.");
-    setTimeout(() => setResendNotice(""), 4000);
   };
 
   const handleGoogleSignIn = async () => {
@@ -483,13 +462,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       let finalProfile: UserProfile;
 
+      // Fetch or create profile in Firestore
       const dbProfile = await getUserProfile(firebaseUid);
       if (dbProfile) {
         finalProfile = {
           id: dbProfile.userId,
           name: dbProfile.name || user.displayName || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : "Google Kullanıcısı"),
           email: dbProfile.email || userEmail,
-          companyName: isSystemAdmin ? "Tall Soft Muhasebe Genel Merkez" : (dbProfile.companyName || "Tall Soft Müşterisi"),
+          companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : (dbProfile.companyName || "Muavin ERP Müşterisi"),
           phone: dbProfile.phone || "+90 (212) 555 0100",
           taxNumber: dbProfile.taxNumber || "1234567890",
           selectedLogoId: dbProfile.selectedLogoId || selectedLogo.id,
@@ -503,7 +483,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           id: firebaseUid,
           name: isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : (user.displayName || userEmail.split("@")[0] || "Google Kullanıcısı"),
           email: userEmail,
-          companyName: isSystemAdmin ? "Tall Soft Muhasebe Genel Merkez" : "Tall Soft Bilişim Ltd. Şti.",
+          companyName: isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin Bilişim A.Ş.",
           phone: "+90 (212) 555 0100",
           taxNumber: "8470291038",
           selectedLogoId: selectedLogo.id,
@@ -530,7 +510,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       }
 
-      persistUserSession(finalProfile, rememberMe);
+      if (rememberMe) {
+        localStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
+      } else {
+        sessionStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
+      }
 
       setSubmitting(false);
       onLoginSuccess(finalProfile);
@@ -549,168 +533,187 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#E0E0F0] overflow-y-auto flex items-center justify-center p-3 sm:p-6 lg:p-8 animate-in fade-in duration-300 font-sans">
-      
-      {/* Central Login Card */}
-      <div className="relative w-full max-w-[1020px] bg-white rounded-2xl sm:rounded-[28px] shadow-2xl shadow-indigo-950/10 overflow-hidden flex flex-col lg:flex-row min-h-[580px] border border-slate-200/60">
+    <div className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto animate-in fade-in duration-300">
+      <div className="relative w-full h-full min-h-screen bg-slate-950 flex flex-col lg:flex-row">
         
-        {/* Close Button (if applicable) */}
-        {canClose && (
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer z-30"
-            title="Kapat"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
-
         {/* ========================================================= */}
-        {/* LEFT COLUMN: WHITE LOGIN / VERIFICATION FORM SECTION      */}
+        {/* LEFT COLUMN: 6-IMAGE ROTATING BACKGROUND CAROUSEL         */}
         {/* ========================================================= */}
-        <div className="w-full lg:w-[48%] bg-white p-7 sm:p-10 lg:p-12 flex flex-col justify-between z-20">
+        <div className="relative w-full lg:w-2/3 min-h-[400px] lg:min-h-screen bg-slate-950 flex flex-col justify-between overflow-hidden group">
           
-          {mode === "verify" ? (
-            /* ======================================================= */
-            /* VERIFICATION CODE SCREEN (OTP / CHECK YOUR EMAIL)       */
-            /* ======================================================= */
-            <div className="animate-in fade-in duration-200">
-              {/* TALL SOFT MUHASEBE LOGO */}
-              <div className="mb-6 select-none">
+          {/* Carousel Images Cross-Dissolve Stack */}
+          {LOGIN_BACKGROUND_SLIDES.map((slide, idx) => {
+            const isActive = idx === currentSlideIndex;
+            return (
+              <div
+                key={slide.id}
+                className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                  isActive ? "opacity-100 z-10 scale-100" : "opacity-0 z-0 scale-105"
+                } transform transition-transform duration-[8000ms]`}
+              >
                 <img
-                  src={tallsoftLogo}
-                  alt="Tall Soft Muhasebe"
-                  className="h-14 sm:h-16 w-auto object-contain"
+                  src={slide.imageUrl}
+                  alt={slide.title}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover object-center"
                 />
+                <div className="absolute inset-0 bg-gradient-to-tr from-purple-950/90 via-[#2d1b54]/60 to-slate-950/50" />
               </div>
+            );
+          })}
 
-              {/* BACK BUTTON */}
-              <div className="mb-4">
-                <button
-                  type="button"
-                  onClick={() => setMode(previousMode)}
-                  className="text-xs sm:text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Geri</span>
-                </button>
-              </div>
+          {/* Dark Purple Gradient Overlay Vignette */}
+          <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/95 via-purple-950/50 to-slate-950/40 mix-blend-multiply pointer-events-none" />
 
-              {/* HEADING (PLEASE CHECK YOUR EMAIL!) */}
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mb-6">
-                Lütfen e-postanızı kontrol edin!
-              </h1>
-
-              {errorMessage && (
-                <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-center justify-between animate-in fade-in mb-4">
-                  <span>⚠️ {errorMessage}</span>
-                  <button
-                    type="button"
-                    onClick={() => setErrorMessage("")}
-                    className="font-bold text-rose-500 hover:text-rose-700 cursor-pointer ml-2"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-
-              {resendNotice && (
-                <div className="p-3 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl flex items-center justify-between animate-in fade-in mb-4">
-                  <span>✓ {resendNotice}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleVerifySubmit} className="space-y-6">
-                {/* 6 OTP DIGIT BOXES */}
-                <div className="flex items-center justify-between gap-1.5 sm:gap-2.5">
-                  {otp.map((digit, index) => (
-                    <input
-                      key={index}
-                      ref={(el) => {
-                        otpRefs.current[index] = el;
-                      }}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleOtpChange(index, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                      onPaste={index === 0 ? handleOtpPaste : undefined}
-                      placeholder="-"
-                      className="w-10 h-12 sm:w-12 sm:h-14 text-center text-lg sm:text-xl font-bold text-slate-800 bg-white border border-slate-200 focus:border-[#351F62] focus:ring-2 focus:ring-[#351F62]/20 rounded-xl outline-none transition-all placeholder:text-slate-300"
-                    />
-                  ))}
-                </div>
-
-                {/* WE SENT A CODE TO EMAIL ... RESEND */}
-                <div className="flex items-center justify-between text-xs sm:text-sm text-slate-600 gap-2">
-                  <p className="truncate">
-                    <span className="font-semibold text-slate-800">{email}</span> adresine bir kod gönderdik
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleResendCode}
-                    className="text-[#6C47FF] hover:text-[#5233D2] font-semibold shrink-0 hover:underline cursor-pointer"
-                  >
-                    Tekrar Gönder
-                  </button>
-                </div>
-
-                {/* CONTINUE BUTTON WITH COLOR #351F62 */}
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  style={{ backgroundColor: "#351F62" }}
-                  className="w-full py-3.5 px-4 rounded-xl text-white font-medium text-sm hover:opacity-95 active:scale-[0.99] transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 mt-4"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Doğrulanıyor...</span>
-                    </>
-                  ) : (
-                    <span>Devam Et</span>
-                  )}
-                </button>
-              </form>
+          {/* Top Header Badge on Carousel */}
+          <div className="relative z-30 p-6 flex items-center justify-between">
+            <div className="inline-flex items-center gap-2 bg-slate-900/70 backdrop-blur-md border border-[#8252F6]/40 px-3.5 py-1.5 rounded-full text-purple-200 text-xs font-bold tracking-wide shadow-lg">
+              <Sparkles className="w-4 h-4 text-[#EF7D2C] animate-pulse" />
+              <span>MUAVİN ERP • 6 Görsel Otomatik Akış</span>
             </div>
-          ) : (
-            /* ======================================================= */
-            /* LOGIN / REGISTER FORM SCREEN                            */
-            /* ======================================================= */
-            <div>
-              {/* TALL SOFT MUHASEBE LOGO */}
-              <div className="mb-6 select-none">
-                <img
-                  src={tallsoftLogo}
-                  alt="Tall Soft Muhasebe"
-                  className="h-14 sm:h-16 w-auto object-contain"
-                />
+
+            {/* Auto Play / Pause Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+              className="bg-slate-900/70 hover:bg-slate-900/90 border border-white/20 text-white p-2 rounded-full backdrop-blur-md transition-all cursor-pointer shadow-md"
+              title={isAutoPlaying ? "Otomatik Akışı Duraklat" : "Otomatik Akışı Başlat"}
+            >
+              {isAutoPlaying ? <Pause className="w-4 h-4 text-purple-300" /> : <Play className="w-4 h-4 text-[#EF7D2C]" />}
+            </button>
+          </div>
+
+          {/* CENTER: FROSTED GLASS CAPTION CARD */}
+          <div className="relative z-30 flex-1 flex items-center justify-center p-6 sm:p-10">
+            <div className="w-full max-w-md bg-[#1e1435]/75 backdrop-blur-xl border border-[#8252F6]/40 rounded-3xl p-6 sm:p-8 shadow-2xl text-center text-white space-y-4 animate-in fade-in duration-500">
+              
+              {/* Active Category Tag */}
+              <div className="inline-block px-3.5 py-1 rounded-full bg-[#EF7D2C]/20 border border-[#EF7D2C]/40 text-[#EF7D2C] text-[11px] font-black tracking-wider uppercase shadow-xs">
+                {activeSlide.tag}
               </div>
 
-              {/* HEADER ROW: TITLE & BACK TO WEBSITE */}
-              <div className="flex items-center justify-between mb-5">
-                <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">
-                  {mode === "login" ? "Giriş Yap" : "Kayıt Ol"}
-                </h1>
+              {/* Tagline Title */}
+              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-snug drop-shadow-md">
+                {activeSlide.title}
+              </h2>
+
+              {/* Tagline Subtitle */}
+              <p className="text-xs sm:text-sm text-purple-100/90 font-normal leading-relaxed">
+                {activeSlide.subtitle}
+              </p>
+
+              {/* Progress Bar */}
+              <div className="pt-2">
+                <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden shadow-inner">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#8252F6] via-purple-400 to-[#EF7D2C] transition-all duration-100 ease-linear rounded-full"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Dots & Nav Buttons */}
+              <div className="flex items-center justify-between pt-2">
                 <button
                   type="button"
-                  onClick={handleBackToWebsite}
-                  className="text-xs sm:text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  onClick={handlePrevSlide}
+                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-purple-200 hover:text-white transition-all cursor-pointer"
+                  title="Önceki Slayt"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Web sitesine dön</span>
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <div className="flex items-center gap-1.5">
+                  {LOGIN_BACKGROUND_SLIDES.map((slide, idx) => {
+                    const isCurrent = idx === currentSlideIndex;
+                    return (
+                      <button
+                        key={slide.id}
+                        type="button"
+                        onClick={() => handleSelectSlide(idx)}
+                        className={`h-2 rounded-full transition-all cursor-pointer ${
+                          isCurrent
+                            ? "w-6 bg-[#EF7D2C] shadow-md"
+                            : "w-2 bg-white/30 hover:bg-white/60"
+                        }`}
+                        title={`Slayt ${idx + 1}`}
+                      />
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleNextSlide}
+                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-purple-200 hover:text-white transition-all cursor-pointer"
+                  title="Sonraki Slayt"
+                >
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* GOOGLE SIGN IN BUTTON */}
+            </div>
+          </div>
+
+          {/* Carousel Bottom Footer */}
+          <div className="relative z-30 p-4 text-center text-[11px] text-purple-200/80 font-semibold border-t border-white/10 bg-slate-950/60 backdrop-blur-xs">
+            ✨ MUAVİN MUHASEBE • Bulut Tabanlı Ön Muhasebe & ERP Portalı
+          </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* RIGHT COLUMN: USER LOGIN FORM (ÜYE GİRİŞİ BÖLÜMÜ - SAĞDA) */}
+        {/* ========================================================= */}
+        <div className="relative w-full lg:w-1/3 min-h-screen bg-white flex flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-y-auto custom-scrollbar z-30">
+          
+          {/* Top Close Button (if applicable) */}
+          {canClose && (
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 p-2.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-all cursor-pointer z-20"
+              title="Kapat"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
+
+          <div className="w-full max-w-md mx-auto my-auto space-y-6">
+
+            {/* BRAND LOGO EMBLEM (OFFICIAL MUAV!N LOGO) */}
+            <div className="flex flex-col items-center justify-center text-center space-y-3 pt-2">
+              <Logo size="lg" showText={true} />
+              <div className="text-[11px] font-bold tracking-[0.25em] text-[#8252F6] uppercase flex items-center justify-center gap-2 w-full">
+                <span className="w-8 h-[1px] bg-purple-200" />
+                <span>ÖN MUHASEBE & FİNANS PORTALI</span>
+                <span className="w-8 h-[1px] bg-purple-200" />
+              </div>
+            </div>
+
+            {/* LOGIN / SIGN UP HEADER & BACK LINK */}
+            <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                {mode === "login" ? "Kullanıcı Girişi" : "Yeni Üyelik Oluşturun"}
+              </h3>
+              {canClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="text-xs font-semibold text-slate-500 hover:text-[#8252F6] flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <span>← Web Sitesine Dön</span>
+                </button>
+              )}
+            </div>
+
+            {/* GOOGLE SIGN IN BUTTON */}
+            <div className="space-y-3 pt-1">
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={submitting}
-                className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 text-slate-700 text-sm font-medium transition-all shadow-2xs active:scale-[0.99] cursor-pointer disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm py-3 px-4 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs transition-all active:scale-[0.99] cursor-pointer disabled:opacity-50"
               >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
                     d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
@@ -728,124 +731,192 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                   />
                 </svg>
-                <span>Google ile Devam Et</span>
+                <span>Google ile {mode === "login" ? "Giriş Yap" : "Kayıt Ol"}</span>
               </button>
 
-              {/* DOTTED SEPARATOR */}
-              <div className="my-5 border-t border-dotted border-slate-200" />
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-[11px] font-medium text-slate-400">veya e-posta ile devam edin</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
+            </div>
 
-              {/* AUTH FORM */}
-              <form onSubmit={handleInitiateEmailAuth} className="space-y-4">
-                {errorMessage && (
-                  <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-center justify-between animate-in fade-in">
-                    <span>⚠️ {errorMessage}</span>
-                    <button
-                      type="button"
-                      onClick={() => setErrorMessage("")}
-                      className="font-bold text-rose-500 hover:text-rose-700 cursor-pointer ml-2"
-                    >
-                      ✕
-                    </button>
+            {/* AUTH FORM */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {errorMessage && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl p-3 flex items-center justify-between gap-2 shadow-2xs animate-in fade-in">
+                  <span>⚠️ {errorMessage}</span>
+                  <button
+                    type="button"
+                    onClick={() => setErrorMessage("")}
+                    className="text-rose-600 hover:text-rose-900 font-black cursor-pointer px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* REGISTER EXTRA FIELDS */}
+              {mode === "register" && (
+                <div className="space-y-3 animate-in fade-in">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Adınız Soyadınız *
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-[#8252F6] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ahmet Yılmaz"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-[#8252F6] focus:ring-2 focus:ring-[#8252F6]/20 transition-all"
+                      />
+                    </div>
                   </div>
-                )}
 
-                {/* EMAIL ADDRESS FIELD (NOTCHED LABEL) */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Şirket Unvanı *
+                    </label>
+                    <div className="relative">
+                      <Building className="w-4 h-4 text-[#8252F6] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Muavin Teknoloji Ltd. Şti."
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 focus:bg-white rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-[#8252F6] focus:ring-2 focus:ring-[#8252F6]/20 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* EMAIL FIELD */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  E-Posta Adresi
+                </label>
                 <div className="relative">
-                  <label className="absolute -top-2.5 left-3.5 px-1.5 bg-white text-[11px] sm:text-xs font-medium text-slate-500 z-10 select-none">
-                    E-posta adresi
-                  </label>
+                  <Mail className="w-4 h-4 text-[#8252F6] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="email"
                     required
+                    placeholder="ornek@sirketiniz.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="demo@tallsoft.com.tr"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-[#351F62] focus:ring-1 focus:ring-[#351F62] text-sm text-slate-800 placeholder:text-slate-400 font-normal outline-none transition-all"
+                    className="w-full bg-white border border-slate-200 focus:border-[#8252F6] rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#8252F6]/20 transition-all"
                   />
                 </div>
+              </div>
 
-                {/* PASSWORD FIELD */}
+              {/* PASSWORD FIELD */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Şifre
+                </label>
                 <div className="relative">
+                  <Lock className="w-4 h-4 text-[#8252F6] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type={showPassword ? "text" : "password"}
                     required
+                    placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={mode === "register" ? "Şifrenizi belirleyin" : "Şifrenizi giriniz"}
-                    className="w-full px-4 py-3 pr-11 rounded-xl border border-slate-200 focus:border-[#351F62] focus:ring-1 focus:ring-[#351F62] text-sm text-slate-800 placeholder:text-slate-400 font-normal outline-none transition-all"
+                    className="w-full bg-white border border-slate-200 focus:border-[#8252F6] rounded-xl pl-9 pr-10 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#8252F6]/20 transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                    title={showPassword ? "Şifreyi Gizle" : "Şifreyi Göster"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+              </div>
 
-                {/* SUBMIT BUTTON WITH USER REQUESTED COLOR #351F62 */}
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  style={{ backgroundColor: "#351F62" }}
-                  className="w-full py-3.5 px-4 rounded-xl text-white font-medium text-sm hover:opacity-95 active:scale-[0.99] transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>{mode === "login" ? "Giriş Yapılıyor..." : "Kayıt Yapılıyor..."}</span>
-                    </>
-                  ) : (
-                    <span>E-posta ile devam et</span>
-                  )}
-                </button>
-              </form>
-            </div>
-          )}
+              {/* CHECKBOX & FORGOT PASSWORD */}
+              {mode === "login" && (
+                <div className="flex items-center justify-between text-xs pt-0.5">
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="rounded border-slate-300 text-[#8252F6] focus:ring-[#8252F6] w-4 h-4"
+                    />
+                    <span>Beni Hatırla</span>
+                  </label>
+                  <a
+                    href="#forgot"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      alert("Şifre sıfırlama talebiniz alındı. E-posta adresinize sıfırlama bağlantısı gönderildi.");
+                    }}
+                    className="font-semibold text-[#8252F6] hover:text-[#6a35dd] hover:underline"
+                  >
+                    Şifremi Unuttum?
+                  </a>
+                </div>
+              )}
 
-          {/* FOOTER SWITCH TO REGISTER / LOGIN (only when not in verify mode) */}
-          {mode !== "verify" && (
-            <div className="mt-6 text-left text-xs sm:text-sm text-slate-600 font-medium">
+              {/* SUBMIT BUTTON */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-gradient-to-r from-[#8252F6] via-[#7340f5] to-[#6366f1] hover:from-[#723ff4] hover:to-[#5254e0] disabled:opacity-50 text-white font-bold text-xs sm:text-sm py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-purple-500/20 transition-all active:scale-[0.99] cursor-pointer mt-2"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Giriş Yapılıyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{mode === "login" ? "Giriş Yap" : "Üyeliği Tamamla ve Giriş Yap"}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* MODE SWITCH FOOTER LINK */}
+            <div className="text-center text-xs pt-4 border-t border-slate-100">
               {mode === "login" ? (
-                <span>
+                <p className="text-slate-600 font-medium">
                   Hesabınız yok mu?{" "}
                   <button
                     type="button"
                     onClick={() => setMode("register")}
-                    className="text-[#6C47FF] hover:text-[#5233D2] font-semibold hover:underline cursor-pointer ml-1"
+                    className="font-bold text-[#8252F6] hover:text-[#6a35dd] hover:underline cursor-pointer"
                   >
-                    Kayıt Ol
+                    Üye Olun
                   </button>
-                </span>
+                </p>
               ) : (
-                <span>
+                <p className="text-slate-600 font-medium">
                   Zaten bir hesabınız var mı?{" "}
                   <button
                     type="button"
                     onClick={() => setMode("login")}
-                    className="text-[#6C47FF] hover:text-[#5233D2] font-semibold hover:underline cursor-pointer ml-1"
+                    className="font-bold text-[#8252F6] hover:text-[#6a35dd] hover:underline cursor-pointer"
                   >
-                    Giriş Yap
+                    Giriş Yapın
                   </button>
-                </span>
+                </p>
               )}
             </div>
-          )}
 
-        </div>
-
-        {/* ========================================================= */}
-        {/* RIGHT COLUMN: SOLID PURPLE ILLUSTRATION SECTION           */}
-        {/* ========================================================= */}
-        <div className="hidden lg:flex lg:w-[52%] bg-[#8252FC] items-center justify-center p-8 xl:p-12 relative overflow-hidden select-none">
-          <div className="relative w-full max-w-[420px] xl:max-w-[460px] flex items-center justify-center">
-            <img
-              src={loginIllustration}
-              alt="Tall Soft Finans ve Muhasebe"
-              className="w-full h-auto max-h-[500px] object-contain drop-shadow-md pointer-events-none"
-            />
           </div>
+
+          {/* BOTTOM FOOTER */}
+          <div className="text-center text-[11px] text-slate-400 font-medium pt-4">
+            🔒 256-Bit SSL Şifreleme ve KVKK Uyumlu Güvenli Altyapı
+          </div>
+
         </div>
 
       </div>

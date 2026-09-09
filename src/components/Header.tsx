@@ -1,15 +1,21 @@
 import React from "react";
 import {
-  Menu,
-  ArrowLeft,
-  ChevronRight,
-  Rocket,
-  Bell,
+  Search,
+  Sparkles,
+  Wallet,
+  Plus,
+  LogIn,
+  UserPlus,
   LogOut,
+  X,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ChevronRight,
 } from "lucide-react";
 import { Account } from "../types";
 import { UserProfile } from "./AuthModal";
-import tallsoftHeaderLogo from "../assets/auth/tallsoft-logo-header.png";
+import { useTheme } from "../context/ThemeContext";
 
 interface HeaderProps {
   title: string;
@@ -26,168 +32,225 @@ interface HeaderProps {
   onToggleMobileMenu?: () => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebarCollapse?: () => void;
-  breadcrumbCategory?: string;
-  breadcrumbPage?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   title,
+  subtitle,
+  accounts,
+  searchTerm,
+  onSearchChange,
+  onOpenAiModal,
+  onOpenQuickAdd,
   onSelectTab,
   currentUser,
+  onOpenAuthModal,
   onLogout,
   onToggleMobileMenu,
+  isSidebarCollapsed = false,
   onToggleSidebarCollapse,
-  breadcrumbCategory = "Cari takip",
-  breadcrumbPage = "Alacaklar ve borçlar",
 }) => {
-  const handleToggle = () => {
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      if (onToggleMobileMenu) onToggleMobileMenu();
-    } else {
-      if (onToggleSidebarCollapse) onToggleSidebarCollapse();
-    }
-  };
+  const { theme } = useTheme();
+
+  const totalTlBalance = accounts
+    .filter((a) => a.currency === "TRY")
+    .reduce((sum, a) => sum + a.balance, 0);
 
   return (
-    <header className="w-full bg-white border-b border-slate-100/90 px-4 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-40 select-none font-sans">
-      {/* ========================================================= */}
-      {/* LEFT SECTION: HAMBURGER, LOGO, BACK BUTTON, BREADCRUMB   */}
-      {/* ========================================================= */}
-      <div className="flex items-center">
-        {/* Brand Group (Aligned with Sidebar width) */}
-        <div className="flex items-center w-48 sm:w-56 lg:w-60 shrink-0">
-          {/* Hamburger Menu Circular Button */}
+    <header
+      className="relative px-4 sm:px-6 py-2.5 sticky top-0 z-30 transition-colors border-b shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 backdrop-blur-md"
+      style={{
+        backgroundColor: theme.headerBg,
+        borderColor: theme.headerBorder,
+        color: theme.headerText,
+      }}
+    >
+      {/* Title, Breadcrumb & Mobile Hamburger / Desktop Sidebar Toggle */}
+      <div className="relative z-10 flex items-center gap-3">
+        {onToggleMobileMenu && (
           <button
             type="button"
-            onClick={handleToggle}
-            className="w-9 h-9 rounded-full bg-[#F0EBFA] hover:bg-[#E5DEF8] text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
-            title="Menüyü Aç / Kapat"
+            onClick={onToggleMobileMenu}
+            className="md:hidden p-2 rounded-xl border shadow-2xs cursor-pointer transition-all active:scale-95"
+            style={{
+              borderColor: theme.cardBorder,
+              backgroundColor: theme.cardBg,
+              color: theme.headerText,
+            }}
+            title="Ana Menüyü Aç / Kapat"
           >
-            <Menu className="w-4 h-4" />
+            <Menu className="w-5 h-5" />
           </button>
-
-          {/* TALL SOFT BRAND LOGO */}
-          <div
-            onClick={() => onSelectTab("dashboard")}
-            className="cursor-pointer flex items-center shrink-0 ml-3 sm:ml-4"
-          >
-            <img
-              src={tallsoftHeaderLogo}
-              alt="TALL SOFT"
-              className="h-8 sm:h-8.5 w-auto object-contain"
-            />
-          </div>
-        </div>
-
-        {/* Back Button & Breadcrumbs (Shifted to the Right, aligning with main canvas) */}
-        <div className="flex items-center ml-2 sm:ml-6 lg:ml-8">
-          {/* Back Button (←) with #F0EBFA */}
+        )}
+        {onToggleSidebarCollapse && (
           <button
             type="button"
-            onClick={() => onSelectTab("dashboard")}
-            className="w-8 h-8 rounded-xl bg-[#F0EBFA] hover:bg-[#E5DEF8] text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
-            title="Geri Dön"
+            onClick={onToggleSidebarCollapse}
+            className="hidden md:flex p-2 rounded-xl border shadow-2xs cursor-pointer transition-all active:scale-95 items-center justify-center hover:opacity-80"
+            style={{
+              borderColor: theme.cardBorder,
+              backgroundColor: theme.cardBg,
+              color: theme.headerText,
+            }}
+            title={isSidebarCollapsed ? "Kenar Çubuğunu Genişlet" : "Kenar Çubuğunu Daralt"}
+            aria-label="Kenar Çubuğunu Aç / Kapat"
           >
-            <ArrowLeft className="w-4 h-4" />
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="w-4 h-4" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4" />
+            )}
           </button>
+        )}
 
-          {/* Vertical Separator Line */}
-          <div className="hidden sm:block h-4 w-[1px] bg-slate-200 mx-3.5" />
-
-          {/* Clean Breadcrumb Navigation */}
-          <div className="hidden sm:flex items-center gap-2 text-xs sm:text-[13px] font-medium text-slate-500">
-            <span
-              onClick={() => onSelectTab("contacts")}
-              className="hover:text-slate-800 transition-colors cursor-pointer"
-            >
-              {breadcrumbCategory}
-            </span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-600 font-medium">
-              {breadcrumbPage || title}
-            </span>
+        {/* Title and Clean Breadcrumb */}
+        <div>
+          <div className="flex items-center gap-1.5 text-[11px] font-medium opacity-60">
+            <span>Caris</span>
+            <ChevronRight className="w-3 h-3" />
+            <span className="font-semibold opacity-90">{title}</span>
           </div>
+          <h2 className="text-base sm:text-lg font-extrabold tracking-tight mt-0.5" style={{ color: theme.headerText }}>
+            {title}
+          </h2>
         </div>
       </div>
 
-      {/* ========================================================= */}
-      {/* RIGHT SECTION: UPGRADE PLAN, BELL, DIVIDER, AVATAR RING   */}
-      {/* ========================================================= */}
-      <div className="flex items-center gap-3">
-        {/* "Upgrade plan" Button (#351F62 with Rocket Icon) */}
-        <button
-          type="button"
-          onClick={() =>
-            alert(
-              "Tall Soft Pro Plan yükseltme talebiniz alındı. Müşteri temsilcimiz sizinle iletişime geçecektir."
-            )
-          }
-          style={{ backgroundColor: "#351F62" }}
-          className="flex items-center gap-2 text-white font-medium text-xs sm:text-sm py-2 px-4 sm:px-4.5 rounded-xl hover:opacity-95 active:scale-[0.98] transition-all shadow-xs cursor-pointer"
-        >
-          <Rocket className="w-4 h-4 text-purple-200" />
-          <span>Upgrade plan</span>
-        </button>
-
-        {/* Notification Bell with Purple Badge Dot */}
-        <button
-          type="button"
-          className="relative p-2 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer ml-0.5"
-          title="Bildirimler"
-        >
-          <Bell className="w-5 h-5 text-slate-600" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#8252FC] ring-2 ring-white" />
-        </button>
-
-        {/* Vertical Separator before Avatar */}
-        <div className="hidden sm:block h-5 w-[1px] bg-slate-200 mx-1" />
-
-        {/* User Profile Avatar with Colorful Gradient Ring (Figma Spec) */}
-        <div className="relative group">
-          <button
-            type="button"
-            className="flex items-center cursor-pointer focus:outline-none"
-            title={currentUser?.name || "Profil"}
-          >
-            {/* Colorful Gradient Border Ring */}
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full p-[2px] bg-gradient-to-tr from-purple-600 via-rose-500 to-amber-400 shadow-2xs hover:scale-105 transition-transform">
-              <div className="w-full h-full rounded-full overflow-hidden bg-white border border-white flex items-center justify-center">
-                {currentUser?.selectedLogoUrl ? (
-                  <img
-                    src={currentUser.selectedLogoUrl}
-                    alt={currentUser.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <img
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=120&auto=format&fit=crop"
-                    alt="Avatar"
-                    className="w-full h-full object-cover"
-                  />
-                )}
-              </div>
-            </div>
-          </button>
-
-          {/* User Quick Dropdown */}
-          <div className="absolute right-0 top-12 w-52 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 hidden group-hover:block z-50 animate-in fade-in zoom-in-95 text-xs text-slate-700">
-            <div className="px-3 py-2 border-b border-slate-100">
-              <p className="font-bold text-slate-900 truncate">
-                {currentUser?.name || "Kullanıcı"}
-              </p>
-              <p className="text-[11px] text-slate-500 truncate">
-                {currentUser?.email || "demo@tallsoft.com.tr"}
-              </p>
-            </div>
+      {/* Global Search & Action Bar */}
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 relative z-10">
+        {/* Search Bar */}
+        <div className="relative w-full sm:w-64">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Cari, Fatura, Ürün ara..."
+            value={searchTerm}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="w-full text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-7 py-2 border transition-all shadow-2xs focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+            style={{
+              backgroundColor: theme.pageBg,
+              borderColor: theme.cardBorder,
+            }}
+          />
+          {searchTerm && (
             <button
               type="button"
-              onClick={onLogout}
-              className="w-full text-left px-3 py-2 hover:bg-rose-50 text-rose-600 rounded-xl flex items-center gap-2 font-semibold mt-1 cursor-pointer transition-colors"
+              onClick={() => onSearchChange("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer p-0.5 rounded-md transition-all"
+              title="Aramayı Temizle"
             >
-              <LogOut className="w-4 h-4" />
-              <span>Çıkış Yap</span>
+              <X className="w-3.5 h-3.5" />
             </button>
+          )}
+        </div>
+
+        {/* Total Cash Balance Pill */}
+        <div
+          onClick={() => onSelectTab("accounts")}
+          className="rounded-xl px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all border shadow-2xs hover:opacity-90"
+          style={{
+            backgroundColor: theme.cardBg,
+            borderColor: theme.cardBorder,
+          }}
+          title="Toplam Kasa ve Banka Bakiyesi"
+        >
+          <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+            <Wallet className="w-3.5 h-3.5 text-emerald-600" />
           </div>
+          <div>
+            <div className="text-[9px] uppercase font-bold text-slate-500 leading-none tracking-wider">
+              Nakit Bakiye
+            </div>
+            <div className="text-xs font-black text-emerald-600 mt-0.5 font-mono">
+              ₺{totalTlBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+        </div>
+
+        {/* AI Assistant Trigger Button */}
+        <button
+          onClick={onOpenAiModal}
+          className="font-bold text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all border hover:opacity-90"
+          style={{
+            backgroundColor: theme.cardBg,
+            borderColor: theme.cardBorder,
+            color: theme.primaryColor,
+          }}
+        >
+          <Sparkles className="w-3.5 h-3.5 animate-pulse" style={{ color: theme.primaryColor }} />
+          <span>AI Muavin</span>
+        </button>
+
+        {/* New Transaction Button */}
+        <button
+          onClick={onOpenQuickAdd}
+          className="text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-[0.98] hover:opacity-90"
+          style={{ backgroundColor: theme.primaryColor }}
+        >
+          <Plus className="w-3.5 h-3.5 font-bold" />
+          <span>İşlem Ekle</span>
+        </button>
+
+        {/* USER AUTHENTICATION BUTTONS / PROFILE STATE */}
+        <div className="pl-2 border-l flex items-center gap-2" style={{ borderColor: theme.cardBorder }}>
+          {currentUser ? (
+            <div
+              className="flex items-center gap-2 p-1 rounded-xl border shadow-2xs"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="w-7 h-7 rounded-lg overflow-hidden border shrink-0 bg-slate-100" style={{ borderColor: theme.cardBorder }}>
+                <img
+                  src={currentUser.selectedLogoUrl}
+                  alt={currentUser.selectedLogoName}
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="text-left max-w-[120px] hidden sm:block">
+                <div className="text-xs font-black truncate leading-tight" style={{ color: theme.textPrimary }}>
+                  {currentUser.name}
+                </div>
+                <div className="text-[9px] font-semibold truncate" style={{ color: theme.primaryColor }}>
+                  {currentUser.companyName}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all cursor-pointer"
+                title="Sistemden Çıkış Yap"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onOpenAuthModal("login")}
+                className="border font-extrabold text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer hover:opacity-90"
+                style={{
+                  backgroundColor: theme.cardBg,
+                  borderColor: theme.cardBorder,
+                  color: theme.headerText,
+                }}
+              >
+                <LogIn className="w-3.5 h-3.5" style={{ color: theme.primaryColor }} />
+                <span>Giriş Yap</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenAuthModal("register")}
+                className="text-white font-extrabold text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer hover:opacity-90"
+                style={{ backgroundColor: theme.primaryColor }}
+              >
+                <UserPlus className="w-3.5 h-3.5 text-white" />
+                <span>Üye Ol</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
