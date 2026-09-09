@@ -75,18 +75,47 @@ const STORAGE_KEYS = {
   FOOD_SAMPLES: "muavin_food_samples",
 };
 
+export function cleanupOversizedStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    // 1. Purge massive fonts (3-5MB alone) that exceed quota
+    window.localStorage.removeItem("muavin_font_roboto_reg_v2");
+    window.localStorage.removeItem("muavin_font_roboto_bold_v2");
+    window.localStorage.removeItem("muavin_font_roboto_reg");
+    window.localStorage.removeItem("muavin_font_roboto_bold");
+    // 2. Purge non-critical API cache if needed
+    window.localStorage.removeItem("muavinn_tradres_provinces");
+  } catch (e) {
+    console.warn("Storage cleanup error:", e);
+  }
+}
+
+// Immediately run cleanup when module loads
+if (typeof window !== "undefined") {
+  cleanupOversizedStorage();
+}
+
 const safeSet = (key: string, val: any) => {
   try {
     localStorage.setItem(key, JSON.stringify(val));
   } catch (e) {
     console.warn(`Storage quota exceeded or error setting ${key}:`, e);
+    cleanupOversizedStorage();
+    try {
+      localStorage.setItem(key, JSON.stringify(val));
+    } catch (_) {
+      try {
+        sessionStorage.setItem(key, JSON.stringify(val));
+      } catch (_) {}
+    }
   }
 };
 
 export function getStoredData() {
+  cleanupOversizedStorage();
   const get = <T>(key: string, fallback: T): T => {
     try {
-      const item = localStorage.getItem(key);
+      const item = localStorage.getItem(key) || sessionStorage.getItem(key);
       return item ? JSON.parse(item) : fallback;
     } catch (e) {
       console.error(`Error loading ${key} from storage`, e);
@@ -240,6 +269,14 @@ export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any) {
     localStorage.setItem(STORAGE_KEYS[key], JSON.stringify(data));
   } catch (e) {
     console.warn(`Storage quota exceeded or error saving ${key} to localStorage:`, e);
+    cleanupOversizedStorage();
+    try {
+      localStorage.setItem(STORAGE_KEYS[key], JSON.stringify(data));
+    } catch (_) {
+      try {
+        sessionStorage.setItem(STORAGE_KEYS[key], JSON.stringify(data));
+      } catch (_) {}
+    }
   }
 }
 

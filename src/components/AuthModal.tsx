@@ -22,8 +22,32 @@ import {
   getUserProfile,
 } from "../lib/firebase";
 import { AppModuleKey } from "../types";
+import { cleanupOversizedStorage } from "../utils/storage";
 import tallsoftLogo from "../assets/auth/tallsoft-muhasebe-logo.png";
 import loginIllustration from "../assets/auth/login-illustration.png";
+
+const persistUserSession = (profile: UserProfile, remember: boolean) => {
+  const serialized = JSON.stringify(profile);
+  try {
+    sessionStorage.setItem("muavin_active_user", serialized);
+  } catch (e) {
+    console.warn("Could not save user to sessionStorage:", e);
+  }
+
+  if (remember) {
+    try {
+      localStorage.setItem("muavin_active_user", serialized);
+    } catch (storageErr) {
+      console.warn("localStorage quota exceeded, cleaning up caches and retrying:", storageErr);
+      cleanupOversizedStorage();
+      try {
+        localStorage.setItem("muavin_active_user", serialized);
+      } catch (retryErr) {
+        console.warn("Could not save user to localStorage even after cleanup:", retryErr);
+      }
+    }
+  }
+};
 
 export interface UserProfile {
   id: string;
@@ -389,11 +413,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       }
 
-      if (rememberMe) {
-        localStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
-      } else {
-        sessionStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
-      }
+      persistUserSession(finalProfile, rememberMe);
 
       setPassword("");
       setSubmitting(false);
@@ -510,11 +530,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       }
 
-      if (rememberMe) {
-        localStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
-      } else {
-        sessionStorage.setItem("muavin_active_user", JSON.stringify(finalProfile));
-      }
+      persistUserSession(finalProfile, rememberMe);
 
       setSubmitting(false);
       onLoginSuccess(finalProfile);

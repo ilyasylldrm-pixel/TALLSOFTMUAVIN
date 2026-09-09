@@ -88,19 +88,19 @@ export function preloadTurkishFont(): Promise<void> {
 
   fontPreloadPromise = (async () => {
     try {
-      // 1. Check browser storage first (instant 0ms)
+      // 1. Purge massive fonts from browser storage to prevent QuotaExceededError
       if (typeof window !== "undefined") {
         try {
-          cachedRobotoRegularBase64 =
-            window.localStorage?.getItem("muavin_font_roboto_reg_v2") ||
-            window.sessionStorage?.getItem("muavin_font_roboto_reg_v2");
-          cachedRobotoBoldBase64 =
-            window.localStorage?.getItem("muavin_font_roboto_bold_v2") ||
-            window.sessionStorage?.getItem("muavin_font_roboto_bold_v2");
+          window.localStorage?.removeItem("muavin_font_roboto_reg_v2");
+          window.localStorage?.removeItem("muavin_font_roboto_bold_v2");
+          window.localStorage?.removeItem("muavin_font_roboto_reg");
+          window.localStorage?.removeItem("muavin_font_roboto_bold");
+          window.sessionStorage?.removeItem("muavin_font_roboto_reg_v2");
+          window.sessionStorage?.removeItem("muavin_font_roboto_bold_v2");
         } catch (_) {}
       }
 
-      // 2. Fetch regular font if not in cache
+      // 2. Fetch regular font if not in memory
       if (!cachedRobotoRegularBase64 && typeof fetch !== "undefined") {
         const regularUrls = [
           "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf",
@@ -110,17 +110,12 @@ export function preloadTurkishFont(): Promise<void> {
           const base64 = await fetchFontWithTimeout(url, 1500);
           if (base64) {
             cachedRobotoRegularBase64 = base64;
-            if (typeof window !== "undefined") {
-              try {
-                window.localStorage?.setItem("muavin_font_roboto_reg_v2", base64);
-              } catch (_) {}
-            }
             break;
           }
         }
       }
 
-      // 3. Fetch bold font if not in cache
+      // 3. Fetch bold font if not in memory
       if (!cachedRobotoBoldBase64 && typeof fetch !== "undefined") {
         const boldUrls = [
           "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf",
@@ -130,11 +125,6 @@ export function preloadTurkishFont(): Promise<void> {
           const base64 = await fetchFontWithTimeout(url, 1500);
           if (base64) {
             cachedRobotoBoldBase64 = base64;
-            if (typeof window !== "undefined") {
-              try {
-                window.localStorage?.setItem("muavin_font_roboto_bold_v2", base64);
-              } catch (_) {}
-            }
             break;
           }
         }

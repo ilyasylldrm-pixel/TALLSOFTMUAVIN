@@ -58,6 +58,7 @@ const SectorsModule = lazyWithRetry(() => import("./components/Sectors/SectorsMo
 import {
   getStoredData,
   saveStoredData,
+  cleanupOversizedStorage,
   resetToDemoData,
   exportBackupJSON,
   importBackupJSON,
@@ -172,6 +173,10 @@ export default function App() {
       setCurrentTab("admin");
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    cleanupOversizedStorage();
+  }, []);
 
   const handleOpenAuthModal = (mode: "login" | "register") => {
     setAuthModalMode(mode);
