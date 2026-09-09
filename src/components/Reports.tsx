@@ -55,6 +55,7 @@ interface ReportsProps {
   cheques?: any[];
   promissoryNotes?: any[];
   employees?: any[];
+  initialTab?: "monthly" | "periodic" | "guidelines" | "ledger";
 }
 
 // 2026 Gelir Vergisi Tarifesi (GVK M.103) - Progressive Tax Bracket Calculation
@@ -123,9 +124,16 @@ export const Reports: React.FC<ReportsProps> = ({
   transactions,
   companySettings,
   employees = [],
+  initialTab,
 }) => {
   const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState<"monthly" | "periodic" | "guidelines" | "ledger">("monthly");
+  const [activeTab, setActiveTab] = useState<"monthly" | "periodic" | "guidelines" | "ledger">(initialTab || "monthly");
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Selected Taxpayer Type (Mükellefiyet Türü)
   const [activeTaxpayerType, setActiveTaxpayerType] = useState<string>(

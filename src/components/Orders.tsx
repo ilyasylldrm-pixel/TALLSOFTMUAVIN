@@ -5,6 +5,7 @@ import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../u
 import { formatOrderWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import { Pagination } from "./common/Pagination";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS, getContactAvatar } from "../utils/assetIcons";
@@ -71,7 +72,13 @@ export const Orders: React.FC<OrdersProps> = ({
   const [activeTab, setActiveTab] = useState<"all" | "sales" | "purchase">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [displayLimit, setDisplayLimit] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(15);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, activeTab, statusFilter, globalSearchTerm]);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedOrderForView, setSelectedOrderForView] = useState<Order | null>(null);
   const [whatsAppOrder, setWhatsAppOrder] = useState<Order | null>(null);
@@ -346,7 +353,10 @@ export const Orders: React.FC<OrdersProps> = ({
     return true;
   });
 
-  const displayedOrders = filteredOrders.slice(0, displayLimit);
+  const displayedOrders = React.useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, currentPage, pageSize]);
 
   // Analytics Metrics
   const totalOrdersCount = orders.length;
@@ -1523,16 +1533,19 @@ export const Orders: React.FC<OrdersProps> = ({
           </table>
         </div>
 
-        {filteredOrders.length > displayLimit && (
-          <div className="p-4 border-t border-slate-100 text-center">
-            <button
-              onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
-            >
-              Daha Fazla Göster ({displayLimit} / {filteredOrders.length})
-            </button>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredOrders.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          pageSizeOptions={[10, 15, 25, 50, 100]}
+          itemLabel="sipariş"
+          className="border-t border-slate-100"
+        />
       </div>
 
     </div>

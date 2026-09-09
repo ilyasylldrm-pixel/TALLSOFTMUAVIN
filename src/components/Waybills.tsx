@@ -5,6 +5,7 @@ import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../u
 import { formatWaybillWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import { Pagination } from "./common/Pagination";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
@@ -123,7 +124,13 @@ export const Waybills: React.FC<WaybillsProps> = ({
   }, [forcedType]);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [displayLimit, setDisplayLimit] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(15);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, activeTab, statusFilter, globalSearchTerm]);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingWaybillId, setEditingWaybillId] = useState<string | null>(null);
   const [editingWaybillNumber, setEditingWaybillNumber] = useState<string | null>(null);
@@ -534,7 +541,10 @@ export const Waybills: React.FC<WaybillsProps> = ({
     return true;
   });
 
-  const displayedWaybills = filteredWaybills.slice(0, displayLimit);
+  const displayedWaybills = React.useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredWaybills.slice(start, start + pageSize);
+  }, [filteredWaybills, currentPage, pageSize]);
 
   // Analytics Metrics
   const totalWaybillsCount = waybills.length;
@@ -1883,16 +1893,19 @@ export const Waybills: React.FC<WaybillsProps> = ({
           </table>
         </div>
 
-        {filteredWaybills.length > displayLimit && (
-          <div className="text-center mt-4">
-            <button
-              onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-purple-100 text-purple-900 rounded-xl font-bold text-xs hover:bg-purple-200 transition-colors cursor-pointer"
-            >
-              Daha Fazla Göster ({displayLimit} / {filteredWaybills.length})
-            </button>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredWaybills.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          pageSizeOptions={[10, 15, 25, 50, 100]}
+          itemLabel="irsaliye"
+          className="border-t border-slate-100"
+        />
         </div>
 
     </div>

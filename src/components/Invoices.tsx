@@ -17,9 +17,11 @@ import {
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
 import { InvoiceCreatePreviewPanel } from "./InvoiceCreatePreviewPanel";
+import { InvoiceCreateFigma } from "./InvoiceCreateFigma";
 import { InvoiceTaxSettingsModal } from "./InvoiceTaxSettingsModal";
 import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerModal";
 import { ExportButtons } from "./ExportButtons";
+import { Pagination } from "./common/Pagination";
 import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS, getContactAvatar } from "../utils/assetIcons";
@@ -188,8 +190,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [isCollectAllModalOpen, setIsCollectAllModalOpen] = useState<boolean>(false);
   const [collectAllAccountId, setCollectAllAccountId] = useState<string>(accounts[0]?.id || "");
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(15);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterType, docSubTab, selectedYear, selectedMonth, selectedExpenseCategoryFilter, forcedType, globalSearchTerm]);
+
   // Payment Form State
-  const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [selectedAccountId, setSelectedAccountId] = useState<string>(
     accounts[0]?.id || ""
   );
@@ -1308,7 +1317,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return true;
   });
 
-  const displayedInvoices = filteredInvoices.slice(0, displayLimit);
+  const displayedInvoices = React.useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredInvoices.slice(start, start + pageSize);
+  }, [filteredInvoices, currentPage, pageSize]);
 
   const kpiStats = React.useMemo(() => {
     const relevant = forcedType
@@ -1556,6 +1568,25 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   // If Detail View is active (Create / Edit Invoice), render Full Page Detail Layout directly
   if (detailNav.isDetailView) {
+    // 0. NEW FIGMA INVOICE CREATION DESIGN
+    if (detailNav.mode === "create") {
+      return (
+        <div className="animate-fadeIn">
+          <InvoiceCreateFigma
+            contacts={contacts}
+            products={products}
+            initialType={forcedType || invType || "sales"}
+            initialContactId={initialContactIdForNewInvoice || contactId}
+            onSave={(newInvoice) => {
+              onAddInvoice(newInvoice);
+              handleCloseDetail();
+            }}
+            onClose={handleCloseDetail}
+          />
+        </div>
+      );
+    }
+
     // 1. DRAFT INVOICE PREVIEW
     if (isDraftPreviewOpen) {
       return (
@@ -4009,16 +4040,19 @@ export const Invoices: React.FC<InvoicesProps> = ({
           </table>
         </div>
 
-        {filteredInvoices.length > displayLimit && (
-          <div className="text-center py-4 border-t border-slate-100">
-            <button
-              onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer"
-            >
-              Daha Fazla Göster ({displayLimit} / {filteredInvoices.length})
-            </button>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredInvoices.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          pageSizeOptions={[10, 15, 25, 50, 100]}
+          itemLabel="fatura"
+          className="border-t border-slate-100"
+        />
       </div>
     </div>
   );

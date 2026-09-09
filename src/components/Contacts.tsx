@@ -3,6 +3,7 @@ import { Contact, ContactType, LedgerEntry, Invoice, Transaction, Account, Chequ
 import { ExportButtons } from "./ExportButtons";
 import { EmailExportModal } from "./EmailExportModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import { Pagination } from "./common/Pagination";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, generateAccountStatementAutoTablePDF, exportElementToPDFWithPrintStyling, LedgerSummaryData } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
@@ -109,6 +110,9 @@ interface ContactsProps {
   onAddCheque?: (cheque: Cheque) => void;
   onAddPromissoryNote?: (note: PromissoryNote) => void;
   onTransferBetweenAccounts?: (fromId: string, toId: string, amount: number, desc: string) => void;
+  initialFilterType?: string;
+  initialStatusFilter?: string;
+  initialOnlyDebtors?: boolean;
 }
 
 export const Contacts: React.FC<ContactsProps> = ({
@@ -130,13 +134,34 @@ export const Contacts: React.FC<ContactsProps> = ({
   onAddCheque,
   onAddPromissoryNote,
   onTransferBetweenAccounts,
+  initialFilterType,
+  initialStatusFilter,
+  initialOnlyDebtors,
 }) => {
   const { theme } = useTheme();
-  const [filterType, setFilterType] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [onlyDebtors, setOnlyDebtors] = useState<boolean>(false);
+  const [filterType, setFilterType] = useState<string>(initialFilterType || "all");
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || "all");
+  const [onlyDebtors, setOnlyDebtors] = useState<boolean>(initialOnlyDebtors || false);
   const [search, setSearch] = useState<string>("");
-  const [displayLimit, setDisplayLimit] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(15);
+
+  useEffect(() => {
+    if (initialFilterType !== undefined) setFilterType(initialFilterType);
+  }, [initialFilterType]);
+
+  useEffect(() => {
+    if (initialStatusFilter !== undefined) setStatusFilter(initialStatusFilter);
+  }, [initialStatusFilter]);
+
+  useEffect(() => {
+    if (initialOnlyDebtors !== undefined) setOnlyDebtors(initialOnlyDebtors);
+  }, [initialOnlyDebtors]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterType, statusFilter, onlyDebtors, globalSearchTerm]);
+
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
@@ -866,7 +891,10 @@ export const Contacts: React.FC<ContactsProps> = ({
     });
   }, [contacts, activeSearchQuery, filterType, onlyDebtors, statusFilter]);
 
-  const displayedContacts = filteredContacts.slice(0, displayLimit);
+  const displayedContacts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredContacts.slice(start, start + pageSize);
+  }, [filteredContacts, currentPage, pageSize]);
 
   // Top KPI Metrics for Contacts
   const totalReceivable = useMemo(() => {
@@ -4425,17 +4453,19 @@ export const Contacts: React.FC<ContactsProps> = ({
           </table>
         </div>
 
-        {filteredContacts.length > displayLimit && (
-          <div className="p-3 text-center border-t" style={{ borderColor: theme.cardBorder }}>
-            <button
-              onClick={() => setDisplayLimit((prev) => prev + 100)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold border hover:bg-slate-50 transition-colors cursor-pointer"
-              style={{ color: theme.primaryColor, borderColor: theme.cardBorder }}
-            >
-              Daha Fazla Göster ({displayLimit} / {filteredContacts.length})
-            </button>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredContacts.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          pageSizeOptions={[10, 15, 25, 50, 100]}
+          itemLabel="cari"
+          className="border-t border-slate-100"
+        />
       </div>
     </div>
   );
