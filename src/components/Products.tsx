@@ -2174,7 +2174,7 @@ export const Products: React.FC<ProductsProps> = ({
             style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
           >
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[850px]">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                     <th className="py-3 px-4">Stok Kodu & Barkod</th>

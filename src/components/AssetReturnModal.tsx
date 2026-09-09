@@ -129,7 +129,7 @@ export const AssetReturnModal: React.FC<AssetReturnModalProps> = ({
       }
       headerIcon={<RotateCcw className="w-5 h-5 text-amber-600" />}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onClose}
@@ -148,7 +148,7 @@ export const AssetReturnModal: React.FC<AssetReturnModalProps> = ({
         </div>
       }
     >
-      <div className="max-w-2xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
+      <div className="max-w-2xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-6 md:p-8 space-y-6">
         <form id="asset-return-form" onSubmit={handleSubmit} className="space-y-4">
           {/* Target Asset Summary Box */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
@@ -166,7 +166,7 @@ export const AssetReturnModal: React.FC<AssetReturnModalProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/70 text-[11px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/70 text-[11px]">
               <div>
                 <span className="text-slate-500">Zimmetli Personel:</span>
                 <p className="font-semibold text-slate-800">

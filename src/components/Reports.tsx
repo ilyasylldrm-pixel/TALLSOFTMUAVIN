@@ -2050,8 +2050,8 @@ export const Reports: React.FC<ReportsProps> = ({
                       </div>
 
                       {/* Official Step-by-Step Kurumlar Vergisi Table */}
-                      <div className="overflow-x-auto rounded-xl border border-purple-200 bg-white">
-                        <table className="w-full text-left text-xs border-collapse">
+                      <div className="overflow-x-auto custom-scrollbar rounded-xl border border-purple-200 bg-white">
+                        <table className="w-full text-left text-xs border-collapse min-w-[550px]">
                           <thead>
                             <tr className="bg-purple-900 text-white font-extrabold text-[11px]">
                               <th className="p-2.5 w-12 text-center">Satır</th>
@@ -2166,8 +2166,8 @@ export const Reports: React.FC<ReportsProps> = ({
                       <div className="font-bold text-xs text-slate-900">
                         2026 Gelir Vergisi Dilimlerine Göre Dağılım Tablosu (GVK M.103)
                       </div>
-                      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                        <table className="w-full text-left text-xs border-collapse">
+                      <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200 bg-white">
+                        <table className="w-full text-left text-xs border-collapse min-w-[500px]">
                           <thead>
                             <tr className="bg-slate-100 text-slate-700 font-bold text-[11px]">
                               <th className="p-2">Gelir Vergisi Dilimi</th>

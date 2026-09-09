@@ -817,7 +817,7 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
           }
           headerIcon={<FileText className="w-5 h-5 text-purple-600" />}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleDownloadPDF}
@@ -845,10 +845,10 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
             </div>
           }
         >
-          <div className="bg-white rounded-3xl max-w-4xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-6">
+          <div className="bg-white rounded-3xl max-w-4xl mx-auto p-4 sm:p-6 md:p-8 shadow-sm border border-slate-200 space-y-6">
 
             {/* A4 FORMATINDA RESMİ BELGE GÖRÜNÜMÜ */}
-            <div id="severance-printable-sheet" className="p-6 bg-white border border-slate-200 rounded-2xl space-y-6 text-slate-900 font-sans text-xs">
+            <div id="severance-printable-sheet" className="p-4 sm:p-6 bg-white border border-slate-200 rounded-2xl space-y-6 text-slate-900 font-sans text-xs">
               {/* Belge Üst Başlığı */}
               <div className="text-center border-b-2 border-slate-800 pb-4 space-y-1">
                 <h2 className="font-black text-base text-slate-950 uppercase tracking-wide">
@@ -863,7 +863,7 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
               </div>
 
               {/* Personel ve Hizmet Bilgileri Tablosu */}
-              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <div className="space-y-1">
                   <div><span className="text-slate-500">Adı Soyadı:</span> <strong className="text-slate-900">{selectedEmp.fullName}</strong></div>
                   <div><span className="text-slate-500">T.C. Kimlik No:</span> <strong className="text-slate-900">{selectedEmp.tckn || "—"}</strong></div>
@@ -879,66 +879,68 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
               </div>
 
               {/* Hakediş Döküm Tablosu */}
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-800 text-white font-bold">
-                    <th className="p-2 text-left border border-slate-700">Tazminat / Hakediş Kalemi</th>
-                    <th className="p-2 text-right border border-slate-700">Brüt Tutar</th>
-                    <th className="p-2 text-right border border-slate-700">SGK Kesintisi</th>
-                    <th className="p-2 text-right border border-slate-700">Gelir Vergisi</th>
-                    <th className="p-2 text-right border border-slate-700">Damga Vergisi</th>
-                    <th className="p-2 text-right border border-slate-700">Net Tutar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paySeverance && (
-                    <tr>
-                      <td className="p-2 border border-slate-200 font-semibold">
-                        Kıdem Tazminatı ({calculation.completedYears} Yıl, {calculation.completedMonths} Ay, {calculation.completedDays} Gün)
-                      </td>
-                      <td className="p-2 border border-slate-200 text-right font-bold">{formatTRY(calculation.grossSeveranceTotal)}</td>
-                      <td className="p-2 border border-slate-200 text-right text-slate-400">0,00 ₺</td>
-                      <td className="p-2 border border-slate-200 text-right text-slate-400">0,00 ₺</td>
-                      <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.severanceStampTax)}</td>
-                      <td className="p-2 border border-slate-200 text-right font-black text-purple-950">{formatTRY(calculation.netSeveranceTotal)}</td>
+              <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-700">
+                <table className="w-full border-collapse text-xs min-w-[700px]">
+                  <thead>
+                    <tr className="bg-slate-800 text-white font-bold">
+                      <th className="p-2 text-left border border-slate-700">Tazminat / Hakediş Kalemi</th>
+                      <th className="p-2 text-right border border-slate-700">Brüt Tutar</th>
+                      <th className="p-2 text-right border border-slate-700">SGK Kesintisi</th>
+                      <th className="p-2 text-right border border-slate-700">Gelir Vergisi</th>
+                      <th className="p-2 text-right border border-slate-700">Damga Vergisi</th>
+                      <th className="p-2 text-right border border-slate-700">Net Tutar</th>
                     </tr>
-                  )}
-                  {payNotice && (
-                    <tr>
-                      <td className="p-2 border border-slate-200 font-semibold">
-                        İhbar Tazminatı ({calculation.noticeWeeks} Hafta / {calculation.noticeDays} Gün)
+                  </thead>
+                  <tbody>
+                    {paySeverance && (
+                      <tr>
+                        <td className="p-2 border border-slate-200 font-semibold">
+                          Kıdem Tazminatı ({calculation.completedYears} Yıl, {calculation.completedMonths} Ay, {calculation.completedDays} Gün)
+                        </td>
+                        <td className="p-2 border border-slate-200 text-right font-bold">{formatTRY(calculation.grossSeveranceTotal)}</td>
+                        <td className="p-2 border border-slate-200 text-right text-slate-400">0,00 ₺</td>
+                        <td className="p-2 border border-slate-200 text-right text-slate-400">0,00 ₺</td>
+                        <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.severanceStampTax)}</td>
+                        <td className="p-2 border border-slate-200 text-right font-black text-purple-950">{formatTRY(calculation.netSeveranceTotal)}</td>
+                      </tr>
+                    )}
+                    {payNotice && (
+                      <tr>
+                        <td className="p-2 border border-slate-200 font-semibold">
+                          İhbar Tazminatı ({calculation.noticeWeeks} Hafta / {calculation.noticeDays} Gün)
+                        </td>
+                        <td className="p-2 border border-slate-200 text-right font-bold">{formatTRY(calculation.grossNoticeTotal)}</td>
+                        <td className="p-2 border border-slate-200 text-right text-slate-400">0,00 ₺</td>
+                        <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.noticeIncomeTax)}</td>
+                        <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.noticeStampTax)}</td>
+                        <td className="p-2 border border-slate-200 text-right font-black text-indigo-950">{formatTRY(calculation.netNoticeTotal)}</td>
+                      </tr>
+                    )}
+                    {includeUnusedLeave && unusedLeaveDays > 0 && (
+                      <tr>
+                        <td className="p-2 border border-slate-200 font-semibold">
+                          Kullanılmayan Yıllık İzin Ücreti ({unusedLeaveDays} Gün)
+                        </td>
+                        <td className="p-2 border border-slate-200 text-right font-bold">{formatTRY(calculation.grossUnusedLeave)}</td>
+                        <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.leaveSgkDeduction)}</td>
+                        <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.leaveIncomeTax)}</td>
+                        <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.leaveStampTax)}</td>
+                        <td className="p-2 border border-slate-200 text-right font-black text-teal-950">{formatTRY(calculation.netUnusedLeave)}</td>
+                      </tr>
+                    )}
+                    <tr className="bg-slate-100 font-black text-slate-950">
+                      <td className="p-2.5 border border-slate-300 uppercase">GENEL TOPLAM</td>
+                      <td className="p-2.5 border border-slate-300 text-right">{formatTRY(calculation.grandGrossTotal)}</td>
+                      <td colSpan={3} className="p-2.5 border border-slate-300 text-right text-rose-800">
+                        Toplam Kesinti: -{formatTRY(calculation.grandDeductionsTotal)}
                       </td>
-                      <td className="p-2 border border-slate-200 text-right font-bold">{formatTRY(calculation.grossNoticeTotal)}</td>
-                      <td className="p-2 border border-slate-200 text-right text-slate-400">0,00 ₺</td>
-                      <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.noticeIncomeTax)}</td>
-                      <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.noticeStampTax)}</td>
-                      <td className="p-2 border border-slate-200 text-right font-black text-indigo-950">{formatTRY(calculation.netNoticeTotal)}</td>
-                    </tr>
-                  )}
-                  {includeUnusedLeave && unusedLeaveDays > 0 && (
-                    <tr>
-                      <td className="p-2 border border-slate-200 font-semibold">
-                        Kullanılmayan Yıllık İzin Ücreti ({unusedLeaveDays} Gün)
+                      <td className="p-2.5 border border-slate-300 text-right text-sm text-emerald-800 bg-emerald-50">
+                        {formatTRY(calculation.grandNetPayable)}
                       </td>
-                      <td className="p-2 border border-slate-200 text-right font-bold">{formatTRY(calculation.grossUnusedLeave)}</td>
-                      <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.leaveSgkDeduction)}</td>
-                      <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.leaveIncomeTax)}</td>
-                      <td className="p-2 border border-slate-200 text-right text-rose-700">{formatTRY(calculation.leaveStampTax)}</td>
-                      <td className="p-2 border border-slate-200 text-right font-black text-teal-950">{formatTRY(calculation.netUnusedLeave)}</td>
                     </tr>
-                  )}
-                  <tr className="bg-slate-100 font-black text-slate-950">
-                    <td className="p-2.5 border border-slate-300 uppercase">GENEL TOPLAM</td>
-                    <td className="p-2.5 border border-slate-300 text-right">{formatTRY(calculation.grandGrossTotal)}</td>
-                    <td colSpan={3} className="p-2.5 border border-slate-300 text-right text-rose-800">
-                      Toplam Kesinti: -{formatTRY(calculation.grandDeductionsTotal)}
-                    </td>
-                    <td className="p-2.5 border border-slate-300 text-right text-sm text-emerald-800 bg-emerald-50">
-                      {formatTRY(calculation.grandNetPayable)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
 
               {/* İBRANAME METNİ */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-[11px] leading-relaxed text-slate-700 text-justify">
@@ -952,7 +954,7 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
               </div>
 
               {/* İmza Alanları */}
-              <div className="grid grid-cols-2 gap-8 pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 pt-4">
                 <div className="text-center space-y-8">
                   <span className="font-bold text-slate-800 block text-xs">İŞVEREN / YETKİLİ KAŞE - İMZA</span>
                   <div className="text-[11px] text-slate-500">{companySettings.companyName || "Yetkili İmza"}</div>

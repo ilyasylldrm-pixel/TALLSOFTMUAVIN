@@ -1032,7 +1032,7 @@ export const BankStatementImportModal: React.FC<BankStatementImportModalProps> =
               {/* TABLE OF PARSED MOVEMENTS */}
               <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs bg-white">
                 <div className="overflow-x-auto max-h-[420px] overflow-y-auto custom-scrollbar">
-                  <table className="w-full text-left text-xs border-collapse">
+                  <table className="w-full text-left text-xs border-collapse min-w-[720px]">
                     <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase tracking-wider sticky top-0 z-10 border-b border-slate-200">
                       <tr>
                         <th className="py-2.5 px-3 w-10 text-center">

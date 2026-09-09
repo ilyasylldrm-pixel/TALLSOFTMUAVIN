@@ -5,7 +5,15 @@ import { Dashboard } from "./components/Dashboard";
 import { AuthModal, UserProfile, BRAND_LOGOS } from "./components/AuthModal";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 
-// Self-healing dynamic import wrapper with retries for network resilience
+// Auto-recover from Vite module preload errors on new deployments/updates
+if (typeof window !== "undefined") {
+  window.addEventListener("vite:preloadError", (event) => {
+    console.warn("vite:preloadError detected, reloading window...", event);
+    window.location.reload();
+  });
+}
+
+// Self-healing dynamic import wrapper with retries and auto-reload for network/chunk resilience
 function lazyWithRetry<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>,
   retries = 3,
@@ -15,10 +23,23 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
     new Promise<{ default: T }>((resolve, reject) => {
       const attempt = (remaining: number) => {
         factory()
-          .then(resolve)
+          .then((mod) => {
+            sessionStorage.removeItem("chunk_reload_lock");
+            resolve(mod);
+          })
           .catch((error) => {
             console.warn("Failed to dynamically load module, retrying...", error);
             if (remaining <= 1) {
+              const isChunkError =
+                error?.message?.includes("dynamically imported module") ||
+                error?.message?.includes("Failed to fetch") ||
+                error?.name === "ChunkLoadError";
+              const reloadLock = sessionStorage.getItem("chunk_reload_lock");
+              if (isChunkError && !reloadLock) {
+                sessionStorage.setItem("chunk_reload_lock", Date.now().toString());
+                window.location.reload();
+                return;
+              }
               reject(error);
             } else {
               setTimeout(() => attempt(remaining - 1), interval);
@@ -45,7 +66,7 @@ const Settings = lazyWithRetry(() => import("./components/Settings").then((m) =>
 const CompanyManagement = lazyWithRetry(() => import("./components/CompanyManagement").then((m) => ({ default: m.CompanyManagement })));
 const EServices = lazyWithRetry(() => import("./components/EServices").then((m) => ({ default: m.EServices })));
 const EDocuments = lazyWithRetry(() => import("./components/EDocuments"));
-const HRManagement = lazyWithRetry(() => import("./components/HRManagement").then((m) => ({ default: m.HRManagement || (m as any).default })));
+const HRManagement = lazyWithRetry(() => import("./components/HRManagement").then((m) => ({ default: m.default || m.HRManagement })));
 const FileManager = lazyWithRetry(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
 const AdminDashboard = lazyWithRetry(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
 const WhatsAppCenter = lazyWithRetry(() => import("./components/WhatsAppCenter").then((m) => ({ default: m.WhatsAppCenter })));
@@ -1600,7 +1621,7 @@ export default function App() {
       case "invoices_purchase":
         return { category: "Fatura Yönetimi", page: "Faturalar" };
       case "accounts":
-        return { category: "Hesap Planı & Mizan", page: "Kasa, Banka & Çek" };
+        return { category: "Finans Yönetimi", page: "Kasa, Banka & Çek" };
       case "products":
       case "products_list":
       case "products_costs":
@@ -1617,7 +1638,7 @@ export default function App() {
   const breadcrumbs = getBreadcrumbs(currentTab);
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F4F5F9] text-slate-900 font-sans antialiased">
+    <div className="flex flex-col min-h-screen bg-[#F4F5F9] text-slate-900 font-sans antialiased text-[13px]">
       {/* Full-width top Header on #F4F5F9 */}
       <Header
         title={getPageTitle(currentTab)}
@@ -1654,7 +1675,7 @@ export default function App() {
           onToggleCollapse={toggleSidebarCollapsed}
         />
 
-        <main className="flex-1 bg-white rounded-tl-[32px] overflow-y-auto p-4 sm:p-6 lg:p-8 shadow-xs pb-12">
+        <main className="flex-1 bg-white rounded-tl-[32px] overflow-y-auto p-4 sm:p-6 lg:p-8 shadow-xs pb-12 text-[13px]">
           <ErrorBoundary key={currentTab}>
             <Suspense fallback={<TabLoadingSkeleton />}>
             {currentTab === "dashboard" && (

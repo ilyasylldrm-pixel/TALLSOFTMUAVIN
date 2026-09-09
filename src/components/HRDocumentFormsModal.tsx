@@ -1409,7 +1409,7 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
           <div className="lg:col-span-7 bg-slate-200/80 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex justify-center items-start print:p-0 print:bg-white print:overflow-visible print:w-full print:block">
             
             {/* A4 PAPER CONTAINER */}
-            <div id="hr-printable-paper" className="bg-white text-black w-full max-w-[760px] min-h-[980px] p-8 sm:p-12 shadow-xl border border-slate-300 rounded-sm font-serif leading-relaxed text-sm print:shadow-none print:border-none print:p-8 print:max-w-none print:w-full">
+            <div id="hr-printable-paper" className="bg-white text-black w-full max-w-[760px] min-h-[980px] p-4 sm:p-8 md:p-12 shadow-xl border border-slate-300 rounded-sm font-serif leading-relaxed text-sm print:shadow-none print:border-none print:p-8 print:max-w-none print:w-full">
               
               {/* ========================================================================= */}
               {/* FORM 1: TUTANAKTIR (Mazeretsiz İşe Gelmeme / Devamsızlık Tutanağı) */}
@@ -2103,8 +2103,8 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
                   </div>
 
                   {/* MASRAF KALEMLERİ TABLOSU */}
-                  <div>
-                    <table className="w-full border-collapse border border-slate-800 text-[11px]">
+                  <div className="overflow-x-auto custom-scrollbar w-full">
+                    <table className="w-full border-collapse border border-slate-800 text-[11px] min-w-[500px]">
                       <thead>
                         <tr className="bg-slate-200 text-slate-900 font-black uppercase text-center border-b border-slate-800">
                           <th className="border-r border-slate-800 py-1.5 px-1 w-10">SIRA</th>

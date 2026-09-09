@@ -409,7 +409,7 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
         )
       }
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleBack}
@@ -434,7 +434,7 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
       <div className="space-y-4">
         {/* Quick Presets for New Assets */}
         {!editingAsset && (
-          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between text-xs overflow-x-auto">
+          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2 text-xs overflow-x-auto custom-scrollbar">
             <div className="flex items-center space-x-2 text-slate-600 font-bold">
               <Sparkles className="w-4 h-4 text-amber-500" />
               <span>Hızlı Şablonlar:</span>

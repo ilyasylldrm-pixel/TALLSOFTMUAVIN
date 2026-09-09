@@ -45,14 +45,14 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
         className="sticky top-0 z-30 border-b backdrop-blur-md shadow-2xs transition-colors"
         style={{ backgroundColor: `${theme.cardBg}fa`, borderColor: theme.cardBorder }}
       >
-        <div className={`${fullWidth ? "px-4 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-4 sm:px-6"} py-3`}>
+        <div className={`${fullWidth ? "px-3 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-3 sm:px-6"} py-2.5 sm:py-3`}>
           {/* Breadcrumb row & Back button */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-            <div className="flex items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 mb-2">
+            <div className="flex items-center gap-2 text-xs min-w-0">
               <button
                 type="button"
                 onClick={onBack}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer active:scale-95 shadow-2xs group border"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer active:scale-95 shadow-2xs group border shrink-0"
                 style={{
                   backgroundColor: theme.cardBg,
                   borderColor: theme.cardBorder,
@@ -97,26 +97,26 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
             </div>
 
             {/* Top Action Buttons */}
-            {actions && <div className="flex items-center gap-2">{actions}</div>}
+            {actions && <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 justify-end">{actions}</div>}
           </div>
 
           {/* Main Title & Status Badge Row */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               {headerIcon && (
-                <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
                   {headerIcon}
                 </div>
               )}
               <div className="min-w-0">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-lg sm:text-xl font-bold tracking-tight truncate" style={{ color: theme.pageText }}>
+                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+                  <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight truncate" style={{ color: theme.pageText }}>
                     {title}
                   </h1>
                   {statusBadge && <div className="shrink-0">{statusBadge}</div>}
                 </div>
                 {subtitle && (
-                  <p className="text-xs font-medium truncate mt-0.5" style={{ color: theme.pageTextMuted }}>
+                  <p className="text-[11px] sm:text-xs font-medium truncate mt-0.5" style={{ color: theme.pageTextMuted }}>
                     {subtitle}
                   </p>
                 )}
@@ -127,8 +127,8 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
       </header>
 
       {/* Main Content Body */}
-      <main className="flex-1 py-6 w-full min-w-0">
-        <div className={`${fullWidth ? "px-4 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-4 sm:px-6"} w-full min-w-0`}>
+      <main className="flex-1 py-4 sm:py-6 w-full min-w-0">
+        <div className={`${fullWidth ? "px-3 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-3 sm:px-6"} w-full min-w-0`}>
           {children}
         </div>
       </main>

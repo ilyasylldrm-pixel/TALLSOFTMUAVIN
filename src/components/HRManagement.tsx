@@ -1570,7 +1570,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           }
           headerIcon={<UserPlus className="w-5 h-5 text-purple-600" />}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleBackToList}
@@ -1589,7 +1589,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
+          <div className="bg-white rounded-3xl p-4 sm:p-6 md:p-8 border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
             <form id="add-employee-form" onSubmit={handleCreateEmployeeSubmit} className="space-y-4">
               {/* Photo Upload Header */}
               <div className="flex items-center gap-4 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
@@ -2003,7 +2003,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           }
           headerIcon={<Calculator className="w-5 h-5 text-purple-700" />}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {/* Alfabetik Sıra ve Gezinme Butonları */}
               {(() => {
                 const sortedAlphabetical = [...employees].sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"));
@@ -2072,7 +2072,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl w-full p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6 max-w-7xl mx-auto">
+          <div className="bg-white rounded-3xl w-full p-4 sm:p-6 md:p-8 border border-purple-100 shadow-sm space-y-6 max-w-7xl mx-auto">
 
             {/* Auto-Transfer Info Banners */}
             {(() => {
@@ -2836,7 +2836,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 md:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
 
             <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-semibold">
               <div className="flex justify-between py-1 border-b border-slate-200">
@@ -3006,7 +3006,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           }
           headerIcon={<Calendar className="w-5 h-5 text-purple-700" />}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleBackToList}
@@ -3024,7 +3024,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 md:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
             <form id="add-leave-form" onSubmit={handleCreateLeaveSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Personel Seçin *</label>
@@ -3246,7 +3246,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Başlangıç Tarihi *</label>
                   <input
@@ -3461,7 +3461,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           }
           headerIcon={<CreditCard className="w-5 h-5 text-purple-700" />}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleBackToList}
@@ -3479,7 +3479,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-4 sm:p-6 md:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
             <form id="add-advance-form" onSubmit={handleCreateAdvanceSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Personel</label>
@@ -3580,7 +3580,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           }
           headerIcon={<User className="w-5 h-5 text-purple-700" />}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -3603,7 +3603,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-4 sm:p-6 md:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3.5">
                 <div className="w-14 h-14 rounded-full bg-purple-600 text-white font-black flex items-center justify-center text-xl shadow-md border-2 border-purple-200 overflow-hidden shrink-0">
@@ -3643,7 +3643,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3.5 text-xs font-semibold">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs font-semibold">
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <span className="text-slate-500 block text-[11px]">T.C. Kimlik No</span>
                 <span className="font-mono text-slate-900 font-bold text-sm">{selectedEmployeeForDetail.tckn}</span>
@@ -3690,7 +3690,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 </span>
               </div>
 
-              <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="col-span-1 sm:col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <span className="text-slate-500 block text-[11px]">Ev / İkametgah Adresi</span>
                 <span className="text-slate-900 font-medium">{selectedEmployeeForDetail.homeAddress || "Adres kaydı bulunmuyor."}</span>
               </div>
@@ -3710,14 +3710,14 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 </span>
               </div>
 
-              <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="col-span-1 sm:col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <span className="text-slate-500 block text-[11px]">Banka IBAN ({selectedEmployeeForDetail.bankName})</span>
                 <span className="font-mono text-slate-900 font-bold">{selectedEmployeeForDetail.iban || "—"}</span>
               </div>
 
               {/* Termination Details if existed */}
               {(selectedEmployeeForDetail.endDate || selectedEmployeeForDetail.terminationCode) && (
-                <div className="col-span-2 bg-amber-50 p-3 rounded-xl border border-amber-300 text-amber-900">
+                <div className="col-span-1 sm:col-span-2 bg-amber-50 p-3 rounded-xl border border-amber-300 text-amber-900">
                   <span className="font-bold text-xs block text-amber-950 mb-1">
                     İşten Çıkış / SGK Fesih Kaydı:
                   </span>
@@ -3738,7 +3738,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 </div>
               )}
 
-              <div className="col-span-2 bg-purple-50/60 p-3 rounded-xl border border-purple-200">
+              <div className="col-span-1 sm:col-span-2 bg-purple-50/60 p-3 rounded-xl border border-purple-200">
                 <span className="text-purple-900 font-bold block">Acil Durum İletişim Kişisi</span>
                 <span className="text-slate-800">{selectedEmployeeForDetail.emergencyContact || "Belirtilmedi"} — {selectedEmployeeForDetail.emergencyPhone}</span>
               </div>
@@ -3799,7 +3799,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl max-w-2xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
+          <div className="bg-white rounded-3xl max-w-2xl mx-auto p-4 sm:p-6 md:p-8 shadow-sm border border-slate-200 space-y-5">
 
             <form onSubmit={handleSaveLegalDeductionSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4008,7 +4008,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl max-w-xl mx-auto p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
+          <div className="bg-white rounded-3xl max-w-xl mx-auto p-4 sm:p-6 md:p-8 shadow-sm border border-slate-200 space-y-5">
 
             <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2 text-xs font-semibold">
               <div className="flex justify-between">
@@ -4454,7 +4454,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
           {/* Employees Table */}
           <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-            <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[800px]">
+            <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[720px]">
               <thead>
                 <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                   <th className="pb-2 px-3">Çalışan Bilgisi</th>
@@ -4463,7 +4463,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   <th className="pb-2 px-3">Anlaşma & Maaş</th>
                   <th className="pb-2 px-3">İzin Hakkı</th>
                   <th className="pb-2 px-3">Durum</th>
-                  <th className="pb-2 px-3 text-right">İşlemler</th>
+                  <th className="pb-2 px-2 sm:px-3 text-right whitespace-nowrap">İşlemler</th>
                 </tr>
               </thead>
               <tbody>
@@ -4575,25 +4575,29 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-3 rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="py-2.5 sm:py-3 px-2 sm:px-3 rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1 sm:gap-1.5">
                         <button
                           type="button"
                           onClick={() => handleOpenEditPayroll(emp)}
-                          className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95"
+                          className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
                           title={`${emp.fullName} için Puantaj ve Bordro Hazırla`}
+                          aria-label="Bordro Hazırla"
                         >
-                          <Calculator className="w-3.5 h-3.5 text-purple-200" />
-                          <span>Bordro Hazırla</span>
+                          <Calculator className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                          <span className="hidden sm:inline lg:hidden xl:inline">Bordro Hazırla</span>
+                          <span className="hidden lg:inline xl:hidden">Bordro</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setSelectedEmployeeForDetail(emp)}
-                          className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/70 font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/70 font-bold p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
                           title="Özlük Dosyası ve Personel Bilgilerini Görüntüle"
+                          aria-label="Özlük Detayı"
                         >
-                          <Eye className="w-3.5 h-3.5 text-purple-700" />
-                          <span>Özlük Detayı</span>
+                          <Eye className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                          <span className="hidden sm:inline lg:hidden xl:inline">Özlük Detayı</span>
+                          <span className="hidden lg:inline xl:hidden">Özlük</span>
                         </button>
                       </div>
                     </td>
@@ -4662,15 +4666,16 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsBulkPayrollModalOpen(true)}
-                  className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 active:scale-95 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                  className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 active:scale-95 text-white font-bold px-2.5 sm:px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
                   title="Tüm Aktif Personeller İçin Toplu Puantaj ve Bordro Hakedişi Hazırla"
                 >
-                  <Layers className="w-3.5 h-3.5 text-purple-200" />
-                  <span>Toplu Bordro Hazırla</span>
+                  <Layers className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                  <span className="hidden sm:inline">Toplu Bordro Hazırla</span>
+                  <span className="sm:hidden">Toplu Bordro</span>
                 </button>
 
                 <button
@@ -4680,11 +4685,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                     setPayrollPrintInitialMode("month");
                     setIsPayrollPrintModalOpen(true);
                   }}
-                  className="bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                  className="bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold px-2.5 sm:px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
                   title="Seçilen Ay veya Tüm Yıl Bordro İcmalini Resmi Şablonda Yazdır / PDF İndir"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Bordro Yazdır / İcmal</span>
+                  <Printer className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Bordro Yazdır / İcmal</span>
+                  <span className="sm:hidden">Yazdır / İcmal</span>
                 </button>
 
                 <ExportButtons
@@ -4699,8 +4705,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       "SGK İşçi Payı",
                       "Gelir Vergisi",
                       "Damga Vergisi",
-                      "Avans Kesintisi",
-                      "Nafaka/İcra Kesintisi",
+                      "Kesintiler (Avans / Eksik Gün / İcra)",
                       "Net Ödenen Maaş",
                       "İşveren Toplam Maliyeti",
                     ],
@@ -4711,8 +4716,14 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       formatCurrency(r.sgkEmployeeShare || 0, "TRY"),
                       formatCurrency(r.incomeTax || 0, "TRY"),
                       formatCurrency(r.stampTax || 0, "TRY"),
-                      formatCurrency(r.advanceDeduction || 0, "TRY"),
-                      formatCurrency((r.executionDeduction || 0) + (r.alimonyDeduction || 0), "TRY"),
+                      formatCurrency(
+                        (r.advanceDeduction || 0) +
+                          (r.unpaidLeaveDeduction || 0) +
+                          (r.executionDeduction || 0) +
+                          (r.alimonyDeduction || 0) +
+                          (r.otherDeductions || 0),
+                        "TRY"
+                      ),
                       formatCurrency(r.payableNetSalary || 0, "TRY"),
                       formatCurrency(r.totalEmployerCost || 0, "TRY"),
                     ]),
@@ -4722,25 +4733,29 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-3 shadow-2xs">
-              <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[900px]">
+            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
+              <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[680px]">
                 <thead>
                   <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
                     <th className="pb-2 px-3">Personel</th>
                     <th className="pb-2 px-3">Brüt Ücret</th>
                     <th className="pb-2 px-3">Yasal Kesinti (SGK+Vergi)</th>
-                    <th className="pb-2 px-3 text-amber-900">Entegre Avans Kesintisi</th>
-                    <th className="pb-2 px-3">Ücretsiz İzin / Eksik Gün</th>
-                    <th className="pb-2 px-3 text-rose-900">İcra / Nafaka / Kesinti</th>
+                    <th className="pb-2 px-3 text-rose-900">Kesintiler</th>
                     <th className="pb-2 px-3 text-emerald-900 font-extrabold">Net Ele Geçen</th>
                     <th className="pb-2 px-3 text-purple-950 font-black">Toplam Maliyet</th>
-                    <th className="pb-2 px-3 text-center">İşlemler</th>
+                    <th className="pb-2 px-2 sm:px-3 text-center whitespace-nowrap">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody>
                   {payrollRecords.map((rec) => {
                     const empObj = employees.find((e) => e.id === rec.employeeId);
                     const totalLegalDeductions = rec.sgkEmployeeShare + rec.unemploymentEmployeeShare + rec.incomeTax + rec.stampTax;
+                    const otherDeductionsTotal =
+                      (rec.advanceDeduction || 0) +
+                      (rec.unpaidLeaveDeduction || 0) +
+                      (rec.executionDeduction || 0) +
+                      (rec.alimonyDeduction || 0) +
+                      (rec.otherDeductions || 0);
 
                     return (
                       <tr
@@ -4788,45 +4803,40 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                         </td>
 
                         <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                          {rec.advanceDeduction && rec.advanceDeduction > 0 ? (
-                            <span className="inline-flex items-center gap-1 bg-amber-100/80 text-amber-900 font-bold px-2 py-1 rounded-lg border border-amber-300 text-xs">
-                              <Receipt className="w-3 h-3 text-amber-700" />
-                              -{formatTRY(rec.advanceDeduction)}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                          {rec.unpaidLeaveDays && rec.unpaidLeaveDays > 0 ? (
-                            <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-800 font-bold px-2 py-1 rounded-lg border border-rose-200 text-xs">
-                              <AlertCircle className="w-3 h-3 text-rose-600" />
-                              {rec.unpaidLeaveDays} Gün (-{formatTRY(rec.unpaidLeaveDeduction || 0)})
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                          {Boolean((rec.executionDeduction || 0) + (rec.alimonyDeduction || 0) + (rec.otherDeductions || 0)) ? (
+                          {otherDeductionsTotal > 0 ? (
                             <div className="space-y-1">
-                              {Boolean(rec.executionDeduction) && (
-                                <span className="inline-flex items-center gap-1 bg-red-100 text-red-900 font-bold px-2 py-0.5 rounded-md border border-red-200 text-[11px] block w-fit">
-                                  İcra: -{formatTRY(rec.executionDeduction)}
-                                </span>
-                              )}
-                              {Boolean(rec.alimonyDeduction) && (
-                                <span className="inline-flex items-center gap-1 bg-purple-100 text-purple-900 font-bold px-2 py-0.5 rounded-md border border-purple-200 text-[11px] block w-fit">
-                                  Nafaka: -{formatTRY(rec.alimonyDeduction)}
-                                </span>
-                              )}
-                              {Boolean(rec.otherDeductions) && (
-                                <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-md border border-slate-200 text-[11px] block w-fit">
-                                  Diğer: -{formatTRY(rec.otherDeductions)}
-                                </span>
-                              )}
+                              <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-900 font-bold px-2 py-0.5 rounded-md border border-rose-200 text-xs">
+                                <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                                -{formatTRY(otherDeductionsTotal)}
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {Boolean(rec.advanceDeduction && rec.advanceDeduction > 0) && (
+                                  <span className="inline-flex items-center gap-0.5 bg-amber-50 text-amber-900 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-amber-200/70" title="Entegre Avans">
+                                    <Receipt className="w-2.5 h-2.5 text-amber-700" />
+                                    Avans: -{formatTRY(rec.advanceDeduction)}
+                                  </span>
+                                )}
+                                {Boolean(rec.unpaidLeaveDays && rec.unpaidLeaveDays > 0) && (
+                                  <span className="inline-flex items-center gap-0.5 bg-rose-50 text-rose-800 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-rose-200/70" title="Ücretsiz İzin / Eksik Gün">
+                                    {rec.unpaidLeaveDays}g İzin (-{formatTRY(rec.unpaidLeaveDeduction || 0)})
+                                  </span>
+                                )}
+                                {Boolean(rec.executionDeduction && rec.executionDeduction > 0) && (
+                                  <span className="inline-flex items-center gap-0.5 bg-red-50 text-red-900 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-red-200/70" title="İcra">
+                                    İcra: -{formatTRY(rec.executionDeduction)}
+                                  </span>
+                                )}
+                                {Boolean(rec.alimonyDeduction && rec.alimonyDeduction > 0) && (
+                                  <span className="inline-flex items-center gap-0.5 bg-purple-50 text-purple-900 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-purple-200/70" title="Nafaka">
+                                    Nafaka: -{formatTRY(rec.alimonyDeduction)}
+                                  </span>
+                                )}
+                                {Boolean(rec.otherDeductions && rec.otherDeductions > 0) && (
+                                  <span className="inline-flex items-center gap-0.5 bg-slate-50 text-slate-800 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-slate-200/70" title="Diğer Kesinti">
+                                    Diğer: -{formatTRY(rec.otherDeductions)}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           ) : (
                             <span className="text-slate-400">—</span>
@@ -4841,43 +4851,51 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                           {formatTRY(rec.totalEmployerCost)}
                         </td>
 
-                        <td className="py-3 px-3 rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                        <td className="py-2.5 sm:py-3 px-2 sm:px-3 rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1 sm:gap-1.5">
                             {empObj && (
                               <button
+                                type="button"
                                 onClick={() => handleOpenEditPayroll(empObj)}
-                                className="bg-purple-700 hover:bg-purple-800 text-white font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                                title="Personel Puantaj Takvimi ve Bordro Hazırla"
+                                className="bg-purple-700 hover:bg-purple-800 active:scale-95 text-white font-bold p-1.5 sm:px-2 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs shrink-0"
+                                title={`${rec.employeeName} için Puantaj Takvimi ve Bordro Hazırla`}
+                                aria-label="Bordro Hazırla"
                               >
-                                <Calculator className="w-3.5 h-3.5" />
-                                Bordro Hazırla
+                                <Calculator className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                                <span className="hidden xl:inline">Bordro Hazırla</span>
+                                <span className="hidden md:inline xl:hidden">Bordro</span>
                               </button>
                             )}
 
                             <button
+                              type="button"
                               onClick={() => {
                                 setPayrollPrintSelectedEmpId(rec.employeeId);
                                 setPayrollPrintInitialMode("month");
                                 setIsPayrollPrintModalOpen(true);
                               }}
-                              className="bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-200/70 font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                              className="bg-purple-50 hover:bg-purple-100 active:scale-95 text-purple-950 border border-purple-200/70 font-bold p-1.5 sm:px-2 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs shrink-0"
                               title={`${rec.employeeName} için Seçilen Ay veya Tüm Yıl Bordrosunu Yazdır`}
+                              aria-label="Bordro Yazdır"
                             >
-                              <Printer className="w-3.5 h-3.5 text-purple-700" />
-                              Bordro Yazdır
+                              <Printer className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                              <span className="hidden xl:inline">Bordro Yazdır</span>
+                              <span className="hidden md:inline xl:hidden">Yazdır</span>
                             </button>
 
                             <button
+                              type="button"
                               onClick={() => {
                                 setPayrollPrintSelectedEmpId(rec.employeeId);
                                 setPayrollPrintInitialMode("month");
                                 setIsPayrollPrintModalOpen(true);
                               }}
-                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/70 font-bold px-2.5 py-1.5 rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                              className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-200/70 font-bold p-1.5 sm:px-2 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs shrink-0"
                               title={`${rec.employeeName} için WhatsApp Maaş Pusulası Gönder`}
+                              aria-label="WhatsApp"
                             >
-                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                              WhatsApp
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span className="hidden lg:inline">WhatsApp</span>
                             </button>
                           </div>
                         </td>

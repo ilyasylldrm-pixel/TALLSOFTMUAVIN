@@ -237,10 +237,10 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
         </div>
       }
     >
-      <div id="zimmet-print-container" className="max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-10 space-y-6 print:border-none print:shadow-none print:p-0">
+      <div id="zimmet-print-container" className="max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-6 md:p-10 space-y-6 print:border-none print:shadow-none print:p-0">
           {/* Document Header */}
           <div className="border-b-2 border-slate-900 pb-5 mb-5">
-            <div className="flex justify-between items-start">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
               <div>
                 <div className="flex items-center space-x-3">
                   {companySettings.logoUrl ? (

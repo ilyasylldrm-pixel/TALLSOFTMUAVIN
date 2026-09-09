@@ -721,8 +721,8 @@ export const WhatsAppCenter: React.FC<WhatsAppCenterProps> = ({ settings }) => {
               <p className="text-xs text-slate-400">Cari ekstre veya test mesajı gönderdiğinizde burada listelenecektir.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-xs border-collapse min-w-[650px]">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-500 font-bold bg-slate-50/50">
                     <th className="py-3 px-4">Tarih / Saat</th>

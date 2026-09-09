@@ -1083,8 +1083,8 @@ export const AssetCustodyManagement: React.FC<AssetCustodyManagementProps> = ({
       ) : (
         /* TABLE VIEW */
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left text-xs min-w-[850px]">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase font-bold tracking-wider">
                 <tr>
                   <th className="px-4 py-3">Demirbaş / Eşya</th>

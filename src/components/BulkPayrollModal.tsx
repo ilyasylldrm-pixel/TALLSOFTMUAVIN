@@ -780,7 +780,7 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
       }
       headerIcon={<Calculator className="w-5 h-5 text-purple-700" />}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* View Mode Tabs */}
           <div className="bg-slate-100 p-0.5 rounded-xl border border-slate-200 flex items-center shadow-2xs">
             <button
@@ -1134,7 +1134,7 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
           /* ========================================================================= */
           /* GÖRÜNÜM 1: BORDRO HAZIRLA EKRANI (BİREBİR AYNI DETAYLI FORM & PUANTAJ)    */
           /* ========================================================================= */
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
+          <div className="bg-white rounded-3xl p-4 sm:p-6 md:p-8 border border-purple-100 shadow-sm space-y-6">
             {/* Personel Kimlik & Dönem Başlığı */}
             <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-purple-100">
               <div className="flex items-center gap-3">
@@ -1949,7 +1949,7 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
 
             {/* İcmal Tablosu */}
             <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-white border border-purple-200/70 shadow-xs">
-              <table className="w-full text-left text-xs border-collapse min-w-[960px]">
+              <table className="w-full text-left text-xs border-collapse min-w-[860px]">
                 <thead className="bg-purple-50/95 border-b border-purple-200 text-purple-950 font-extrabold uppercase text-[10px]">
                   <tr>
                     <th className="py-2.5 px-3 w-10 text-center">
@@ -1975,7 +1975,7 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
                     <th className="py-2.5 px-3 text-emerald-900 font-extrabold">Net Ödenecek</th>
                     <th className="py-2.5 px-3 text-purple-950 font-black">Toplam Maliyet</th>
                     <th className="py-2.5 px-3 text-center">Durum</th>
-                    <th className="py-2.5 px-3 text-right">İşlem</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">İşlem</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-purple-100">
@@ -2106,17 +2106,19 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
                           )}
                         </td>
 
-                        <td className="py-2.5 px-3 text-right">
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => {
                               setActiveEmpId(emp.id);
                               setActiveTab("detail");
                             }}
-                            className="px-2.5 py-1 rounded-lg font-bold text-xs bg-white hover:bg-purple-50 text-purple-950 border border-purple-200 transition-all cursor-pointer flex items-center gap-1 ml-auto shadow-2xs"
+                            className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg font-bold text-xs bg-white hover:bg-purple-50 active:scale-95 text-purple-950 border border-purple-200 transition-all cursor-pointer inline-flex items-center gap-1 ml-auto shadow-2xs shrink-0"
+                            title="Puantaj & Bordro Detayları"
+                            aria-label="Puantaj ve Bordro"
                           >
-                            <Sliders className="w-3.5 h-3.5 text-purple-700" />
-                            <span>Puantaj & Bordro</span>
+                            <Sliders className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                            <span className="hidden sm:inline">Puantaj & Bordro</span>
                           </button>
                         </td>
                       </tr>

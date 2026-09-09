@@ -1109,8 +1109,8 @@ export const Quotes: React.FC<QuotesProps> = ({
         className="rounded-2xl border shadow-2xs overflow-hidden"
         style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left text-xs border-collapse min-w-[700px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="py-3.5 px-4 font-bold">Belge No</th>

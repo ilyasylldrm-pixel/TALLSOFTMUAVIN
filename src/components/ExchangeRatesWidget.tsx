@@ -227,7 +227,7 @@ export const ExchangeRatesWidget: React.FC<ExchangeRatesWidgetProps> = ({
       </div>
 
       <div className="overflow-x-auto custom-scrollbar">
-        <table className="w-full text-left text-xs border-collapse">
+        <table className="w-full text-left text-xs border-collapse min-w-[550px]">
           <thead>
             <tr
               className="border-b uppercase tracking-wider"

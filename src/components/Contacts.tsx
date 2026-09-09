@@ -2905,8 +2905,8 @@ export const Contacts: React.FC<ContactsProps> = ({
                       Kronolojik İşlem Sırası
                     </span>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse" style={{ backgroundColor: "#ffffff" }}>
+                  <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left text-xs border-collapse min-w-[750px]" style={{ backgroundColor: "#ffffff" }}>
                       <thead>
                         <tr
                           className="font-bold border-b uppercase text-[10px] tracking-wider"
@@ -4256,8 +4256,8 @@ export const Contacts: React.FC<ContactsProps> = ({
         className="rounded-2xl border shadow-2xs overflow-hidden"
         style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left text-xs border-collapse min-w-[700px]">
             <thead>
               <tr
                 className="border-b text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50"

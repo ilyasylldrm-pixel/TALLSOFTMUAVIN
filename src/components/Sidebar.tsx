@@ -353,7 +353,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-items under Cari takip */}
               {isCariExpanded && (
-                <div className="space-y-0.5 pl-3">
+                <div className="space-y-0.5 ml-2.5 pl-2 border-l border-slate-200/80 my-1">
                   {/* Alacaklar ve Borçlar */}
                   <button
                     type="button"
@@ -442,7 +442,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {isInvoicesExpanded && (
-                <div className="space-y-0.5 pl-3">
+                <div className="space-y-0.5 ml-2.5 pl-2 border-l border-slate-200/80 my-1">
                   <button
                     type="button"
                     onClick={() => handleNavClick("invoices")}
@@ -524,7 +524,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
 
-            {/* 4. Hesap Planı & Mizan (Finans Yönetimi Accordion) */}
+            {/* 4. Finans Yönetimi Accordion */}
             <div className="space-y-1">
               <div
                 onClick={() => {
@@ -538,7 +538,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <div className="flex items-center gap-3">
                   <Landmark className={"w-4 h-4 shrink-0 " + (isFinanceSectionActive ? "text-[#351F62]" : "text-slate-500")} />
-                  <span>Hesap Planı & Mizan</span>
+                  <span>Finans Yönetimi</span>
                 </div>
                 <div
                   onClick={(e) => {
@@ -557,7 +557,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {isFinanceExpanded && (
-                <div className="space-y-0.5 pl-3">
+                <div className="space-y-0.5 ml-2.5 pl-2 border-l border-slate-200/80 my-1">
                   <button
                     type="button"
                     onClick={() => handleFinanceNavClick("accounts", "kasa")}
@@ -672,7 +672,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {isProductsExpanded && (
-                <div className="space-y-0.5 pl-3">
+                <div className="space-y-0.5 ml-2.5 pl-2 border-l border-slate-200/80 my-1">
                   <button
                     type="button"
                     onClick={() => handleNavClick("products")}
@@ -754,7 +754,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {isReportsExpanded && (
-                <div className="space-y-0.5 pl-3">
+                <div className="space-y-0.5 ml-2.5 pl-2 border-l border-slate-200/80 my-1">
                   <button
                     type="button"
                     onClick={() => handleNavClick("reports")}
@@ -849,7 +849,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {isSectorsExpanded && (
-                <div className="space-y-0.5 pl-3">
+                <div className="space-y-0.5 ml-2.5 pl-2 border-l border-slate-200/80 my-1">
                   <button
                     type="button"
                     onClick={() => handleNavClick("auto_service")}
@@ -1049,7 +1049,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {isCompanyExpanded && (
-                <div className="space-y-0.5 pl-3">
+                <div className="space-y-0.5 ml-2.5 pl-2 border-l border-slate-200/80 my-1">
                   <button
                     type="button"
                     onClick={() => handleNavClick("company_profile")}
@@ -1150,20 +1150,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom Company Info Card (Clickable!) */}
-      <div className="pt-3 border-t border-slate-200/60">
+      <div className="pt-3 border-t border-slate-200/70">
         <button
           type="button"
           onClick={() => handleNavClick("company_profile")}
-          className="w-full text-left p-2 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer group"
+          className="w-full text-left p-2.5 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer group"
           title="Firma Bilgilerini Görüntüle"
         >
-          <div className="flex items-center justify-between">
-            <p className="font-semibold text-slate-700 text-xs truncate group-hover:text-[#351F62]">
+          <div className="flex items-center justify-between gap-2">
+            <p className="sidebar-company-name font-semibold text-slate-800 text-xs truncate group-hover:text-[#351F62]">
               {settings.companyName || "Tall Soft Muhasebe"}
             </p>
             <Building2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#351F62] shrink-0" />
           </div>
-          <p className="text-[11px] text-slate-400">VKN: {settings.taxNumber || "-"}</p>
+          <p className="sidebar-company-sub text-[11px] text-slate-400 font-mono tracking-wide mt-0.5">VKN: {settings.taxNumber || "-"}</p>
         </button>
       </div>
     </div>
@@ -1229,7 +1229,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             (isFinanceSectionActive
               ? "bg-[#F0EBFA] text-[#351F62]"
               : "hover:bg-slate-200/50 text-slate-500")}
-          title="Hesap Planı & Mizan"
+          title="Finans Yönetimi"
         >
           <Landmark className="w-5 h-5" />
         </button>

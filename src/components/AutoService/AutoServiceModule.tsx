@@ -1229,8 +1229,8 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
 
           {/* Records Table */}
           <div className="bg-white/90 backdrop-blur-md rounded-2xl border border-purple-200/60 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse min-w-[850px]">
                 <thead>
                   <tr className="bg-purple-50/70 border-b border-purple-200/70 text-xs font-extrabold text-purple-950 uppercase tracking-wider">
                     <th className="py-3.5 px-4">Servis No / Plaka</th>

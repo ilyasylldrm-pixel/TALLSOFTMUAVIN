@@ -673,7 +673,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
           {/* 📊 The Matrix Table */}
           <div className="bg-white rounded-3xl border border-purple-100 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs border-collapse min-w-[1200px]">
                 <thead>
                   <tr className="bg-slate-900 text-white divide-x divide-slate-800">
                     <th className="p-4 font-black w-64 sticky left-0 bg-slate-900 z-20">

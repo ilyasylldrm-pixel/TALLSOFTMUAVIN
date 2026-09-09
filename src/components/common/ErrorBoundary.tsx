@@ -37,6 +37,11 @@ export class ErrorBoundary extends (React.Component as any) {
   }
 
   private handleRetry = () => {
+    try {
+      sessionStorage.removeItem("chunk_reload_lock");
+    } catch {
+      // ignore
+    }
     this.setState({ hasError: false, error: null });
     if (this.props.onReset) {
       this.props.onReset();

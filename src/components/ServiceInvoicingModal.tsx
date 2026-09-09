@@ -567,8 +567,8 @@ export const ServiceInvoicingModal: React.FC<ServiceInvoicingModalProps> = ({
               </button>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-xs">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-xs overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-xs border-collapse min-w-[700px]">
                 <thead>
                   <tr className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-extrabold text-slate-700 uppercase">
                     <th className="py-2.5 px-3">Hizmet / Parça Açıklaması</th>

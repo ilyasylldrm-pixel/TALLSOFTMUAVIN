@@ -87,12 +87,106 @@
   }
 }
 
-body {
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --default-font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+html {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body,
+#root {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
   background-color: var(--theme-page-bg, #f8fafc);
   color: var(--theme-text-primary, #0f172a);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ========================================================================= */
+/* UNIFIED FINANCIAL SAAS TYPOGRAPHY DESIGN (PLUS JAKARTA SANS)              */
+/* ========================================================================= */
+
+/* Tabular Numerals for Financial Data, Balances, Quantities & Currencies */
+table,
+.tabular-nums,
+[data-numeric="true"],
+.font-mono {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Sidebar Navigation Typography Hierarchy */
+aside nav,
+aside .custom-scrollbar {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   letter-spacing: -0.01em;
+}
+
+/* Section Group Headings (GENEL, TİCARİ, FİNANS vb.) */
+.sidebar-section-header,
+aside button.uppercase,
+aside div.uppercase,
+aside span.uppercase {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: #94a3b8;
+}
+
+/* Ensure all interactive elements, forms, and tables inherit the exact application font */
+button,
+input,
+optgroup,
+select,
+textarea,
+table,
+th,
+td {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Headings scale aligned proportionally with sidebar hierarchy */
+h1 {
+  font-size: 1.45rem; /* ~19px */
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 1.25rem; /* ~16.5px */
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+h3 {
+  font-size: 1.05rem; /* ~14px */
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h4, h5, h6 {
+  font-size: 0.92rem; /* ~12px */
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Sidebar-like Section Header & Badge standard classes */
+.sidebar-heading-style {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #94a3b8;
 }
 
 /* Typography refinement: normalize heavy font weights for an elegant editorial look */

@@ -220,7 +220,7 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
             href={portalInfo.url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-xl transition-all cursor-pointer ml-auto"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-xl transition-all cursor-pointer ml-0 sm:ml-auto"
           >
             <span>Doğrudan {portalInfo.shortName}&apos;na Git</span>
             <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
@@ -676,8 +676,8 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
               {activeTab === "declarations" && (
                 <div className="space-y-3">
                   <h4 className="font-extrabold text-slate-900">Son Gönderilen e-Bildirge v2 Belgeleri</h4>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                    <table className="w-full text-left">
+                  <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200 bg-white">
+                    <table className="w-full text-left min-w-[550px]">
                       <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px]">
                         <tr>
                           <th className="p-2.5">Dönem</th>
@@ -715,8 +715,8 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
               {activeTab === "employees" && (
                 <div className="space-y-3">
                   <h4 className="font-extrabold text-slate-900">{currentWp.name} Aktif Sigortalı Personel</h4>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                    <table className="w-full text-left">
+                  <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200 bg-white">
+                    <table className="w-full text-left min-w-[550px]">
                       <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px]">
                         <tr>
                           <th className="p-2.5">T.C. Kimlik No</th>

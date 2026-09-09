@@ -1096,8 +1096,8 @@ export const ProductCostsView: React.FC<ProductCostsViewProps> = ({
 
           {/* Detailed Costs Table */}
           <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-xs border-collapse min-w-[900px]">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
                     <th className="py-3.5 px-4">Stok Kodu / Adı</th>

@@ -385,8 +385,8 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
               {activePortalTab === "declarations" && (
                 <div className="space-y-3 text-xs">
                   <h4 className="font-extrabold text-slate-900">Son Verilen e-Beyanname ve Onaylı Alındı Belgeleri</h4>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                    <table className="w-full text-left">
+                  <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200 bg-white">
+                    <table className="w-full text-left min-w-[550px]">
                       <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px]">
                         <tr>
                           <th className="p-2.5">Dönem</th>
