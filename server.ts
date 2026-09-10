@@ -28,7 +28,7 @@ function loadServerEnv() {
 loadServerEnv();
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 
 // High Performance Middleware Stack (Gzip/Deflate compression for all JSON and static assets)
 app.use(
