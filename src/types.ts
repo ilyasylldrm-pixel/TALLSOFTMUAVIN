@@ -281,6 +281,18 @@ export interface Invoice {
   createdAt: string;
   eDocumentType?: EDocumentType;
   eDocumentEttn?: string;
+  // GİB & Mysoft 14.09.2026 e-Fatura / e-Arşiv alanları
+  vehicleInfo?: {
+    licencePlate: string;
+    licencePlateSchemaId?: "PLAKA" | "YABANCIPLAKA";
+    vehicleNumber?: string;
+  };
+  esuReportInfo?: Array<{
+    esuReportId: string;
+    esuReportDate: string;
+  }>;
+  esuSeriNo?: string;
+  shipmentNo?: string;
 }
 
 export type ChequeType = "received" | "issued"; // received = Müşteri Çeki, issued = Borç / Firma Çeki
@@ -857,6 +869,7 @@ export interface WaybillItem {
   id: string;
   productId?: string;
   productCode?: string;
+  productName?: string;
   description: string;
   quantity: number;
   unit: string;
@@ -897,6 +910,13 @@ export interface Waybill {
   invoicedInvoiceId?: string;
   invoicedInvoiceNumber?: string;
   createdAt: string;
+  // GİB & Mysoft 14.09.2026 e-İrsaliye alanları
+  licencePlateSchemaId?: "PLAKA" | "YABANCIPLAKA";
+  trailerNo?: string;
+  trailerNoSchemaId?: "DORSE" | "YABANCIDORSE";
+  trailerPlate?: string;
+  trailerPlateSchemaId?: "DORSEPLAKA" | "YABANCIDORSEPLAKA";
+  shipmentNo?: string;
 }
 
 export type CostProjectStatus = "planning" | "active" | "completed" | "paused" | "cancelled";

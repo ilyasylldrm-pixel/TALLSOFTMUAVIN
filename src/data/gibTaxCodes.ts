@@ -425,12 +425,80 @@ export const GIB_EXEMPTION_CODES: GibExemptionCode[] = [
     category: "ihracat",
   },
   {
+    code: "233",
+    name: "Kamulaştırma Kanunu Kapsamında Taşınmazların Kamu İdarelerine Devri",
+    lawArticle: "2942 S.K. Kapsamı / 3065 S.K. Md. 17/4-r",
+    category: "istisna",
+  },
+  {
+    code: "308",
+    name: "Yatırım Teşvik - İmalat Sanayii ve Turizm İnşaat İşleri Teslim ve Hizmetleri",
+    lawArticle: "3065 S.K. Geçici Md. 37 (YATIRIMTESVIK Profili)",
+    category: "istisna",
+  },
+  {
+    code: "339",
+    name: "Yatırım Teşvik - İntifa Hakkı ve Kiralama İşlemleri",
+    lawArticle: "3065 S.K. Geçici Md. 30 (YATIRIMTESVIK Profili)",
+    category: "istisna",
+  },
+  {
     code: "350",
     name: "Diğer İstisnalar (Kanunun İlgili Maddesi)",
     lawArticle: "3065 S.K. Çeşitli Md.",
     category: "diger",
   },
 ];
+
+/**
+ * GİB & Mysoft 14.09.2026 Kuralı:
+ * 308 ve 339 kodları Yatırım Teşvik istisnasıdır.
+ * e-Fatura'da ProfileID=YATIRIMTESVIK (ISTISNA veya IADE),
+ * e-Arşiv'de ProfileID=EARSIVFATURA (YTBISTISNA veya YTBIADE) ile kullanılmalıdır.
+ */
+export function isInvestmentIncentiveExemptionCode(code?: string): boolean {
+  return code === "308" || code === "339";
+}
+
+export function validateExemptionCodeRules(
+  code: string,
+  profile: string,
+  invoiceType: string,
+  eDocumentType: string = "e_fatura",
+): { valid: boolean; message?: string } {
+  if (isInvestmentIncentiveExemptionCode(code)) {
+    const normProfile = profile.toUpperCase();
+    const normType = invoiceType.toUpperCase();
+    if (normType.includes("SATIS") || normType.includes("TEVKIFAT")) {
+      return {
+        valid: false,
+        message: `${code} istisna kodu KDV'li (${normType}) faturalarda kullanılamaz. Fatura tipi ISTISNA veya IADE olmalıdır.`,
+      };
+    }
+    if (eDocumentType === "e_arsiv" || normProfile === "EARSIVFATURA") {
+      if (normType !== "YTBISTISNA" && normType !== "YTBIADE" && normType !== "ISTISNA" && normType !== "IADE") {
+        return {
+          valid: false,
+          message: `e-Arşiv'de ${code} kodu için fatura tipi YTBISTISNA veya YTBIADE olmalıdır.`,
+        };
+      }
+    } else {
+      if (normProfile !== "YATIRIMTESVIK") {
+        return {
+          valid: false,
+          message: `e-Fatura'da ${code} kodu için fatura profili YATIRIMTESVIK olmalıdır.`,
+        };
+      }
+      if (normType !== "ISTISNA" && normType !== "IADE") {
+        return {
+          valid: false,
+          message: `e-Fatura'da ${code} kodu için fatura tipi ISTISNA veya IADE olmalıdır.`,
+        };
+      }
+    }
+  }
+  return { valid: true };
+}
 
 /**
  * Ek Vergiler (GİB Resmi Ek Vergi Kodları Listesi)

@@ -9,6 +9,7 @@ import {
   getExemptionCodeInfo,
   getSpecialTaxBaseCodeInfo,
   getAdditionalTaxCodeInfo,
+  isInvestmentIncentiveExemptionCode,
 } from "../data/gibTaxCodes";
 import { computeInvoiceItem } from "../utils/taxCalculationService";
 import { formatCurrency } from "../utils/exportUtils";
@@ -28,6 +29,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Coins,
+  AlertCircle,
 } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 
@@ -662,6 +664,17 @@ export const InvoiceTaxSettingsModal: React.FC<InvoiceTaxSettingsModalProps> = (
                         </option>
                       ))}
                     </select>
+                    {isInvestmentIncentiveExemptionCode(exemptionCode) && (
+                      <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-start gap-2 animate-fadeIn">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold">GİB & Mysoft 14.09.2026 Kuralı:</p>
+                          <p className="text-[10px] text-amber-800 leading-relaxed mt-0.5">
+                            {exemptionCode} nolu kod Yatırım Teşvik kapsamındadır. Fatura profili e-Fatura'da otomatik olarak <strong>YATIRIMTESVIK</strong> (ISTISNA veya IADE), e-Arşiv'de <strong>EARSIVFATURA</strong> (YTBISTISNA veya YTBIADE) olarak iletilir. SATIŞ veya TEVKİFAT faturalarında kullanılamaz.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>

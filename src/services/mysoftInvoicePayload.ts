@@ -135,7 +135,11 @@ export function buildMysoftInvoiceOutboxPayload(
   const eDocumentType = resolveEDocumentType(
     options.eDocumentType || invoice.eDocumentType,
   );
-  const profile =
+  const hasInvestmentIncentive = invoice.items?.some(
+    (i) => i.exemptionCode === "308" || i.exemptionCode === "339",
+  );
+
+  let profile =
     eDocumentType === "EARSIVFATURA"
       ? "EARSIVFATURA"
       : String(options.profile || "TEMELFATURA").toUpperCase();
@@ -156,6 +160,20 @@ export function buildMysoftInvoiceOutboxPayload(
     }
   }
 
+  // GİB & Mysoft 14.09.2026 Kuralı:
+  // 308/339 kodları için ProfileID ve Fatura Tipi otomatik uyarlanır:
+  // e-Fatura -> ProfileID: YATIRIMTESVIK, Fatura Tipi: ISTISNA (veya IADE)
+  // e-Arşiv -> ProfileID: EARSIVFATURA, Fatura Tipi: YTBISTISNA (veya YTBIADE)
+  if (hasInvestmentIncentive) {
+    if (eDocumentType === "EARSIVFATURA") {
+      profile = "EARSIVFATURA";
+      resolvedInvoiceType = resolvedInvoiceType === "IADE" || resolvedInvoiceType === "YTBIADE" ? "YTBIADE" : "YTBISTISNA";
+    } else {
+      profile = "YATIRIMTESVIK";
+      resolvedInvoiceType = resolvedInvoiceType === "IADE" ? "IADE" : "ISTISNA";
+    }
+  }
+
   // Yalnızca Mysoft'a bağlı gerçek mükellef VKN/TCKN kullanılır; demo firma
   // taxNumber (8470291038) veya portal tenant id buraya düşmez.
   const tenant =
@@ -172,6 +190,43 @@ export function buildMysoftInvoiceOutboxPayload(
       .slice(0, 3)
       .toUpperCase() ||
     undefined;
+
+  // GİB 14.09.2026: Araç ve Plaka Şeması (PLAKA veya YABANCIPLAKA)
+  const rawPlate =
+    invoice.vehicleInfo?.licencePlate ||
+    (invoice as any).vehiclePlate ||
+    (invoice as any).plateNumber;
+  const licencePlateSchemaId =
+    invoice.vehicleInfo?.licencePlateSchemaId ||
+    (invoice as any).licencePlateSchemaId ||
+    "PLAKA";
+  const vehicleInfo = rawPlate
+    ? {
+        licencePlate: String(rawPlate).replace(/\s+/g, "").toUpperCase(),
+        licencePlateSchemaId,
+        vehicleNumber: invoice.vehicleInfo?.vehicleNumber || undefined,
+      }
+    : undefined;
+
+  // GİB 14.09.2026: ESU Rapor Bilgisi Artık Dizi (Array)
+  const rawEsu = invoice.esuReportInfo || (invoice as any).esuReportInfo;
+  const esuReportInfo = Array.isArray(rawEsu) && rawEsu.length > 0
+    ? rawEsu.map((r: any) => ({
+        esuReportId: String(r.esuReportId || r.reportId || "").trim(),
+        esuReportDate: toMysoftDateTime(r.esuReportDate || r.reportDate),
+      }))
+    : undefined;
+
+  // GİB 14.09.2026: ESU Seri No
+  const esuSeriNo = (invoice.esuSeriNo || (invoice as any).esuSeriNo)?.trim() || undefined;
+
+  // GİB 14.09.2026: Sevkiyat No (SE- veya ES- ile başlayan 10 karakter)
+  const rawShipmentNo = (invoice.shipmentNo || (invoice as any).shipmentNo)?.trim().toUpperCase();
+  const supplierPartyIdentifer = rawShipmentNo
+    ? {
+        shipmentNo: rawShipmentNo,
+      }
+    : undefined;
 
   // Shape mirrors Mysoft GET /api/InvoiceOutbox/createInvoiceOutboxTestJson
   // (docs/mysoft/invoice-outbox-sablon.json) — production defaults: SATIS / TEMEL.
@@ -204,6 +259,10 @@ export function buildMysoftInvoiceOutboxPayload(
     notes: invoice.notes?.trim()
       ? [{ note: invoice.notes.trim() }]
       : undefined,
+    vehicleInfo,
+    esuReportInfo,
+    esuSeriNo,
+    supplierPartyIdentifer,
     invoiceAccount: {
       vknTckn: buyerTax || undefined,
       accountName: contact.name || invoice.contactName,

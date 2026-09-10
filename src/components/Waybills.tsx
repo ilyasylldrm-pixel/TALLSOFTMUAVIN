@@ -7,6 +7,7 @@ import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { Pagination } from "./common/Pagination";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { validatePlateFormat, validateShipmentNo } from "../services/mysoftDespatchPayload";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
 import {
@@ -181,8 +182,14 @@ export const Waybills: React.FC<WaybillsProps> = ({
     return `${now.toISOString().split("T")[0]} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   });
   const [vehiclePlate, setVehiclePlate] = useState("34 BRS 102");
+  const [licencePlateSchemaId, setLicencePlateSchemaId] = useState<"PLAKA" | "YABANCIPLAKA">("PLAKA");
   const [driverName, setDriverName] = useState("Ahmet Demir");
   const [driverTckn, setDriverTckn] = useState("10293847562");
+  const [trailerNo, setTrailerNo] = useState("");
+  const [trailerNoSchemaId, setTrailerNoSchemaId] = useState<"DORSE" | "YABANCIDORSE">("DORSE");
+  const [trailerPlate, setTrailerPlate] = useState("");
+  const [trailerPlateSchemaId, setTrailerPlateSchemaId] = useState<"DORSEPLAKA" | "YABANCIDORSEPLAKA">("DORSEPLAKA");
+  const [shipmentNo, setShipmentNo] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(warehouses[0]?.id || "");
   const [notes, setNotes] = useState("");
@@ -230,6 +237,12 @@ export const Waybills: React.FC<WaybillsProps> = ({
     setDispatchDate(`${now.toISOString().split("T")[0]} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
     setSelectedWarehouseId(warehouses[0]?.id || "");
     setNotes("");
+    setLicencePlateSchemaId("PLAKA");
+    setTrailerNo("");
+    setTrailerNoSchemaId("DORSE");
+    setTrailerPlate("");
+    setTrailerPlateSchemaId("DORSEPLAKA");
+    setShipmentNo("");
 
     // Initial first line
     const firstProd = products[0];
@@ -287,8 +300,14 @@ export const Waybills: React.FC<WaybillsProps> = ({
         `${waybill.waybillDate || new Date().toISOString().split("T")[0]} 10:00`
     );
     setVehiclePlate(waybill.vehiclePlate || "");
+    setLicencePlateSchemaId(waybill.licencePlateSchemaId || "PLAKA");
     setDriverName(waybill.driverName || "");
     setDriverTckn(waybill.driverTckn || "");
+    setTrailerNo(waybill.trailerNo || "");
+    setTrailerNoSchemaId(waybill.trailerNoSchemaId || "DORSE");
+    setTrailerPlate(waybill.trailerPlate || "");
+    setTrailerPlateSchemaId(waybill.trailerPlateSchemaId || "DORSEPLAKA");
+    setShipmentNo(waybill.shipmentNo || "");
     setDeliveryAddress(waybill.deliveryAddress || "");
     setSelectedWarehouseId(waybill.warehouseId || warehouses[0]?.id || "");
     setNotes(waybill.notes || "");
@@ -425,6 +444,42 @@ export const Waybills: React.FC<WaybillsProps> = ({
     const contactObj = contacts.find((c) => c.id === selectedContactId);
     if (!contactObj) return;
 
+    // GİB 14.09.2026: Sürücü bilgisi girildiyse araç plakası zorunludur
+    if (driverName.trim() && !vehiclePlate.trim()) {
+      alert("GİB 14.09.2026 e-İrsaliye kuralı gereği: Sürücü bilgisi girildiğinde araç plakası girilmesi zorunludur.");
+      return;
+    }
+
+    // Plaka format kontrolü
+    if (vehiclePlate.trim()) {
+      const plateCheck = validatePlateFormat(vehiclePlate, licencePlateSchemaId);
+      if (!plateCheck.valid) {
+        alert(`Araç Plakası Hatası: ${plateCheck.message}`);
+        return;
+      }
+    }
+
+    // Dorse plakası format kontrolü
+    if (trailerPlate.trim()) {
+      const dorseCheck = validatePlateFormat(
+        trailerPlate,
+        trailerPlateSchemaId === "DORSEPLAKA" ? "PLAKA" : "YABANCIPLAKA"
+      );
+      if (!dorseCheck.valid) {
+        alert(`Dorse Plakası Hatası: ${dorseCheck.message}`);
+        return;
+      }
+    }
+
+    // Sevkiyat No (İDİS) kontrolü
+    if (shipmentNo.trim()) {
+      const shipmentCheck = validateShipmentNo(shipmentNo);
+      if (!shipmentCheck.valid) {
+        alert(`Sevkiyat No Hatası: ${shipmentCheck.message}`);
+        return;
+      }
+    }
+
     const whObj = warehouses.find((w) => w.id === selectedWarehouseId);
 
     if (editingWaybillId) {
@@ -440,9 +495,15 @@ export const Waybills: React.FC<WaybillsProps> = ({
         taxNumber: contactObj.taxNumber,
         waybillDate,
         dispatchDate,
-        vehiclePlate,
-        driverName,
-        driverTckn,
+        vehiclePlate: vehiclePlate.trim() || undefined,
+        licencePlateSchemaId: vehiclePlate.trim() ? licencePlateSchemaId : undefined,
+        driverName: driverName.trim() || undefined,
+        driverTckn: driverTckn.trim() || undefined,
+        trailerNo: trailerNo.trim() || undefined,
+        trailerNoSchemaId: trailerNo.trim() ? trailerNoSchemaId : undefined,
+        trailerPlate: trailerPlate.trim() || undefined,
+        trailerPlateSchemaId: trailerPlate.trim() ? trailerPlateSchemaId : undefined,
+        shipmentNo: shipmentNo.trim() || undefined,
         deliveryAddress,
         warehouseId: whObj?.id,
         warehouseName: whObj?.name,
@@ -474,9 +535,15 @@ export const Waybills: React.FC<WaybillsProps> = ({
       taxNumber: contactObj.taxNumber,
       waybillDate,
       dispatchDate,
-      vehiclePlate,
-      driverName,
-      driverTckn,
+      vehiclePlate: vehiclePlate.trim() || undefined,
+      licencePlateSchemaId: vehiclePlate.trim() ? licencePlateSchemaId : undefined,
+      driverName: driverName.trim() || undefined,
+      driverTckn: driverTckn.trim() || undefined,
+      trailerNo: trailerNo.trim() || undefined,
+      trailerNoSchemaId: trailerNo.trim() ? trailerNoSchemaId : undefined,
+      trailerPlate: trailerPlate.trim() || undefined,
+      trailerPlateSchemaId: trailerPlate.trim() ? trailerPlateSchemaId : undefined,
+      shipmentNo: shipmentNo.trim() || undefined,
       deliveryAddress,
       warehouseId: whObj?.id,
       warehouseName: whObj?.name,
@@ -797,51 +864,140 @@ export const Waybills: React.FC<WaybillsProps> = ({
                 </div>
               </div>
 
-              {/* Logistics & Driver Information */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Araç Plakası</label>
-                  <input
-                    type="text"
-                    placeholder="34 ABC 123"
-                    value={vehiclePlate}
-                    onChange={(e) => setVehiclePlate(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 uppercase"
-                  />
+              {/* Logistics, Driver & Trailer Information (GİB 14.09.2026 Uyumlu) */}
+              <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-blue-600" />
+                    Lojistik, Araç & Sevkiyat Bilgileri (GİB e-İrsaliye)
+                  </span>
+                  <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 font-semibold px-2 py-0.5 rounded-lg">
+                    GİB 14.09.2026 Uyumlu
+                  </span>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sürücü Adı Soyadı</label>
-                  <input
-                    type="text"
-                    placeholder="Ahmet Yılmaz"
-                    value={driverName}
-                    onChange={(e) => setDriverName(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                  />
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Araç Plakası {driverName.trim() && <span className="text-rose-500 font-bold" title="Sürücü varken plaka zorunludur">*</span>}
+                    </label>
+                    <div className="flex gap-1.5">
+                      <select
+                        value={licencePlateSchemaId}
+                        onChange={(e) => setLicencePlateSchemaId(e.target.value as "PLAKA" | "YABANCIPLAKA")}
+                        className="bg-white border border-slate-200 rounded-xl px-2 py-2 text-[11px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        title="Plaka Şeması"
+                      >
+                        <option value="PLAKA">TR (Yerli)</option>
+                        <option value="YABANCIPLAKA">Yabancı</option>
+                      </select>
+                      <input
+                        type="text"
+                        placeholder={licencePlateSchemaId === "PLAKA" ? "34ABC123" : "ABC123"}
+                        value={vehiclePlate}
+                        onChange={(e) => setVehiclePlate(e.target.value)}
+                        className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 uppercase"
+                      />
+                    </div>
+                    {driverName.trim() && !vehiclePlate.trim() && (
+                      <p className="text-[10px] text-amber-600 mt-1 font-medium">
+                        ⚠️ GİB kuralı: Sürücü varken plaka zorunludur.
+                      </p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Sürücü TCKN</label>
-                  <input
-                    type="text"
-                    maxLength={11}
-                    placeholder="10293847562"
-                    value={driverTckn}
-                    onChange={(e) => setDriverTckn(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Sürücü Adı Soyadı</label>
+                    <input
+                      type="text"
+                      placeholder="Ahmet Yılmaz"
+                      value={driverName}
+                      onChange={(e) => setDriverName(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    />
+                  </div>
 
-                <div className="md:col-span-3">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Teslimat Adresi</label>
-                  <input
-                    type="text"
-                    placeholder="Sevkiyatın teslim edileceği açık adres..."
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                  />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Sürücü TCKN</label>
+                    <input
+                      type="text"
+                      maxLength={11}
+                      placeholder="10293847562"
+                      value={driverTckn}
+                      onChange={(e) => setDriverTckn(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Dorse Plakası (Varsa)</label>
+                    <div className="flex gap-1.5">
+                      <select
+                        value={trailerPlateSchemaId}
+                        onChange={(e) => setTrailerPlateSchemaId(e.target.value as "DORSEPLAKA" | "YABANCIDORSEPLAKA")}
+                        className="bg-white border border-slate-200 rounded-xl px-2 py-2 text-[11px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        title="Dorse Plaka Şeması"
+                      >
+                        <option value="DORSEPLAKA">TR Dorse</option>
+                        <option value="YABANCIDORSEPLAKA">Yabancı Dorse</option>
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="34DORSE01"
+                        value={trailerPlate}
+                        onChange={(e) => setTrailerPlate(e.target.value)}
+                        className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 uppercase"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Dorse Numarası (Varsa)</label>
+                    <div className="flex gap-1.5">
+                      <select
+                        value={trailerNoSchemaId}
+                        onChange={(e) => setTrailerNoSchemaId(e.target.value as "DORSE" | "YABANCIDORSE")}
+                        className="bg-white border border-slate-200 rounded-xl px-2 py-2 text-[11px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        title="Dorse No Şeması"
+                      >
+                        <option value="DORSE">Dorse No</option>
+                        <option value="YABANCIDORSE">Yabancı Dorse</option>
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="DRS12345"
+                        value={trailerNo}
+                        onChange={(e) => setTrailerNo(e.target.value)}
+                        className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 uppercase"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Sevkiyat No (İDİS Takip No)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      placeholder="SE-1234567 veya ES-1234567"
+                      value={shipmentNo}
+                      onChange={(e) => setShipmentNo(e.target.value.toUpperCase())}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 uppercase"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-0.5">SE- veya ES- ile başlayan 10 karakter</p>
+                  </div>
+
+                  <div className="md:col-span-3">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Teslimat Adresi</label>
+                    <input
+                      type="text"
+                      placeholder="Sevkiyatın teslim edileceği açık adres..."
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1150,14 +1306,44 @@ export const Waybills: React.FC<WaybillsProps> = ({
                     </div>
                   </div>
 
-                  <div className="space-y-1 md:border-l md:border-purple-200/60 md:pl-4">
+                  <div className="space-y-1.5 md:border-l md:border-purple-200/60 md:pl-4">
                     <span className="text-[10px] font-black uppercase text-purple-950 tracking-wider block">
                       Lojistik, Araç & Sürücü Bilgileri
                     </span>
                     <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                       <Truck className="w-3.5 h-3.5 text-purple-700" />
-                      <span>Araç Plakası: <span className="font-mono">{selectedWaybillForView.vehiclePlate || "Belirtilmedi"}</span></span>
+                      <span>
+                        Araç Plakası: <span className="font-mono">{selectedWaybillForView.vehiclePlate || "Belirtilmedi"}</span>
+                        {selectedWaybillForView.licencePlateSchemaId && (
+                          <span className="text-[10px] text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded font-bold ml-1.5">
+                            {selectedWaybillForView.licencePlateSchemaId === "PLAKA" ? "TR" : "Yabancı"}
+                          </span>
+                        )}
+                      </span>
                     </div>
+                    {selectedWaybillForView.trailerPlate && (
+                      <div className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                        <Truck className="w-3.5 h-3.5 text-purple-500" />
+                        <span>
+                          Dorse Plakası: <span className="font-mono">{selectedWaybillForView.trailerPlate}</span>
+                          {selectedWaybillForView.trailerPlateSchemaId && (
+                            <span className="text-[10px] text-purple-800 bg-purple-100 px-1 py-0.5 rounded font-medium ml-1">
+                              {selectedWaybillForView.trailerPlateSchemaId === "DORSEPLAKA" ? "TR Dorse" : "Yabancı Dorse"}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {selectedWaybillForView.trailerNo && (
+                      <div className="text-xs text-slate-600 font-mono">
+                        Dorse No: {selectedWaybillForView.trailerNo} ({selectedWaybillForView.trailerNoSchemaId || "DORSE"})
+                      </div>
+                    )}
+                    {selectedWaybillForView.shipmentNo && (
+                      <div className="text-xs font-bold text-blue-700 font-mono flex items-center gap-1">
+                        <span>İDİS Takip:</span> {selectedWaybillForView.shipmentNo}
+                      </div>
+                    )}
                     <div className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-purple-600" />
                       <span>Sürücü Adı: {selectedWaybillForView.driverName || "Belirtilmedi"}</span>
