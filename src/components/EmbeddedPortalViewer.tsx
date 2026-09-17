@@ -287,8 +287,35 @@ export const EmbeddedPortalViewer: React.FC<EmbeddedPortalViewerProps> = ({
               title="Kayıtlı kullanıcı kodu ve şifreleri ilgili forma otomatik aktar"
             >
               <Zap className="w-4 h-4 fill-slate-950" />
-              <span>⚡ Otomatik Doldur & Giriş Yap</span>
+              <span>⚡ Otomatik Doldur</span>
             </button>
+
+            {/* Direct Native Module Shortcuts */}
+            {activePortal.category === "gib" && onOpenGibModal && (
+              <button
+                type="button"
+                onClick={onOpenGibModal}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-500/20 active:scale-95 transition cursor-pointer"
+                title="Resmi Vergi Levhası, Tahakkuk Fişleri ve Borcu Yoktur Belgelerini yerel modülden üretin"
+              >
+                <Sparkles className="w-4 h-4 text-blue-200" />
+                <span>🏛️ GİB Resmi Belgeler</span>
+              </button>
+            )}
+
+            {activePortal.category === "sgk" && onOpenSgkModal && (
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenSgkModal(activePortal.id === "sgk_ebildirge" ? "ebildirgev2" : "isveren")
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-500/20 active:scale-95 transition cursor-pointer"
+                title="Aylık Prim Bildirgeleri, 4/a Çalışan Excel/PDF ve SGK Borcu Yoktur Belgeleri"
+              >
+                <Sparkles className="w-4 h-4 text-blue-200" />
+                <span>🏢 SGK Resmi Belgeler</span>
+              </button>
+            )}
 
             {/* SGK Workplace Selector (if SGK tab) */}
             {activePortal.category === "sgk" && workplaces.length > 1 && (
@@ -331,16 +358,27 @@ export const EmbeddedPortalViewer: React.FC<EmbeddedPortalViewerProps> = ({
               <RefreshCw className={`w-4 h-4 ${isLoadingIframe ? "animate-spin text-emerald-400" : ""}`} />
             </button>
 
-            {/* Open direct in new tab */}
-            <a
-              href={activePortal.directUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition cursor-pointer"
-              title="Harici Sekmede Aç"
+            {/* Open direct in new tab with credential auto-copy */}
+            <button
+              onClick={() => {
+                const credToCopy =
+                  activePortal.category === "sgk"
+                    ? activeWorkplace?.userCode || companySettings.sgkCredentials?.userCode || ""
+                    : activePortal.category === "edevlet"
+                    ? companySettings.eDevletCredentials?.tckn || companySettings.taxNumber || ""
+                    : companySettings.taxCredentials?.userCode || companySettings.taxNumber || "";
+                if (credToCopy) {
+                  navigator.clipboard.writeText(credToCopy);
+                  setAutoFillSuccessCount(1);
+                }
+                window.open(activePortal.directUrl, "_blank", "noopener,noreferrer");
+              }}
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+              title="Giriş kodunu panoya kopyala ve harici sekmede aç"
             >
               <ExternalLink className="w-4 h-4" />
-            </a>
+              <span className="hidden md:inline">Harici Aç</span>
+            </button>
 
             {/* Fullscreen Toggle */}
             <button

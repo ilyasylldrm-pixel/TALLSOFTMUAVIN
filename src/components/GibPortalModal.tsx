@@ -20,6 +20,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import {
+  downloadVergiLevhasiPdf,
+  downloadGibBorcuYokturPdf,
+  downloadGibTahakkukPdf,
+} from "../utils/officialPortalPdfs";
 
 interface GibPortalModalProps {
   isOpen: boolean;
@@ -356,8 +361,12 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
                       <p><strong>Onay Kodu:</strong> GİB-2026-98402910</p>
                     </div>
 
-                    <button className="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold border border-slate-300 py-2 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer">
-                      <Download className="w-3.5 h-3.5 text-red-600" /> e-Vergi Levhasını PDF İndir
+                    <button
+                      type="button"
+                      onClick={() => downloadVergiLevhasiPdf(companySettings)}
+                      className="w-full bg-red-600 hover:bg-red-700 text-white font-extrabold border border-red-700 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Download className="w-3.5 h-3.5" /> e-Vergi Levhasını Resmi PDF Olarak İndir
                     </button>
                   </div>
 
@@ -386,7 +395,7 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
                 <div className="space-y-3 text-xs">
                   <h4 className="font-extrabold text-slate-900">Son Verilen e-Beyanname ve Onaylı Alındı Belgeleri</h4>
                   <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200 bg-white">
-                    <table className="w-full text-left min-w-[550px]">
+                    <table className="w-full text-left min-w-[650px]">
                       <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px]">
                         <tr>
                           <th className="p-2.5">Dönem</th>
@@ -394,6 +403,7 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
                           <th className="p-2.5">Onay Zamanı</th>
                           <th className="p-2.5 text-right">Tahakkuk Tutarı</th>
                           <th className="p-2.5 text-center">Durum</th>
+                          <th className="p-2.5 text-center">Evrak İndir</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
@@ -405,6 +415,22 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
                           <td className="p-2.5 text-center">
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Onaylandı</span>
                           </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                downloadGibTahakkukPdf(companySettings, {
+                                  period: "2026/06",
+                                  type: "KDV-1 Beyannamesi",
+                                  amount: 14820.5,
+                                  time: "26.07.2026 14:22",
+                                })
+                              }
+                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Download className="w-3 h-3" /> Tahakkuk PDF
+                            </button>
+                          </td>
                         </tr>
                         <tr>
                           <td className="p-2.5 font-bold">2026/06</td>
@@ -413,6 +439,22 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
                           <td className="p-2.5 text-right font-mono font-bold text-slate-900">₺8.450,00</td>
                           <td className="p-2.5 text-center">
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Onaylandı</span>
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                downloadGibTahakkukPdf(companySettings, {
+                                  period: "2026/06",
+                                  type: "Muhtasar ve Prim Hizmet Beyannamesi",
+                                  amount: 8450.0,
+                                  time: "24.07.2026 11:05",
+                                })
+                              }
+                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Download className="w-3 h-3" /> Tahakkuk PDF
+                            </button>
                           </td>
                         </tr>
                         <tr>
@@ -423,6 +465,22 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
                           <td className="p-2.5 text-center">
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Onaylandı</span>
                           </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                downloadGibTahakkukPdf(companySettings, {
+                                  period: "2026/1.Geçici",
+                                  type: "Geçici Vergi Beyannamesi",
+                                  amount: 42100.0,
+                                  time: "16.05.2026 16:40",
+                                })
+                              }
+                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Download className="w-3 h-3" /> Tahakkuk PDF
+                            </button>
+                          </td>
                         </tr>
                       </tbody>
                     </table>
@@ -432,7 +490,7 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
 
               {activePortalTab === "debts" && (
                 <div className="space-y-4 text-xs">
-                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between">
+                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <ShieldCheck className="w-8 h-8 text-emerald-600 shrink-0" />
                       <div>
@@ -441,8 +499,12 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
                       </div>
                     </div>
 
-                    <button className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0">
-                      <Printer className="w-3.5 h-3.5" /> Resmi Belgeyi Yazdır
+                    <button
+                      type="button"
+                      onClick={() => downloadGibBorcuYokturPdf(companySettings)}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-xs active:scale-95"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Resmi Belgeyi PDF İndir & Yazdır
                     </button>
                   </div>
                 </div>

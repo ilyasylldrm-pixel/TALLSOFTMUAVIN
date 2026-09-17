@@ -24,8 +24,15 @@ import {
   ArrowRight,
   HelpCircle,
   RefreshCw,
+  Download,
 } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import {
+  downloadSgkBorcuYokturPdf,
+  downloadSgkBildirgePdf,
+  exportSgkEmployeesExcel,
+  downloadSgkEmployeesPdf,
+} from "../utils/officialPortalPdfs";
 
 interface SgkPortalModalProps {
   isOpen: boolean;
@@ -669,6 +676,21 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
                       <p><strong>Tahakkuk Eden Prim:</strong> ₺180.000,00</p>
                       <p><strong>Kalan Borç:</strong> ₺0,00</p>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadSgkBildirgePdf(companySettings, currentWp, {
+                          period: "2026/06",
+                          type: "01 - Tüm Sigorta Kolları",
+                          count: 14,
+                          amount: 180000,
+                        })
+                      }
+                      className="w-full mt-3 bg-white hover:bg-emerald-50 text-emerald-800 font-extrabold border border-emerald-200 py-2 rounded-xl flex items-center justify-center gap-1.5 transition text-xs cursor-pointer shadow-2xs active:scale-95"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" /> Prim Tahakkuk Özeti PDF İndir
+                    </button>
                   </div>
                 </div>
               )}
@@ -677,7 +699,7 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
                 <div className="space-y-3">
                   <h4 className="font-extrabold text-slate-900">Son Gönderilen e-Bildirge v2 Belgeleri</h4>
                   <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200 bg-white">
-                    <table className="w-full text-left min-w-[550px]">
+                    <table className="w-full text-left min-w-[650px]">
                       <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px]">
                         <tr>
                           <th className="p-2.5">Dönem</th>
@@ -685,6 +707,7 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
                           <th className="p-2.5">Kişi Sayısı</th>
                           <th className="p-2.5 text-right">Tahakkuk Tutarı</th>
                           <th className="p-2.5 text-center">Durum</th>
+                          <th className="p-2.5 text-center">Evrak İndir</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
@@ -696,6 +719,22 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
                           <td className="p-2.5 text-center">
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Onaylandı</span>
                           </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                downloadSgkBildirgePdf(companySettings, currentWp, {
+                                  period: "2026/06",
+                                  type: "01 - Tüm Sigorta Kolları",
+                                  count: 14,
+                                  amount: 180250,
+                                })
+                              }
+                              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Download className="w-3 h-3" /> Tahakkuk PDF
+                            </button>
+                          </td>
                         </tr>
                         <tr>
                           <td className="p-2.5 font-bold">2026/05</td>
@@ -704,6 +743,22 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
                           <td className="p-2.5 text-right font-mono font-bold text-slate-900">₺165.800,00</td>
                           <td className="p-2.5 text-center">
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Onaylandı</span>
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                downloadSgkBildirgePdf(companySettings, currentWp, {
+                                  period: "2026/05",
+                                  type: "01 - Tüm Sigorta Kolları",
+                                  count: 13,
+                                  amount: 165800,
+                                })
+                              }
+                              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Download className="w-3 h-3" /> Tahakkuk PDF
+                            </button>
                           </td>
                         </tr>
                       </tbody>
@@ -714,7 +769,40 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
 
               {activeTab === "employees" && (
                 <div className="space-y-3">
-                  <h4 className="font-extrabold text-slate-900">{currentWp.name} Aktif Sigortalı Personel</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <h4 className="font-extrabold text-slate-900">{currentWp.name} Aktif Sigortalı Personel</h4>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          exportSgkEmployeesExcel(currentWp, [
+                            { tckn: "38291048201", tcknMasked: "382910****", name: "Ahmet Yılmaz", startDate: "15.01.2023", professionCode: "2512.01", professionName: "Yazılım Geliştirici" },
+                            { tckn: "19482019384", tcknMasked: "194820****", name: "Ayşe Kaya", startDate: "01.06.2024", professionCode: "2411.02", professionName: "Mali Müşavir / Muhasebe" },
+                            { tckn: "48201928471", tcknMasked: "482019****", name: "Mehmet Demir", startDate: "10.09.2024", professionCode: "3322.01", professionName: "Satış & Operasyon Temsilcisi" },
+                            { tckn: "59102938472", tcknMasked: "591029****", name: "Zeynep Çelik", startDate: "01.02.2025", professionCode: "4321.01", professionName: "Lojistik & Depo Sorumlusu" },
+                          ])
+                        }
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Excel İndir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadSgkEmployeesPdf(currentWp, [
+                            { tckn: "38291048201", tcknMasked: "382910****", name: "Ahmet Yılmaz", startDate: "15.01.2023", professionCode: "2512.01", professionName: "Yazılım Geliştirici" },
+                            { tckn: "19482019384", tcknMasked: "194820****", name: "Ayşe Kaya", startDate: "01.06.2024", professionCode: "2411.02", professionName: "Mali Müşavir / Muhasebe" },
+                            { tckn: "48201928471", tcknMasked: "482019****", name: "Mehmet Demir", startDate: "10.09.2024", professionCode: "3322.01", professionName: "Satış & Operasyon Temsilcisi" },
+                            { tckn: "59102938472", tcknMasked: "591029****", name: "Zeynep Çelik", startDate: "01.02.2025", professionCode: "4321.01", professionName: "Lojistik & Depo Sorumlusu" },
+                          ])
+                        }
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                      >
+                        <Download className="w-3.5 h-3.5" /> PDF İndir
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200 bg-white">
                     <table className="w-full text-left min-w-[550px]">
                       <thead className="bg-slate-100 text-slate-700 font-extrabold uppercase text-[10px]">
@@ -745,6 +833,24 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Aktif</span>
                           </td>
                         </tr>
+                        <tr>
+                          <td className="p-2.5 font-mono">482019****</td>
+                          <td className="p-2.5 font-bold">Mehmet Demir</td>
+                          <td className="p-2.5">10.09.2024</td>
+                          <td className="p-2.5 font-mono">3322.01 (Satış Temsilcisi)</td>
+                          <td className="p-2.5 text-center">
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Aktif</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="p-2.5 font-mono">591029****</td>
+                          <td className="p-2.5 font-bold">Zeynep Çelik</td>
+                          <td className="p-2.5">01.02.2025</td>
+                          <td className="p-2.5 font-mono">4321.01 (Depo Sorumlusu)</td>
+                          <td className="p-2.5 text-center">
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Aktif</span>
+                          </td>
+                        </tr>
                       </tbody>
                     </table>
                   </div>
@@ -753,7 +859,7 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
 
               {activeTab === "clearance" && (
                 <div className="space-y-4">
-                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between">
+                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <ShieldCheck className="w-8 h-8 text-emerald-600 shrink-0" />
                       <div>
@@ -762,8 +868,12 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
                       </div>
                     </div>
 
-                    <button className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0">
-                      <Printer className="w-3.5 h-3.5" /> Yazdır / PDF
+                    <button
+                      type="button"
+                      onClick={() => downloadSgkBorcuYokturPdf(companySettings, currentWp)}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Resmi Belgeyi PDF İndir & Yazdır
                     </button>
                   </div>
                 </div>

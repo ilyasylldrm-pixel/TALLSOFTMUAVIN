@@ -230,6 +230,64 @@ export function getPortalProxyRouter(): Router {
     res.json({ success: true, portals: Object.values(OFFICIAL_PORTALS) });
   });
 
+  // Reverse proxy for GİB e-Arşiv services & dispatch
+  router.all("/earsiv/*", async (req: Request, res: Response) => {
+    const subPath = (req.params as any)[0] || "";
+    const queryString = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    const targetUrl = `https://earsivportal.efatura.gov.tr/${subPath}${queryString}`;
+
+    try {
+      const headers: Record<string, string> = {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        Referer: "https://earsivportal.efatura.gov.tr/intragiris.html",
+        Origin: "https://earsivportal.efatura.gov.tr",
+      };
+
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"] as string;
+      }
+      if (req.headers["cookie"]) {
+        headers["Cookie"] = req.headers["cookie"] as string;
+      }
+
+      const fetchOptions: RequestInit = {
+        method: req.method,
+        headers,
+      };
+
+      if (req.method !== "GET" && req.method !== "HEAD" && req.body) {
+        if (typeof req.body === "string" || Buffer.isBuffer(req.body)) {
+          fetchOptions.body = req.body;
+        } else if (typeof req.body === "object") {
+          if (req.headers["content-type"]?.includes("application/json")) {
+            fetchOptions.body = JSON.stringify(req.body);
+          } else {
+            fetchOptions.body = new URLSearchParams(req.body as any).toString();
+          }
+        }
+      }
+
+      const response = await fetch(targetUrl, fetchOptions);
+      const contentType = response.headers.get("content-type") || "text/plain";
+
+      const setCookie = response.headers.get("set-cookie");
+      if (setCookie) {
+        res.setHeader("Set-Cookie", setCookie);
+      }
+
+      res.status(response.status);
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (err: any) {
+      console.warn("GİB e-Arşiv proxy hatası:", err?.message);
+      res.status(500).json({ error: "1", messages: [{ type: "1", text: err?.message || "Bağlantı hatası" }] });
+    }
+  });
+
   // Proxy view endpoint for portal
   router.get("/view/:portalKey", async (req: Request, res: Response) => {
     const { portalKey } = req.params;
@@ -252,6 +310,14 @@ export function getPortalProxyRouter(): Router {
 
       const contentType = response.headers.get("content-type") || "text/html";
       let html = await response.text();
+
+      // For e-Arşiv, redirect internal dispatch calls to our proxy endpoint
+      if (portalKey === "gib_earsiv") {
+        html = html.replace(
+          /var\s+hostName\s*=\s*window\.location\.protocol\s*\+\s*'\/\/'\s*\+\s*window\.location\.host;?/g,
+          'var hostName = "/api/portal-proxy/earsiv";'
+        );
+      }
 
       // Rewrite base URL so relative images, scripts, and CSS load from the target server
       const baseTag = `<base href="${portal.targetUrl}/" />`;

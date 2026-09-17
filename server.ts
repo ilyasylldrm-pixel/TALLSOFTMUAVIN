@@ -50,10 +50,17 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.use("/api/mysoft", getMysoftRouter());
 app.use("/api/whatsapp", getWhatsAppRouter());
 app.use("/api/portal-proxy", getPortalProxyRouter());
 app.use("/api/extension", getExtensionRouter());
+
+// Direct root-level /earsiv-services forwarder for GİB e-Arşiv AJAX requests
+app.all("/earsiv-services/*", (req, res, next) => {
+  req.url = "/earsiv" + req.url;
+  getPortalProxyRouter()(req, res, next);
+});
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;
