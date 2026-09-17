@@ -35,6 +35,8 @@ export interface EmbeddedPortalViewerProps {
   companySettings: CompanySettings;
   branches?: Branch[];
   warehouses?: Warehouse[];
+  selectedPortalId?: string;
+  onPortalChange?: (portalId: string) => void;
   onOpenGibModal?: () => void;
   onOpenSgkModal?: (portal: "isveren" | "ebildirgev2") => void;
   onOpenTebligatModal?: () => void;
@@ -128,11 +130,28 @@ export const EmbeddedPortalViewer: React.FC<EmbeddedPortalViewerProps> = ({
   companySettings,
   branches = [],
   warehouses = [],
+  selectedPortalId: controlledPortalId,
+  onPortalChange,
   onOpenGibModal,
   onOpenSgkModal,
   onOpenTebligatModal,
 }) => {
-  const [selectedPortalId, setSelectedPortalId] = useState<string>("gib_dijital");
+  const [internalPortalId, setInternalPortalId] = useState<string>(controlledPortalId || "gib_dijital");
+
+  useEffect(() => {
+    if (controlledPortalId && controlledPortalId !== internalPortalId) {
+      setInternalPortalId(controlledPortalId);
+      setIsLoadingIframe(true);
+    }
+  }, [controlledPortalId]);
+
+  const selectedPortalId = controlledPortalId || internalPortalId;
+  const handleSelectPortal = (id: string) => {
+    setInternalPortalId(id);
+    setIsLoadingIframe(true);
+    onPortalChange?.(id);
+  };
+
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isLoadingIframe, setIsLoadingIframe] = useState(true);
   const [iframeKey, setIframeKey] = useState(1);
@@ -342,8 +361,7 @@ export const EmbeddedPortalViewer: React.FC<EmbeddedPortalViewerProps> = ({
               <button
                 key={tab.id}
                 onClick={() => {
-                  setSelectedPortalId(tab.id);
-                  setIsLoadingIframe(true);
+                  handleSelectPortal(tab.id);
                 }}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition cursor-pointer ${
                   isActive

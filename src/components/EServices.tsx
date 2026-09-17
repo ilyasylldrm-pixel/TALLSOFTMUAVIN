@@ -4,7 +4,6 @@ import { GibPortalModal } from "./GibPortalModal";
 import { SgkPortalModal } from "./SgkPortalModal";
 import { ETebligatModal } from "./ETebligatModal";
 import { EmbeddedPortalViewer } from "./EmbeddedPortalViewer";
-import { ExtensionInstallModal } from "./ExtensionInstallModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import {
@@ -13,7 +12,6 @@ import {
   Key,
   Eye,
   Zap,
-  Puzzle,
   FolderArchive,
   EyeOff,
   User,
@@ -69,29 +67,13 @@ export const EServices: React.FC<EServicesProps> = ({
 }) => {
   const [form, setForm] = useState<CompanySettings>(settings);
   const [activeMainTab, setActiveMainTab] = useState<"embedded" | "credentials" | "eTebligat">("embedded");
+  const [selectedEmbeddedPortal, setSelectedEmbeddedPortal] = useState<string>("gib_dijital");
   const [isSaved, setIsSaved] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  // Extension & Assistant Integration State
-  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isExtensionDetected, setIsExtensionDetected] = useState(
-    typeof window !== "undefined" && Boolean((window as any).__MUAVIN_EXTENSION_INSTALLED__)
-  );
 
-  const handleLaunchPortal = (url: string, name: string, userCode?: string) => {
-    if (userCode) {
-      navigator.clipboard.writeText(userCode);
-      setToastMessage(`⚡ ${name} için Kullanıcı Kodu (${userCode}) panoya kopyalandı. Portala yönlendiriliyorsunuz...`);
-      setTimeout(() => setToastMessage(null), 4500);
-    }
-    window.open(url, "_blank");
-  };
-
-  const syncToExtension = (dataToSync: CompanySettings) => {
-    if (typeof window !== "undefined") {
-      window.postMessage({ type: "MUAVIN_SYNC_CREDENTIALS", payload: dataToSync }, "*");
-    }
+  // Sync credentials to backend for embedded portal auto-fill bridge
+  const syncCredentialsToBackend = (dataToSync: CompanySettings) => {
     fetch("/api/extension/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -100,18 +82,7 @@ export const EServices: React.FC<EServicesProps> = ({
   };
 
   useEffect(() => {
-    const handleExtensionReady = () => {
-      setIsExtensionDetected(true);
-      syncToExtension(form);
-    };
-
-    window.addEventListener("MUAVIN_EXTENSION_READY", handleExtensionReady);
-    if (typeof window !== "undefined" && (window as any).__MUAVIN_EXTENSION_INSTALLED__) {
-      setIsExtensionDetected(true);
-      syncToExtension(form);
-    }
-
-    return () => window.removeEventListener("MUAVIN_EXTENSION_READY", handleExtensionReady);
+    syncCredentialsToBackend(form);
   }, [form]);
 
   // Password visibility states
@@ -382,6 +353,7 @@ export const EServices: React.FC<EServicesProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveSettings(form);
+    syncCredentialsToBackend(form);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
@@ -420,23 +392,22 @@ export const EServices: React.FC<EServicesProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {/* Integrated Assistant Button */}
             <button
               type="button"
-              onClick={() => setIsExtensionModalOpen(true)}
-              className="text-xs font-black px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer border bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-emerald-500/10 hover:from-emerald-500/25 hover:to-teal-500/20 text-emerald-950 border-emerald-300 active:scale-95"
+              onClick={() => setIsGibModalOpen(true)}
+              className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95"
             >
-              <Zap className="w-4 h-4 text-emerald-600 fill-emerald-600 animate-pulse" />
-              <span>⚡ Entegre Giriş Asistanı (Sıfır Kurulum)</span>
+              <Landmark className="w-4 h-4" />
+              <span>🏛️ GİB Dijital Vergi Dairesi</span>
             </button>
 
             <button
               type="button"
-              onClick={() => setIsGibModalOpen(true)}
-              className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+              onClick={() => openSgkModal("isveren")}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95"
             >
-              <ExternalLink className="w-4 h-4" />
-              <span>Dijital Vergi Dairesine Bağlan</span>
+              <Building2 className="w-4 h-4" />
+              <span>🏢 SGK İşveren & e-Bildirge</span>
             </button>
           </div>
         </div>
@@ -456,7 +427,7 @@ export const EServices: React.FC<EServicesProps> = ({
           <Globe className="w-4 h-4 text-emerald-400" />
           <span>🌐 Canlı Gömülü Portallar</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            ⚡ Auto-Fill
+            ⚡ Otomatik Giriş
           </span>
         </button>
 
@@ -498,6 +469,8 @@ export const EServices: React.FC<EServicesProps> = ({
           companySettings={form}
           branches={branches}
           warehouses={warehouses}
+          selectedPortalId={selectedEmbeddedPortal}
+          onPortalChange={setSelectedEmbeddedPortal}
           onOpenGibModal={() => setIsGibModalOpen(true)}
           onOpenSgkModal={openSgkModal}
           onOpenTebligatModal={() => setIsAddTebligatModalOpen(true)}
@@ -506,22 +479,22 @@ export const EServices: React.FC<EServicesProps> = ({
 
       {/* Main Form Container (TAB 2 or TAB 3) */}
       <form onSubmit={handleSubmit} className={`space-y-6 ${activeMainTab === "embedded" ? "hidden" : "block"}`}>
-        {/* Quick Portal Launchers Bar & Integrated Assistant Widget */}
+        {/* Quick Portal Launchers Bar */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 p-4 rounded-2xl text-white border border-emerald-500/20 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold shrink-0">
-                <Zap className="w-4 h-4 fill-emerald-400" />
+                <Sparkles className="w-4 h-4 fill-emerald-400 text-emerald-400" />
               </div>
               <div>
                 <div className="text-xs font-bold flex items-center gap-2">
-                  <span>Muavin Entegre E-İşlem & Giriş Asistanı</span>
+                  <span>Web Sitesi İçi Resmi Kurum Modülleri</span>
                   <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold">
-                    ⚡ Sıfır Kurulum (ZIP Yok)
+                    ⚡ %100 Web Sitesi İçi
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-300">
-                  Resmi portallarda (GİB, SGK, e-Devlet) kayıtlı şifrelerinizle tek tıkla oturum açın veya site içi gömülü konsolu kullanın.
+                  GİB, SGK, e-Arşiv ve e-Devlet modüllerinin tamamı web sitesi içinde doğrudan çalışır; harici eklenti veya kurulum gerekmez.
                 </div>
               </div>
             </div>
@@ -529,20 +502,32 @@ export const EServices: React.FC<EServicesProps> = ({
             <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => setActiveMainTab("embedded")}
+                onClick={() => {
+                  setSelectedEmbeddedPortal("gib_dijital");
+                  setActiveMainTab("embedded");
+                }}
                 className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs transition cursor-pointer flex items-center gap-1.5 border border-slate-700"
               >
                 <Globe className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Gömülü Konsol</span>
+                <span>Gömülü Canlı Konsol</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setIsExtensionModalOpen(true)}
+                onClick={() => setIsGibModalOpen(true)}
+                className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-xl font-extrabold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-red-900/30"
+              >
+                <Landmark className="w-3.5 h-3.5 text-white" />
+                <span>GİB Vergi Dairesi</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openSgkModal("isveren")}
                 className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-extrabold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-900/30"
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
-                <span>⚡ Giriş Asistanını Aç</span>
+                <Building2 className="w-3.5 h-3.5 text-white" />
+                <span>SGK Portalı</span>
               </button>
             </div>
           </div>
@@ -566,50 +551,44 @@ export const EServices: React.FC<EServicesProps> = ({
           <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
             <span className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-purple-600" />
-              Sık Kullanılan Resmi Kurum ve E-Devlet Portalları
+              Resmi Kurum ve E-Devlet Modülleri (Web İçi Doğrudan Erişim)
             </span>
             <span className="text-[11px] text-slate-400 font-normal">
-              Portala gitmek için tıklayınız (Kullanıcı kodu otomatik kopyalanır)
+              İlgili resmi işlemi doğrudan web sitesi içinde başlatmak için tıklayınız
             </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* 1. GİB Dijital Vergi Dairesi */}
             <button
               type="button"
-              onClick={() =>
-                handleLaunchPortal(
-                  "https://dijital.gib.gov.tr",
-                  "GİB Dijital Vergi Dairesi",
-                  form.taxCredentials?.userCode || form.taxNumber
-                )
-              }
+              onClick={() => setIsGibModalOpen(true)}
               className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-red-50/70 border border-slate-200/80 hover:border-red-200 text-slate-700 hover:text-red-700 transition-all group text-left cursor-pointer"
             >
               <div className="truncate">
                 <div className="text-xs font-extrabold truncate">Dijital Vergi Dairesi</div>
-                <div className="text-[10px] text-slate-400 group-hover:text-red-500 truncate">dijital.gib.gov.tr</div>
+                <div className="text-[10px] text-red-600 font-medium group-hover:text-red-700 truncate">Sitede Aç (Beyanname/Borç)</div>
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-red-600 shrink-0 ml-1" />
+              <Sparkles className="w-3.5 h-3.5 text-slate-400 group-hover:text-red-600 shrink-0 ml-1" />
             </button>
 
+            {/* 2. e-Devlet Kapısı */}
             <button
               type="button"
-              onClick={() =>
-                handleLaunchPortal(
-                  "https://giris.turkiye.gov.tr/Giris/",
-                  "e-Devlet Kapısı",
-                  form.eDevletCredentials?.tckn || form.taxNumber
-                )
-              }
+              onClick={() => {
+                setSelectedEmbeddedPortal("edevlet");
+                setActiveMainTab("embedded");
+              }}
               className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-200/80 hover:border-blue-200 text-slate-700 hover:text-blue-700 transition-all group text-left cursor-pointer"
             >
               <div className="truncate">
                 <div className="text-xs font-extrabold truncate">e-Devlet Kapısı</div>
-                <div className="text-[10px] text-slate-400 group-hover:text-blue-500 truncate">turkiye.gov.tr</div>
+                <div className="text-[10px] text-blue-600 font-medium group-hover:text-blue-700 truncate">Sitede Canlı Aç</div>
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 ml-1" />
+              <Sparkles className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 ml-1" />
             </button>
 
+            {/* 3. SGK İşveren */}
             <button
               type="button"
               onClick={() => openSgkModal("isveren")}
@@ -620,12 +599,13 @@ export const EServices: React.FC<EServicesProps> = ({
                   <span>SGK İşveren Portalı</span>
                 </div>
                 <div className="text-[10px] text-emerald-600 font-medium group-hover:text-emerald-700 truncate">
-                  Merkez, Şube & Depo Seçimli
+                  Sitede Aç (Şube/Depo/Prim)
                 </div>
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 shrink-0 ml-1" />
+              <Sparkles className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 shrink-0 ml-1" />
             </button>
 
+            {/* 4. SGK v2 Bildirge */}
             <button
               type="button"
               onClick={() => openSgkModal("ebildirgev2")}
@@ -636,46 +616,42 @@ export const EServices: React.FC<EServicesProps> = ({
                   <span>SGK v2 Bildirge</span>
                 </div>
                 <div className="text-[10px] text-teal-600 font-medium group-hover:text-teal-700 truncate">
-                  Merkez, Şube & Depo Seçimli
+                  Sitede Aç (e-Bildirge v2)
                 </div>
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 ml-1" />
+              <Sparkles className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 ml-1" />
             </button>
 
+            {/* 5. GİB e-Arşiv */}
             <button
               type="button"
-              onClick={() =>
-                handleLaunchPortal(
-                  "https://earsivportal.efatura.gov.tr/intragiris.html",
-                  "GİB e-Arşiv Fatura",
-                  form.taxCredentials?.userCode || form.taxNumber
-                )
-              }
+              onClick={() => {
+                setSelectedEmbeddedPortal("gib_earsiv");
+                setActiveMainTab("embedded");
+              }}
               className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-amber-50/70 border border-slate-200/80 hover:border-amber-200 text-slate-700 hover:text-amber-700 transition-all group text-left cursor-pointer"
             >
               <div className="truncate">
                 <div className="text-xs font-extrabold truncate">GİB e-Arşiv Portal</div>
-                <div className="text-[10px] text-slate-400 group-hover:text-amber-500 truncate">earsivportal.gov.tr</div>
+                <div className="text-[10px] text-amber-600 font-medium group-hover:text-amber-700 truncate">5.000 / 30.000 Sitede Aç</div>
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-600 shrink-0 ml-1" />
+              <Sparkles className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-600 shrink-0 ml-1" />
             </button>
 
+            {/* 6. MERSİS Portalı */}
             <button
               type="button"
-              onClick={() =>
-                handleLaunchPortal(
-                  "https://mersis.gtb.gov.tr/",
-                  "MERSİS Portalı",
-                  form.taxCredentials?.userCode || form.taxNumber
-                )
-              }
+              onClick={() => {
+                setSelectedEmbeddedPortal("mersis");
+                setActiveMainTab("embedded");
+              }}
               className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-purple-50/70 border border-slate-200/80 hover:border-purple-200 text-slate-700 hover:text-purple-700 transition-all group text-left cursor-pointer"
             >
               <div className="truncate">
                 <div className="text-xs font-extrabold truncate">MERSİS Portalı</div>
-                <div className="text-[10px] text-slate-400 group-hover:text-purple-500 truncate">mersis.gtb.gov.tr</div>
+                <div className="text-[10px] text-purple-600 font-medium group-hover:text-purple-700 truncate">Sitede Canlı Aç</div>
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 shrink-0 ml-1" />
+              <Sparkles className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 shrink-0 ml-1" />
             </button>
           </div>
         </div>
@@ -1775,36 +1751,6 @@ export const EServices: React.FC<EServicesProps> = ({
         companySettings={form}
         onStatusChange={handleTebligatStatusChange}
       />
-
-      {/* Entegre E-İşlem & Giriş Asistanı Modalı (Sıfır Kurulum) */}
-      <ExtensionInstallModal
-        isOpen={isExtensionModalOpen}
-        onClose={() => setIsExtensionModalOpen(false)}
-        isExtensionDetected={isExtensionDetected}
-        companySettings={form}
-        onNavigateToEmbedded={() => setActiveMainTab("embedded")}
-        onOpenGibModal={() => setIsGibModalOpen(true)}
-        onOpenSgkModal={openSgkModal}
-      />
-
-      {/* Ekran İçi Canlı E-İşlem Asistanı Butonu (Floating Widget) */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          type="button"
-          onClick={() => setIsExtensionModalOpen(true)}
-          className="group px-4 py-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-black text-xs rounded-2xl shadow-2xl shadow-emerald-950/60 border border-emerald-300/40 flex items-center gap-2.5 cursor-pointer transition transform hover:scale-105 active:scale-95"
-          title="Muavin Entegre E-İşlem ve Portallar Asistanı"
-        >
-          <div className="w-5 h-5 rounded-lg bg-slate-950 text-emerald-400 flex items-center justify-center text-xs font-black shadow-inner">
-            ⚡
-          </div>
-          <span className="text-white font-extrabold tracking-tight drop-shadow-xs">
-            E-İşlem Asistanı
-          </span>
-          <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping group-hover:hidden" />
-        </button>
-      </div>
-
     </div>
   );
 };
