@@ -20,7 +20,9 @@
     "*://etebligat.sgk.gov.tr/*",
     "*://localhost/*",
     "*://127.0.0.1/*",
-    "*://*.muavin.com/*"
+    "*://*.muavin.com/*",
+    "*://*.tallsoft.org/*",
+    "*://tallsoft.org/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -52,7 +54,9 @@
         "*://etebligat.sgk.gov.tr/*",
         "*://localhost/*",
         "*://127.0.0.1/*",
-        "*://*.muavin.com/*"
+        "*://*.muavin.com/*",
+        "*://*.tallsoft.org/*",
+        "*://tallsoft.org/*"
       ],
       "js": ["content.js"],
       "run_at": "document_end"

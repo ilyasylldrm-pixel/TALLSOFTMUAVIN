@@ -50,11 +50,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Open Muavin button
   btnOpenMuavin.addEventListener("click", () => {
-    chrome.tabs.query({ url: ["http://localhost:*/*", "http://127.0.0.1:*/*", "https://*.muavin.com/*"] }, (tabs) => {
+    chrome.tabs.query({ url: ["http://localhost:*/*", "http://127.0.0.1:*/*", "https://*.muavin.com/*", "https://*.tallsoft.org/*", "https://tallsoft.org/*"] }, (tabs) => {
       if (tabs && tabs.length > 0) {
         chrome.tabs.update(tabs[0].id, { active: true });
       } else {
-        chrome.tabs.create({ url: "http://localhost:3000" });
+        chrome.tabs.create({ url: "https://tallsoft.org" });
       }
     });
   });

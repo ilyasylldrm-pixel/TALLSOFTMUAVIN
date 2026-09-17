@@ -11,7 +11,8 @@
   if (
     currentHost === "localhost" ||
     currentHost === "127.0.0.1" ||
-    currentHost.includes("muavin")
+    currentHost.includes("muavin") ||
+    currentHost.includes("tallsoft")
   ) {
     // Eklentinin kurulu olduğunu web sayfasına bildir
     window.__MUAVIN_EXTENSION_INSTALLED__ = true;

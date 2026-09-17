@@ -13,205 +13,436 @@ import {
   ChevronRight,
   Copy,
   Check,
+  Bookmark,
+  MousePointer,
+  Globe,
+  Key,
+  Lock,
+  ArrowRight,
+  Info,
 } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import { CompanySettings } from "../types";
+import { generatePortalBookmarklet } from "../utils/portalBookmarklet";
 
 export interface ExtensionInstallModalProps {
   isOpen: boolean;
   onClose: () => void;
   isExtensionDetected: boolean;
+  companySettings?: CompanySettings;
+  onNavigateToEmbedded?: () => void;
 }
 
 export const ExtensionInstallModal: React.FC<ExtensionInstallModalProps> = ({
   isOpen,
   onClose,
   isExtensionDetected,
+  companySettings,
+  onNavigateToEmbedded,
 }) => {
-  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"bookmarklet" | "embedded" | "credentials" | "zip">("bookmarklet");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleCopyUrl = (url: string, key: string) => {
-    navigator.clipboard.writeText(url);
-    setCopiedUrl(key);
-    setTimeout(() => setCopiedUrl(null), 2000);
+  const effectiveSettings: CompanySettings = companySettings || {
+    companyName: "Şirketim",
+    taxNumber: "",
+  };
+
+  const { bookmarkletHref, rawScript } = generatePortalBookmarklet(effectiveSettings);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   const handleDownloadZip = () => {
     window.location.href = "/api/extension/download-zip";
   };
 
+  const taxCreds = effectiveSettings.taxCredentials || {};
+  const activeWp = effectiveSettings.sgkCredentials?.workplaces?.[0] || effectiveSettings.sgkCredentials || {};
+  const edevletCreds = effectiveSettings.eDevletCredentials || {};
+
   return (
     <DetailPageLayout
-      title="Muavin Chrome & Edge Eklentisi"
-      subtitle="GİB, SGK, e-Arşiv ve e-Devlet sitelerine tek tıkla şifresiz doğrudan giriş yapın"
+      title="Muavin Entegre E-İşlem & Giriş Asistanı"
+      subtitle="GİB, SGK, e-Arşiv ve e-Devlet sitelerine sıfır kurulumla, tek tıkla otomatik giriş yapın"
       breadcrumbs={[
         { label: "Sistem & Entegrasyon", onClick: onClose },
-        { label: "Tarayıcı Eklentisi", active: true },
+        { label: "E-İşlem Asistanı", active: true },
       ]}
       onBack={onClose}
       statusBadge={
-        <span
-          className={`text-xs font-bold px-3 py-1 rounded-xl border ${
-            isExtensionDetected
-              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-              : "bg-amber-50 text-amber-800 border-amber-200"
-          }`}
-        >
-          {isExtensionDetected ? "EKLENTİ AKTİF" : "KURULUM GEREKİYOR"}
+        <span className="text-xs font-bold px-3 py-1 rounded-xl border bg-emerald-50 text-emerald-800 border-emerald-200 flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          SIFIR KURULUM AKTİF
         </span>
       }
       headerIcon={<Zap className="w-5 h-5 text-emerald-600" />}
       actions={
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleDownloadZip}
-            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs shadow-xs active:scale-95 transition cursor-pointer"
-          >
-            <Download className="w-4 h-4" />
-            <span>Eklenti Paketini İndir (.ZIP)</span>
-          </button>
+          {onNavigateToEmbedded && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onNavigateToEmbedded();
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+            >
+              <Globe className="w-4 h-4 text-emerald-400" />
+              <span>Gömülü Konsolu Aç</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
           >
-            Geri Dön
+            Kapat
           </button>
         </div>
       }
     >
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 w-full max-w-3xl mx-auto flex flex-col overflow-hidden">
-
-        {/* MODAL BODY: 3-STEP INSTALLATION GUIDE */}
-        <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
-          {/* Status Indicator */}
-          <div
-            className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
-              isExtensionDetected
-                ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                : "bg-amber-50 border-amber-200 text-amber-900"
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 w-full max-w-4xl mx-auto flex flex-col overflow-hidden">
+        {/* TAB SWITCHER */}
+        <div className="flex border-b border-slate-200 bg-slate-50/80 px-6 pt-3 gap-2 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setActiveTab("bookmarklet")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition cursor-pointer border-b-2 ${
+              activeTab === "bookmarklet"
+                ? "bg-white text-emerald-700 border-emerald-600 shadow-2xs"
+                : "text-slate-600 border-transparent hover:text-slate-900"
             }`}
           >
-            <div className="flex items-center gap-2.5">
-              {isExtensionDetected ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              ) : (
-                <Puzzle className="w-5 h-5 text-amber-600 shrink-0" />
-              )}
-              <div>
-                <div className="font-extrabold text-xs">
-                  {isExtensionDetected ? "Eklenti Tarayıcınızda Yüklü ve Aktif!" : "Eklenti Henüz Algılanmadı"}
+            <Bookmark className="w-4 h-4 text-emerald-600" />
+            <span>⚡ Yer İmi Asistanı (Sıfır Kurulum)</span>
+            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.2 rounded-full">
+              Önerilen
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("embedded")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition cursor-pointer border-b-2 ${
+              activeTab === "embedded"
+                ? "bg-white text-emerald-700 border-emerald-600 shadow-2xs"
+                : "text-slate-600 border-transparent hover:text-slate-900"
+            }`}
+          >
+            <Globe className="w-4 h-4 text-blue-600" />
+            <span>🖥️ Gömülü Portallar Konsolu</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("credentials")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition cursor-pointer border-b-2 ${
+              activeTab === "credentials"
+                ? "bg-white text-emerald-700 border-emerald-600 shadow-2xs"
+                : "text-slate-600 border-transparent hover:text-slate-900"
+            }`}
+          >
+            <Key className="w-4 h-4 text-purple-600" />
+            <span>📋 Hızlı Şifre Panosu</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("zip")}
+            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-t-xl text-xs font-medium transition cursor-pointer border-b-2 ml-auto ${
+              activeTab === "zip"
+                ? "bg-white text-slate-800 border-slate-700 shadow-2xs"
+                : "text-slate-400 border-transparent hover:text-slate-700"
+            }`}
+          >
+            <Puzzle className="w-3.5 h-3.5 text-slate-400" />
+            <span>Gelişmiş (.ZIP Eklenti)</span>
+          </button>
+        </div>
+
+        {/* MODAL BODY */}
+        <div className="p-6 overflow-y-auto space-y-6 text-xs text-slate-700">
+          {/* TAB 1: BOOKMARKLET (ZERO INSTALL) */}
+          {activeTab === "bookmarklet" && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Highlight Hero Card */}
+              <div className="bg-gradient-to-r from-emerald-900 via-slate-900 to-slate-900 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1.5 max-w-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded border border-emerald-500/30">
+                        ⚡ Sıfır Kurulum Teknolojisi
+                      </span>
+                      <span className="text-[10px] text-slate-300">ZIP dosyası veya eklenti indirmeniz gerekmez!</span>
+                    </div>
+                    <h3 className="text-base font-black text-white">
+                      Tarayıcınızın Favoriler Çubuğuna Tek Sürüklemeyle Kurun
+                    </h3>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      Aşağıdaki yeşil butonu farenizle basılı tutup tarayıcınızın Yer İmleri (Favoriler) çubuğuna bırakın. GİB, SGK veya e-Devlet sayfasına gittiğinizde butona tıklamanız yeterlidir.
+                    </p>
+                  </div>
+
+                  {/* The Draggable Link */}
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <a
+                      href={bookmarkletHref}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        alert("💡 Bu butona doğrudan tıklamak yerine, farenizle basılı tutup tarayıcınızın yukarıdaki Yer İmleri / Favoriler çubuğuna sürükleyip bırakınız. Eğer yer imleri çubuğunuz görünmüyorsa klavyeden Ctrl + Shift + B (Mac'te Cmd + Shift + B) tuşlarına basınız.");
+                      }}
+                      draggable="true"
+                      className="px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs rounded-2xl shadow-xl shadow-emerald-500/30 cursor-grab active:cursor-grabbing border-2 border-white/40 flex items-center gap-2.5 select-none transform hover:-translate-y-0.5 transition"
+                      title="Bu butonu tarayıcınızın Yer İmleri (Favoriler) çubuğuna sürükleyip bırakın"
+                    >
+                      <MousePointer className="w-4 h-4 animate-bounce" />
+                      <span>⚡ Muavin Şifre Doldurucu</span>
+                    </a>
+                    <span className="text-[10px] text-emerald-300/80 font-semibold">
+                      👆 Basılı tutup Yer İmleri Çubuğuna Sürükleyin
+                    </span>
+                  </div>
                 </div>
-                <div className="text-[11px] opacity-80">
-                  {isExtensionDetected
-                    ? "Resmi devlet portallarına gittiğinizde şifreleriniz otomatik olarak formlara aktarılacaktır."
-                    : "Aşağıdaki 3 adımı takip ederek 30 saniyede eklentiyi kurabilirsiniz."}
+              </div>
+
+              {/* 3 Step Visual Guide */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                  <div className="w-7 h-7 rounded-xl bg-slate-900 text-emerald-400 font-black text-xs flex items-center justify-center">
+                    1
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-xs">Yer İmleri Çubuğunu Açın</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Klavyenizden <kbd className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-mono font-bold">Ctrl + Shift + B</kbd> (Mac: <kbd className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-mono font-bold">Cmd + Shift + B</kbd>) tuşlarına basarak tarayıcınızın favoriler çubuğunu görünür yapın.
+                  </p>
                 </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                  <div className="w-7 h-7 rounded-xl bg-slate-900 text-emerald-400 font-black text-xs flex items-center justify-center">
+                    2
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-xs">Yeşil Butonu Yukarı Sürükleyin</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Yukarıdaki <strong>"⚡ Muavin Şifre Doldurucu"</strong> butonunu farenizle tutup tarayıcının üstündeki yer imleri çubuğuna bırakın.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                  <div className="w-7 h-7 rounded-xl bg-slate-900 text-emerald-400 font-black text-xs flex items-center justify-center">
+                    3
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-xs">Portallarda Tek Tıkla Doldurun</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    GİB, SGK veya e-Devlet giriş sayfasına gittiğinizde favorilerinizdeki o butona tıklayın; tüm şifreleriniz anında formlara aktarılacaktır!
+                  </p>
+                </div>
+              </div>
+
+              {/* Alternative: Copy Raw Bookmarklet URL */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    Manuel Yer İmi Eklemek İsterseniz:
+                  </span>
+                  <p className="text-[11px] text-slate-500">
+                    Sürükleme yapamıyorsanız yer imi kodunu kopyalayıp tarayıcınızda yeni yer imi oluşturarak URL alanına yapıştırabilirsiniz.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleCopy(bookmarkletHref, "bookmarklet_code")}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl font-bold text-xs shrink-0 transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  {copiedKey === "bookmarklet_code" ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-emerald-700">Kod Kopyalandı!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Yer İmi Kodunu Kopyala</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
+          )}
 
-            <button
-              type="button"
-              onClick={handleDownloadZip}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shrink-0 shadow-md cursor-pointer transition"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-400" />
-              <span>ZIP İndir</span>
-            </button>
-          </div>
-
-          {/* 3 STEPS CARDS */}
-          <div className="space-y-3">
-            <h4 className="font-black text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              3 Adımda Kolay Kurulum Kılavuzu:
-            </h4>
-
-            {/* Step 1 */}
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-3.5 hover:border-slate-300 transition">
-              <div className="w-7 h-7 rounded-xl bg-slate-900 text-emerald-400 font-black text-xs flex items-center justify-center shrink-0 shadow-sm">
-                1
+          {/* TAB 2: EMBEDDED CONSOLE */}
+          {activeTab === "embedded" && (
+            <div className="space-y-4 animate-fadeIn">
+              <div className="bg-blue-50/60 border border-blue-200 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-blue-900 font-extrabold text-xs">
+                  <Globe className="w-4 h-4 text-blue-600" />
+                  <span>Site İçi Gömülü Resmi Portallar Konsolu</span>
+                </div>
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  Muavin uygulamasının içinde yer alan <strong>"Gömülü Resmi Portallar Konsolu"</strong> sayesinde tarayıcıdan harici sekme açmadan GİB Dijital Vergi Dairesi, SGK İşveren Sistemi, e-Arşiv ve e-Devlet portallarını doğrudan görüntüleyebilir ve <strong>"⚡ Otomatik Doldur"</strong> butonu ile giriş yapabilirsiniz.
+                </p>
               </div>
-              <div className="flex-1 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="font-extrabold text-slate-900 text-xs">Eklenti Dosyasını İndirin ve Çıkartın</div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <h4 className="font-extrabold text-slate-900 text-xs">🏛️ GİB Dijital Vergi Dairesi</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Beyannameler, tahakkuk fişleri, vergi levhası ve borç dökümlerini site içi webview konsolunda açın.
+                  </p>
+                  <a
+                    href="https://dijital.gib.gov.tr"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 hover:text-red-700"
+                  >
+                    <span>Portala Git</span> <ArrowRight className="w-3 h-3" />
+                  </a>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <h4 className="font-extrabold text-slate-900 text-xs">🏢 SGK İşveren Portalı & e-Bildirge</h4>
+                  <p className="text-[11px] text-slate-500">
+                    İşyeri sicil numarası ve sistem şifrelerinizle tüm şube ve merkez işyerleriniz için bildirge verin.
+                  </p>
+                  <a
+                    href="https://uyg.sgk.gov.tr/IsverenSistemi"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-700"
+                  >
+                    <span>Portala Git</span> <ArrowRight className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+
+              {onNavigateToEmbedded && (
+                <div className="pt-2">
                   <button
                     type="button"
-                    onClick={handleDownloadZip}
-                    className="text-emerald-700 hover:text-emerald-800 font-bold text-[11px] flex items-center gap-1 underline cursor-pointer"
+                    onClick={() => {
+                      onClose();
+                      onNavigateToEmbedded();
+                    }}
+                    className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-2xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
                   >
-                    <FolderArchive className="w-3.5 h-3.5" /> muavin-eklenti.zip İndir
+                    <Globe className="w-4 h-4 text-emerald-400" />
+                    <span>Gömülü Konsolu Şimdi Aç</span>
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  İndirdiğiniz <strong>muavin-eklenti.zip</strong> dosyasını bilgisayarınızda bir klasöre çıkartın (örn: <em>Masaüstü / muavin-eklenti</em>).
-                </p>
-              </div>
+              )}
             </div>
+          )}
 
-            {/* Step 2 */}
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-3.5 hover:border-slate-300 transition">
-              <div className="w-7 h-7 rounded-xl bg-slate-900 text-emerald-400 font-black text-xs flex items-center justify-center shrink-0 shadow-sm">
-                2
+          {/* TAB 3: CREDENTIALS SUMMARY & 1-CLICK COPY */}
+          {activeTab === "credentials" && (
+            <div className="space-y-4 animate-fadeIn">
+              <div className="text-xs font-bold text-slate-700">
+                Kayıtlı Resmi Kurum Şifreleriniz (Tek Tıkla Kopyalayabilirsiniz):
               </div>
-              <div className="flex-1 space-y-2">
-                <div className="font-extrabold text-slate-900 text-xs">
-                  Tarayıcınızın Eklentiler Sayfasını Açın
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Tarayıcınızın adres çubuğuna aşağıdaki adresi kopyalayıp yapıştırın:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-300 font-mono text-[11px] text-slate-800">
-                    <span>chrome://extensions</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyUrl("chrome://extensions", "chrome_url")}
-                      className="text-slate-400 hover:text-emerald-600 cursor-pointer"
-                      title="Adresi Kopyala"
-                    >
-                      {copiedUrl === "chrome_url" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* GİB Card */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                  <div className="font-extrabold text-slate-900 text-xs flex items-center justify-between">
+                    <span>🏛️ Gelir İdaresi (GİB / İVD)</span>
+                    <span className="text-[10px] bg-red-100 text-red-700 font-bold px-1.5 py-0.2 rounded">GİB</span>
                   </div>
+                  <div className="space-y-1 text-[11px] font-mono">
+                    <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                      <span className="text-slate-500 font-sans">Kullanıcı Kodu:</span>
+                      <span className="font-bold">{taxCreds.userCode || effectiveSettings.taxNumber || "—"}</span>
+                      <button
+                        onClick={() => handleCopy(taxCreds.userCode || effectiveSettings.taxNumber || "", "c_tax_user")}
+                        className="text-slate-400 hover:text-emerald-600 cursor-pointer"
+                      >
+                        {copiedKey === "c_tax_user" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
 
-                  <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-300 font-mono text-[11px] text-slate-800">
-                    <span>edge://extensions</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyUrl("edge://extensions", "edge_url")}
-                      className="text-slate-400 hover:text-emerald-600 cursor-pointer"
-                      title="Adresi Kopyala"
-                    >
-                      {copiedUrl === "edge_url" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
+                    <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                      <span className="text-slate-500 font-sans">Parola:</span>
+                      <span className="font-bold">{taxCreds.password ? "••••••••" : "—"}</span>
+                      <button
+                        onClick={() => handleCopy(taxCreds.password || "", "c_tax_pass")}
+                        className="text-slate-400 hover:text-emerald-600 cursor-pointer"
+                      >
+                        {copiedKey === "c_tax_pass" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SGK Card */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                  <div className="font-extrabold text-slate-900 text-xs flex items-center justify-between">
+                    <span>🏢 SGK İşveren Sistemi</span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.2 rounded">SGK</span>
+                  </div>
+                  <div className="space-y-1 text-[11px] font-mono">
+                    <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                      <span className="text-slate-500 font-sans">Kullanıcı Kodu:</span>
+                      <span className="font-bold">{activeWp.userCode || "—"}</span>
+                      <button
+                        onClick={() => handleCopy(activeWp.userCode || "", "c_sgk_user")}
+                        className="text-slate-400 hover:text-emerald-600 cursor-pointer"
+                      >
+                        {copiedKey === "c_sgk_user" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                      <span className="text-slate-500 font-sans">İşyeri Kodu:</span>
+                      <span className="font-bold">{activeWp.workplaceCode || "000"}</span>
+                      <button
+                        onClick={() => handleCopy(activeWp.workplaceCode || "000", "c_sgk_wp")}
+                        className="text-slate-400 hover:text-emerald-600 cursor-pointer"
+                      >
+                        {copiedKey === "c_sgk_wp" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          )}
 
-            {/* Step 3 */}
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-3.5 hover:border-slate-300 transition">
-              <div className="w-7 h-7 rounded-xl bg-slate-900 text-emerald-400 font-black text-xs flex items-center justify-center shrink-0 shadow-sm">
-                3
-              </div>
-              <div className="flex-1 space-y-1.5">
-                <div className="font-extrabold text-slate-900 text-xs">
-                  Geliştirici Modunu Açıp Klasörü Seçin
+          {/* TAB 4: ADVANCED ZIP (OPTIONAL) */}
+          {activeTab === "zip" && (
+            <div className="space-y-4 animate-fadeIn bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs">Gelişmiş: Klasik Tarayıcı Eklentisi Paketi (.ZIP)</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Özel olarak Chrome / Edge eklentisini tarayıcınıza kurmak isterseniz paketi indirebilirsiniz.
+                  </p>
                 </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Açılan sayfanın sağ üst köşesindeki <strong>"Geliştirici Modu" (Developer Mode)</strong> anahtarını aktif edin. Sol üstte beliren <strong>"Paketlenmemiş Öğe Yükle" (Load Unpacked)</strong> butonuna tıklayıp 1. adımda çıkarttığınız klasörü seçin.
-                </p>
+                <button
+                  type="button"
+                  onClick={handleDownloadZip}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>ZIP İndir</span>
+                </button>
               </div>
+              <p className="text-[10px] text-slate-400">
+                Not: Yer İmi Asistanı yukarıdaki 1. sekmede yer almakta olup, dosya indirme gerektirmediği için genellikle çok daha pratik ve tercih edilen yöntemdir.
+              </p>
             </div>
-          </div>
+          )}
 
-          {/* Security note */}
-          <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-center gap-2 text-emerald-950 text-[11px]">
+          {/* Security Guarantee Banner */}
+          <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-center gap-2.5 text-emerald-950 text-[11px]">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>
-              <strong>Tamamen Güvenlidir:</strong> Eklenti yalnızca resmi devlet portallarında (`gib.gov.tr`, `sgk.gov.tr`, `turkiye.gov.tr`) çalışır ve şifrelerinizi hiçbir üçüncü tarafa göndermez.
+              <strong>%100 Güvenli & Yerel:</strong> Şifreleriniz yalnızca sizin bilgisayarınızda ve tarayıcınızda çalışır, hiçbir üçüncü tarafa veya harici sunucuya iletilmez.
             </span>
           </div>
         </div>
@@ -221,19 +452,23 @@ export const ExtensionInstallModal: React.FC<ExtensionInstallModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold text-xs transition cursor-pointer"
+            className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold text-xs transition cursor-pointer"
           >
-            Geri Dön
+            Kapat
           </button>
 
-          <button
-            type="button"
-            onClick={handleDownloadZip}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-xs active:scale-95 transition cursor-pointer"
+          <a
+            href={bookmarkletHref}
+            onClick={(e) => {
+              e.preventDefault();
+              alert("💡 Bu butonu farenizle basılı tutup yukarıdaki Tarayıcı Yer İmleri (Favoriler) çubuğunuza sürükleyip bırakınız. Ardından GİB veya SGK sayfasına girdiğinizde o butona tıklayarak şifrelerinizi anında doldurabilirsiniz!");
+            }}
+            draggable="true"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs shadow-xs active:scale-95 transition cursor-grab select-none"
           >
-            <Download className="w-4 h-4" />
-            <span>Eklenti Paketini İndir (.ZIP)</span>
-          </button>
+            <Bookmark className="w-4 h-4" />
+            <span>⚡ Muavin Şifre Doldurucu (Favorilere Sürükleyin)</span>
+          </a>
         </div>
       </div>
     </DetailPageLayout>

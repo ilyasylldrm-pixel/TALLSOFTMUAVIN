@@ -72,11 +72,21 @@ export const EServices: React.FC<EServicesProps> = ({
   const [isSaved, setIsSaved] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Extension Integration State
+  // Extension & Assistant Integration State
   const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isExtensionDetected, setIsExtensionDetected] = useState(
     typeof window !== "undefined" && Boolean((window as any).__MUAVIN_EXTENSION_INSTALLED__)
   );
+
+  const handleLaunchPortal = (url: string, name: string, userCode?: string) => {
+    if (userCode) {
+      navigator.clipboard.writeText(userCode);
+      setToastMessage(`⚡ ${name} için Kullanıcı Kodu (${userCode}) panoya kopyalandı. Portala yönlendiriliyorsunuz...`);
+      setTimeout(() => setToastMessage(null), 4500);
+    }
+    window.open(url, "_blank");
+  };
 
   const syncToExtension = (dataToSync: CompanySettings) => {
     if (typeof window !== "undefined") {
@@ -410,18 +420,14 @@ export const EServices: React.FC<EServicesProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {/* Chrome/Edge Extension Button */}
+            {/* Integrated Assistant Button */}
             <button
               type="button"
               onClick={() => setIsExtensionModalOpen(true)}
-              className={`text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer border ${
-                isExtensionDetected
-                  ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300"
-                  : "bg-slate-900 hover:bg-slate-800 text-white border-slate-700 shadow-md shadow-slate-900/20"
-              }`}
+              className="text-xs font-black px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer border bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-emerald-500/10 hover:from-emerald-500/25 hover:to-teal-500/20 text-emerald-950 border-emerald-300 active:scale-95"
             >
-              <Zap className={`w-4 h-4 ${isExtensionDetected ? "text-emerald-600 fill-emerald-600" : "text-amber-400"}`} />
-              <span>{isExtensionDetected ? "🟢 Eklenti Bağlı (Aktif)" : "⚡ Muavin Eklentisi (.ZIP)"}</span>
+              <Zap className="w-4 h-4 text-emerald-600 fill-emerald-600 animate-pulse" />
+              <span>⚡ Entegre Giriş Asistanı (Sıfır Kurulum)</span>
             </button>
 
             <button
@@ -500,37 +506,62 @@ export const EServices: React.FC<EServicesProps> = ({
 
       {/* Main Form Container (TAB 2 or TAB 3) */}
       <form onSubmit={handleSubmit} className={`space-y-6 ${activeMainTab === "embedded" ? "hidden" : "block"}`}>
-        {/* Quick Portal Launchers Bar & Extension Widget */}
+        {/* Quick Portal Launchers Bar & Integrated Assistant Widget */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-900 to-slate-800 p-3.5 rounded-xl text-white">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 p-4 rounded-2xl text-white border border-emerald-500/20 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold shrink-0">
                 <Zap className="w-4 h-4 fill-emerald-400" />
               </div>
               <div>
                 <div className="text-xs font-bold flex items-center gap-2">
-                  <span>Muavin Chrome / Edge Eklentisi</span>
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded font-mono">
-                    {isExtensionDetected ? "🟢 Aktif" : "Önerilen"}
+                  <span>Muavin Entegre E-İşlem & Giriş Asistanı</span>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold">
+                    ⚡ Sıfır Kurulum (ZIP Yok)
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-400">
-                  Resmi portallarda (GİB, SGK, e-Devlet) kayıtlı şifrelerinizle tek tıkla otomatik oturum açın.
+                <div className="text-[11px] text-slate-300">
+                  Resmi portallarda (GİB, SGK, e-Devlet) kayıtlı şifrelerinizle tek tıkla oturum açın veya site içi gömülü konsolu kullanın.
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveMainTab("embedded")}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs transition cursor-pointer flex items-center gap-1.5 border border-slate-700"
+              >
+                <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Gömülü Konsol</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsExtensionModalOpen(true)}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-extrabold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-900/30"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Eklenti İndir & Kur</span>
+                <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
+                <span>⚡ Giriş Asistanını Aç</span>
               </button>
             </div>
           </div>
+
+          {toastMessage && (
+            <div className="p-3 bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 rounded-xl text-xs font-bold flex items-center justify-between animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <span>{toastMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToastMessage(null)}
+                className="text-emerald-400 hover:text-white text-xs cursor-pointer ml-2"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
             <span className="flex items-center gap-2">
@@ -538,36 +569,46 @@ export const EServices: React.FC<EServicesProps> = ({
               Sık Kullanılan Resmi Kurum ve E-Devlet Portalları
             </span>
             <span className="text-[11px] text-slate-400 font-normal">
-              Portallara gitmek için tıklayınız
+              Portala gitmek için tıklayınız (Kullanıcı kodu otomatik kopyalanır)
             </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <a
-              href="https://dijital.gib.gov.tr"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-red-50/70 border border-slate-200/80 hover:border-red-200 text-slate-700 hover:text-red-700 transition-all group"
+            <button
+              type="button"
+              onClick={() =>
+                handleLaunchPortal(
+                  "https://dijital.gib.gov.tr",
+                  "GİB Dijital Vergi Dairesi",
+                  form.taxCredentials?.userCode || form.taxNumber
+                )
+              }
+              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-red-50/70 border border-slate-200/80 hover:border-red-200 text-slate-700 hover:text-red-700 transition-all group text-left cursor-pointer"
             >
               <div className="truncate">
                 <div className="text-xs font-extrabold truncate">Dijital Vergi Dairesi</div>
                 <div className="text-[10px] text-slate-400 group-hover:text-red-500 truncate">dijital.gib.gov.tr</div>
               </div>
               <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-red-600 shrink-0 ml-1" />
-            </a>
+            </button>
 
-            <a
-              href="https://giris.turkiye.gov.tr/Giris/"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-200/80 hover:border-blue-200 text-slate-700 hover:text-blue-700 transition-all group"
+            <button
+              type="button"
+              onClick={() =>
+                handleLaunchPortal(
+                  "https://giris.turkiye.gov.tr/Giris/",
+                  "e-Devlet Kapısı",
+                  form.eDevletCredentials?.tckn || form.taxNumber
+                )
+              }
+              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-200/80 hover:border-blue-200 text-slate-700 hover:text-blue-700 transition-all group text-left cursor-pointer"
             >
               <div className="truncate">
                 <div className="text-xs font-extrabold truncate">e-Devlet Kapısı</div>
                 <div className="text-[10px] text-slate-400 group-hover:text-blue-500 truncate">turkiye.gov.tr</div>
               </div>
               <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 ml-1" />
-            </a>
+            </button>
 
             <button
               type="button"
@@ -601,31 +642,41 @@ export const EServices: React.FC<EServicesProps> = ({
               <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 ml-1" />
             </button>
 
-            <a
-              href="https://earsivportal.efatura.gov.tr/intragiris.html"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-amber-50/70 border border-slate-200/80 hover:border-amber-200 text-slate-700 hover:text-amber-700 transition-all group"
+            <button
+              type="button"
+              onClick={() =>
+                handleLaunchPortal(
+                  "https://earsivportal.efatura.gov.tr/intragiris.html",
+                  "GİB e-Arşiv Fatura",
+                  form.taxCredentials?.userCode || form.taxNumber
+                )
+              }
+              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-amber-50/70 border border-slate-200/80 hover:border-amber-200 text-slate-700 hover:text-amber-700 transition-all group text-left cursor-pointer"
             >
               <div className="truncate">
                 <div className="text-xs font-extrabold truncate">GİB e-Arşiv Portal</div>
                 <div className="text-[10px] text-slate-400 group-hover:text-amber-500 truncate">earsivportal.gov.tr</div>
               </div>
               <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-600 shrink-0 ml-1" />
-            </a>
+            </button>
 
-            <a
-              href="https://mersis.gtb.gov.tr/"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-purple-50/70 border border-slate-200/80 hover:border-purple-200 text-slate-700 hover:text-purple-700 transition-all group"
+            <button
+              type="button"
+              onClick={() =>
+                handleLaunchPortal(
+                  "https://mersis.gtb.gov.tr/",
+                  "MERSİS Portalı",
+                  form.taxCredentials?.userCode || form.taxNumber
+                )
+              }
+              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-purple-50/70 border border-slate-200/80 hover:border-purple-200 text-slate-700 hover:text-purple-700 transition-all group text-left cursor-pointer"
             >
               <div className="truncate">
                 <div className="text-xs font-extrabold truncate">MERSİS Portalı</div>
                 <div className="text-[10px] text-slate-400 group-hover:text-purple-500 truncate">mersis.gtb.gov.tr</div>
               </div>
               <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 shrink-0 ml-1" />
-            </a>
+            </button>
           </div>
         </div>
 
@@ -1723,6 +1774,15 @@ export const EServices: React.FC<EServicesProps> = ({
         tebligat={selectedTebligat}
         companySettings={form}
         onStatusChange={handleTebligatStatusChange}
+      />
+
+      {/* Entegre E-İşlem & Giriş Asistanı Modalı (Sıfır Kurulum) */}
+      <ExtensionInstallModal
+        isOpen={isExtensionModalOpen}
+        onClose={() => setIsExtensionModalOpen(false)}
+        isExtensionDetected={isExtensionDetected}
+        companySettings={form}
+        onNavigateToEmbedded={() => setActiveMainTab("embedded")}
       />
 
     </div>

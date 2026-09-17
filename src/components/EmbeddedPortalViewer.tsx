@@ -5,6 +5,7 @@ import {
   Branch,
   Warehouse,
 } from "../types";
+import { generatePortalBookmarklet } from "../utils/portalBookmarklet";
 import {
   Globe,
   RefreshCw,
@@ -166,6 +167,8 @@ export const EmbeddedPortalViewer: React.FC<EmbeddedPortalViewerProps> = ({
 
   const activeWorkplace =
     workplaces.find((w) => w.id === selectedSgkWorkplaceId) || workplaces[0];
+
+  const { bookmarkletHref } = generatePortalBookmarklet(companySettings);
 
   // Listen for bridge autofill response from iframe
   useEffect(() => {
@@ -546,6 +549,21 @@ export const EmbeddedPortalViewer: React.FC<EmbeddedPortalViewerProps> = ({
                 {showPasswordText ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 <span>{showPasswordText ? "Gizle" : "Şifreleri Göster"}</span>
               </button>
+
+              {/* Draggable Zero-Zip Bookmarklet */}
+              <a
+                href={bookmarkletHref}
+                onClick={(e) => {
+                  e.preventDefault();
+                  alert("💡 Bu butonu farenizle basılı tutup yukarıdaki Tarayıcı Yer İmleri (Favoriler) çubuğunuza sürükleyin. Resmi portallara girdiğinizde favorilerdeki bu butona tıklayarak şifrelerinizi tek tıkla doldurabilirsiniz!");
+                }}
+                draggable="true"
+                className="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-black text-[11px] rounded-lg shadow-sm flex items-center gap-1 cursor-grab select-none transition"
+                title="Farenizle yukarıdaki Yer İmleri (Favoriler) çubuğunuza sürükleyip bırakın (ZIP gerektirmez)"
+              >
+                <Zap className="w-3 h-3 fill-slate-950" />
+                <span>⚡ Şifre Doldurucu (Favorilere Sürükle)</span>
+              </a>
 
               {/* Local simulator modal shortcut button */}
               {activePortal.category === "gib" && onOpenGibModal && (
