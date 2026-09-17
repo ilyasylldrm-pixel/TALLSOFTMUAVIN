@@ -1783,7 +1783,27 @@ export const EServices: React.FC<EServicesProps> = ({
         isExtensionDetected={isExtensionDetected}
         companySettings={form}
         onNavigateToEmbedded={() => setActiveMainTab("embedded")}
+        onOpenGibModal={() => setIsGibModalOpen(true)}
+        onOpenSgkModal={openSgkModal}
       />
+
+      {/* Ekran İçi Canlı E-İşlem Asistanı Butonu (Floating Widget) */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <button
+          type="button"
+          onClick={() => setIsExtensionModalOpen(true)}
+          className="group px-4 py-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-black text-xs rounded-2xl shadow-2xl shadow-emerald-950/60 border border-emerald-300/40 flex items-center gap-2.5 cursor-pointer transition transform hover:scale-105 active:scale-95"
+          title="Muavin Entegre E-İşlem ve Portallar Asistanı"
+        >
+          <div className="w-5 h-5 rounded-lg bg-slate-950 text-emerald-400 flex items-center justify-center text-xs font-black shadow-inner">
+            ⚡
+          </div>
+          <span className="text-white font-extrabold tracking-tight drop-shadow-xs">
+            E-İşlem Asistanı
+          </span>
+          <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping group-hover:hidden" />
+        </button>
+      </div>
 
     </div>
   );

@@ -91,24 +91,25 @@ const AUTOFILL_BRIDGE_SCRIPT = `
   bar.style.background = "#0f172a";
   bar.style.color = "#34d399";
   bar.style.border = "1px solid #059669";
-  bar.style.padding = "6px 12px";
+  bar.style.padding = "7px 14px";
   bar.style.borderRadius = "12px";
   bar.style.fontSize = "11px";
   bar.style.fontWeight = "bold";
-  bar.style.fontFamily = "sans-serif";
-  bar.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)";
+  bar.style.fontFamily = "system-ui, -apple-system, sans-serif";
+  bar.style.boxShadow = "0 8px 24px rgba(0,0,0,0.4)";
   bar.style.display = "flex";
   bar.style.alignItems = "center";
-  bar.style.gap = "6px";
+  bar.style.gap = "8px";
   bar.style.cursor = "pointer";
-  bar.innerHTML = "⚡ Muavin Köprüsü Aktif";
+  bar.style.transition = "all 0.2s ease";
+  bar.innerHTML = "⚡ Muavin Entegre Köprüsü Aktif";
   document.body.appendChild(bar);
 
   function setFieldValue(selectors, val) {
     if (!val) return false;
     for (var i = 0; i < selectors.length; i++) {
       var el = document.querySelector(selectors[i]);
-      if (el) {
+      if (el && el.offsetParent !== null) {
         el.value = val;
         el.dispatchEvent(new Event("input", { bubbles: true }));
         el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -121,47 +122,100 @@ const AUTOFILL_BRIDGE_SCRIPT = `
     return false;
   }
 
-  window.addEventListener("message", function(event) {
-    if (!event.data || event.data.type !== "MUAVIN_AUTOFILL") return;
-    var data = event.data.payload || {};
+  function executeAutoFill(data) {
+    if (!data) return 0;
     var filledCount = 0;
 
+    var taxCreds = data.taxCredentials || {};
+    var sgkCreds = data.sgkCredentials || {};
+    var activeWp = (sgkCreds.workplaces && sgkCreds.workplaces[0]) || sgkCreds;
+    var edevlet = data.eDevletCredentials || {};
+
     // GİB Fields
-    if (setFieldValue(['input[name="kullaniciKodu"]', 'input[id*="kullanici"]', 'input[name="username"]', 'input[name="userid"]', '#userid', '#kullaniciKodu'], data.userCode || data.taxNumber)) filledCount++;
-    if (setFieldValue(['input[name="parola"]', 'input[id*="parola"]', 'input[name="password"]', '#password', '#parola', 'input[type="password"]'], data.password)) filledCount++;
-    if (setFieldValue(['input[name="sifre"]', 'input[id*="sifre"]', 'input[name="codeSecret"]', '#sifre', '#codeSecret'], data.codeSecret)) filledCount++;
+    var userCode = data.userCode || taxCreds.userCode || data.taxNumber || "";
+    var password = data.password || taxCreds.password || "";
+    var codeSecret = data.codeSecret || taxCreds.codeSecret || "";
+
+    if (setFieldValue(['input[name="kullaniciKodu"]', 'input[id*="kullanici"]', 'input[name="username"]', 'input[name="userid"]', '#userid', '#kullaniciKodu'], userCode)) filledCount++;
+    if (setFieldValue(['input[name="parola"]', 'input[id*="parola"]', 'input[name="password"]', '#password', '#parola', 'input[type="password"]'], password)) filledCount++;
+    if (setFieldValue(['input[name="sifre"]', 'input[id*="sifre"]', 'input[name="codeSecret"]', '#sifre', '#codeSecret'], codeSecret)) filledCount++;
 
     // SGK Fields
-    if (setFieldValue(['input[name="isyeriKodu"]', 'input[id*="isyeriKodu"]', '#isyeriKodu'], data.workplaceCode)) filledCount++;
-    if (setFieldValue(['input[name="sistemSifresi"]', 'input[id*="sistemSifresi"]', '#sistemSifresi'], data.systemPassword)) filledCount++;
-    if (setFieldValue(['input[name="isyeriSifresi"]', 'input[id*="isyeriSifresi"]', '#isyeriSifresi'], data.workplacePassword)) filledCount++;
-    if (setFieldValue(['input[name="isyeriSicil"]', 'input[id*="isyeriSicil"]', '#isyeriSicil'], data.workplaceRegistrationNo)) filledCount++;
+    var sgkUser = data.userCode || activeWp.userCode || sgkCreds.userCode || "";
+    var wpCode = data.workplaceCode || activeWp.workplaceCode || "000";
+    var sysPass = data.systemPassword || activeWp.systemPassword || sgkCreds.systemPassword || "";
+    var wpPass = data.workplacePassword || activeWp.workplacePassword || sgkCreds.workplacePassword || "";
+    var wpSicil = data.workplaceRegistrationNo || activeWp.workplaceRegistrationNo || "";
+
+    if (setFieldValue(['input[name="kullaniciKodu"]', '#kullaniciKodu'], sgkUser)) filledCount++;
+    if (setFieldValue(['input[name="isyeriKodu"]', 'input[id*="isyeriKodu"]', '#isyeriKodu'], wpCode)) filledCount++;
+    if (setFieldValue(['input[name="sistemSifresi"]', 'input[id*="sistemSifresi"]', '#sistemSifresi'], sysPass)) filledCount++;
+    if (setFieldValue(['input[name="isyeriSifresi"]', 'input[id*="isyeriSifresi"]', '#isyeriSifresi'], wpPass)) filledCount++;
+    if (setFieldValue(['input[name="isyeriSicil"]', 'input[id*="isyeriSicil"]', '#isyeriSicil'], wpSicil)) filledCount++;
 
     // e-Devlet Fields
-    if (setFieldValue(['#tridfield', 'input[name="tridfield"]', 'input[id*="trid"]'], data.tckn || data.userCode)) filledCount++;
-    if (setFieldValue(['#egpField', 'input[name="egpField"]', 'input[id*="egp"]'], data.eDevletPassword)) filledCount++;
+    var tckn = data.tckn || edevlet.tckn || data.taxNumber || "";
+    var edevPass = data.eDevletPassword || edevlet.password || "";
+    if (setFieldValue(['#tridfield', 'input[name="tridfield"]', 'input[id*="trid"]'], tckn)) filledCount++;
+    if (setFieldValue(['#egpField', 'input[name="egpField"]', 'input[id*="egp"]'], edevPass)) filledCount++;
 
     // MERSİS Fields
-    if (setFieldValue(['#UserName', 'input[name="UserName"]'], data.userCode)) filledCount++;
-    if (setFieldValue(['#Password', 'input[name="Password"]'], data.password)) filledCount++;
+    if (setFieldValue(['#UserName', 'input[name="UserName"]'], userCode)) filledCount++;
+    if (setFieldValue(['#Password', 'input[name="Password"]'], password)) filledCount++;
 
-    bar.innerHTML = "✅ " + filledCount + " Alan Otomatik Dolduruldu";
-    bar.style.background = "#064e3b";
-    bar.style.color = "#a7f3d0";
-    setTimeout(function() {
-      bar.innerHTML = "⚡ Muavin Köprüsü Aktif";
-      bar.style.background = "#0f172a";
-      bar.style.color = "#34d399";
-    }, 4000);
+    if (filledCount > 0) {
+      bar.innerHTML = "✅ " + filledCount + " Alan Otomatik Dolduruldu";
+      bar.style.background = "#064e3b";
+      bar.style.color = "#a7f3d0";
+      setTimeout(function() {
+        bar.innerHTML = "⚡ Muavin Entegre Köprüsü Aktif";
+        bar.style.background = "#0f172a";
+        bar.style.color = "#34d399";
+      }, 4000);
+    }
 
-    // Try focusing on captcha if present
     var captcha = document.querySelector('input[name*="guvenlik"], input[id*="captcha"], input[name*="captcha"], input[id*="guvenlik"]');
     if (captcha) {
       captcha.focus();
     }
 
+    return filledCount;
+  }
+
+  // Auto-fetch credentials from backend on frame load
+  try {
+    fetch("/api/extension/credentials")
+      .then(function(res) { return res.json(); })
+      .then(function(json) {
+        if (json && json.data) {
+          setTimeout(function() { executeAutoFill(json.data); }, 600);
+          setTimeout(function() { executeAutoFill(json.data); }, 1800);
+        }
+      })
+      .catch(function() {});
+  } catch (e) {}
+
+  // Bar click trigger
+  bar.addEventListener("click", function() {
+    fetch("/api/extension/credentials")
+      .then(function(res) { return res.json(); })
+      .then(function(json) {
+        if (json && json.data) {
+          var count = executeAutoFill(json.data);
+          if (count === 0) {
+            bar.innerHTML = "⚠️ Form alanı bulunamadı";
+            setTimeout(function() { bar.innerHTML = "⚡ Muavin Entegre Köprüsü Aktif"; }, 3000);
+          }
+        }
+      })
+      .catch(function() {});
+  });
+
+  window.addEventListener("message", function(event) {
+    if (!event.data || event.data.type !== "MUAVIN_AUTOFILL") return;
+    var count = executeAutoFill(event.data.payload || {});
     if (window.parent) {
-      window.parent.postMessage({ type: "MUAVIN_AUTOFILL_SUCCESS", filledCount: filledCount }, "*");
+      window.parent.postMessage({ type: "MUAVIN_AUTOFILL_SUCCESS", filledCount: count }, "*");
     }
   });
 })();
