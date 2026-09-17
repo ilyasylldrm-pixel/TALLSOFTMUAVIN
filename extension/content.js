@@ -61,20 +61,21 @@
   // ==========================================
   // Şirket şifrelerini background storage'dan çek
   chrome.runtime.sendMessage({ action: "GET_CREDENTIALS" }, (response) => {
-    if (!response || !response.companyData) {
-      console.log("⚠️ Muavin: Senkronize edilmiş şirket şifresi bulunamadı. Lütfen önce Muavin uygulamasını açın.");
+    if (!response || !response.authToken || !response.companyData) {
+      console.log("⚠️ Muavin: Eklentiye henüz giriş yapılmamış. Lütfen eklenti simgesine tıklayıp Tallsoft hesabınızla giriş yapın.");
       renderFloatingWidget(null);
       return;
     }
 
     const company = response.companyData;
-    console.log("✅ Muavin: Aktif şirket şifreleri hazır:", company.companyName);
+    const selectedWpId = response.selectedWpId;
+    console.log("✅ Muavin: Aktif şirket şifreleri hazır:", company.companyTitle || company.companyName);
 
-    renderFloatingWidget(company);
+    renderFloatingWidget(company, selectedWpId);
 
     // Sayfa yeni açıldığında otomatik doldurmayı dene
     setTimeout(() => {
-      autoFillPortal(company, false);
+      autoFillPortal(company, selectedWpId, false);
     }, 800);
   });
 
@@ -96,7 +97,7 @@
     return false;
   }
 
-  function autoFillPortal(company, userClicked = false) {
+  function autoFillPortal(company, selectedWpId, userClicked = false) {
     let filledCount = 0;
 
     // GİB Dijital / İVD / e-Arşiv Seçicileri
@@ -104,8 +105,10 @@
     if (fillField(['input[name="parola"]', 'input[id*="parola"]', 'input[name="password"]', '#password', '#parola', 'input[type="password"]'], company.taxCredentials?.password)) filledCount++;
     if (fillField(['input[name="sifre"]', 'input[id*="sifre"]', 'input[name="codeSecret"]', '#sifre', '#codeSecret'], company.taxCredentials?.codeSecret)) filledCount++;
 
-    // SGK İşveren & e-Bildirge Seçicileri
-    const activeWp = company.sgkCredentials?.workplaces?.[0] || company.sgkCredentials || {};
+    // SGK İşveren & e-Bildirge Seçicileri (İlgili işyerini bul)
+    const workplaces = company.sgkCredentials?.workplaces || [];
+    const activeWp = (selectedWpId && workplaces.find(w => w.id === selectedWpId)) || workplaces[0] || company.sgkCredentials || {};
+
     if (fillField(['input[name="kullaniciKodu"]', '#kullaniciKodu'], activeWp.userCode || company.sgkCredentials?.userCode)) filledCount++;
     if (fillField(['input[name="isyeriKodu"]', '#isyeriKodu'], activeWp.workplaceCode || "000")) filledCount++;
     if (fillField(['input[name="sistemSifresi"]', '#sistemSifresi'], activeWp.systemPassword || company.sgkCredentials?.systemPassword)) filledCount++;
@@ -141,7 +144,7 @@
   }
 
   // Floating Widget Oluşturucu
-  function renderFloatingWidget(company) {
+  function renderFloatingWidget(company, selectedWpId) {
     if (document.getElementById("muavin-floating-root")) return;
 
     const root = document.createElement("div");
@@ -154,11 +157,11 @@
     root.style.boxShadow = "0 10px 30px -5px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1)";
     root.style.background = "#0f172a";
     root.style.color = "#f8fafc";
-    root.style.padding = "12px 16px";
-    root.style.borderRadius = "18px";
+    root.style.padding = "10px 14px";
+    root.style.borderRadius = "16px";
     root.style.display = "flex";
     root.style.alignItems = "center";
-    root.style.gap = "12px";
+    root.style.gap = "10px";
     root.style.backdropFilter = "blur(12px)";
     root.style.border = "1px solid #1e293b";
     root.style.transition = "all 0.2s ease";
@@ -166,10 +169,10 @@
     if (!company) {
       root.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:18px;">⚡</span>
+          <span style="font-size:18px;">🔐</span>
           <div>
-            <div style="font-size:12px;font-weight:800;color:#f8fafc;">Muavin Eklentisi</div>
-            <div style="font-size:10px;color:#94a3b8;">Muavin'i açarak şifreleri eşleyin</div>
+            <div style="font-size:11px;font-weight:800;color:#f8fafc;">Muavin Eklentisi</div>
+            <div style="font-size:10px;color:#fbbf24;">Tallsoft hesabınızla giriş yapın</div>
           </div>
         </div>
       `;
@@ -177,16 +180,16 @@
       return;
     }
 
-    const companyTitle = company.companyName || "Şirketim";
+    const companyTitle = company.companyTitle || company.companyName || "Şirketim";
     const vkn = company.taxNumber ? `(VKN: ${company.taxNumber})` : "";
 
     root.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg, #10b981, #0d9488);display:flex;align-items:center;justify-content:center;color:#0f172a;font-weight:900;font-size:16px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg, #10b981, #0d9488);display:flex;align-items:center;justify-content:center;color:#0f172a;font-weight:900;font-size:15px;">
           ⚡
         </div>
         <div>
-          <div style="font-size:12px;font-weight:800;color:#ffffff;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          <div style="font-size:11px;font-weight:800;color:#ffffff;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             ${companyTitle}
           </div>
           <div id="muavin-widget-status" style="font-size:10px;font-weight:700;color:#34d399;">
@@ -195,7 +198,7 @@
         </div>
       </div>
 
-      <button id="muavin-btn-autofill" style="background:#10b981;color:#0f172a;border:none;padding:7px 14px;border-radius:10px;font-size:11px;font-weight:900;cursor:pointer;display:flex;align-items:center;gap:5px;transition:background 0.2s;">
+      <button id="muavin-btn-autofill" style="background:#10b981;color:#0f172a;border:none;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:900;cursor:pointer;display:flex;align-items:center;gap:4px;transition:background 0.2s;">
         <span>Doldur</span> ⚡
       </button>
     `;
@@ -205,7 +208,7 @@
     const btn = document.getElementById("muavin-btn-autofill");
     if (btn) {
       btn.addEventListener("click", () => {
-        autoFillPortal(company, true);
+        autoFillPortal(company, selectedWpId, true);
       });
       btn.addEventListener("mouseenter", () => (btn.style.background = "#34d399"));
       btn.addEventListener("mouseleave", () => (btn.style.background = "#10b981"));

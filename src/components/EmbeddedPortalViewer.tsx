@@ -29,6 +29,7 @@ import {
   FileText,
   CreditCard,
   ChevronDown,
+  Download,
 } from "lucide-react";
 
 export interface EmbeddedPortalViewerProps {
@@ -40,6 +41,7 @@ export interface EmbeddedPortalViewerProps {
   onOpenGibModal?: () => void;
   onOpenSgkModal?: (portal: "isveren" | "ebildirgev2") => void;
   onOpenTebligatModal?: () => void;
+  onOpenExtensionModal?: () => void;
 }
 
 export interface PortalTabItem {
@@ -135,6 +137,7 @@ export const EmbeddedPortalViewer: React.FC<EmbeddedPortalViewerProps> = ({
   onOpenGibModal,
   onOpenSgkModal,
   onOpenTebligatModal,
+  onOpenExtensionModal,
 }) => {
   const [internalPortalId, setInternalPortalId] = useState<string>(controlledPortalId || "gib_dijital");
 
@@ -314,6 +317,19 @@ export const EmbeddedPortalViewer: React.FC<EmbeddedPortalViewerProps> = ({
               >
                 <Sparkles className="w-4 h-4 text-blue-200" />
                 <span>🏢 SGK Resmi Belgeler</span>
+              </button>
+            )}
+
+            {/* Extension (.ZIP) Modal Shortcut */}
+            {onOpenExtensionModal && (
+              <button
+                type="button"
+                onClick={onOpenExtensionModal}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-purple-300 rounded-xl font-bold text-xs border border-purple-500/30 transition cursor-pointer"
+                title="Chrome Eklentisini İndir & Kurulum Rehberi"
+              >
+                <Download className="w-3.5 h-3.5 text-purple-400" />
+                <span className="hidden md:inline">Eklenti (.ZIP)</span>
               </button>
             )}
 

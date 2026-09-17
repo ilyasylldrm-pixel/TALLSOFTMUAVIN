@@ -21,6 +21,7 @@ import {
   CreditCard,
   Eye,
   EyeOff,
+  Download,
 } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { CompanySettings, WorkplaceSgkCredential } from "../types";
@@ -43,7 +44,7 @@ export const ExtensionInstallModal: React.FC<ExtensionInstallModalProps> = ({
   onOpenGibModal,
   onOpenSgkModal,
 }) => {
-  const [activeTab, setActiveTab] = useState<"portals" | "credentials" | "workplaces">("portals");
+  const [activeTab, setActiveTab] = useState<"extension" | "portals" | "credentials" | "workplaces">("extension");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState(false);
   const [selectedWpId, setSelectedWpId] = useState<string>("");
@@ -193,6 +194,19 @@ export const ExtensionInstallModal: React.FC<ExtensionInstallModalProps> = ({
         <div className="flex border-b border-slate-200 bg-slate-50/80 px-6 pt-3 gap-2 overflow-x-auto">
           <button
             type="button"
+            onClick={() => setActiveTab("extension")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition cursor-pointer border-b-2 ${
+              activeTab === "extension"
+                ? "bg-white text-purple-700 border-purple-600 shadow-2xs"
+                : "text-slate-600 border-transparent hover:text-slate-900"
+            }`}
+          >
+            <Download className="w-4 h-4 text-purple-600" />
+            <span>📦 Chrome Eklentisi (.ZIP)</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab("portals")}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition cursor-pointer border-b-2 ${
               activeTab === "portals"
@@ -233,6 +247,168 @@ export const ExtensionInstallModal: React.FC<ExtensionInstallModalProps> = ({
 
         {/* MODAL BODY */}
         <div className="p-6 overflow-y-auto space-y-6 text-xs text-slate-700">
+          {/* TAB 0: CHROME EXTENSION DOWNLOAD & SETUP */}
+          {activeTab === "extension" && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Top Banner */}
+              <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 rounded-2xl p-5 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-purple-500/30 shadow-md">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-500/30 text-purple-200 border border-purple-400/40">
+                      v1.2 Manifest V3
+                    </span>
+                    <h3 className="text-base font-extrabold text-white tracking-tight">
+                      Muavin - Resmi Portallar ve E-İşlem Asistanı Eklentisi
+                    </h3>
+                  </div>
+                  <p className="text-xs text-purple-200 max-w-2xl leading-relaxed">
+                    Eklentiyi Chrome tarayıcınıza yükleyin ve Tallsoft kullanıcı adı ve şifrenizle giriş yapın. Kayıtlı şirket şifreleriniz Tallsoft API'sinden anında çekilir ve GİB, SGK, e-Arşiv, e-Devlet portallarında otomatik doldurulur.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 w-full md:w-auto">
+                  <a
+                    href="/api/extension/download-zip"
+                    download="muavin-eklenti.zip"
+                    className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 fill-slate-950" />
+                    <span>📥 Eklentiyi İndir (.ZIP)</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/extension/sync", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(effectiveSettings),
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          setToastMessage("✅ Şirket şifreleri Tallsoft API'sine senkronize edildi!");
+                        } else {
+                          setToastMessage("⚠️ Senkronizasyon uyarısı: " + (data.error || ""));
+                        }
+                      } catch (err: any) {
+                        setToastMessage("⚠️ API bağlantı hatası: " + err?.message);
+                      }
+                      setTimeout(() => setToastMessage(null), 4000);
+                    }}
+                    className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                    <span>🔄 Şifreleri API'ye Gönder</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4-Step Installation Visual Cards */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  4 Adımda Hızlı Kurulum & Kullanım Rehberi
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  {/* Step 1 */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-2xs">
+                    <div>
+                      <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 font-black flex items-center justify-center text-xs mb-2">
+                        1
+                      </div>
+                      <h5 className="font-extrabold text-slate-900 text-xs mb-1">ZIP İndir ve Çıkart</h5>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Yukarıdaki <strong>"📥 Eklentiyi İndir"</strong> butonuna basıp inen <code>muavin-eklenti.zip</code> dosyasını masaüstüne veya bir klasöre ayıklayın.
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-lg border border-purple-100">
+                      📦 Klasöre Ayıkla
+                    </span>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-2xs">
+                    <div>
+                      <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 font-black flex items-center justify-center text-xs mb-2">
+                        2
+                      </div>
+                      <h5 className="font-extrabold text-slate-900 text-xs mb-1">Chrome Uzantılar Sayfası</h5>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Chrome adres çubuğuna <code>chrome://extensions</code> yazıp açın veya sağ üstteki üç nokta menüsünden Uzantılar &gt; Uzantıları Yönet yolunu izleyin.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy("chrome://extensions", "ext_url", "Uzantılar adresi")}
+                      className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg border border-blue-100 flex items-center justify-between cursor-pointer"
+                    >
+                      <span>chrome://extensions</span>
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-2xs">
+                    <div>
+                      <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 font-black flex items-center justify-center text-xs mb-2">
+                        3
+                      </div>
+                      <h5 className="font-extrabold text-slate-900 text-xs mb-1">Geliştirici Modu & Yükle</h5>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Sağ üst köşedeki <strong>"Geliştirici Modu"</strong> anahtarını açın. Sol üstte çıkan <strong>"Paketlenmemiş öğe yükle"</strong> butonuna basıp klasörü seçin.
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-100">
+                      ⚡ Paketlenmemiş Yükle
+                    </span>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-2xs">
+                    <div>
+                      <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 font-black flex items-center justify-center text-xs mb-2">
+                        4
+                      </div>
+                      <h5 className="font-extrabold text-slate-900 text-xs mb-1">Giriş Yap & Doldur</h5>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Eklenti simgesine tıklayıp Tallsoft kullanıcı adı ve şifrenizle oturum açın. Şifreler otomatik çekilir ve tüm resmi sitelerde formlar doldurulur!
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                      🚀 Otomatik Doldurma Hazır
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status and Diagnostics */}
+              <div className="bg-slate-900 text-white rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-extrabold text-white flex items-center gap-2">
+                      <span>Eklenti API Servisi:</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        🟢 Canlı & Dinlemede
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Sunucu Uç Noktası: <code className="text-emerald-400">/api/extension/login</code> • Şifre Deposu: <code className="text-emerald-400">data/company_settings.json</code>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-300">
+                    Kayıtlı Şirket: <strong className="text-white">{effectiveSettings.companyName}</strong> ({effectiveSettings.taxNumber})
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
           {/* TAB 1: QUICK PORTAL LAUNCHERS */}
           {activeTab === "portals" && (
             <div className="space-y-4 animate-fadeIn">

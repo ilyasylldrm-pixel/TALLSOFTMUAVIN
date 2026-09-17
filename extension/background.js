@@ -19,11 +19,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "GET_CREDENTIALS") {
-    chrome.storage.local.get(["companyData", "lastSynced"], (result) => {
+    chrome.storage.local.get(["companyData", "lastSynced", "authToken", "user", "selectedWpId"], (result) => {
       sendResponse({
         success: true,
         companyData: result.companyData || null,
         lastSynced: result.lastSynced || null,
+        authToken: result.authToken || null,
+        user: result.user || null,
+        selectedWpId: result.selectedWpId || null,
       });
     });
     return true;

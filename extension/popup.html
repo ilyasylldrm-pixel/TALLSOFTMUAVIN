@@ -14,93 +14,166 @@
         <span class="logo-icon">⚡</span>
         <div>
           <h1 class="title">Muavin Asistanı</h1>
-          <p class="subtitle">Resmi E-İşlem & Giriş Köprüsü</p>
+          <p class="subtitle">Tallsoft E-İşlem & Giriş Köprüsü</p>
         </div>
       </div>
-      <span class="version-badge">v1.0</span>
+      <span class="version-badge">v1.2</span>
     </header>
 
-    <!-- ACTIVE COMPANY CARD -->
-    <section class="card" id="company-card">
-      <div class="card-header">
-        <span class="badge-status" id="status-badge">🟢 Eşlendi</span>
-        <span class="text-muted" id="last-synced">Az önce</span>
+    <!-- VIEW 1: LOGIN VIEW -->
+    <div id="view-login" class="view-section">
+      <div class="login-banner">
+        <span class="login-banner-icon">🔐</span>
+        <div>
+          <h3 class="login-banner-title">Hesabınızla Giriş Yapın</h3>
+          <p class="login-banner-desc">Tallsoft hesabınızla giriş yaparak kayıtlı vergi ve SGK şifrelerinizi otomatik çekin.</p>
+        </div>
       </div>
-      <div class="company-info">
-        <h2 class="company-name" id="company-name">Şirket Yükleniyor...</h2>
-        <p class="company-vkn" id="company-vkn">VKN: —</p>
-      </div>
-    </section>
 
-    <!-- QUICK PORTAL LAUNCHERS -->
-    <section class="section-portals">
-      <div class="section-title">Tek Tıkla Portala Git & Giriş Yap</div>
-      <div class="portals-grid">
-        <button class="portal-btn" data-url="https://dijital.gib.gov.tr" data-type="gib_dijital">
-          <span class="portal-icon">🏛️</span>
-          <div class="portal-text">
-            <span class="portal-name">Dijital Vergi Dairesi</span>
-            <span class="portal-sub">GİB & İVD</span>
+      <form id="form-login" class="login-form">
+        <div class="form-group">
+          <label for="input-email" class="form-label">Kullanıcı Adı veya E-Posta</label>
+          <input
+            type="text"
+            id="input-email"
+            class="form-input"
+            placeholder="admin@tallsoft.org veya kullanıcı adı"
+            required
+            autocomplete="username"
+          />
+        </div>
+
+        <div class="form-group">
+          <div class="form-label-row">
+            <label for="input-password" class="form-label">Şifre</label>
+            <button type="button" id="btn-toggle-password" class="btn-text">Göster</button>
           </div>
-          <span class="portal-arrow">→</span>
-        </button>
+          <input
+            type="password"
+            id="input-password"
+            class="form-input"
+            placeholder="••••••••"
+            required
+            autocomplete="current-password"
+          />
+        </div>
 
-        <button class="portal-btn" data-url="https://earsivportal.efatura.gov.tr/intragiris.html" data-type="gib_earsiv">
-          <span class="portal-icon">📄</span>
-          <div class="portal-text">
-            <span class="portal-name">GİB e-Arşiv Fatura</span>
-            <span class="portal-sub">5.000 / 30.000</span>
+        <div class="form-group">
+          <label for="input-server" class="form-label">Tallsoft Sunucu Adresi</label>
+          <input
+            type="text"
+            id="input-server"
+            class="form-input"
+            value="https://tallsoft.org"
+          />
+          <div class="server-chips">
+            <button type="button" class="server-chip" data-url="https://tallsoft.org">Canlı (tallsoft.org)</button>
+            <button type="button" class="server-chip" data-url="http://localhost:3000">Yerel (localhost)</button>
           </div>
-          <span class="portal-arrow">→</span>
-        </button>
+        </div>
 
-        <button class="portal-btn" data-url="https://uyg.sgk.gov.tr/IsverenSistemi" data-type="sgk_isveren">
-          <span class="portal-icon">🏢</span>
-          <div class="portal-text">
-            <span class="portal-name">SGK İşveren Sistemi</span>
-            <span class="portal-sub">İşveren / Teşvik</span>
-          </div>
-          <span class="portal-arrow">→</span>
-        </button>
+        <div id="login-error" class="login-error" style="display: none;"></div>
 
-        <button class="portal-btn" data-url="https://ebildirge.sgk.gov.tr/EBildirgeV2" data-type="sgk_ebildirge">
-          <span class="portal-icon">📋</span>
-          <div class="portal-text">
-            <span class="portal-name">SGK e-Bildirge v2</span>
-            <span class="portal-sub">MUHSGK & Prim</span>
-          </div>
-          <span class="portal-arrow">→</span>
+        <button type="submit" id="btn-login" class="btn-primary btn-block">
+          <span id="btn-login-text">🚀 Giriş Yap ve Şifreleri Çek</span>
+          <span id="btn-login-spinner" class="spinner" style="display: none;"></span>
         </button>
+      </form>
+    </div>
 
-        <button class="portal-btn" data-url="https://giris.turkiye.gov.tr/Giris/" data-type="edevlet">
-          <span class="portal-icon">🇹🇷</span>
-          <div class="portal-text">
-            <span class="portal-name">e-Devlet Kapısı</span>
-            <span class="portal-sub">Kurumsal Giriş</span>
-          </div>
-          <span class="portal-arrow">→</span>
+    <!-- VIEW 2: DASHBOARD VIEW (AUTHENTICATED) -->
+    <div id="view-dashboard" class="view-section" style="display: none;">
+      <!-- ACTIVE COMPANY CARD -->
+      <section class="card" id="company-card">
+        <div class="card-header">
+          <span class="badge-status" id="status-badge">🟢 Bağlandı</span>
+          <span class="text-muted" id="user-display">👤 Kullanıcı</span>
+        </div>
+        <div class="company-info">
+          <h2 class="company-name" id="company-name">Şirket Yükleniyor...</h2>
+          <p class="company-vkn" id="company-vkn">VKN: —</p>
+        </div>
+
+        <!-- SGK Workplace Selector (if multi workplace) -->
+        <div id="workplace-container" class="wp-selector" style="display: none;">
+          <label for="select-workplace" class="wp-label">SGK İşyeri:</label>
+          <select id="select-workplace" class="wp-select"></select>
+        </div>
+      </section>
+
+      <!-- QUICK PORTAL LAUNCHERS -->
+      <section class="section-portals">
+        <div class="section-title">Tek Tıkla Portala Git & Otomatik Doldur</div>
+        <div class="portals-grid">
+          <button class="portal-btn" data-url="https://dijital.gib.gov.tr" data-type="gib_dijital">
+            <span class="portal-icon">🏛️</span>
+            <div class="portal-text">
+              <span class="portal-name">Dijital Vergi Dairesi</span>
+              <span class="portal-sub">GİB & İVD Girişi</span>
+            </div>
+            <span class="portal-arrow">→</span>
+          </button>
+
+          <button class="portal-btn" data-url="https://earsivportal.efatura.gov.tr/intragiris.html" data-type="gib_earsiv">
+            <span class="portal-icon">📄</span>
+            <div class="portal-text">
+              <span class="portal-name">GİB e-Arşiv Fatura</span>
+              <span class="portal-sub">5.000 / 30.000 Portal</span>
+            </div>
+            <span class="portal-arrow">→</span>
+          </button>
+
+          <button class="portal-btn" data-url="https://uyg.sgk.gov.tr/IsverenSistemi" data-type="sgk_isveren">
+            <span class="portal-icon">🏢</span>
+            <div class="portal-text">
+              <span class="portal-name">SGK İşveren Sistemi</span>
+              <span class="portal-sub">İşveren / Teşvik</span>
+            </div>
+            <span class="portal-arrow">→</span>
+          </button>
+
+          <button class="portal-btn" data-url="https://ebildirge.sgk.gov.tr/EBildirgeV2" data-type="sgk_ebildirge">
+            <span class="portal-icon">📋</span>
+            <div class="portal-text">
+              <span class="portal-name">SGK e-Bildirge v2</span>
+              <span class="portal-sub">MUHSGK & Prim</span>
+            </div>
+            <span class="portal-arrow">→</span>
+          </button>
+
+          <button class="portal-btn" data-url="https://giris.turkiye.gov.tr/Giris/" data-type="edevlet">
+            <span class="portal-icon">🇹🇷</span>
+            <div class="portal-text">
+              <span class="portal-name">e-Devlet Kapısı</span>
+              <span class="portal-sub">Kurumsal Giriş</span>
+            </div>
+            <span class="portal-arrow">→</span>
+          </button>
+
+          <button class="portal-btn" data-url="https://mersis.gtb.gov.tr/" data-type="mersis">
+            <span class="portal-icon">🏛️</span>
+            <div class="portal-text">
+              <span class="portal-name">Ticaret MERSİS</span>
+              <span class="portal-sub">Merkezi Sicil Kayıt</span>
+            </div>
+            <span class="portal-arrow">→</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- FOOTER ACTIONS -->
+      <footer class="footer">
+        <button id="btn-sync" class="btn-primary" title="Tallsoft sunucusundan güncel şifreleri çek">
+          🔄 Şifreleri Yenile
         </button>
-
-        <button class="portal-btn" data-url="https://mersis.gtb.gov.tr/" data-type="mersis">
-          <span class="portal-icon">🏛️</span>
-          <div class="portal-text">
-            <span class="portal-name">Ticaret MERSİS</span>
-            <span class="portal-sub">Ticaret Sicil</span>
-          </div>
-          <span class="portal-arrow">→</span>
+        <button id="btn-open-muavin" class="btn-secondary" title="Tallsoft Web Uygulamasına Git">
+          🖥️ Web
         </button>
-      </div>
-    </section>
-
-    <!-- FOOTER -->
-    <footer class="footer">
-      <button id="btn-open-muavin" class="btn-secondary">
-        🖥️ Muavin'e Git
-      </button>
-      <button id="btn-sync" class="btn-primary">
-        🔄 Şifreleri Eşle
-      </button>
-    </footer>
+        <button id="btn-logout" class="btn-danger" title="Oturumu Kapat">
+          🚪 Çıkış
+        </button>
+      </footer>
+    </div>
   </div>
 
   <script src="popup.js"></script>

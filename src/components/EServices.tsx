@@ -4,6 +4,7 @@ import { GibPortalModal } from "./GibPortalModal";
 import { SgkPortalModal } from "./SgkPortalModal";
 import { ETebligatModal } from "./ETebligatModal";
 import { EmbeddedPortalViewer } from "./EmbeddedPortalViewer";
+import { ExtensionInstallModal } from "./ExtensionInstallModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import {
@@ -91,6 +92,7 @@ export const EServices: React.FC<EServicesProps> = ({
   const [showEDevletPasswords, setShowEDevletPasswords] = useState(false);
   const [isGibModalOpen, setIsGibModalOpen] = useState(false);
   const [isSgkModalOpen, setIsSgkModalOpen] = useState(false);
+  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
   const [sgkTargetPortal, setSgkTargetPortal] = useState<"isveren" | "ebildirgev2">("isveren");
   const eservicesNav = useDetailNavigation({
     moduleKey: "e-services",
@@ -409,6 +411,15 @@ export const EServices: React.FC<EServicesProps> = ({
               <Building2 className="w-4 h-4" />
               <span>🏢 SGK İşveren & e-Bildirge</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setIsExtensionModalOpen(true)}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              <Download className="w-4 h-4" />
+              <span>📦 Chrome Eklentisi (.ZIP)</span>
+            </button>
           </div>
         </div>
       </div>
@@ -474,6 +485,7 @@ export const EServices: React.FC<EServicesProps> = ({
           onOpenGibModal={() => setIsGibModalOpen(true)}
           onOpenSgkModal={openSgkModal}
           onOpenTebligatModal={() => setIsAddTebligatModalOpen(true)}
+          onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
         />
       )}
 
@@ -1750,6 +1762,25 @@ export const EServices: React.FC<EServicesProps> = ({
         tebligat={selectedTebligat}
         companySettings={form}
         onStatusChange={handleTebligatStatusChange}
+      />
+
+      {/* Chrome Eklentisi İndir & Kurulum Modalı */}
+      <ExtensionInstallModal
+        isOpen={isExtensionModalOpen}
+        onClose={() => setIsExtensionModalOpen(false)}
+        companySettings={form}
+        onNavigateToEmbedded={() => {
+          setIsExtensionModalOpen(false);
+          setActiveMainTab("embedded");
+        }}
+        onOpenGibModal={() => {
+          setIsExtensionModalOpen(false);
+          setIsGibModalOpen(true);
+        }}
+        onOpenSgkModal={(portal) => {
+          setIsExtensionModalOpen(false);
+          openSgkModal(portal);
+        }}
       />
     </div>
   );
