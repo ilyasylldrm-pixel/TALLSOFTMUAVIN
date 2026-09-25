@@ -1,0 +1,2048 @@
+import React, { useState } from "react";
+import { Transaction, Account, Contact, TransactionType, Product, InvoiceItem, getContactAccountCode, CompanySettings } from "../types";
+import { ExportButtons } from "./ExportButtons";
+import { ExportData, formatCurrency, formatDate, exportToExcel, exportToPDF } from "../utils/exportUtils";
+import { formatTransactionWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { TableColumnFilterInput } from "./common/TableColumnFilterInput";
+import { Pagination } from "./common/Pagination";
+import { TableCheckbox } from "./common/TableCheckbox";
+import { BulkActionBar } from "./common/BulkActionBar";
+import { useTableSelection } from "../hooks/useTableSelection";
+import {
+  Receipt,
+  Plus,
+  Search,
+  ArrowUpRight,
+  ArrowDownLeft,
+  X,
+  Filter,
+  Trash2,
+  PlusCircle,
+  Eye,
+  Printer,
+  FileText,
+  CreditCard,
+  Building2,
+  Zap,
+  MessageCircle,
+  CheckCircle2,
+  ChevronRight,
+  ChevronDown,
+} from "lucide-react";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS } from "../utils/assetIcons";
+import { useColumnVisibility, ColumnDef } from "../hooks/useColumnVisibility";
+import { ColumnManagementDropdown } from "./common/ColumnManagementDropdown";
+
+const TRANSACTION_TABLE_COLUMNS: ColumnDef[] = [
+  { id: "docDate", label: "Fiş No / Tarih", defaultVisible: true },
+  { id: "contactDesc", label: "Cari / Açıklama", defaultVisible: true },
+  { id: "account", label: "Kasa / Banka Hesabı", defaultVisible: true },
+  { id: "category", label: "Kategori", defaultVisible: true },
+  { id: "amount", label: "Genel Toplam", defaultVisible: true },
+  { id: "actions", label: "İşlemler", defaultVisible: true, lockVisible: true },
+];
+
+interface TransactionsProps {
+  transactions: Transaction[];
+  accounts: Account[];
+  contacts: Contact[];
+  products?: Product[];
+  forcedType?: "income" | "expense";
+  globalSearchTerm?: string;
+  companySettings?: CompanySettings | null;
+  onAddTransaction: (tx: Transaction) => void;
+  onUpdateTransaction?: (tx: Transaction) => void;
+  onDeleteTransaction: (id: string) => void;
+  onBulkDeleteTransactions?: (ids: string[]) => void;
+}
+
+export const isPaymentOrReceiptTx = (t: Transaction): boolean => {
+  // 1. Explicit collection, payment, or transfer types
+  if (t.type === "collection" || t.type === "payment" || t.type === "transfer") {
+    return true;
+  }
+
+  // 2. Linked to an invoice
+  if (t.invoiceId || t.invoiceNumber) {
+    return true;
+  }
+
+  const category = (t.category || "").toLowerCase();
+  const description = (t.description || "").toLowerCase();
+  const documentNo = (t.documentNo || "").toLowerCase();
+
+  // 3. Document number patterns for dekont, tahsilat, tediye, eft/havale, virman
+  if (
+    documentNo.startsWith("dek-") ||
+    documentNo.startsWith("ths-") ||
+    documentNo.startsWith("tdy-") ||
+    documentNo.startsWith("mak-") ||
+    documentNo.startsWith("eft-") ||
+    documentNo.startsWith("hav-") ||
+    documentNo.startsWith("vrm-")
+  ) {
+    return true;
+  }
+
+  // 4. Category or description keywords for invoice payments / receipts / bank transfers / collections
+  if (
+    category.includes("tahsilat") ||
+    category.includes("ödemesi") ||
+    category.includes("tediye") ||
+    category.includes("dekont") ||
+    category.includes("transfer") ||
+    category.includes("virman") ||
+    description.includes("faturanın tahsilatı") ||
+    description.includes("faturanın ödemesi") ||
+    description.includes("fatura tahsilatı") ||
+    description.includes("fatura ödemesi") ||
+    description.includes("tahsilat makbuzu") ||
+    description.includes("banka dekontu") ||
+    description.includes("tediye makbuzu") ||
+    description.includes("havale/eft") ||
+    description.includes("virman transferi")
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+export const Transactions: React.FC<TransactionsProps> = ({
+  transactions,
+  accounts,
+  contacts,
+  products = [],
+  forcedType,
+  globalSearchTerm = "",
+  companySettings,
+  onAddTransaction,
+  onDeleteTransaction,
+  onBulkDeleteTransactions,
+}) => {
+  const selection = useTableSelection();
+  const { theme } = useTheme();
+
+  const kpiStats = React.useMemo(() => {
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let incomeCount = 0;
+    let expenseCount = 0;
+
+    transactions.forEach((tx) => {
+      const isIncome = tx.type === "income" || tx.type === "collection";
+      const amount = tx.amount || 0;
+      if (isIncome) {
+        totalIncome += amount;
+        incomeCount++;
+      } else {
+        totalExpense += amount;
+        expenseCount++;
+      }
+    });
+
+    const netCashFlow = totalIncome - totalExpense;
+
+    return {
+      totalIncome,
+      totalExpense,
+      netCashFlow,
+      totalCount: transactions.length,
+      incomeCount,
+      expenseCount,
+    };
+  }, [transactions]);
+
+  // Full-Page Detail Navigation
+  const detailNav = useDetailNavigation<Transaction>({
+    moduleKey: "transactions",
+  });
+
+  const handleBackToList = () => {
+    detailNav.backToList();
+    setIsModalOpen(false);
+    setViewingTx(null);
+    setWhatsAppTx(null);
+  };
+
+  const [filterType, setFilterType] = useState<string>(forcedType || "all");
+  const [search, setSearch] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(15);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterType, forcedType, globalSearchTerm]);
+
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
+  const [whatsAppTx, setWhatsAppTx] = useState<Transaction | null>(null);
+
+  // Kolon Yönetimi (Show/Hide Sütunlar)
+  const {
+    columns: txColumns,
+    columnVisibility: txColVisibility,
+    toggleColumn: toggleTxCol,
+    setAllColumns: setAllTxCols,
+    resetToDefaults: resetTxCols,
+    isVisible: isTxColVisible,
+    hiddenCount: hiddenTxColCount,
+  } = useColumnVisibility("transactions", TRANSACTION_TABLE_COLUMNS);
+
+  const visibleTxColCount = React.useMemo(() => {
+    return 1 + TRANSACTION_TABLE_COLUMNS.filter((col) => isTxColVisible(col.id)).length;
+  }, [isTxColVisible]);
+
+  // Master-Detail Expanded Rows State (set of expanded transaction IDs)
+  const [expandedTxIds, setExpandedTxIds] = useState<Set<string>>(new Set());
+
+  const toggleRowExpand = (id: string) => {
+    setExpandedTxIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Form State
+  const [txType, setTxType] = useState<TransactionType>(forcedType || "income");
+  const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [accountId, setAccountId] = useState<string>(accounts[0]?.id || "");
+  const [contactId, setContactId] = useState<string>("");
+  const [category, setCategory] = useState<string>("Genel Gelir");
+  const [documentNo, setDocumentNo] = useState<string>("");
+  const [description, setDescription] = useState<string>("");
+
+  // Invoice-like Itemized Lines
+  const [items, setItems] = useState<InvoiceItem[]>([
+    {
+      id: "item_1",
+      description: "Gelir / Gider Fiş Kalemi",
+      quantity: 1,
+      unit: "Adet",
+      unitPrice: 1000,
+      vatRate: 20,
+      totalWithoutVat: 1000,
+      vatAmount: 200,
+      totalWithVat: 1200,
+    },
+  ]);
+
+  const categoriesIncome = [
+    "Danışmanlık Geliri",
+    "Yazılım Satış Geliri",
+    "Hizmet Bedeli",
+    "Kira Geliri",
+    "Diğer Gelirler",
+  ];
+
+  const categoriesExpense = [
+    "Ofis Kirası",
+    "Personel Maaşı / SGK",
+    "Elektrik & İnternet",
+    "Yemek & Mutfak Gideri",
+    "Sunucu & Cloud Hizmetleri",
+    "Vergi & Harçlar",
+    "Reklam & Pazarlama",
+    "Diğer Giderler",
+  ];
+
+  const handleOpenModal = (overrideType?: "income" | "expense") => {
+    const typeToUse = overrideType || forcedType || "income";
+    setTxType(typeToUse);
+    setCategory(typeToUse === "income" ? categoriesIncome[0] : categoriesExpense[0]);
+    setDate(new Date().toISOString().split("T")[0]);
+    setAccountId(accounts[0]?.id || "");
+    setContactId("");
+    setDocumentNo(
+      typeToUse === "income"
+        ? `GLR-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
+        : `GDR-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
+    );
+    setDescription("");
+    setItems([
+      {
+        id: "item_1",
+        description:
+          typeToUse === "income"
+            ? "Danışmanlık / Hizmet Gelir Kalemi"
+            : "Operasyonel Gider Kalemi",
+        quantity: 1,
+        unit: "Adet",
+        unitPrice: 1000,
+        vatRate: 20,
+        totalWithoutVat: 1000,
+        vatAmount: 200,
+        totalWithVat: 1200,
+      },
+    ]);
+    setIsModalOpen(true);
+    detailNav.openCreate();
+  };
+
+  const handleAddItem = () => {
+    const newItem: InvoiceItem = {
+      id: "item_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+      description: "",
+      quantity: 1,
+      unit: "Adet",
+      unitPrice: 0,
+      vatRate: 20,
+      totalWithoutVat: 0,
+      vatAmount: 0,
+      totalWithVat: 0,
+    };
+    setItems((prev) => [...prev, newItem]);
+  };
+
+  const handleRemoveItem = (id: string) => {
+    if (items.length <= 1) return;
+    setItems((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const handleItemChange = (id: string, field: keyof InvoiceItem, value: any) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+
+        let updated = { ...item, [field]: value };
+
+        if (field === "productId" && value) {
+          const prod = products.find((p) => p.id === value);
+          if (prod) {
+            updated.description = prod.name;
+            updated.unit = prod.unit || "Adet";
+            updated.unitPrice = txType === "income" ? (prod.sellPrice || 0) : (prod.buyPrice || 0);
+            updated.vatRate = prod.vatRate ?? 20;
+          }
+        }
+
+        const q = updated.quantity || 0;
+        const price = updated.unitPrice || 0;
+        const vat = updated.vatRate || 0;
+
+        const sub = q * price;
+        const vatAmt = sub * (vat / 100);
+        const grand = sub + vatAmt;
+
+        updated.totalWithoutVat = sub;
+        updated.vatAmount = vatAmt;
+        updated.totalWithVat = grand;
+
+        return updated;
+      })
+    );
+  };
+
+  const subtotal = items.reduce((acc, i) => acc + (i.totalWithoutVat || 0), 0);
+  const totalVat = items.reduce((acc, i) => acc + (i.vatAmount || 0), 0);
+  const grandTotal = items.reduce((acc, i) => acc + (i.totalWithVat || 0), 0);
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const acc = accounts.find((a) => a.id === accountId);
+    if (!acc) return;
+
+    const contact = contacts.find((c) => c.id === contactId);
+
+    const mainDesc =
+      String(description || "").trim() ||
+      items
+        .map((i) => i.description)
+        .filter(Boolean)
+        .join(", ") ||
+      category;
+
+    const newTx: Transaction = {
+      id: "tx_" + Date.now(),
+      date,
+      type: txType,
+      amount: grandTotal > 0 ? grandTotal : 0,
+      currency: "TRY",
+      accountId: acc.id,
+      accountName: acc.name,
+      contactId: contact?.id,
+      contactName: contact?.name,
+      category,
+      description: mainDesc,
+      documentNo:
+        String(documentNo || "").trim() ||
+        (txType === "income"
+          ? `GLR-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
+          : `GDR-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`),
+      items,
+      subtotal,
+      totalVat,
+    };
+
+    onAddTransaction(newTx);
+    handleBackToList();
+  };
+
+  // Sütun Bazlı Filtreleme Durumu
+  const [colFilters, setColFilters] = useState<{
+    docDate: string;
+    contactDesc: string;
+    account: string;
+    category: string;
+    amount: string;
+  }>({
+    docDate: "",
+    contactDesc: "",
+    account: "",
+    category: "",
+    amount: "",
+  });
+  const [showColFilters, setShowColFilters] = useState(true);
+
+  const activeColFilterCount = React.useMemo(() => {
+    return (Object.values(colFilters) as string[]).filter((v) => Boolean(v && typeof v === "string" && v.trim() !== "")).length;
+  }, [colFilters]);
+
+  const clearAllColFilters = () => {
+    setColFilters({
+      docDate: "",
+      contactDesc: "",
+      account: "",
+      category: "",
+      amount: "",
+    });
+  };
+
+  const activeSearchQuery = String(globalSearchTerm || search || "").toLowerCase().trim();
+  const filteredTxs = transactions.filter((t) => {
+    // Sütun Bazlı Filtreler (Header Inputs)
+    if (colFilters.docDate) {
+      const q = colFilters.docDate.toLowerCase().trim();
+      const docStr = (t.documentNo || "").toLowerCase();
+      const dateStr = formatDate(t.date).toLowerCase();
+      if (!docStr.includes(q) && !dateStr.includes(q) && !t.date.includes(q)) return false;
+    }
+
+    if (colFilters.contactDesc) {
+      const q = colFilters.contactDesc.toLowerCase().trim();
+      const cStr = (t.contactName || "").toLowerCase();
+      const dStr = (t.description || "").toLowerCase();
+      if (!cStr.includes(q) && !dStr.includes(q)) return false;
+    }
+
+    if (colFilters.account) {
+      const q = colFilters.account.toLowerCase().trim();
+      const aStr = (t.accountName || "").toLowerCase();
+      if (!aStr.includes(q)) return false;
+    }
+
+    if (colFilters.category) {
+      const q = colFilters.category.toLowerCase().trim();
+      const catStr = (t.category || "").toLowerCase();
+      if (!catStr.includes(q)) return false;
+    }
+
+    if (colFilters.amount) {
+      const q = colFilters.amount.toLowerCase().trim();
+      const amtStr = t.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 });
+      if (!amtStr.includes(q) && !String(t.amount).includes(q)) return false;
+    }
+
+    const matchesSearch =
+      !activeSearchQuery ||
+      t.description.toLowerCase().includes(activeSearchQuery) ||
+      t.category.toLowerCase().includes(activeSearchQuery) ||
+      (t.contactName && t.contactName.toLowerCase().includes(activeSearchQuery)) ||
+      (t.documentNo && t.documentNo.toLowerCase().includes(activeSearchQuery)) ||
+      (t.accountName && t.accountName.toLowerCase().includes(activeSearchQuery));
+
+    if (!matchesSearch) return false;
+
+    const isReceipt = isPaymentOrReceiptTx(t);
+
+    if (forcedType === "income") {
+      // Only faturalanmayan Gelir Fişi (excludes tahsilat makbuzları, banka dekontları, fatura ödemeleri)
+      return t.type === "income" && !isReceipt;
+    }
+
+    if (forcedType === "expense") {
+      // Only faturalanmayan Gider Fişi (excludes tediye makbuzları, banka dekontları, fatura ödemeleri)
+      return t.type === "expense" && !isReceipt;
+    }
+
+    if (filterType === "income") return t.type === "income" && !isReceipt;
+    if (filterType === "expense") return t.type === "expense" && !isReceipt;
+    if (filterType === "receipts") return isReceipt;
+
+    return true;
+  });
+
+  const displayedTxs = React.useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredTxs.slice(start, start + pageSize);
+  }, [filteredTxs, currentPage, pageSize]);
+
+  const displayedTxIds = React.useMemo(() => {
+    return displayedTxs.map((t) => t.id);
+  }, [displayedTxs]);
+
+  const getTransactionsExportData = (targetTxs: Transaction[] = filteredTxs): ExportData => {
+    const headers = [
+      "Tarih",
+      "İşlem Tipi",
+      "Belge / Fiş No",
+      "Kategori / Tür",
+      "Hesap (Kasa / Banka)",
+      "İlişkili Cari Hesap",
+      "Stok / Kalem Adı",
+      "Miktar",
+      "Birim",
+      "Birim Fiyat",
+      "KDV (%)",
+      "Kalem Tutarı",
+      "Fiş Genel Toplamı",
+      "Para Birimi",
+      "Açıklama",
+    ];
+
+    const rows: (string | number | boolean | null | undefined)[][] = [];
+
+    targetTxs.forEach((t) => {
+      const typeLabel =
+        t.type === "income" ? "Gelir Fişi" : t.type === "expense" ? "Gider Fişi" : "Finans / Dekont Hareketi";
+      const txCurrency = t.currency || "TRY";
+
+      if ((t as any).items && (t as any).items.length > 0) {
+        (t as any).items.forEach((item: any) => {
+          rows.push([
+            t.date,
+            typeLabel,
+            t.documentNo || "-",
+            t.category || "-",
+            t.accountName || "-",
+            t.contactName || "-",
+            item.description || "Belirtilmedi",
+            item.quantity ?? 1,
+            item.unit || "Adet",
+            formatCurrency(item.unitPrice || 0, txCurrency),
+            `%${item.vatRate ?? 0}`,
+            formatCurrency(item.totalWithVat ?? item.totalWithoutVat ?? 0, txCurrency),
+            formatCurrency(t.amount || 0, txCurrency),
+            txCurrency,
+            t.description || "-",
+          ]);
+        });
+      } else {
+        rows.push([
+          t.date,
+          typeLabel,
+          t.documentNo || "-",
+          t.category || "-",
+          t.accountName || "-",
+          t.contactName || "-",
+          t.description || "Genel Fiş Kalemi",
+          1,
+          "Adet",
+          formatCurrency(t.amount || 0, txCurrency),
+          "%0",
+          formatCurrency(t.amount || 0, txCurrency),
+          formatCurrency(t.amount || 0, txCurrency),
+          txCurrency,
+          t.description || "-",
+        ]);
+      }
+    });
+
+    return {
+      filename: `Finans_Detayli_Stok_Hareketleri_${new Date().toISOString().split("T")[0]}`,
+      title:
+        forcedType === "income"
+          ? "GELİR FİŞLERİ VE KALEM HAREKET LİSTESİ"
+          : forcedType === "expense"
+          ? "GİDER FİŞLERİ VE KALEM HAREKET LİSTESİ"
+          : "KASA & BANKA FİNANS VE KALEM HAREKETLERİ",
+      subtitle: `Toplam ${targetTxs.length} Adet Hareket (${rows.length} Satır Kalem Kaydı)`,
+      headers,
+      rows,
+    };
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = selection.selectedIdArray;
+    if (onBulkDeleteTransactions) {
+      onBulkDeleteTransactions(ids);
+    } else {
+      ids.forEach((id) => onDeleteTransaction(id));
+    }
+    selection.clearSelection();
+  };
+
+  const handleBulkExportExcel = () => {
+    const selected = filteredTxs.filter((t) => selection.isSelected(t.id));
+    exportToExcel(getTransactionsExportData(selected));
+  };
+
+  const handleBulkExportPdf = () => {
+    const selected = filteredTxs.filter((t) => selection.isSelected(t.id));
+    exportToPDF(getTransactionsExportData(selected));
+  };
+
+  // =========================================================================
+  // 1. FULL-PAGE DETAIL VIEW: CREATE TRANSACTION (YENİ GELİR / GİDER FİŞİ)
+  // =========================================================================
+  if (detailNav.mode === "create" || isModalOpen) {
+    const isIncome = txType === "income";
+    return (
+      <DetailPageLayout
+        title={isIncome ? "Yeni Gelir / Tahsilat Fişi" : "Yeni Gider / Tediye Fişi"}
+        subtitle="Fatura düzeninde kalemli gelir ve gider fişi girişi, KDV hesaplaması ve finans kaydı"
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          {
+            label:
+              forcedType === "income"
+                ? "Gelir İşlemleri"
+                : forcedType === "expense"
+                ? "Gider İşlemleri"
+                : "Kasa & Banka Hareketleri",
+            onClick: handleBackToList,
+          },
+          { label: isIncome ? "Yeni Gelir Fişi" : "Yeni Gider Fişi", active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-black border ${
+              isIncome
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-rose-50 text-rose-700 border-rose-200"
+            }`}
+          >
+            {isIncome ? "+ GELİR / TAHSİLAT" : "- GİDER / TEDİYE"}
+          </span>
+        }
+        headerIcon={<Receipt className="w-5 h-5 text-purple-700" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+            >
+              İptal / Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="transaction-create-form"
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Fişi Kaydet</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-4xl mx-auto">
+          <form id="transaction-create-form" onSubmit={handleSave} className="space-y-6">
+            {/* Header Inputs Card */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Fiş Tipi *
+                  </label>
+                  <select
+                    value={txType}
+                    onChange={(e) => {
+                      const val = e.target.value as TransactionType;
+                      setTxType(val);
+                      setCategory(val === "income" ? categoriesIncome[0] : categoriesExpense[0]);
+                      setDocumentNo(
+                        val === "income"
+                          ? `GLR-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
+                          : `GDR-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
+                      );
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="income">Gelir Fişi (+ Satış / Tahsilat)</option>
+                    <option value="expense">Gider Fişi (- Harcama / Tediye)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Cari Hesap (Müşteri / Tedarikçi)
+                  </label>
+                  <select
+                    value={contactId}
+                    onChange={(e) => setContactId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">-- Cari Seçiniz (Opsiyonel) --</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.type === "customer" ? "Müşteri" : "Tedarikçi"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Kasa / Banka Hesabı *
+                  </label>
+                  <select
+                    required
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.type === "cash" ? "Kasa" : "Banka"}) - ₺
+                        {a.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Kategori *
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  >
+                    {(txType === "income" ? categoriesIncome : categoriesExpense).map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Belge / Fiş No *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={documentNo}
+                    onChange={(e) => setDocumentNo(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    İşlem Tarihi *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Genel Açıklama / Not
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Fiş hakkında genel açıklama veya fatura referansı girin..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Line Items Table Card */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                    Fiş Kalemleri (Fatura Detayları)
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Stoktan ürün seçebilir veya serbest hizmet/gider kalemi girebilirsiniz.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Kalem Ekle</span>
+                </button>
+              </div>
+
+              <div className="overflow-x-auto custom-scrollbar border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs min-w-[700px]">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
+                      <th className="py-2.5 px-3">Hızlı Stok</th>
+                      <th className="py-2.5 px-3 w-1/3">Açıklama / Kalem *</th>
+                      <th className="py-2.5 px-2 text-center w-20">Miktar</th>
+                      <th className="py-2.5 px-2 text-center w-20">Birim</th>
+                      <th className="py-2.5 px-3 text-right w-28">Birim Fiyat</th>
+                      <th className="py-2.5 px-2 text-center w-20">KDV %</th>
+                      <th className="py-2.5 px-3 text-right w-28">Toplam</th>
+                      <th className="py-2.5 px-2 text-center w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {items.map((item) => (
+                      <tr key={item.id} className="hover:bg-blue-50/70 transition-colors">
+                        <td className="p-2">
+                          <select
+                            value={item.productId || ""}
+                            onChange={(e) => handleItemChange(item.id, "productId", e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] text-slate-700 font-medium cursor-pointer"
+                          >
+                            <option value="">-- Serbest --</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="text"
+                            required
+                            placeholder="Kalem açıklaması..."
+                            value={item.description}
+                            onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-semibold text-slate-900"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="1"
+                            step="any"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(item.id, "quantity", parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-center font-bold text-slate-900"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <select
+                            value={item.unit || "Adet"}
+                            onChange={(e) => handleItemChange(item.id, "unit", e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] text-center font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="Adet">Adet</option>
+                            <option value="Ay">Ay</option>
+                            <option value="Saat">Saat</option>
+                            <option value="Gün">Gün</option>
+                            <option value="Kg">Kg</option>
+                            <option value="Metre">Metre</option>
+                            <option value="Paket">Paket</option>
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.unitPrice}
+                            onChange={(e) => handleItemChange(item.id, "unitPrice", parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-right font-mono font-bold text-slate-900"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <select
+                            value={item.vatRate ?? 20}
+                            onChange={(e) => handleItemChange(item.id, "vatRate", parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-center font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="20">%20</option>
+                            <option value="10">%10</option>
+                            <option value="1">%1</option>
+                            <option value="0">%0</option>
+                          </select>
+                        </td>
+                        <td className="p-2 text-right font-mono font-black text-xs text-slate-900">
+                          ₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.id)}
+                            disabled={items.length <= 1}
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Totals Breakdown */}
+              <div className="flex justify-end pt-2">
+                <div className="w-full sm:w-80 bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Ara Toplam (KDV Hariç):</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      ₺{subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Hesaplanan Toplam KDV:</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      ₺{totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-extrabold text-slate-900 border-t border-slate-200 pt-2">
+                    <span className="text-purple-950 font-black">Fiş Genel Toplamı:</span>
+                    <span className="font-mono font-black text-purple-700 text-base">
+                      ₺{grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  // =========================================================================
+  // WHATSAPP SHARE MODAL FOR TRANSACTIONS
+  // =========================================================================
+  if (whatsAppTx) {
+    const matchedContact = contacts.find(
+      (c) => c.id === whatsAppTx.contactId || c.name === whatsAppTx.contactName
+    );
+    const recipientPhone = matchedContact?.phone || matchedContact?.mobile || "";
+
+    return (
+      <UniversalWhatsAppModal
+        isOpen={true}
+        onClose={() => setWhatsAppTx(null)}
+        title={`WhatsApp ile İşlem Dekontu Paylaş - ${whatsAppTx.documentNo || whatsAppTx.id.slice(0, 8)}`}
+        documentTypeLabel="İşlem Fişi / Dekont"
+        recipientName={whatsAppTx.contactName || whatsAppTx.accountName || "Sayın İlgili"}
+        recipientPhone={recipientPhone}
+        defaultMessage={formatTransactionWhatsAppMessage(whatsAppTx, companySettings, matchedContact)}
+        documentFileName={`Dekont_${whatsAppTx.documentNo || whatsAppTx.id.slice(0, 8)}.pdf`}
+        companySettings={companySettings}
+        onSuccess={() => setWhatsAppTx(null)}
+      />
+    );
+  }
+
+  // =========================================================================
+  // 2. FULL-PAGE DETAIL VIEW: INSPECT TRANSACTION (FİŞ & İŞLEM DETAYI)
+  // =========================================================================
+  if ((detailNav.mode === "detail" || viewingTx !== null) && viewingTx) {
+    const isInc = viewingTx.type === "income" || viewingTx.type === "collection";
+    return (
+      <DetailPageLayout
+        title={`İşlem Fişi Detayı: ${viewingTx.documentNo || viewingTx.id.slice(0, 8)}`}
+        subtitle={`${formatDate(viewingTx.date)} • ${viewingTx.accountName || "Kasa/Banka"} • ${viewingTx.contactName || "Genel Cari"}`}
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          { label: "Gelir & Gider İşlemleri", onClick: handleBackToList },
+          { label: `Fiş #${viewingTx.documentNo || viewingTx.id.slice(0, 8)}`, active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-black border ${
+              isInc
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-rose-50 text-rose-700 border-rose-200"
+            }`}
+          >
+            {isInc ? "GELİR / TAHSİLAT (+)" : "GİDER / TEDİYE (-)"}
+          </span>
+        }
+        headerIcon={<FileText className="w-5 h-5 text-purple-700" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+            >
+              ← Listeye Dön
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <Printer className="w-4 h-4 text-emerald-400" />
+              <span>Dekont Yazdır</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWhatsAppTx(viewingTx)}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+              <span>WhatsApp ile Paylaş</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("Bu mali işlemi ve fiş kaydını silmek istediğinize emin misiniz?")) {
+                  onDeleteTransaction(viewingTx.id);
+                  handleBackToList();
+                }
+              }}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Sil</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+            {/* Header info grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
+              <div>
+                <span className="text-slate-400 block text-[10px] font-bold uppercase">İşlem Tarihi</span>
+                <span className="font-bold text-slate-900">{formatDate(viewingTx.date)}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] font-bold uppercase">Kategori</span>
+                <span className="font-bold text-slate-900">{viewingTx.category}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] font-bold uppercase">Cari Hesap</span>
+                <span className="font-bold text-slate-900">
+                  {viewingTx.contactName || "Genel Müşteri / Cari Yok"}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] font-bold uppercase">Kasa / Banka Hesabı</span>
+                <span className="font-bold text-slate-900">{viewingTx.accountName}</span>
+              </div>
+            </div>
+
+            {/* Line Items Table if available */}
+            {viewingTx.items && viewingTx.items.length > 0 ? (
+              <div className="space-y-3">
+                <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                  Fiş Kalem Detayları
+                </h4>
+                <div className="border border-slate-200 rounded-2xl overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left text-xs min-w-[500px]">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                        <th className="py-2.5 px-3">Açıklama</th>
+                        <th className="py-2.5 px-3 text-center">Miktar</th>
+                        <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
+                        <th className="py-2.5 px-3 text-center">KDV %</th>
+                        <th className="py-2.5 px-3 text-right">Toplam</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {viewingTx.items.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="p-3 font-semibold text-slate-900">{item.description}</td>
+                          <td className="p-3 text-center text-slate-700">
+                            {item.quantity} {item.unit}
+                          </td>
+                          <td className="p-3 text-right font-mono text-slate-700">
+                            ₺{item.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-3 text-center text-slate-700">%{item.vatRate}</td>
+                          <td className="p-3 text-right font-mono font-bold text-slate-900">
+                            ₺{item.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
+                <span className="text-slate-500 block text-[10px] font-bold uppercase">Fiş Açıklaması</span>
+                <p className="font-semibold text-slate-900 mt-1">{viewingTx.description}</p>
+              </div>
+            )}
+
+            {/* Totals Breakdown */}
+            <div className="bg-purple-50/50 border border-purple-200/60 p-5 rounded-2xl space-y-2 text-xs">
+              {viewingTx.subtotal !== undefined && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Ara Toplam (KDV Hariç):</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    ₺{viewingTx.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              {viewingTx.totalVat !== undefined && (
+                <div className="flex justify-between text-slate-600">
+                  <span>KDV Toplamı:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    ₺{viewingTx.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-base font-extrabold text-slate-900 border-t border-purple-200/60 pt-3">
+                <span>Fiş Genel Tutarı:</span>
+                <span className={`font-mono text-xl font-black ${isInc ? "text-emerald-700" : "text-rose-700"}`}>
+                  {isInc ? "+" : "-"}₺{viewingTx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  return (
+    <div className="p-4 sm:p-6 space-y-6 sm:space-y-7 max-w-7xl mx-auto">
+      {/* 1. TOP TITLE & ACTION HEADER WITH EDITORIAL BACKGROUND */}
+      <ModuleEntranceHeader
+        badge={
+          forcedType === "income"
+            ? "Gelir & Satış Fişleri"
+            : forcedType === "expense"
+            ? "Gider & Masraf Fişleri"
+            : "Kasa & Banka Hareketleri"
+        }
+        badgeIcon={<Receipt className="w-2.5 h-2.5 text-[#0f6bae]" />}
+        title={
+          forcedType === "income"
+            ? "Gelir Fişi İşlemleri"
+            : forcedType === "expense"
+            ? "Gider Fişi İşlemleri"
+            : "Finansal Hareketler & Fişler"
+        }
+        description={
+          forcedType === "income"
+            ? "Faturalanmayan kalemli gelir fişleri ve doğrudan satış belgeleri."
+            : forcedType === "expense"
+            ? "Faturalanmayan kalemli gider fişleri ve operasyonel harcama belgeleri."
+            : "Nakit akışı, gelir-gider fişleri, dekont ve kasa-banka hareketleri takibi."
+        }
+        actions={
+          <button
+            type="button"
+            onClick={() => handleOpenModal()}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>
+              {forcedType === "income"
+                ? "+ Yeni Gelir Fişi"
+                : forcedType === "expense"
+                ? "+ Yeni Gider Fişi"
+                : "+ Yeni Fiş Ekle"}
+            </span>
+          </button>
+        }
+      />
+
+      {/* 2. TOP 4 KPI SUMMARY CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Toplam Gelir */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam Gelir Hacmi</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                ₺{kpiStats.totalIncome.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+              <img src={ASSET_ICONS.ciro} alt="" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+              {kpiStats.incomeCount} Kayıt
+            </span>
+            <span className="text-slate-400 text-[11px]">Gelir ve tahsilat fişi</span>
+          </div>
+        </div>
+
+        {/* Card 2: Toplam Gider */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam Gider Hacmi</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-rose-600">
+                ₺{kpiStats.totalExpense.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+              <img src={ASSET_ICONS.toplamBorc} alt="" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
+              {kpiStats.expenseCount} Kayıt
+            </span>
+            <span className="text-slate-400 text-[11px]">Gider ve harcama fişi</span>
+          </div>
+        </div>
+
+        {/* Card 3: Net Nakit Akışı */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Net Nakit Dengesi</span>
+              <div className={`text-2xl font-bold font-mono tracking-tight ${kpiStats.netCashFlow >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {kpiStats.netCashFlow >= 0 ? "+" : ""}₺{kpiStats.netCashFlow.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+              <img src={ASSET_ICONS.nakit} alt="" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className={`text-[11px] font-bold ${kpiStats.netCashFlow >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {kpiStats.netCashFlow >= 0 ? "Pozitif Akış" : "Negatif Fark"}
+            </span>
+            <span className="text-slate-400 text-[11px]">• Gelir - Gider farkı</span>
+          </div>
+        </div>
+
+        {/* Card 4: Toplam İşlem Sayısı */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam İşlem Adedi</span>
+              <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                {kpiStats.totalCount}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+              <img src={ASSET_ICONS.sonBelgeler} alt="" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+              Kayıtlı Fişler
+            </span>
+            <span className="text-slate-400 text-[11px]">Tüm hareket kayıtları</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. FILTER & ACTION TOOLBAR */}
+      <div
+        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Submodule Tab Pills */}
+          {!forcedType ? (
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setFilterType("all")}
+                className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                  filterType === "all"
+                    ? "bg-white text-purple-950 font-bold border border-slate-200/60 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Tümü ({transactions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType("income")}
+                className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                  filterType === "income"
+                    ? "bg-white text-emerald-600 font-bold border border-slate-200/60 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Gelir Fişleri
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType("expense")}
+                className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                  filterType === "expense"
+                    ? "bg-white text-rose-600 font-bold border border-slate-200/60 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Gider Fişleri
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType("receipts")}
+                className={`px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                  filterType === "receipts"
+                    ? "bg-white text-indigo-700 font-bold border border-slate-200/60 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Tahsilat & Dekont
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setFilterType(forcedType)}
+                className="px-3 py-1.5 rounded-lg bg-white text-purple-700 font-bold border border-slate-200/60 shadow-2xs"
+              >
+                Faturalanmayan {forcedType === "income" ? "Gelir Fişleri" : "Gider Fişleri"} ({filteredTxs.length})
+              </button>
+            </div>
+          )}
+
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Fiş no, açıklama veya cari ara..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200/50 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowColFilters((prev) => !prev)}
+            className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+              showColFilters
+                ? "bg-purple-50 border-purple-200 text-purple-900 font-bold"
+                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium"
+            }`}
+            title="Sütun bazlı arama ve filtreleme alanlarını göster/gizle"
+          >
+            <Filter className="w-3.5 h-3.5 text-purple-600" />
+            <span className="hidden sm:inline">Sütun Filtreleri</span>
+            {activeColFilterCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {activeColFilterCount}
+              </span>
+            )}
+          </button>
+          <ColumnManagementDropdown
+            columns={txColumns}
+            columnVisibility={txColVisibility}
+            onToggleColumn={toggleTxCol}
+            onSetAllColumns={setAllTxCols}
+            onResetToDefaults={resetTxCols}
+            hiddenCount={hiddenTxColCount}
+          />
+          <ExportButtons getExportData={getTransactionsExportData} size="sm" />
+        </div>
+      </div>
+
+      <BulkActionBar
+        selectedCount={selection.selectedCount}
+        totalCount={filteredTxs.length}
+        itemLabel="fiş"
+        onClearSelection={selection.clearSelection}
+        onSelectAll={() => selection.selectAll(filteredTxs.map((t) => t.id))}
+        onDelete={handleBulkDelete}
+        deleteLabel="Seçilen Fişleri Sil"
+        onExportExcel={handleBulkExportExcel}
+        onExportPdf={handleBulkExportPdf}
+      />
+
+      {/* 4. MODERN DATA TABLE */}
+      <div
+        className="rounded-2xl border shadow-2xs overflow-hidden"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        {/* Desktop / Tablet Transactions Table View */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="w-10 py-3.5 px-3 text-center">
+                  <TableCheckbox
+                    checked={displayedTxIds.length > 0 && selection.isAllSelected(displayedTxIds)}
+                    indeterminate={selection.isIndeterminate(displayedTxIds)}
+                    onChange={() => selection.toggleSelectAll(displayedTxIds)}
+                    title="Tümünü Seç / Seçimi Kaldır"
+                  />
+                </th>
+                {isTxColVisible("docDate") && <th className="py-3.5 px-4 font-bold">Fiş No / Tarih</th>}
+                {isTxColVisible("contactDesc") && <th className="py-3.5 px-4 font-bold">Cari / Açıklama</th>}
+                {isTxColVisible("account") && <th className="py-3.5 px-4 font-bold">Kasa / Banka Hesabı</th>}
+                {isTxColVisible("category") && <th className="py-3.5 px-4 font-bold">Kategori</th>}
+                {isTxColVisible("amount") && <th className="py-3.5 px-4 font-bold text-right">Genel Toplam</th>}
+                {isTxColVisible("actions") && <th className="py-3.5 px-4 font-bold text-right">İşlemler</th>}
+              </tr>
+              {/* Sütun Bazlı Filtreleme Satırı */}
+              {showColFilters && (
+                <tr
+                  className="border-b bg-slate-50/40 dark:bg-slate-800/40 transition-colors"
+                  style={{ borderColor: theme.cardBorder }}
+                >
+                  <th className="w-10 py-2 px-3 text-center"></th>
+                  {isTxColVisible("docDate") && (
+                    <th className="py-2 px-3 font-normal">
+                      <TableColumnFilterInput
+                        value={colFilters.docDate}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, docDate: val }))}
+                        placeholder="Fiş No / Tarih..."
+                      />
+                    </th>
+                  )}
+                  {isTxColVisible("contactDesc") && (
+                    <th className="py-2 px-3 font-normal">
+                      <TableColumnFilterInput
+                        value={colFilters.contactDesc}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, contactDesc: val }))}
+                        placeholder="Cari / Açıklama..."
+                      />
+                    </th>
+                  )}
+                  {isTxColVisible("account") && (
+                    <th className="py-2 px-3 font-normal">
+                      <TableColumnFilterInput
+                        value={colFilters.account}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, account: val }))}
+                        placeholder="Hesap adı..."
+                      />
+                    </th>
+                  )}
+                  {isTxColVisible("category") && (
+                    <th className="py-2 px-3 font-normal w-32">
+                      <TableColumnFilterInput
+                        value={colFilters.category}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, category: val }))}
+                        placeholder="Kategori..."
+                      />
+                    </th>
+                  )}
+                  {isTxColVisible("amount") && (
+                    <th className="py-2 px-3 font-normal w-32">
+                      <TableColumnFilterInput
+                        value={colFilters.amount}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, amount: val }))}
+                        placeholder="Tutar..."
+                      />
+                    </th>
+                  )}
+                  {isTxColVisible("actions") && (
+                    <th className="py-2 px-2 font-normal text-right">
+                      {activeColFilterCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={clearAllColFilters}
+                          className="px-2 py-1 text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="Tüm sütun filtrelerini temizle"
+                        >
+                          <X className="w-3 h-3" />
+                          <span>Temizle</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">Filtrele</span>
+                      )}
+                    </th>
+                  )}
+                </tr>
+              )}
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredTxs.length === 0 ? (
+                <tr>
+                  <td colSpan={visibleTxColCount} className="py-12 text-center text-slate-400">
+                    Kayıtlı fiş bulunamadı.
+                  </td>
+                </tr>
+              ) : (
+                displayedTxs.map((tx) => {
+                  const isIncome = tx.type === "income" || tx.type === "collection";
+                  const isExpanded = expandedTxIds.has(tx.id);
+                  const isRowSelected = selection.isSelected(tx.id);
+                  return (
+                    <React.Fragment key={tx.id}>
+                      <tr
+                        className={`transition-colors group cursor-pointer ${
+                          isRowSelected
+                            ? "bg-indigo-50/80 dark:bg-indigo-950/40"
+                            : isExpanded
+                            ? "bg-[var(--color-periwinkle-wash)] shadow-2xs row-clicked-highlight"
+                            : "hover:bg-blue-50/80"
+                        }`}
+                      >
+                        <td className="w-10 py-3.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <TableCheckbox
+                            checked={isRowSelected}
+                            onChange={() => selection.toggleSelect(tx.id)}
+                            title="Fişi Seç"
+                          />
+                        </td>
+                        {/* Document No & Date with Clickable Chevron */}
+                        {isTxColVisible("docDate") && (
+                          <td className="py-3.5 px-4 whitespace-nowrap font-mono tabular-nums">
+                            <div className="flex items-center gap-2">
+                              {/* Clickable Chevron Icon for Master-Detail Toggle */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleRowExpand(tx.id);
+                                }}
+                                aria-expanded={isExpanded}
+                                className={`p-1.5 -ml-1 rounded-lg transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                                  isExpanded
+                                    ? "bg-purple-100 text-purple-700 shadow-2xs ring-1 ring-purple-300"
+                                    : "text-slate-400 hover:text-purple-600 hover:bg-slate-100"
+                                }`}
+                                title={isExpanded ? "Detayları gizle" : "Detayları aç (Sayfadan ayrılmadan incele)"}
+                              >
+                                <ChevronRight
+                                  className={`w-4 h-4 transition-transform duration-200 ${
+                                    isExpanded ? "rotate-90 text-purple-700" : "text-slate-400"
+                                  }`}
+                                />
+                              </button>
+                              <span
+                                className={`p-1 rounded-lg shrink-0 ${
+                                  isIncome ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                                }`}
+                              >
+                                <Receipt className="w-3.5 h-3.5" />
+                              </span>
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRowExpand(tx.id)}
+                                  className="hover:underline hover:text-purple-600 cursor-pointer font-mono font-bold text-left text-slate-900"
+                                  title="Satır Detayını Aç / Kapat"
+                                >
+                                  {tx.documentNo || (isIncome ? "GLR-FİŞ" : "GDR-FİŞ")}
+                                </button>
+                                <div className="text-[10px] text-slate-400 font-mono tabular-nums">
+                                  {formatDate(tx.date)}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        )}
+
+                        {/* Contact / Description */}
+                        {isTxColVisible("contactDesc") && (
+                          <td className="py-3.5 px-4">
+                            <div className="min-w-0 truncate max-w-[240px]">
+                              {tx.contactName ? (
+                                <div className="font-bold text-slate-900 truncate" title={tx.contactName}>
+                                  {tx.contactName}
+                                </div>
+                              ) : (
+                                <div className="font-bold text-slate-800 truncate" title={tx.description}>
+                                  {tx.description}
+                                </div>
+                              )}
+                              {tx.contactName && (
+                                <div className="text-[10px] text-slate-400 truncate" title={tx.description}>
+                                  {tx.description}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        )}
+
+                        {/* Account Name */}
+                        {isTxColVisible("account") && (
+                          <td className="py-3.5 px-4">
+                            <span className="font-bold text-slate-800">{tx.accountName}</span>
+                          </td>
+                        )}
+
+                        {/* Category Badge */}
+                        {isTxColVisible("category") && (
+                          <td className="py-3.5 px-4">
+                            <span className="inline-block bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                              {tx.category}
+                            </span>
+                          </td>
+                        )}
+
+                        {/* Amount */}
+                        {isTxColVisible("amount") && (
+                          <td
+                            className={`py-3.5 px-4 text-right font-mono tabular-nums font-tabular-num-md font-bold text-sm whitespace-nowrap ${
+                              isIncome ? "text-emerald-600" : "text-rose-600"
+                            }`}
+                          >
+                            {isIncome ? "+" : "-"}₺
+                            {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                        )}
+
+                        {/* Actions */}
+                        {isTxColVisible("actions") && (
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => toggleRowExpand(tx.id)}
+                                title={isExpanded ? "Detayları Gizle" : "Hızlı İncele (Master-Detail)"}
+                                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                                  isExpanded
+                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                                }`}
+                              >
+                                <ChevronDown
+                                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                    isExpanded ? "rotate-180 text-purple-600" : "text-slate-600"
+                                  }`}
+                                />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setViewingTx(tx);
+                                  detailNav.openDetail(tx, tx.id);
+                                }}
+                                title="Tam Sayfada İncele & Yazdır"
+                                className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-slate-600" />
+                              </button>
+                              <button
+                                onClick={() => setWhatsAppTx(tx)}
+                                title="Fiş / Dekontu WhatsApp ile Paylaş"
+                                className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                              </button>
+                              <button
+                                onClick={() => onDeleteTransaction(tx.id)}
+                                title="Fişi Sil"
+                                className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+
+                      {/* Hidden Master-Detail View Section */}
+                      {isExpanded && (
+                        <tr className="expanded-detail-row bg-slate-50/70 border-y border-slate-200" data-skip-row-highlight="true">
+                          <td colSpan={visibleTxColCount} className="p-0">
+                            <div className="p-4 sm:p-6 bg-gradient-to-br from-slate-50 via-[#eaedff]/40 to-white border-l-4 border-l-[#005289] space-y-4">
+                              {/* Master-Detail Header / Control Strip */}
+                              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                                <div className="flex flex-wrap items-center gap-2.5">
+                                  <span
+                                    className={`px-2.5 py-1 rounded-full text-xs font-black border ${
+                                      isIncome
+                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                        : "bg-rose-50 text-rose-700 border-rose-200"
+                                    }`}
+                                  >
+                                    {isIncome ? "GELİR / TAHSİLAT (+)" : "GİDER / TEDİYE (-)"}
+                                  </span>
+                                  <span className="text-xs text-slate-500 font-medium">
+                                    Fiş No:{" "}
+                                    <span className="font-mono tabular-nums font-bold text-slate-900">
+                                      {tx.documentNo || `#${tx.id.slice(0, 8)}`}
+                                    </span>
+                                  </span>
+                                  {tx.invoiceNumber && (
+                                    <span className="text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full font-mono tabular-nums">
+                                      İlişkili Fatura: {tx.invoiceNumber}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Quick Actions without Leaving Page */}
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setWhatsAppTx(tx)}
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                    title="WhatsApp ile Paylaş"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                    <span>WhatsApp</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setViewingTx(tx);
+                                      detailNav.openDetail(tx, tx.id);
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                                    title="Tam sayfa görünümüne geç"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-purple-600" />
+                                    <span>Tam Sayfa</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (confirm("Bu mali işlem fişini silmek istediğinize emin misiniz?")) {
+                                        onDeleteTransaction(tx.id);
+                                        toggleRowExpand(tx.id);
+                                      }
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                                    title="Fişi Sil"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Sil</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Master-Detail Metadata Grid */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-3.5 rounded-xl border border-slate-200 text-xs shadow-2xs">
+                                <div>
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    İşlem Tarihi
+                                  </span>
+                                  <span className="font-mono tabular-nums font-bold text-slate-800 mt-0.5 block">
+                                    {formatDate(tx.date)}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    Kasa / Banka Hesabı
+                                  </span>
+                                  <span className="font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                                    <Building2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                    <span className="truncate">{tx.accountName}</span>
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    Cari Hesap / Muhatap
+                                  </span>
+                                  <span className="font-bold text-slate-900 block mt-0.5 truncate" title={tx.contactName || "Genel Cari"}>
+                                    <span className="truncate">{tx.contactName || "Genel Cari / Tanımsız"}</span>
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    Kategori
+                                  </span>
+                                  <span className="inline-block bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded text-[11px] font-bold mt-0.5">
+                                    {tx.category}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Itemized Lines if any */}
+                              {tx.items && tx.items.length > 0 ? (
+                                <div className="space-y-2">
+                                  <div className="text-[11px] font-bold uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                                    <Receipt className="w-3.5 h-3.5 text-purple-600" />
+                                    <span>Fiş Kalemleri ({tx.items.length} Kalem)</span>
+                                  </div>
+                                  <div className="border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar bg-white shadow-2xs">
+                                    <table className="w-full text-left text-xs min-w-[500px]">
+                                      <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                                          <th className="py-2.5 px-3">Açıklama</th>
+                                          <th className="py-2.5 px-3 text-center">Miktar</th>
+                                          <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
+                                          <th className="py-2.5 px-3 text-center">KDV %</th>
+                                          <th className="py-2.5 px-3 text-right">Toplam</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {tx.items.map((item, idx) => (
+                                          <tr key={idx} className="hover:bg-blue-50/80 transition-colors">
+                                            <td className="py-2.5 px-3 font-semibold text-slate-800">{item.description}</td>
+                                            <td className="py-2.5 px-3 text-center font-mono tabular-nums text-slate-700">
+                                              {item.quantity} {item.unit || "Adet"}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-700">
+                                              ₺{item.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center font-mono tabular-nums text-slate-600">
+                                              %{item.vatRate}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono tabular-nums font-bold text-slate-900">
+                                              ₺{item.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              {/* Description & Financial Summary Footer */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                                <div className="md:col-span-2 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs text-xs">
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    Fiş Açıklaması & Notlar
+                                  </span>
+                                  <p className="text-slate-700 font-medium mt-1 leading-relaxed">
+                                    {tx.description || "İlave açıklama girilmemiş."}
+                                  </p>
+                                </div>
+
+                                <div className="bg-purple-50/60 border border-purple-200/80 p-3.5 rounded-xl shadow-2xs space-y-1.5 text-xs">
+                                  {tx.subtotal !== undefined && tx.subtotal > 0 && (
+                                    <div className="flex justify-between text-slate-600">
+                                      <span>Ara Toplam (KDV Hariç):</span>
+                                      <span className="font-mono tabular-nums font-bold text-slate-800">
+                                        ₺{tx.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {tx.vatAmount !== undefined && tx.vatAmount > 0 && (
+                                    <div className="flex justify-between text-slate-600">
+                                      <span>Hesaplanan KDV:</span>
+                                      <span className="font-mono tabular-nums font-bold text-slate-800">
+                                        ₺{tx.vatAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between pt-1.5 border-t border-purple-200 font-bold text-sm">
+                                    <span className="text-slate-800">Genel Toplam:</span>
+                                    <span
+                                      className={`font-mono tabular-nums font-black ${
+                                        isIncome ? "text-emerald-700" : "text-rose-700"
+                                      }`}
+                                    >
+                                      {isIncome ? "+" : "-"}₺
+                                      {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Responsive Slip Cards View */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredTxs.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              Kayıtlı fiş bulunamadı.
+            </div>
+          ) : (
+            displayedTxs.map((tx) => {
+              const isIncome = tx.type === "income" || tx.type === "collection";
+              const isExpanded = expandedTxIds.has(tx.id);
+              const isSelected = selection.isSelected(tx.id);
+              return (
+                <div
+                  key={tx.id}
+                  className={`rounded-2xl border p-3.5 shadow-2xs space-y-3 bg-white transition-all ${
+                    isSelected
+                      ? "border-indigo-400 bg-indigo-50/30 ring-2 ring-indigo-200"
+                      : isExpanded
+                      ? "border-purple-300 ring-2 ring-purple-100"
+                      : "border-slate-200/80"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      <TableCheckbox
+                        checked={isSelected}
+                        onChange={() => selection.toggleSelect(tx.id)}
+                        title="Fişi Seç"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleRowExpand(tx.id)}
+                        className={`p-1 rounded-lg transition-all cursor-pointer ${
+                          isExpanded ? "bg-purple-100 text-purple-700" : "text-slate-400 hover:bg-slate-100"
+                        }`}
+                        title={isExpanded ? "Detayları Gizle" : "Detayları Göster"}
+                      >
+                        <ChevronRight
+                          className={`w-4 h-4 transition-transform duration-200 ${
+                            isExpanded ? "rotate-90 text-purple-700" : "text-slate-400"
+                          }`}
+                        />
+                      </button>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => toggleRowExpand(tx.id)}
+                          className="font-mono font-extrabold text-slate-900 text-xs text-left hover:text-purple-600"
+                        >
+                          {tx.documentNo || (isIncome ? "GLR-FİŞ" : "GDR-FİŞ")}
+                        </button>
+                        <div className="text-[10px] text-slate-400 font-mono tabular-nums">
+                          {formatDate(tx.date)}
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      className={`font-mono tabular-nums font-black text-sm px-2.5 py-1 rounded-xl border ${
+                        isIncome
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-rose-50 text-rose-700 border-rose-200"
+                      }`}
+                    >
+                      {isIncome ? "+" : "-"}₺
+                      {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 text-xs">
+                    {tx.contactName && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-400 font-semibold">Cari:</span>
+                        <span className="font-bold text-slate-900 truncate max-w-[180px]">
+                          {tx.contactName}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400 font-semibold">Açıklama:</span>
+                      <span className="text-slate-700 truncate max-w-[180px] font-medium">
+                        {tx.description}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-slate-400 font-semibold">Hesap & Kat:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-800 font-bold">{tx.accountName}</span>
+                        <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-slate-200">
+                          {tx.category}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mobile Master-Detail Hidden Section */}
+                  {isExpanded && (
+                    <div className="pt-2 border-t border-slate-100 space-y-3 bg-purple-50/20 p-3 rounded-xl">
+                      {tx.items && tx.items.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold uppercase text-slate-400">Fiş Kalemleri</span>
+                          <div className="divide-y divide-slate-100 bg-white rounded-lg border border-slate-200 text-xs">
+                            {tx.items.map((it, i) => (
+                              <div key={i} className="p-2 flex justify-between items-center font-mono tabular-nums">
+                                <span className="font-medium text-slate-800 text-[11px] truncate max-w-[150px]">{it.description}</span>
+                                <span className="font-bold text-slate-900">₺{it.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {tx.subtotal !== undefined && tx.subtotal > 0 && (
+                        <div className="flex justify-between text-xs text-slate-600 font-mono tabular-nums">
+                          <span>Ara Toplam:</span>
+                          <span>₺{tx.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                      {tx.vatAmount !== undefined && tx.vatAmount > 0 && (
+                        <div className="flex justify-between text-xs text-slate-600 font-mono tabular-nums">
+                          <span>KDV Tutarı:</span>
+                          <span>₺{tx.vatAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-1.5 pt-1">
+                    <button
+                      onClick={() => {
+                        setViewingTx(tx);
+                        detailNav.openDetail(tx, tx.id);
+                      }}
+                      className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>İncele</span>
+                    </button>
+                    <button
+                      onClick={() => setWhatsAppTx(tx)}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>WhatsApp</span>
+                    </button>
+                    <button
+                      onClick={() => onDeleteTransaction(tx.id)}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Sil</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredTxs.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          pageSizeOptions={[10, 15, 25, 50, 100]}
+          itemLabel="fiş / hareket"
+          className="border-t border-slate-100"
+        />
+      </div>
+
+    </div>
+  );
+};

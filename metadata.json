@@ -1,0 +1,6 @@
+{
+  "name": "Muavin - Ön Muhasebe Programı",
+  "description": "Cari hesap takibi, e-belgeler, kasa/banka/çek/senet, Google E-Tablolar (Google Sheets) çift yönlü veri aktarımı ve senkronizasyonu, Sektörel Üretim Yönetimi (Yemek Fabrikası & Catering reçete, tabldot menü, mutfak iş emirleri, MRP hammadde ve termobox sevkiyat), İnşaat Maliyetlendirme (şantiye, metraj, keşif, hakediş), Oto Servis, Bilişim & BT ve Ev Aletleri/Klima teknik servis yönetimi, WhatsApp entegrasyonu.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

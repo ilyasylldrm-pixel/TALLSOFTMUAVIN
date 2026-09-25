@@ -1,0 +1,54 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: muavin-muhasebe
+  labels:
+    cloud.googleapis.com/location: europe-west3
+  annotations:
+    run.googleapis.com/launch-stage: GA
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Google Cloud Run Gen2 Environment: Full Linux kernel compatibility & higher network I/O
+        run.googleapis.com/execution-environment: gen2
+        # Startup CPU Boost: Temporarily allocates up to 4x CPU during container boot (cuts cold-start by 75%)
+        run.googleapis.com/startup-cpu-boost: "true"
+        # Minimum Instances: Keeps 1 warm instance active 24/7 to completely eliminate cold-start latency
+        autoscaling.knative.dev/minScale: "1"
+        # Maximum Instances: Scales up dynamically under peak business load
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: gcr.io/PROJECT_ID/muavin-muhasebe:latest
+          ports:
+            - name: http1
+              containerPort: 3000
+          resources:
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=3072"
+            - name: PORT
+              value: "3000"
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            periodSeconds: 15
+            timeoutSeconds: 3

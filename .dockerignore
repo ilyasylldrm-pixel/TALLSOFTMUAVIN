@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+.git
+auth_info_baileys
+baileys_auth_info
+sessions
+
+# Include build artifacts
+!dist
+!dist/**
+!build
+!build/**

@@ -1,0 +1,15 @@
+.gcloudignore
+.git
+.gitignore
+node_modules/
+jspm_packages/
+*.log
+auth_info_baileys/
+baileys_auth_info/
+sessions/
+
+# Never ignore build artifacts during deployment
+!dist/
+!dist/**
+!build/
+!build/**

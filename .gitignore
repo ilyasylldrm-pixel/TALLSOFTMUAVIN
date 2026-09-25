@@ -1,0 +1,53 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+dev-server.log
+dev-server-error.log
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build outputs
+# Allow dist and build for cloud artifact deployment uploaders
+!dist/
+!build/
+dist-ssr/
+*.local
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# WhatsApp Baileys Auth Session data
+auth_info_baileys/
+baileys_auth_info/
+sessions/
+
+# Editor / OS files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# OCR language models
+*.traineddata
+*.traineddata.gz
+
+# Archive packages
+*.zip
+*.tar.gz
+
+# GitHub Sync Configuration & Tokens
+data/github-config.json
+*.token
+

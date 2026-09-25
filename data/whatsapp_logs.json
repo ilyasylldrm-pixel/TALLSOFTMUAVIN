@@ -1,0 +1,22 @@
+[
+  {
+    "id": "msg_1787834849483",
+    "timestamp": "2026-08-27T12:47:29.483Z",
+    "type": "text",
+    "phone": "5512468231",
+    "contactName": "Test Alıcısı",
+    "caption": "Sayın İlgili, Muavin Ön Muhasebe sistemi üzerinden gönderilen test iletisidir.",
+    "status": "failed",
+    "error": "Connection Closed"
+  },
+  {
+    "id": "msg_1787834759180",
+    "timestamp": "2026-08-27T12:45:59.180Z",
+    "type": "text",
+    "phone": "05512468231",
+    "contactName": "Test Alıcısı",
+    "caption": "Sayın İlgili, Muavin Ön Muhasebe sistemi üzerinden gönderilen test iletisidir.",
+    "status": "failed",
+    "error": "WhatsApp bağlı değil. Lütfen önce QR kod ile bağlanın."
+  }
+]
