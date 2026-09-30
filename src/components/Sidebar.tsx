@@ -43,6 +43,7 @@ import {
   Layers,
   HardHat,
   ExternalLink,
+  UploadCloud,
 } from "lucide-react";
 import { CompanySettings, ConstructionProject } from "../types";
 import { Logo } from "./Logo";
@@ -108,6 +109,7 @@ interface SidebarProps {
   constructionProjects?: ConstructionProject[];
   selectedConstructionProjectId?: string | null;
   onSelectConstructionProject?: (projectId: string) => void;
+  onOpenGitHubPublish?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -126,6 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   constructionProjects = [],
   selectedConstructionProjectId,
   onSelectConstructionProject,
+  onOpenGitHubPublish,
 }) => {
   const { theme } = useTheme();
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -828,6 +831,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
       </nav>
+
+      {/* Quick Action: Yayınla & Senkronize Et */}
+      {onOpenGitHubPublish && (
+        <div className="px-3 pt-2">
+          <button
+            type="button"
+            onClick={onOpenGitHubPublish}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-white shadow-2xs transition-all cursor-pointer active:scale-98"
+            style={{ backgroundColor: "#0f6bae" }}
+            title="Projeyi GitHub ve Canlı Sunucuya Yayınla"
+          >
+            <UploadCloud className="w-4 h-4 text-white" />
+            <span>Uygulama Yayınla</span>
+          </button>
+        </div>
+      )}
 
       {/* Company Info Footer (Collapsed) */}
       <div

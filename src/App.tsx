@@ -1839,6 +1839,7 @@ export default function App() {
           setSelectedConstructionProjectId(projId);
           setCurrentTab("construction_costing");
         }}
+        onOpenGitHubPublish={() => setIsGitHubPublishOpen(true)}
       />
 
       {/* Main App Content Area */}
