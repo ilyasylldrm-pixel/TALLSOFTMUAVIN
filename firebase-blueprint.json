@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "users": {
+      "title": "Users",
+      "description": "User profile data and preferences",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 254 },
+        "name": { "type": "string", "maxLength": 150 },
+        "companyName": { "type": "string", "maxLength": 200 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "taxNumber": { "type": "string", "maxLength": 20 },
+        "role": { "type": "string", "maxLength": 50 },
+        "selectedLogoId": { "type": "number" },
+        "selectedLogoName": { "type": "string", "maxLength": 100 },
+        "selectedLogoUrl": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userId", "email"]
+    },
+    "user_files": {
+      "title": "User Files",
+      "description": "User uploaded files, invoices, receipts and OCR metadata",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 255 },
+        "fileSize": { "type": "number" },
+        "fileType": { "type": "string", "maxLength": 100 },
+        "uploadDate": { "type": "string", "maxLength": 50 },
+        "category": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "fileUrl": { "type": "string", "maxLength": 2000 },
+        "storagePath": { "type": "string", "maxLength": 500 },
+        "fileData": { "type": "string", "maxLength": 1000000 },
+        "expiresAt": { "type": "number" }
+      },
+      "required": ["userId", "fileName", "uploadDate"]
+    },
+    "admins": {
+      "title": "Admins",
+      "description": "System administrator mapping for secure role-based access control",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 254 },
+        "grantedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["email"]
+    },
+    "system_settings": {
+      "title": "System Settings",
+      "description": "Central system-wide payroll parameters, legal tariffs, and global configurations",
+      "type": "object",
+      "properties": {
+        "settingKey": { "type": "string", "maxLength": 100 },
+        "lastUpdated": { "type": "string", "maxLength": 50 },
+        "updatedBy": { "type": "string", "maxLength": 150 },
+        "version": { "type": "number" },
+        "data": { "type": "object" }
+      },
+      "required": ["settingKey", "lastUpdated"]
+    },
+    "system_audit_logs": {
+      "title": "System Audit Logs",
+      "description": "Central ledger of administrative additions and parameter updates",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "maxLength": 150 },
+        "category": { "type": "string", "maxLength": 100 },
+        "details": { "type": "string", "maxLength": 2000 },
+        "performedBy": { "type": "string", "maxLength": 150 },
+        "timestamp": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["action", "timestamp", "performedBy"]
+    },
+    "broadcast_announcements": {
+      "title": "Broadcast Announcements",
+      "description": "System-wide announcements and update notifications sent to all users",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 200 },
+        "content": { "type": "string", "maxLength": 2000 },
+        "priority": { "type": "string", "maxLength": 50 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "createdBy": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["title", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/users" },
+      "description": "Stores user profile and account configuration"
+    },
+    "/user_files/{fileId}": {
+      "schema": { "$ref": "#/entities/user_files" },
+      "description": "Stores user document metadata, receipts, and e-document files"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/admins" },
+      "description": "Trusted administrative access table for role enforcement"
+    },
+    "/system_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/system_settings" },
+      "description": "Single central repository for shared payroll parameters and firm configurations"
+    },
+    "/system_audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/system_audit_logs" },
+      "description": "Central history log of administrative edits and updates"
+    },
+    "/broadcast_announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/broadcast_announcements" },
+      "description": "System-wide notifications and release broadcast notes"
+    }
+  }
+}

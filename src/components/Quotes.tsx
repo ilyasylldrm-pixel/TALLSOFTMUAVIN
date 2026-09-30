@@ -1,0 +1,1383 @@
+import React, { useState, useCallback, useEffect } from "react";
+import { Quote, QuoteStatus, Contact, Product, Invoice, CompanySettings } from "../types";
+import { ExportButtons } from "./ExportButtons";
+import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
+import { formatQuoteWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { DetailPageLayout } from "./common/DetailPageLayout";
+import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
+import { Pagination } from "./common/Pagination";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS } from "../utils/assetIcons";
+import {
+  FileSpreadsheet,
+  Plus,
+  Search,
+  CheckCircle2,
+  XCircle,
+  ArrowRight,
+  Clock,
+  Trash2,
+  X,
+  PlusCircle,
+  FileText,
+  Printer,
+  Download,
+  Building2,
+  ShoppingCart,
+  Calendar,
+  Filter,
+  Check,
+  Zap,
+  MessageCircle,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+import { numberToTurkishWords } from "../utils/numberToTurkishWords";
+import { Logo } from "./Logo";
+
+const TURKISH_MONTHS = [
+  { id: 1, name: "Ocak" },
+  { id: 2, name: "Şubat" },
+  { id: 3, name: "Mart" },
+  { id: 4, name: "Nisan" },
+  { id: 5, name: "Mayıs" },
+  { id: 6, name: "Haziran" },
+  { id: 7, name: "Temmuz" },
+  { id: 8, name: "Ağustos" },
+  { id: 9, name: "Eylül" },
+  { id: 10, name: "Ekim" },
+  { id: 11, name: "Kasım" },
+  { id: 12, name: "Aralık" },
+];
+
+const getDateYearAndMonth = (dateStr?: string) => {
+  if (!dateStr) return { year: null, month: null };
+  if (dateStr.includes("-")) {
+    const parts = dateStr.split("-");
+    if (parts.length >= 2) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  if (dateStr.includes(".")) {
+    const parts = dateStr.split(".");
+    if (parts.length >= 3) {
+      const y = parseInt(parts[2], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  }
+  return { year: null, month: null };
+};
+
+interface QuotesProps {
+  quotes: Quote[];
+  contacts: Contact[];
+  products: Product[];
+  companySettings?: CompanySettings;
+  globalSearchTerm?: string;
+  onAddQuote: (quote: Quote) => void;
+  onConvertQuoteToInvoice: (quote: Quote) => void;
+  onConvertQuoteToOrder?: (quote: Quote) => void;
+  onDeleteQuote: (id: string) => void;
+}
+
+export const Quotes: React.FC<QuotesProps> = ({
+  quotes,
+  contacts,
+  products,
+  companySettings,
+  globalSearchTerm = "",
+  onAddQuote,
+  onConvertQuoteToInvoice,
+  onConvertQuoteToOrder,
+  onDeleteQuote,
+}) => {
+  const [search, setSearch] = useState("");
+  const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [formType, setFormType] = useState<"proforma" | "quote">("proforma");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(15);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, selectedYear, selectedMonth, formType, globalSearchTerm]);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [printingQuote, setPrintingQuote] = useState<Quote | null>(null);
+  const [whatsAppQuote, setWhatsAppQuote] = useState<Quote | null>(null);
+  const [isDownloadingQuotePDF, setIsDownloadingQuotePDF] = useState(false);
+  const [expandedQuoteId, setExpandedQuoteId] = useState<string | null>(null);
+  const { theme } = useTheme();
+
+  const kpiStats = React.useMemo(() => {
+    let totalVolume = 0;
+    let acceptedVolume = 0;
+    let pendingVolume = 0;
+    let invoicedCount = 0;
+    let acceptedCount = 0;
+    let pendingCount = 0;
+
+    quotes.forEach((q) => {
+      const amount = q.grandTotal || 0;
+      totalVolume += amount;
+      if (q.status === "approved" || q.status === "accepted") {
+        acceptedVolume += amount;
+        acceptedCount++;
+      } else if (q.status === "converted" || q.status === "invoiced") {
+        invoicedCount++;
+      } else {
+        pendingVolume += amount;
+        pendingCount++;
+      }
+    });
+
+    return {
+      totalVolume,
+      acceptedVolume,
+      pendingVolume,
+      invoicedCount,
+      acceptedCount,
+      pendingCount,
+    };
+  }, [quotes]);
+
+  const nav = useDetailNavigation<Quote>({ moduleKey: "quotes" });
+
+  const handleBackToList = useCallback(() => {
+    setIsModalOpen(false);
+    setPrintingQuote(null);
+    nav.backToList();
+  }, [nav]);
+
+  useEffect(() => {
+    if (nav.mode === "list") {
+      setIsModalOpen(false);
+      setPrintingQuote(null);
+    }
+  }, [nav.mode]);
+
+  const handleDownloadQuotePDF = async () => {
+    if (!printingQuote) return;
+    setIsDownloadingQuotePDF(true);
+    try {
+      const fileName = `${printingQuote.quoteNumber}_Proforma_Fatura.pdf`;
+      await exportElementToPDF("printable-quote", fileName);
+    } catch (err) {
+      console.error("Proforma PDF İndirme Hatası:", err);
+    } finally {
+      setIsDownloadingQuotePDF(false);
+    }
+  };
+
+  // Form State
+  const [contactId, setContactId] = useState(contacts[0]?.id || "");
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().split("T")[0]);
+  const [validUntil, setValidUntil] = useState(
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+  );
+  const [notes, setNotes] = useState("Proforma fatura geçerlilik süresi 30 gündür.");
+
+  const [items, setItems] = useState([
+    {
+      id: "qi_1",
+      productId: products[0]?.id || "",
+      description: products[0]?.name || "Proforma Faturası Hizmet Kalemi",
+      quantity: 1,
+      unit: products[0]?.unit || "Proje",
+      unitPrice: products[0]?.sellPrice || 25000,
+      vatRate: products[0]?.vatRate ?? 20,
+      totalWithoutVat: products[0]?.sellPrice || 25000,
+      vatAmount: ((products[0]?.sellPrice || 25000) * (products[0]?.vatRate ?? 20)) / 100,
+      totalWithVat: (products[0]?.sellPrice || 25000) * (1 + (products[0]?.vatRate ?? 20) / 100),
+    },
+  ]);
+
+  const openNewFormModal = (type: "quote" | "proforma" = "proforma") => {
+    setFormType("proforma");
+    setNotes("Proforma fatura geçerlilik süresi 30 gündür.");
+    setContactId(contacts[0]?.id || "");
+    setIssueDate(new Date().toISOString().split("T")[0]);
+    setValidUntil(
+      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+    );
+
+    if (products.length > 0) {
+      const firstP = products[0];
+      setItems([
+        {
+          id: "qi_1",
+          productId: firstP.id,
+          description: firstP.name,
+          quantity: 1,
+          unit: firstP.unit || "Adet",
+          unitPrice: firstP.sellPrice || 0,
+          vatRate: firstP.vatRate ?? 20,
+          totalWithoutVat: firstP.sellPrice || 0,
+          vatAmount: ((firstP.sellPrice || 0) * (firstP.vatRate ?? 20)) / 100,
+          totalWithVat:
+            (firstP.sellPrice || 0) * (1 + (firstP.vatRate ?? 20) / 100),
+        },
+      ]);
+    } else {
+      setItems([
+        {
+          id: "qi_1",
+          productId: "",
+          description: "Yazılım Danışmanlık ve Hizmet Bedeli",
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: 10000,
+          vatRate: 20,
+          totalWithoutVat: 10000,
+          vatAmount: 2000,
+          totalWithVat: 12000,
+        },
+      ]);
+    }
+
+    setIsModalOpen(true);
+  };
+
+  const handleAddItem = () => {
+    const newItem = {
+      id: "qi_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+      productId: "",
+      description: "",
+      quantity: 1,
+      unit: "Adet",
+      unitPrice: 0,
+      vatRate: 20,
+      totalWithoutVat: 0,
+      vatAmount: 0,
+      totalWithVat: 0,
+    };
+    setItems((prev) => [...prev, newItem]);
+  };
+
+  const handleRemoveItem = (id: string) => {
+    if (items.length <= 1) return;
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleItemChange = (id: string, field: string, value: any) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+
+        let updated = { ...item, [field]: value };
+
+        if (field === "productId" && value) {
+          const p = products.find((prod) => prod.id === value);
+          if (p) {
+            updated.description = p.name;
+            updated.unit = p.unit || "Adet";
+            updated.unitPrice = p.sellPrice || 0;
+            updated.vatRate = p.vatRate ?? 20;
+          }
+        }
+
+        const qty = updated.quantity || 0;
+        const price = updated.unitPrice || 0;
+        const vat = updated.vatRate || 0;
+
+        const totalWithoutVat = qty * price;
+        const vatAmount = (totalWithoutVat * vat) / 100;
+        const totalWithVat = totalWithoutVat + vatAmount;
+
+        updated.totalWithoutVat = totalWithoutVat;
+        updated.vatAmount = vatAmount;
+        updated.totalWithVat = totalWithVat;
+
+        return updated;
+      })
+    );
+  };
+
+  const subtotal = items.reduce((sum, i) => sum + (i.totalWithoutVat || 0), 0);
+  const totalVat = items.reduce((sum, i) => sum + (i.vatAmount || 0), 0);
+  const grandTotal = items.reduce((sum, i) => sum + (i.totalWithVat || 0), 0);
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const contact = contacts.find((c) => c.id === contactId);
+    if (!contact) return;
+
+    const prefix = formType === "quote" ? "TEK2026" : "PRF2026";
+
+    const newQuote: Quote = {
+      id: "q_" + Date.now(),
+      quoteNumber: `${prefix}${String(quotes.length + 1).padStart(5, "0")}`,
+      contactId: contact.id,
+      contactName: contact.name,
+      issueDate,
+      validUntil,
+      items,
+      grandTotal,
+      status: "sent",
+      notes,
+    };
+
+    onAddQuote(newQuote);
+    setIsModalOpen(false);
+  };
+
+  // Available Years
+  const availableYears = React.useMemo(() => {
+    const yearsSet = new Set<number>();
+    quotes.forEach((q) => {
+      const { year } = getDateYearAndMonth(q.issueDate);
+      if (year) yearsSet.add(year);
+    });
+    if (yearsSet.size === 0) {
+      yearsSet.add(new Date().getFullYear());
+    }
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [quotes]);
+
+  const activeSearchQuery = String(globalSearchTerm || search || "").toLowerCase().trim();
+  const filteredQuotes = quotes.filter((q) => {
+    // Year filter
+    if (selectedYear !== "all") {
+      const { year } = getDateYearAndMonth(q.issueDate);
+      if (!year || year.toString() !== selectedYear) return false;
+    }
+
+    // Month filter
+    if (selectedMonth !== "all") {
+      const { month } = getDateYearAndMonth(q.issueDate);
+      if (!month || month.toString() !== selectedMonth) return false;
+    }
+
+    // Search query
+    if (activeSearchQuery) {
+      const matchesSearch =
+        q.quoteNumber.toLowerCase().includes(activeSearchQuery) ||
+        q.contactName.toLowerCase().includes(activeSearchQuery) ||
+        (q.notes && q.notes.toLowerCase().includes(activeSearchQuery));
+      if (!matchesSearch) return false;
+    }
+
+    return true;
+  });
+
+  const displayedQuotes = React.useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredQuotes.slice(start, start + pageSize);
+  }, [filteredQuotes, currentPage, pageSize]);
+
+  if (isModalOpen) {
+    return (
+        <DetailPageLayout
+          title="Yeni Proforma Fatura & Teklif Oluştur"
+          subtitle="Müşteri fiyat teklifi ve proforma belge düzenleme"
+          breadcrumbs={[
+            { label: "Proforma & Teklifler", onClick: handleBackToList },
+            { label: "Yeni Proforma Oluştur", active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-[#eaedff] text-[#0f6bae] border-[#dae2fd]">
+              {formType === "proforma" ? "Proforma Fatura" : "Fiyat Teklifi"}
+            </span>
+          }
+          headerIcon={<FileText className="w-5 h-5 text-[#0f6bae]" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                form="quote-form"
+                style={{ backgroundColor: theme.primaryColor }}
+                className="px-5 py-2 hover:brightness-110 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+              >
+                Kaydet & Oluştur
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-6">
+            <form id="quote-form" onSubmit={handleSave} className="space-y-6">
+              {/* Top Form Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-purple-50/50 p-4 rounded-xl border border-purple-100">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Müşteri Cari *
+                  </label>
+                  <select
+                    value={contactId}
+                    onChange={(e) => setContactId(e.target.value)}
+                    className="w-full bg-white border border-purple-200/80 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  >
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Proforma Tarihi *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={issueDate}
+                    onChange={(e) => setIssueDate(e.target.value)}
+                    className="w-full bg-white border border-purple-200/80 rounded-xl p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Son Geçerlilik Tarihi *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={validUntil}
+                    onChange={(e) => setValidUntil(e.target.value)}
+                    className="w-full bg-white border border-purple-200/80 rounded-xl p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  />
+                </div>
+              </div>
+
+              {/* Items & Product/Stock Selection */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase text-purple-950 tracking-wider flex items-center gap-1.5">
+                    <FileSpreadsheet className="w-4 h-4 text-purple-700" />
+                    <span>Proforma Kalemleri & Stok / Hizmet Seçimi</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
+                  >
+                    <PlusCircle className="w-4 h-4 text-purple-700" />
+                    <span>Yeni Satır Ekle</span>
+                  </button>
+                </div>
+
+                <div className="border border-purple-200/80 rounded-xl overflow-x-auto custom-scrollbar w-full shadow-2xs">
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead>
+                      <tr className="bg-purple-50/80 text-purple-950 font-extrabold uppercase text-[10px]">
+                        <th className="py-2.5 px-3">Ürün / Hizmet (Stoktan Seç & Açıklama)</th>
+                        <th className="py-2.5 px-3 w-20 text-center">Miktar</th>
+                        <th className="py-2.5 px-3 w-20 text-center">Birim</th>
+                        <th className="py-2.5 px-3 w-28 text-right">Birim Fiyat (TL)</th>
+                        <th className="py-2.5 px-3 w-24 text-center">KDV %</th>
+                        <th className="py-2.5 px-3 w-28 text-right">Toplam (TL)</th>
+                        <th className="py-2.5 px-2 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-purple-100">
+                      {items.map((item) => (
+                        <tr key={item.id} className="hover:bg-purple-50/30">
+                          <td className="p-2">
+                            <div className="space-y-1">
+                              {products.length > 0 && (
+                                <select
+                                  value={item.productId || ""}
+                                  onChange={(e) =>
+                                    handleItemChange(item.id, "productId", e.target.value)
+                                  }
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                                >
+                                  <option value="">-- Stok / Hizmet Kataloğundan Seç --</option>
+                                  {products.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.stockType ? `[${p.stockType}] ` : ""}{p.name} {p.barcode ? `(Barkod: ${p.barcode})` : ""} - ₺{p.sellPrice.toLocaleString("tr-TR")}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                              <input
+                                type="text"
+                                required
+                                placeholder="Açıklama (ör: Danışmanlık ve Hizmet Bedeli)"
+                                value={item.description}
+                                onChange={(e) =>
+                                  handleItemChange(item.id, "description", e.target.value)
+                                }
+                                className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                              />
+                            </div>
+                          </td>
+
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              min="1"
+                              step="any"
+                              value={item.quantity}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "quantity",
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-center font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                            />
+                          </td>
+
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              value={item.unit}
+                              onChange={(e) =>
+                                handleItemChange(item.id, "unit", e.target.value)
+                              }
+                              className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-center text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                            />
+                          </td>
+
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={item.unitPrice}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "unitPrice",
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-right font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                            />
+                          </td>
+
+                          <td className="p-2">
+                            <select
+                              value={item.vatRate}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "vatRate",
+                                  parseInt(e.target.value) || 0
+                                )
+                              }
+                              className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-center font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                            >
+                              <option value={0}>%0</option>
+                              <option value={1}>%1</option>
+                              <option value={10}>%10</option>
+                              <option value={20}>%20</option>
+                            </select>
+                          </td>
+
+                          <td className="p-2 text-right font-black text-slate-900 text-xs">
+                            ₺{item.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+
+                          <td className="p-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(item.id)}
+                              disabled={items.length <= 1}
+                              className="text-slate-400 hover:text-rose-600 p-1 disabled:opacity-30 disabled:hover:text-slate-400 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Totals Summary */}
+              <div className="flex justify-end">
+                <div className="w-full sm:w-72 bg-purple-50/60 p-3.5 rounded-xl border border-purple-200/80 space-y-1.5 text-xs shadow-2xs">
+                  <div className="flex justify-between text-slate-600 font-semibold">
+                    <span>Ara Toplam (KDV Hariç):</span>
+                    <span className="font-bold text-slate-900">
+                      ₺{subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 font-semibold">
+                    <span>Toplam KDV:</span>
+                    <span className="font-bold text-slate-900">
+                      ₺{totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-black text-purple-950 pt-1.5 border-t border-purple-200/80">
+                    <span>Genel Toplam:</span>
+                    <span>
+                      ₺{grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes & Terms */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Proforma Notu / Şartlar
+                </label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Proforma şartları, ödeme planı veya teslimat notları..."
+                  className="w-full bg-slate-50 border border-purple-200/80 rounded-xl p-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                />
+              </div>
+
+              {/* Form Actions */}
+              <div className="pt-4 flex justify-end gap-3 border-t border-purple-100">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 text-xs font-extrabold bg-purple-700 hover:bg-purple-800 text-white rounded-xl cursor-pointer shadow-xs transition-colors"
+                >
+                  Proforma Faturayı Kaydet
+                </button>
+              </div>
+            </form>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+  if (printingQuote) {
+    return (
+        <DetailPageLayout
+          title={`Proforma Fatura: ${printingQuote.quoteNumber}`}
+          subtitle={`Düzenlenme: ${formatDate(printingQuote.issueDate)} • Geçerlilik: ${formatDate(printingQuote.validUntil)}`}
+          breadcrumbs={[
+            { label: "Proforma & Teklifler", onClick: handleBackToList },
+            { label: printingQuote.quoteNumber, active: true },
+          ]}
+          onBack={handleBackToList}
+          statusBadge={
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-[#eaedff] text-[#0f6bae] border-[#dae2fd]">
+              {printingQuote.status === "accepted" ? "Kabul Edildi" : printingQuote.status === "rejected" ? "Reddedildi" : "Beklemede"}
+            </span>
+          }
+          headerIcon={<Printer className="w-5 h-5 text-[#0f6bae]" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setWhatsAppQuote(printingQuote)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+              >
+                <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
+                <span>WhatsApp ile Gönder</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadQuotePDF}
+                disabled={isDownloadingQuotePDF}
+                style={{ backgroundColor: theme.primaryColor }}
+                className="hover:brightness-110 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                <Download className="w-4 h-4 text-white/80" />
+                <span>{isDownloadingQuotePDF ? "PDF Hazırlanıyor..." : "PDF İndir"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+              >
+                <Printer className="w-4 h-4 text-slate-300" />
+                <span className="hidden sm:inline">Yazdır</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-3xl border border-slate-200 shadow-sm print:p-0 print:border-none print:shadow-none">
+
+            {/* Scrollable Printable Document Sheet */}
+            <div className="p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:overflow-visible custom-scrollbar">
+              <div id="printable-quote" className="bg-white text-slate-900 p-6 sm:p-8 border border-slate-200 rounded-xl space-y-6 print:border-none print:p-0">
+              {/* Header Banner */}
+              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-6">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Logo size="md" src={companySettings?.logoUrl || "/logo.svg"} />
+                  </div>
+                  <h1 className="text-base font-black text-slate-900">
+                    {companySettings?.title || "Örnek Teknoloji ve Danışmanlık A.Ş."}
+                  </h1>
+                  <p className="text-xs text-slate-600 max-w-sm">
+                    {companySettings?.address || "Büyükdere Cad. No:195 Levent, Beşiktaş / İstanbul"}
+                  </p>
+                  <p className="text-xs text-slate-500 font-mono">
+                    VD: {companySettings?.taxOffice || "Boğaziçi"} - VKN: {companySettings?.taxNumber || "9876543210"}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Tel: {companySettings?.phone || "0850 123 45 67"} | E-posta: {companySettings?.email || "info@sirket.com"}
+                  </p>
+                </div>
+
+                <div className="text-right space-y-2">
+                  <div className="inline-block bg-slate-900 text-white px-4 py-2 rounded-lg font-black text-sm uppercase tracking-wider">
+                    PROFORMA FATURA
+                  </div>
+                  <div className="text-xs text-slate-600 font-mono space-y-1">
+                    <div><span className="font-bold text-slate-800">Belge No:</span> {printingQuote.quoteNumber}</div>
+                    <div><span className="font-bold text-slate-800">Tarih:</span> {formatDate(printingQuote.issueDate)}</div>
+                    <div><span className="font-bold text-slate-800">Son Geçerlilik:</span> {formatDate(printingQuote.validUntil)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Info Box */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider block">
+                    Müşteri / Cari Bilgileri
+                  </span>
+                  <div className="text-sm font-black text-slate-900">
+                    {contacts.find((c) => c.id === printingQuote.contactId)?.companyTitle || printingQuote.contactName}
+                  </div>
+                  <div className="text-xs text-slate-600">
+                    {contacts.find((c) => c.id === printingQuote.contactId)?.address || "Türkiye"}
+                  </div>
+                  <div className="text-xs text-slate-500 font-mono">
+                    VD: {contacts.find((c) => c.id === printingQuote.contactId)?.taxOffice || "-"} - VKN/TCKN: {contacts.find((c) => c.id === printingQuote.contactId)?.taxNumber || "-"}
+                  </div>
+                </div>
+
+                <div className="space-y-1 md:border-l md:border-slate-200 md:pl-4">
+                  <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider block">
+                    Ödeme & Şartlar Özeti
+                  </span>
+                  <div className="text-xs text-slate-700">
+                    <span className="font-bold text-slate-900">Durum:</span>{" "}
+                    {printingQuote.status === "converted"
+                      ? "Faturaya Dönüştü"
+                      : printingQuote.status === "approved"
+                      ? "Onaylandı"
+                      : "Onay Bekliyor"}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <span className="font-bold text-slate-900">Banka IBAN:</span>{" "}
+                    <span className="font-mono font-bold text-slate-900">{companySettings?.iban || "TR33 0006 2000 0000 1234 5678 90"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar w-full">
+                <table className="w-full text-left text-xs min-w-[650px]">
+                  <thead>
+                    <tr className="bg-slate-900 text-white font-extrabold uppercase text-[10px]">
+                      <th className="py-2.5 px-3 w-10 text-center">#</th>
+                      <th className="py-2.5 px-3">Ürün / Hizmet Açıklaması</th>
+                      <th className="py-2.5 px-3 text-center w-16">Miktar</th>
+                      <th className="py-2.5 px-3 text-center w-16">Birim</th>
+                      <th className="py-2.5 px-3 text-right w-28">Birim Fiyat</th>
+                      <th className="py-2.5 px-3 text-center w-16">KDV</th>
+                      <th className="py-2.5 px-3 text-right w-28">Toplam</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {printingQuote.items.map((item, index) => (
+                      <tr key={item.id || index} className="even:bg-slate-50/50">
+                        <td className="py-2.5 px-3 text-center font-bold text-slate-400">{index + 1}</td>
+                        <td className="py-2.5 px-3 font-semibold text-slate-900">{item.description}</td>
+                        <td className="py-2.5 px-3 text-center font-bold">{item.quantity}</td>
+                        <td className="py-2.5 px-3 text-center text-slate-600">{item.unit}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">
+                          ₺{item.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono text-slate-600">%{item.vatRate}</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                          ₺{item.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Calculations & Written Amount */}
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-2">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 w-full sm:w-auto flex-1 space-y-1">
+                  <div className="text-[10px] font-extrabold uppercase text-slate-700">Yazı ile Tutar:</div>
+                  <div className="text-xs font-bold italic text-slate-800">
+                    # {numberToTurkishWords(printingQuote.grandTotal)} #
+                  </div>
+                </div>
+
+                <div className="w-full sm:w-72 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs shadow-2xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Ara Toplam (KDV Hariç):</span>
+                    <span className="font-bold text-slate-900">
+                      ₺{(printingQuote.items.reduce((s, i) => s + (i.totalWithoutVat || i.quantity * i.unitPrice), 0)).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Toplam KDV:</span>
+                    <span className="font-bold text-slate-900">
+                      ₺{(printingQuote.items.reduce((s, i) => s + (i.vatAmount || (i.quantity * i.unitPrice * i.vatRate) / 100), 0)).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-300">
+                    <span>GENEL TOPLAM:</span>
+                    <span>₺{printingQuote.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes Section */}
+              {printingQuote.notes && (
+                <div className="border border-slate-200 bg-slate-50 p-3 rounded-xl space-y-1">
+                  <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider block">
+                    Proforma Şartları & Notlar
+                  </span>
+                  <p className="text-xs text-slate-700 whitespace-pre-wrap">{printingQuote.notes}</p>
+                </div>
+              )}
+
+              {/* Signatures */}
+              <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-200 text-center text-xs">
+                <div className="space-y-12">
+                  <div className="font-bold text-slate-900">Düzenleyen / Firma Yetkilisi</div>
+                  <div className="border-b border-dashed border-slate-300 mx-8"></div>
+                  <div className="text-[10px] text-slate-400">İmza / Kaşe</div>
+                </div>
+                <div className="space-y-12">
+                  <div className="font-bold text-slate-900">Onaylayan / Müşteri Yetkilisi</div>
+                  <div className="border-b border-dashed border-slate-300 mx-8"></div>
+                  <div className="text-[10px] text-slate-400">İmza / Kaşe / Onay Tarihi</div>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+        </DetailPageLayout>
+    );
+  }
+
+  return (
+    <div className="p-4 sm:p-6 space-y-6 sm:space-y-7 max-w-7xl mx-auto">
+      {/* 1. TOP TITLE & ACTION HEADER WITH EDITORIAL BACKGROUND */}
+      <ModuleEntranceHeader
+        badge="Satış Teklifi & Proforma"
+        badgeIcon={<FileText className="w-2.5 h-2.5 text-[#0f6bae]" />}
+        title="Teklifler & Proforma Faturalar"
+        description="Müşterilere sunulan proforma faturalar, teklifler ve onaylanan belgelerin faturaya/siparişe dönüşümü."
+        actions={
+          <button
+            type="button"
+            onClick={() => openNewFormModal("proforma")}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>+ Yeni Proforma / Teklif</span>
+          </button>
+        }
+      />
+
+      {/* 2. TOP 4 KPI SUMMARY CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Toplam Teklif Hacmi */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md haze-kpi-card-bg relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Toplam Teklif Hacmi</span>
+              <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                ₺{kpiStats.totalVolume.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-[#eaedff] flex items-center justify-center text-[#0f6bae] shrink-0">
+              <img src={ASSET_ICONS.ciro} alt="" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0f6bae] bg-[#eaedff] px-2 py-0.5 rounded-full">
+              {quotes.length} Kayıt
+            </span>
+            <span className="text-slate-400 text-[11px]">Düzenlenen belgeler</span>
+          </div>
+        </div>
+
+        {/* Card 2: Kabul Edilen Teklifler */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md haze-kpi-card-bg relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Kabul Edilen Teklifler</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                ₺{kpiStats.acceptedVolume.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+              <img src={ASSET_ICONS.nakit} alt="" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-emerald-600">
+              {kpiStats.acceptedCount} Onaylandı
+            </span>
+            <span className="text-slate-400 text-[11px]">• Müşteri onayı alındı</span>
+          </div>
+        </div>
+
+        {/* Card 3: Onay Bekleyenler */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md haze-kpi-card-bg relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Onay Bekleyenler</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-indigo-600">
+                ₺{kpiStats.pendingVolume.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+              <img src={ASSET_ICONS.toplamAlacak} alt="" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-indigo-600">
+              {kpiStats.pendingCount} İncelemede
+            </span>
+            <span className="text-slate-400 text-[11px]">• Karar aşamasında</span>
+          </div>
+        </div>
+
+        {/* Card 4: Faturaya / Siparişe Dönüşen */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md haze-kpi-card-bg relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Faturaya Dönüşenler</span>
+              <div className="text-2xl font-bold font-mono tracking-tight text-teal-600">
+                {kpiStats.invoicedCount}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
+              <img src={ASSET_ICONS.toplamBorc} alt="" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
+              Resmileşti
+            </span>
+            <span className="text-slate-400 text-[11px]">Resmi faturaya dönüştü</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. FILTER & ACTION TOOLBAR */}
+      <div
+        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Proforma no veya müşteri ara..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200/50 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Year Filter */}
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="rounded-xl px-3 py-2 border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm Yıllar</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y.toString()}>{y}</option>
+            ))}
+          </select>
+
+          {/* Month Filter */}
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="rounded-xl px-3 py-2 border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm Aylar</option>
+            {TURKISH_MONTHS.map((m) => (
+              <option key={m.id} value={m.id.toString()}>{m.name}</option>
+            ))}
+          </select>
+
+          {(selectedYear !== "all" || selectedMonth !== "all") && (
+            <button
+              onClick={() => {
+                setSelectedYear("all");
+                setSelectedMonth("all");
+              }}
+              className="text-xs text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              title="Filtreyi temizle"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Temizle</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <ExportButtons
+            getExportData={() => ({
+              filename: `Proforma_Faturalar_${new Date().toISOString().split("T")[0]}`,
+              title: "PROFORMA FATURALAR LİSTESİ",
+              subtitle: `Toplam ${filteredQuotes.length} Adet Kayıt`,
+              headers: [
+                "Belge No",
+                "Belge Türü",
+                "Cari / Müşteri",
+                "Tarih",
+                "Son Geçerlilik Tarihi",
+                "Ara Toplam",
+                "KDV Toplamı",
+                "Genel Toplam",
+                "Durum",
+                "Açıklama / Şartlar",
+              ],
+              rows: filteredQuotes.map((q) => [
+                q.quoteNumber,
+                q.quoteNumber.startsWith("TEK") ? "Fiyat Teklifi" : "Proforma Fatura",
+                q.contactName,
+                formatDate(q.issueDate),
+                formatDate(q.validUntil),
+                formatCurrency(q.subtotal || 0),
+                formatCurrency(q.taxTotal || 0),
+                formatCurrency(q.grandTotal),
+                q.status === "converted"
+                  ? "Faturaya Dönüştü"
+                  : q.status === "approved"
+                  ? "Onaylandı"
+                  : "Onay Bekliyor",
+                q.notes || "-",
+              ]),
+            })}
+          />
+        </div>
+      </div>
+
+      {/* 4. MODERN DATA TABLE */}
+      <div
+        className="rounded-2xl border shadow-2xs overflow-hidden"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="w-10 py-3.5 px-3 text-center"></th>
+                <th className="py-3.5 px-4 font-bold">Belge No</th>
+                <th className="py-3.5 px-4 font-bold">Cari / Müşteri</th>
+                <th className="py-3.5 px-4 font-bold">Tarih / Geçerlilik</th>
+                <th className="py-3.5 px-4 font-bold text-right">Genel Toplam</th>
+                <th className="py-3.5 px-4 font-bold text-center">Durum</th>
+                <th className="py-3.5 px-4 font-bold text-right">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {displayedQuotes.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    Kayıtlı proforma fatura veya teklif bulunamadı.
+                  </td>
+                </tr>
+              ) : (
+                displayedQuotes.map((q) => {
+                  const isExpanded = expandedQuoteId === q.id;
+                  return (
+                    <React.Fragment key={q.id}>
+                      <tr
+                        className={`transition-colors group cursor-pointer ${isExpanded ? "bg-[#eaedff]/30" : "hover:bg-blue-50/80"}`}
+                      >
+                        {/* Master-Detail Expand Chevron */}
+                        <td className="w-10 py-3.5 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedQuoteId(isExpanded ? null : q.id)}
+                            className="p-1 rounded-md text-slate-400 hover:text-[#0f6bae] hover:bg-[#eaedff] transition-colors cursor-pointer"
+                            title={isExpanded ? "Detayı Gizle" : "Hızlı Kalem Detaylarını Aç"}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-[#0f6bae]" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
+
+                        {/* Quote Number & Icon */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="p-1 rounded-lg bg-[#eaedff] text-[#0f6bae]">
+                              <FileText className="w-3.5 h-3.5" />
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPrintingQuote(q)}
+                              className="hover:underline hover:text-[#0f6bae] cursor-pointer font-mono font-bold text-left"
+                              title="Proforma Detayı ve Önizleme Sayfasını Aç"
+                            >
+                              {q.quoteNumber}
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Contact Name */}
+                        <td className="py-3.5 px-4">
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-900 truncate max-w-[220px] block" title={q.contactName}>
+                              {q.contactName}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Issue Date & Validity */}
+                        <td className="py-3.5 px-4 text-slate-700">
+                          <div>{formatDate(q.issueDate)}</div>
+                          <div className="text-[10px] text-slate-400">
+                            Geçerlilik: {formatDate(q.validUntil)}
+                          </div>
+                        </td>
+
+                        {/* Grand Total */}
+                        <td className="py-3.5 px-4 text-right font-mono tabular-nums font-tabular-num-md font-bold text-sm text-slate-900 whitespace-nowrap">
+                          ₺{q.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="py-3.5 px-4 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                              q.status === "converted"
+                                ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                : q.status === "approved"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-blue-50 text-blue-700 border border-blue-200"
+                            }`}
+                          >
+                            {q.status === "converted"
+                              ? "Faturaya Dönüştü"
+                              : q.status === "approved"
+                              ? "Onaylandı"
+                              : "Gönderildi"}
+                          </span>
+                        </td>
+
+                        {/* Action Buttons */}
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setPrintingQuote(q)}
+                              title="Yazdır / Resmi PDF Önizleme"
+                              className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Printer className="w-3.5 h-3.5 text-slate-600" />
+                            </button>
+                            <button
+                              onClick={() => setWhatsAppQuote(q)}
+                              title="Teklifi WhatsApp ile Paylaş"
+                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            </button>
+                            {onConvertQuoteToOrder && (
+                              <button
+                                onClick={() => onConvertQuoteToOrder(q)}
+                                title="Bu belgeyi yeni Satış Siparişine dönüştür"
+                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              >
+                                <ShoppingCart className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Siparişe Gönder</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => onConvertQuoteToInvoice(q)}
+                              className="px-2.5 py-1 bg-[#eaedff] hover:bg-[#dae2fd] text-[#0f6bae] border border-[#dae2fd] rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              title="Gelir Faturasına Dönüştür"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Faturaya Dönüştür</span>
+                            </button>
+                            <button
+                              onClick={() => onDeleteQuote(q.id)}
+                              className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                              title="Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Master-Detail Hidden Section */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50/70 border-b border-slate-200">
+                          <td colSpan={7} className="p-4 pl-12">
+                            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-slate-800">Proforma / Teklif Kalem Detayları:</span>
+                                  <span className="font-mono text-xs font-bold text-[#0f6bae]">{q.quoteNumber}</span>
+                                  <span className="text-[11px] text-slate-500 font-medium">({q.items.length} Kalem)</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setPrintingQuote(q)}
+                                  className="text-xs font-bold text-[#0f6bae] hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <FileText className="w-3.5 h-3.5" /> Resmi Belgeyi Görüntüle / Yazdır
+                                </button>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs">
+                                  <thead>
+                                    <tr className="text-[10px] text-slate-400 uppercase border-b border-slate-100">
+                                      <th className="py-1 px-2 font-bold">Açıklama</th>
+                                      <th className="py-1 px-2 text-center font-bold">Miktar</th>
+                                      <th className="py-1 px-2 text-right font-bold">Birim Fiyat</th>
+                                      <th className="py-1 px-2 text-center font-bold">KDV</th>
+                                      <th className="py-1 px-2 text-right font-bold">Toplam</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {q.items.map((item, idx) => (
+                                      <tr key={item.id || idx}>
+                                        <td className="py-1.5 px-2 font-semibold text-slate-800">{item.description}</td>
+                                        <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-700">{item.quantity} {item.unit || "Adet"}</td>
+                                        <td className="py-1.5 px-2 text-right font-mono text-slate-600">₺{(item.unitPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</td>
+                                        <td className="py-1.5 px-2 text-center font-mono text-slate-500">%{item.vatRate}</td>
+                                        <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-900">₺{(item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              {q.notes && (
+                                <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                  <span className="font-bold text-slate-700">Şartlar & Notlar: </span>{q.notes}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredQuotes.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          pageSizeOptions={[10, 15, 25, 50, 100]}
+          itemLabel="teklif / proforma"
+          className="border-t border-slate-100"
+        />
+      </div>
+
+      {/* WhatsApp Share Modal */}
+      {whatsAppQuote && (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppQuote}
+          onClose={() => setWhatsAppQuote(null)}
+          title="WhatsApp ile Fiyat Teklifi Paylaş"
+          documentTypeLabel="Proforma Fatura / Teklif"
+          recipientName={whatsAppQuote.contactName}
+          recipientPhone={contacts.find((c) => c.id === whatsAppQuote.contactId)?.phone || ""}
+          defaultMessage={formatQuoteWhatsAppMessage(
+            whatsAppQuote,
+            companySettings,
+            contacts.find((c) => c.id === whatsAppQuote.contactId)
+          )}
+          documentFileName={`${whatsAppQuote.quoteNumber}_Teklif.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const el = document.getElementById("printable-quote");
+            if (el) {
+              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+              return exportElementToPDFWithPrintStyling("printable-quote", `${whatsAppQuote.quoteNumber}_Teklif.pdf`, {
+                orientation: "p",
+                margin: 8,
+                scale: 1.6,
+              });
+            }
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `${whatsAppQuote.quoteNumber}_Teklif`,
+              title: `${companySettings?.companyName || "Fiyat Teklifi"} - ${whatsAppQuote.quoteNumber}`,
+              subtitle: `Müşteri: ${whatsAppQuote.contactName} | Düzenlenme: ${formatDate(whatsAppQuote.issueDate)} | Toplam: ${formatCurrency(whatsAppQuote.grandTotal)}`,
+              headers: ["Ürün / Hizmet", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
+              rows: (whatsAppQuote.items || []).map((i) => [
+                i.description,
+                i.quantity,
+                i.unit || "Adet",
+                formatCurrency(i.unitPrice),
+                `%${i.vatRate ?? 20}`,
+                formatCurrency(i.totalWithVat || i.quantity * i.unitPrice * (1 + (i.vatRate ?? 20) / 100)),
+              ]),
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
+      )}
+    </div>
+  );
+};

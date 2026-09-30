@@ -1,0 +1,2553 @@
+import React, { useState, useMemo } from "react";
+import { ExportButtons } from "./ExportButtons";
+import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
+import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS } from "../utils/assetIcons";
+import { AIReportInsights } from "./AIReportInsights";
+import {
+  Contact,
+  Invoice,
+  Transaction,
+  CompanySettings,
+  TAXPAYER_TYPES,
+} from "../types";
+import {
+  BarChart3,
+  Receipt,
+  TrendingUp,
+  TrendingDown,
+  Building2,
+  Calendar,
+  Zap,
+  FileCheck,
+  Percent,
+  CheckCircle2,
+  Info,
+  Calculator,
+  ShieldCheck,
+  Scale,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Search,
+  Filter,
+  ArrowUpDown,
+  Landmark,
+  Users,
+  Sparkles,
+  Download,
+  Clock,
+  ArrowRight,
+  ArrowUpRight,
+  ArrowDownLeft,
+  FileSpreadsheet,
+  AlertCircle,
+} from "lucide-react";
+
+interface ReportsProps {
+  contacts: Contact[];
+  invoices: Invoice[];
+  transactions: Transaction[];
+  companySettings: CompanySettings;
+  products?: any[];
+  quotes?: any[];
+  orders?: any[];
+  waybills?: any[];
+  cheques?: any[];
+  promissoryNotes?: any[];
+  employees?: any[];
+  initialTab?: "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights";
+}
+
+// 2026 Gelir Vergisi Tarifesi (GVK M.103) - Progressive Tax Bracket Calculation
+function calculateIndividualIncomeTax(netProfit: number): {
+  totalTax: number;
+  effectiveRate: number;
+  bracketBreakdown: { bracket: string; taxableAmount: number; taxAmount: number; rate: number }[];
+} {
+  if (netProfit <= 0) {
+    return { totalTax: 0, effectiveRate: 0, bracketBreakdown: [] };
+  }
+
+  const brackets = [
+    { limit: 150000, rate: 0.15, label: "1. Dilim (%15 - 150.000 TL'ye kadar)" },
+    { limit: 330000, rate: 0.20, label: "2. Dilim (%20 - 150.000 TL - 330.000 TL)" },
+    { limit: 1200000, rate: 0.27, label: "3. Dilim (%27 - 330.000 TL - 1.200.000 TL)" },
+    { limit: 4300000, rate: 0.35, label: "4. Dilim (%35 - 1.200.000 TL - 4.300.000 TL)" },
+    { limit: Infinity, rate: 0.40, label: "5. Dilim (%40 - 4.300.000 TL üzeri)" },
+  ];
+
+  let remainingProfit = netProfit;
+  let previousLimit = 0;
+  let totalTax = 0;
+  const bracketBreakdown: { bracket: string; taxableAmount: number; taxAmount: number; rate: number }[] = [];
+
+  for (const b of brackets) {
+    if (remainingProfit <= 0) break;
+
+    const bracketCapacity = b.limit - previousLimit;
+    const amountInBracket = Math.min(remainingProfit, bracketCapacity);
+    const taxInBracket = amountInBracket * b.rate;
+
+    totalTax += taxInBracket;
+    bracketBreakdown.push({
+      bracket: b.label,
+      taxableAmount: amountInBracket,
+      taxAmount: taxInBracket,
+      rate: b.rate * 100,
+    });
+
+    remainingProfit -= amountInBracket;
+    previousLimit = b.limit;
+  }
+
+  const effectiveRate = netProfit > 0 ? (totalTax / netProfit) * 100 : 0;
+
+  return { totalTax, effectiveRate, bracketBreakdown };
+}
+
+const MONTH_NAMES = [
+  "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+  "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+];
+
+const formatTL = (val: number | null | undefined): string => {
+  if (val === null || val === undefined || isNaN(Number(val))) return "0,00";
+  return Number(val).toLocaleString("tr-TR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
+export const Reports: React.FC<ReportsProps> = ({
+  contacts,
+  invoices,
+  transactions,
+  companySettings,
+  employees = [],
+  initialTab,
+}) => {
+  const { theme } = useTheme();
+  const [activeTab, setActiveTab] = useState<"monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights">(initialTab || "monthly");
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  // Selected Taxpayer Type (Mükellefiyet Türü)
+  const [activeTaxpayerType, setActiveTaxpayerType] = useState<string>(
+    companySettings.taxpayerType || "Anonim Şirket"
+  );
+
+  // Filters & Sorting States (Same filter pattern as Finance Management)
+  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc"); // Default chronological
+  const [expandedMonth, setExpandedMonth] = useState<number | null>(null);
+
+  // Active Period Filter State: Quarter (0..3), Month (0..11), or All
+  const [selectedPeriod, setSelectedPeriod] = useState<
+    | { type: "quarter"; index: number }
+    | { type: "month"; index: number }
+    | { type: "all" }
+  >({ type: "quarter", index: 0 });
+  const [isWhatsAppReportModalOpen, setIsWhatsAppReportModalOpen] = useState(false);
+
+  // Additional Corporate Tax Parameters (KVK M.32 Adjustments)
+  const [kkegAmount, setKkegAmount] = useState<number>(0); // Kanunen kabul edilmeyen giderler (+)
+  const [exemptionsAmount, setExemptionsAmount] = useState<number>(0); // İndirim ve İstisnalar (-)
+  const [priorLossesAmount, setPriorLossesAmount] = useState<number>(0); // Geçmiş Yıl Zararları (-)
+  const [prepaidWithholdingAmount, setPrepaidWithholdingAmount] = useState<number>(0); // Kesinti yoluyla ödenen vergiler (-)
+
+  // Quick Date Preset Handler
+  const handleApplyPreset = (preset: "all" | "q1" | "q2" | "q3" | "q4" | "this_month" | "this_year") => {
+    const yr = selectedYear;
+    if (preset === "all" || preset === "this_year") {
+      setSelectedPeriod({ type: "all" });
+      setStartDate(`${yr}-01-01`);
+      setEndDate(`${yr}-12-31`);
+    } else if (preset === "this_month") {
+      const currentM = new Date().getMonth();
+      setSelectedPeriod({ type: "month", index: currentM });
+      const mStr = String(currentM + 1).padStart(2, "0");
+      setStartDate(`${yr}-${mStr}-01`);
+      setEndDate(`${yr}-${mStr}-31`);
+    } else if (preset === "q1") {
+      setSelectedPeriod({ type: "quarter", index: 0 });
+      setStartDate(`${yr}-01-01`);
+      setEndDate(`${yr}-03-31`);
+    } else if (preset === "q2") {
+      setSelectedPeriod({ type: "quarter", index: 1 });
+      setStartDate(`${yr}-04-01`);
+      setEndDate(`${yr}-06-30`);
+    } else if (preset === "q3") {
+      setSelectedPeriod({ type: "quarter", index: 2 });
+      setStartDate(`${yr}-07-01`);
+      setEndDate(`${yr}-09-30`);
+    } else if (preset === "q4") {
+      setSelectedPeriod({ type: "quarter", index: 3 });
+      setStartDate(`${yr}-10-01`);
+      setEndDate(`${yr}-12-31`);
+    }
+  };
+
+  // Fixed Official Stamp Duty Fees (Resmi Beyanname Damga Vergisi Tarifesi - GİB)
+  const YILLIK_GELIR_DAMGA_VERGISI = 1189.50; // Yıllık Gelir Vergisi Beyannameleri
+  const KURUMLAR_DAMGA_VERGISI = 1605.80; // Kurumlar Vergisi Beyannameleri
+  const KDV_DAMGA_VERGISI = 791.00; // Katma Değer Vergisi Beyannameleri
+  const SADECE_MUHTASAR_DAMGA_VERGISI = 791.00; // Muhtasar Beyannameler (Primsiz)
+  const DIGER_VERGI_DAMGA_VERGISI = 791.00; // Diğer Vergi Beyannameleri (Damga Vergisi Beyannameleri Hariç)
+  const GUMRUK_DAMGA_VERGISI = 1605.80; // Gümrük İdarelerine Verilen Beyannameler
+  const BELEDIYE_DAMGA_VERGISI = 588.80; // Belediye ve İl Özel İdarelerine Verilen Beyannameler
+  const SGK_PRIM_DAMGA_VERGISI = 588.80; // Sosyal Güvenlik Kurumlarına Verilen Sigorta Prim Bildirgeleri
+  const MUHTASAR_PRIM_DAMGA_VERGISI = 939.70; // Muhtasar ve Prim Hizmet Beyannamesi
+
+  const GECICI_DAMGA_VERGISI = DIGER_VERGI_DAMGA_VERGISI; // 791,00 TL (Diğer Vergi Beyannamesi Kapsamında)
+
+  // Taxpayer Classifications
+  const isCorporate = ["Anonim Şirket", "Limited Şirket"].includes(activeTaxpayerType);
+  const isIndividual = activeTaxpayerType === "Gerçek Şahıs";
+  const isPartnership = ["Adi Ortaklık", "Kollektif Şirket"].includes(activeTaxpayerType);
+  const isExemptOrg = ["Dernek", "Vakıf", "Siyasi Parti", "Site Yönetimi", "Spor Kulübü"].includes(activeTaxpayerType);
+  const isCoop = activeTaxpayerType === "Kooperatif";
+
+  const YILLIK_DAMGA_VERGISI = (isCorporate || isCoop) ? KURUMLAR_DAMGA_VERGISI : YILLIK_GELIR_DAMGA_VERGISI;
+
+  let taxFormulaDescription = "";
+  if (isCorporate) {
+    taxFormulaDescription = "Net Ticari Kar × %25 Kurumlar Vergisi (KVK M.32)";
+  } else if (isIndividual || isPartnership) {
+    taxFormulaDescription = "GVK M.103 Artan Oranlı Gelir Vergisi Tarifesi (%15 - %40)";
+  } else if (isExemptOrg) {
+    taxFormulaDescription = "İktisadi İşletmesi Bulunmayan Organizasyonlar Muaftır (KVK M.4)";
+  } else if (isCoop) {
+    taxFormulaDescription = "Ortak İçi İşlemlerde Muaf, Ortak Dışı İşlemlerde %25 Kurumlar Vergisi";
+  }
+
+  // -------------------------------------------------------------
+  // CHRONOLOGICALLY SORTED GENERAL LEDGER ENTRIES (MUAVİN DÖKÜMÜ)
+  // -------------------------------------------------------------
+  const ledgerEntries = useMemo(() => {
+    interface LedgerItem {
+      id: string;
+      date: string;
+      typeLabel: string;
+      category: string;
+      documentNo: string;
+      contactName: string;
+      description: string;
+      debit: number; // Borç / Çıkış
+      credit: number; // Alacak / Giriş
+      vatAmount: number;
+      currency: string;
+      source: "invoice" | "transaction";
+    }
+
+    const items: LedgerItem[] = [];
+
+    // 1. Process Invoices
+    invoices.forEach((inv) => {
+      const invDate = inv.issueDate || `${selectedYear}-01-01`;
+      const isSales = inv.type === "sales";
+      items.push({
+        id: `inv-${inv.id}`,
+        date: invDate,
+        typeLabel: isSales ? "Satış Faturası" : "Alış Faturası",
+        category: isSales ? "Satış / Gelir" : "Alış / Gider",
+        documentNo: inv.invoiceNumber || "-",
+        contactName: inv.contactName || "Müşteri / Tedarikçi",
+        description: inv.notes || `${isSales ? "Satış" : "Alış"} Faturası Kaydı`,
+        debit: isSales ? 0 : inv.grandTotal,
+        credit: isSales ? inv.grandTotal : 0,
+        vatAmount: inv.totalVat || 0,
+        currency: inv.currency || "TRY",
+        source: "invoice",
+      });
+    });
+
+    // 2. Process Transactions
+    transactions.forEach((tx) => {
+      const txDate = tx.date || `${selectedYear}-01-01`;
+      const isIncome = tx.type === "income" || tx.type === "collection";
+      items.push({
+        id: `tx-${tx.id}`,
+        date: txDate,
+        typeLabel: isIncome ? "Tahsilat / Gelir" : "Ödeme / Gider",
+        category: tx.category || "Finans",
+        documentNo: tx.documentNo || "-",
+        contactName: tx.contactName || tx.accountName || "Cari",
+        description: tx.description || `${tx.accountName} işlemi`,
+        debit: isIncome ? 0 : tx.amount,
+        credit: isIncome ? tx.amount : 0,
+        vatAmount: 0,
+        currency: tx.currency || "TRY",
+        source: "transaction",
+      });
+    });
+
+    // Filter by year & date range & search
+    return items
+      .filter((item) => {
+        if (startDate && item.date < startDate) return false;
+        if (endDate && item.date > endDate) return false;
+
+        if (searchTerm) {
+          const s = searchTerm.toLowerCase();
+          const matchContact = item.contactName.toLowerCase().includes(s);
+          const matchDoc = item.documentNo.toLowerCase().includes(s);
+          const matchDesc = item.description.toLowerCase().includes(s);
+          const matchCategory = item.category.toLowerCase().includes(s);
+          const matchType = item.typeLabel.toLowerCase().includes(s);
+          if (!matchContact && !matchDoc && !matchDesc && !matchCategory && !matchType) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.date).getTime();
+        const timeB = new Date(b.date).getTime();
+        return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
+      });
+  }, [invoices, transactions, startDate, endDate, searchTerm, sortOrder, selectedYear]);
+
+  // Calculate Running Balance for General Ledger
+  const ledgerWithRunningBalance = useMemo(() => {
+    let running = 0;
+    return ledgerEntries.map((item) => {
+      running += item.credit - item.debit;
+      return { ...item, runningBalance: running };
+    });
+  }, [ledgerEntries]);
+
+  // -------------------------------------------------------------
+  // DETAILED MONTH-BY-MONTH MATRIX (CHRONOLOGICAL 12 MONTHS)
+  // -------------------------------------------------------------
+  const monthlyTaxDetails = useMemo(() => {
+    return MONTH_NAMES.map((monthName, mIdx) => {
+      // Filter invoices by month
+      const monthInvoices = invoices.filter((inv) => {
+        const d = new Date(inv.issueDate);
+        return d.getMonth() === mIdx && (d.getFullYear() === selectedYear || !inv.issueDate);
+      });
+
+      // Sort month invoices chronologically by date
+      monthInvoices.sort((a, b) => new Date(a.issueDate).getTime() - new Date(b.issueDate).getTime());
+
+      const mSalesInvoices = monthInvoices.filter((i) => i.type === "sales");
+      const mPurchaseInvoices = monthInvoices.filter((i) => i.type === "purchase");
+
+      const mSalesVat = mSalesInvoices.reduce((sum, i) => sum + (i.totalVat || 0), 0);
+      const mPurchaseVat = mPurchaseInvoices.reduce((sum, i) => sum + (i.totalVat || 0), 0);
+
+      const mSalesTotal = mSalesInvoices.reduce((sum, i) => sum + (i.grandTotal || 0), 0);
+      const mPurchaseTotal = mPurchaseInvoices.reduce((sum, i) => sum + (i.grandTotal || 0), 0);
+
+      // KDV Tevkifatı on incoming purchase invoices (2 No.lu KDV Beyannamesi Yükümlülüğü)
+      // Satıcı tarafından kesilen ve alıcı olarak vergi dairesine beyan edip ödemekle yükümlü olunan tevkifat tutarı
+      const mPurchaseKdvTevkifat = mPurchaseInvoices.reduce((sum, inv) => {
+        let invWithholding = inv.totalWithholding || 0;
+        if (!invWithholding && inv.taxItems && inv.taxItems.length > 0) {
+          const tevkifatItems = inv.taxItems.filter(
+            (t) => t.taxType === "KDV Tevkifatı" || (t.taxName && t.taxName.toLowerCase().includes("tevkifat"))
+          );
+          invWithholding = tevkifatItems.reduce((s, t) => s + (t.taxAmount || 0), 0);
+        }
+        return sum + invWithholding;
+      }, 0);
+
+      // KDV Tevkifatı on sales invoices (if any)
+      const mSalesKdvTevkifat = mSalesInvoices.reduce((sum, inv) => {
+        let invWithholding = inv.totalWithholding || 0;
+        if (!invWithholding && inv.taxItems && inv.taxItems.length > 0) {
+          const tevkifatItems = inv.taxItems.filter(
+            (t) => t.taxType === "KDV Tevkifatı" || (t.taxName && t.taxName.toLowerCase().includes("tevkifat"))
+          );
+          invWithholding = tevkifatItems.reduce((s, t) => s + (t.taxAmount || 0), 0);
+        }
+        return sum + invWithholding;
+      }, 0);
+
+      // Stopaj from incoming purchase invoices / receipts (SMM, Gider Pusulası, Kira, Danışmanlık vb.)
+      const mPurchaseStopaj = mPurchaseInvoices.reduce((sum, inv) => {
+        let invStopaj = inv.totalStopaj || 0;
+        if (!invStopaj && inv.taxItems && inv.taxItems.length > 0) {
+          const stopajItems = inv.taxItems.filter(
+            (t) => t.taxType === "Stopaj" || (t.taxName && (t.taxName.toLowerCase().includes("stopaj") || t.taxName.toLowerCase().includes("gelir vergisi kesintisi")))
+          );
+          invStopaj = stopajItems.reduce((s, t) => s + (t.taxAmount || 0), 0);
+        }
+        return sum + invStopaj;
+      }, 0);
+
+      // Invoices with tevkifat and stopaj
+      const mPurchaseTevkifatInvoices = mPurchaseInvoices.filter((inv) => {
+        const hasDirect = (inv.totalWithholding || 0) > 0;
+        const hasInItems = inv.taxItems && inv.taxItems.some(
+          (t) => t.taxType === "KDV Tevkifatı" || (t.taxName && t.taxName.toLowerCase().includes("tevkifat"))
+        );
+        return hasDirect || hasInItems;
+      });
+
+      const mPurchaseStopajInvoices = mPurchaseInvoices.filter((inv) => {
+        const hasDirect = (inv.totalStopaj || 0) > 0;
+        const hasInItems = inv.taxItems && inv.taxItems.some(
+          (t) => t.taxType === "Stopaj" || (t.taxName && (t.taxName.toLowerCase().includes("stopaj") || t.taxName.toLowerCase().includes("gelir vergisi kesintisi")))
+        );
+        return hasDirect || hasInItems;
+      });
+
+      // Filter transactions by month
+      const monthTx = transactions.filter((t) => {
+        const d = new Date(t.date);
+        return d.getMonth() === mIdx && (d.getFullYear() === selectedYear || !t.date);
+      });
+
+      // Sort month transactions chronologically by date
+      monthTx.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      const mIncomeTx = monthTx.filter((t) => t.type === "income" || t.type === "collection");
+      const mExpenseTx = monthTx.filter((t) => t.type === "expense" || t.type === "payment");
+
+      const mTxIncome = mIncomeTx.reduce((sum, t) => sum + t.amount, 0);
+      const mTxExpense = mExpenseTx.reduce((sum, t) => sum + t.amount, 0);
+
+      const mTotalIncome = mSalesTotal; // Sadece faturalı satışlar
+      const mTotalExpense = mPurchaseTotal; // Sadece faturalı alışlar
+      const mNetProfit = mTotalIncome - mTotalExpense; // Faturalı Net Matrah
+
+      // 1 No.lu KDV Beyannamesi Hesabı (KDV 1)
+      const mNetVat = mSalesVat - mPurchaseVat;
+      const mPayableVat = isExemptOrg ? 0 : Math.max(0, mNetVat);
+      const mDeferredVat = isExemptOrg ? 0 : mNetVat < 0 ? Math.abs(mNetVat) : 0;
+      const mKdvDamga = isExemptOrg ? 0 : KDV_DAMGA_VERGISI;
+
+      // 2 No.lu KDV Beyannamesi Hesabı (KDV Tevkifatı)
+      const mKdv2Payable = isExemptOrg ? 0 : mPurchaseKdvTevkifat;
+      const mKdv2Damga = (mKdv2Payable > 0 && !isExemptOrg) ? KDV_DAMGA_VERGISI : 0;
+      const mTotalKdv2Load = mKdv2Payable + mKdv2Damga;
+
+      // Monthly HR Payroll & Withholding (Muhtasar Stopaj)
+      let mPayrollIncomeTax = 0;
+      let mPayrollStampTax = 0;
+      let mPayrollSgkShare = 0;
+
+      if (employees.length > 0) {
+        employees.forEach((emp) => {
+          const gross = emp.salary || 20002.50;
+          const sgkEmp = Math.round(gross * 0.15);
+          const incTaxBase = Math.max(0, gross - sgkEmp);
+          const incTax = Math.round(Math.max(0, incTaxBase * 0.15 - 2950));
+          const stamp = Math.round(gross * 0.00759);
+          const sgkEmployer = Math.round(gross * 0.205);
+
+          mPayrollIncomeTax += incTax;
+          mPayrollStampTax += stamp;
+          mPayrollSgkShare += sgkEmp + sgkEmployer;
+        });
+      }
+
+      // Rent Withholding (Kira Stopajı - %20)
+      const rentTx = mExpenseTx.filter((t) =>
+        (t.category || "").toLowerCase().includes("kira") || (t.description || "").toLowerCase().includes("kira")
+      );
+      const mRentAmount = rentTx.reduce((sum, t) => sum + t.amount, 0);
+      const mRentWithholding = Math.round(mRentAmount * 0.20);
+
+      // Total Withholding (Muhtasar Stopaj = Personel GV + Personel Damga + Kira Stopajı + Gelen Fatura/Makbuz Stopajı)
+      const mTotalWithholding = mPayrollIncomeTax + mPayrollStampTax + mRentWithholding + mPurchaseStopaj;
+      const mMuhtasarDamga = (mTotalWithholding > 0 || employees.length > 0 || mRentAmount > 0 || mPurchaseStopaj > 0)
+        ? (employees.length > 0 ? MUHTASAR_PRIM_DAMGA_VERGISI : SADECE_MUHTASAR_DAMGA_VERGISI)
+        : 0;
+
+      // Total Monthly Tax Load (KDV 1 + KDV 1 Damga + KDV 2 Tevkifat + KDV 2 Damga + Muhtasar Stopaj + Muhtasar Damga)
+      const mTotalTaxLoad = mPayableVat + mKdvDamga + mTotalKdv2Load + mTotalWithholding + mMuhtasarDamga;
+
+      return {
+        monthIndex: mIdx,
+        monthName,
+        monthInvoices,
+        monthTx,
+        salesTotal: mSalesTotal,
+        purchaseTotal: mPurchaseTotal,
+        txIncome: mTxIncome,
+        txExpense: mTxExpense,
+        totalIncome: mTotalIncome,
+        totalExpense: mTotalExpense,
+        netProfit: mNetProfit,
+        salesVat: mSalesVat,
+        purchaseVat: mPurchaseVat,
+        payableVat: mPayableVat,
+        deferredVat: mDeferredVat,
+        kdvDamga: mKdvDamga,
+        purchaseKdvTevkifat: mPurchaseKdvTevkifat,
+        salesKdvTevkifat: mSalesKdvTevkifat,
+        kdv2Payable: mKdv2Payable,
+        kdv2Damga: mKdv2Damga,
+        totalKdv2Load: mTotalKdv2Load,
+        purchaseStopaj: mPurchaseStopaj,
+        purchaseTevkifatInvoices: mPurchaseTevkifatInvoices,
+        purchaseStopajInvoices: mPurchaseStopajInvoices,
+        payrollIncomeTax: mPayrollIncomeTax,
+        payrollStampTax: mPayrollStampTax,
+        payrollSgkShare: mPayrollSgkShare,
+        rentAmount: mRentAmount,
+        rentWithholding: mRentWithholding,
+        totalWithholding: mTotalWithholding,
+        muhtasarDamga: mMuhtasarDamga,
+        totalTaxLoad: mTotalTaxLoad,
+        invoiceCount: monthInvoices.length,
+        txCount: monthTx.length,
+      };
+    });
+  }, [invoices, transactions, employees, selectedYear, isExemptOrg]);
+
+  // Annual Totals from 12 Months
+  const annualSalesVat = monthlyTaxDetails.reduce((sum, m) => sum + m.salesVat, 0);
+  const annualPurchaseVat = monthlyTaxDetails.reduce((sum, m) => sum + m.purchaseVat, 0);
+  const annualPayableVat = monthlyTaxDetails.reduce((sum, m) => sum + m.payableVat, 0);
+  const annualKdvDamga = monthlyTaxDetails.reduce((sum, m) => sum + m.kdvDamga, 0);
+  const annualPurchaseKdvTevkifat = monthlyTaxDetails.reduce((sum, m) => sum + m.purchaseKdvTevkifat, 0);
+  const annualKdv2Payable = monthlyTaxDetails.reduce((sum, m) => sum + m.kdv2Payable, 0);
+  const annualKdv2Damga = monthlyTaxDetails.reduce((sum, m) => sum + m.kdv2Damga, 0);
+  const annualTotalKdv2Load = monthlyTaxDetails.reduce((sum, m) => sum + m.totalKdv2Load, 0);
+  const annualPurchaseStopaj = monthlyTaxDetails.reduce((sum, m) => sum + m.purchaseStopaj, 0);
+  const annualRentWithholding = monthlyTaxDetails.reduce((sum, m) => sum + m.rentWithholding, 0);
+  const annualPayrollWithholding = monthlyTaxDetails.reduce((sum, m) => sum + m.payrollIncomeTax + m.payrollStampTax, 0);
+  const annualWithholding = monthlyTaxDetails.reduce((sum, m) => sum + m.totalWithholding, 0);
+  const annualMuhtasarDamga = monthlyTaxDetails.reduce((sum, m) => sum + m.muhtasarDamga, 0);
+  const annualMonthlyTaxLoad = monthlyTaxDetails.reduce((sum, m) => sum + m.totalTaxLoad, 0);
+
+  // -------------------------------------------------------------
+  // QUARTERLY PROVISIONAL TAX & ANNUAL SETTLEMENT
+  // -------------------------------------------------------------
+  const calculateQuarter = (qIdx: number) => {
+    const startM = qIdx * 3;
+    const endM = startM + 2;
+
+    let cumulativeIncome = 0;
+    let cumulativeExpense = 0;
+    for (let m = 0; m <= endM; m++) {
+      cumulativeIncome += monthlyTaxDetails[m].totalIncome;
+      cumulativeExpense += monthlyTaxDetails[m].totalExpense;
+    }
+    const cumulativeProfit = Math.max(0, cumulativeIncome - cumulativeExpense);
+
+    let qIncome = 0;
+    let qExpense = 0;
+    for (let m = startM; m <= endM; m++) {
+      qIncome += monthlyTaxDetails[m].totalIncome;
+      qExpense += monthlyTaxDetails[m].totalExpense;
+    }
+    const qProfit = Math.max(0, qIncome - qExpense);
+
+    let cumulativeTax = 0;
+    if (isCorporate) {
+      cumulativeTax = cumulativeProfit * 0.25;
+    } else if (isIndividual || isPartnership) {
+      cumulativeTax = calculateIndividualIncomeTax(cumulativeProfit).totalTax;
+    } else if (isCoop) {
+      cumulativeTax = cumulativeProfit * 0.25;
+    } else {
+      cumulativeTax = 0;
+    }
+
+    return {
+      qIndex: qIdx + 1,
+      qName: `${qIdx + 1}. Dönem (${MONTH_NAMES[startM]} - ${MONTH_NAMES[endM]})`,
+      qIncome,
+      qExpense,
+      qProfit,
+      cumulativeProfit,
+      cumulativeTax,
+      damgaVergisi: isExemptOrg ? 0 : GECICI_DAMGA_VERGISI,
+      dueDate: qIdx === 0 ? "17 Mayıs" : qIdx === 1 ? "17 Ağustos" : qIdx === 2 ? "17 Kasım" : "17 Şubat",
+    };
+  };
+
+  const quarterDetails = [0, 1, 2, 3].map((qIdx) => {
+    const q = calculateQuarter(qIdx);
+    const prevCumTax = qIdx > 0 ? calculateQuarter(qIdx - 1).cumulativeTax : 0;
+    const qPayableTax = Math.max(0, q.cumulativeTax - prevCumTax);
+    return { ...q, qPayableTax };
+  });
+
+  const totalGeçiciVergiPayable = quarterDetails.reduce((sum, q) => sum + q.qPayableTax, 0);
+  const totalGeçiciDamga = quarterDetails.reduce((sum, q) => sum + q.damgaVergisi, 0);
+
+  const totalYearIncome = monthlyTaxDetails.reduce((s, m) => s + m.totalIncome, 0);
+  const totalYearExpense = monthlyTaxDetails.reduce((s, m) => s + m.totalExpense, 0);
+  const totalYearNetProfit = Math.max(0, totalYearIncome - totalYearExpense);
+
+  // -------------------------------------------------------------
+  // KURUMLAR VERGİSİ HESAPLAMA MATRİSİ (5520 SAYILI KVK M.32)
+  // -------------------------------------------------------------
+  // Kurumlar Vergisi Matrahı = Ticari Bilanço Karı + KKEG - İndirim/İstisna - Geçmiş Yıl Zararları
+  const corporateTaxableBase = Math.max(
+    0,
+    totalYearNetProfit + (kkegAmount || 0) - (exemptionsAmount || 0) - (priorLossesAmount || 0)
+  );
+
+  const corporateTaxRate = 0.25; // %25 Sabit Oran (KVK M.32)
+  const calculatedCorporateTax = (isCorporate || isCoop)
+    ? Math.round(corporateTaxableBase * corporateTaxRate)
+    : 0;
+
+  let totalYearCalculatedTax = 0;
+  if (isCorporate || isCoop) {
+    totalYearCalculatedTax = calculatedCorporateTax;
+  } else if (isIndividual || isPartnership) {
+    totalYearCalculatedTax = calculateIndividualIncomeTax(totalYearNetProfit).totalTax;
+  }
+
+  // Net Kurumlar Vergisi Mahsubu (Ödenen Geçici Vergi + Kesinti Yoluyla Ödenen Stopajlar)
+  const totalPrepaidDeductions = totalGeçiciVergiPayable + (prepaidWithholdingAmount || 0);
+  const netPayableCorporateTax = Math.max(0, calculatedCorporateTax - totalPrepaidDeductions);
+  const corporateRefundTax = calculatedCorporateTax < totalPrepaidDeductions
+    ? totalPrepaidDeductions - calculatedCorporateTax
+    : 0;
+
+  const finalPayableAnnualTax = (isCorporate || isCoop)
+    ? netPayableCorporateTax
+    : Math.max(0, totalYearCalculatedTax - totalGeçiciVergiPayable);
+
+  // Render Date Filter Bar
+  const renderDateFilterBar = (title: string) => (
+    <div
+      className="p-4 rounded-2xl border shadow-2xs space-y-3"
+      style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+    >
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-[#eaedff] text-[#005289]">
+            <Filter className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold" style={{ color: theme.pageText }}>{title}</h3>
+            <p className="text-xs font-medium" style={{ color: theme.pageTextMuted }}>Çeyrek ve ay bazında tarih filtresi ve sıralama</p>
+          </div>
+        </div>
+
+        {/* Search input */}
+        <div className="relative flex-1 max-w-xs">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Cari, Belge No, Açıklama ara..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl font-medium focus:ring-2 focus:ring-[#0f6bae]/20 focus:outline-none"
+            style={{ color: theme.pageText }}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-semibold">
+        {/* Preset Buttons */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-slate-400 font-bold mr-1">Hızlı Çeyrek / Dönem:</span>
+          <button
+            onClick={() => handleApplyPreset("this_year")}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
+              selectedPeriod.type === "all"
+                ? "bg-[#0f6bae] text-white shadow-xs"
+                : "bg-slate-100 hover:bg-[#eaedff] dark:bg-slate-800 dark:text-slate-300 text-slate-700"
+            }`}
+          >
+            Tüm Yıl ({selectedYear})
+          </button>
+          <button
+            onClick={() => handleApplyPreset("q1")}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
+              selectedPeriod.type === "quarter" && selectedPeriod.index === 0
+                ? "bg-[#0f6bae] text-white shadow-xs"
+                : "bg-slate-100 hover:bg-[#eaedff] dark:bg-slate-800 dark:text-slate-300 text-slate-700"
+            }`}
+          >
+            1. Çeyrek
+          </button>
+          <button
+            onClick={() => handleApplyPreset("q2")}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
+              selectedPeriod.type === "quarter" && selectedPeriod.index === 1
+                ? "bg-[#0f6bae] text-white shadow-xs"
+                : "bg-slate-100 hover:bg-[#eaedff] dark:bg-slate-800 dark:text-slate-300 text-slate-700"
+            }`}
+          >
+            2. Çeyrek
+          </button>
+          <button
+            onClick={() => handleApplyPreset("q3")}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
+              selectedPeriod.type === "quarter" && selectedPeriod.index === 2
+                ? "bg-[#0f6bae] text-white shadow-xs"
+                : "bg-slate-100 hover:bg-[#eaedff] dark:bg-slate-800 dark:text-slate-300 text-slate-700"
+            }`}
+          >
+            3. Çeyrek
+          </button>
+          <button
+            onClick={() => handleApplyPreset("q4")}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs font-bold ${
+              selectedPeriod.type === "quarter" && selectedPeriod.index === 3
+                ? "bg-[#0f6bae] text-white shadow-xs"
+                : "bg-slate-100 hover:bg-[#eaedff] dark:bg-slate-800 dark:text-slate-300 text-slate-700"
+            }`}
+          >
+            4. Çeyrek
+          </button>
+        </div>
+
+        {/* Date Inputs & Sort Toggle */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono tabular-nums">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-bold font-mono tabular-nums"
+              style={{ color: theme.pageText }}
+            />
+            <span>-</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-bold font-mono tabular-nums"
+              style={{ color: theme.pageText }}
+            />
+          </div>
+
+          <button
+            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+            className="px-3 py-1.5 rounded-xl bg-[#f2f3ff] text-[#005289] dark:bg-slate-800/80 dark:text-[#9dcaff] border border-[#dae2fd] dark:border-[#283044] hover:bg-[#eaedff] flex items-center gap-1.5 transition-colors cursor-pointer text-xs font-bold"
+            title="Tarihe Göre Sırala"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5 text-[#005289]" />
+            <span>Tarih: {sortOrder === "asc" ? "Eskiden Yeniye" : "Yeniden Eskiye"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="p-3 sm:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* HEADER WITH EDITORIAL BACKGROUND */}
+      <ModuleEntranceHeader
+        badge="Mevzuat & Beyannameler"
+        badgeIcon={<BarChart3 className="w-2.5 h-2.5 text-[#0f6bae]" />}
+        title="Vergilendirme & Mali Raporlar"
+        description="Mükellefiyet türünüze uygun KDV, Muhtasar, SGK, Geçici Vergi ve Yıllık Beyanname dökümleri."
+        actions={
+          <div
+            className="flex flex-wrap items-center gap-3 p-2 rounded-2xl border shadow-2xs shrink-0"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-[#005289]" />
+              <select
+                value={activeTaxpayerType}
+                onChange={(e) => setActiveTaxpayerType(e.target.value)}
+                className="bg-transparent text-xs font-bold focus:outline-none cursor-pointer pr-2"
+                style={{ color: theme.pageText }}
+              >
+                {TAXPAYER_TYPES.map((type) => (
+                  <option key={type} value={type} className="bg-white text-slate-900">
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="bg-[#eaedff] text-[#005289] dark:bg-slate-800 dark:text-[#9dcaff] font-mono tabular-nums font-bold text-xs px-2.5 py-1 rounded-lg border border-[#dae2fd] dark:border-[#283044] cursor-pointer focus:outline-none"
+            >
+              <option value={2026}>2026 Mali Yılı</option>
+              <option value={2025}>2025 Mali Yılı</option>
+            </select>
+          </div>
+        }
+      />
+
+      {/* 5 SUMMARY STAT CARDS GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Card 1: 1 No.lu KDV */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">1 No.lu KDV</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-500/10 text-amber-600 group-hover:scale-110 transition-transform">
+              <img src={ASSET_ICONS.nakit} alt="KDV" className="w-5 h-5 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tabular-nums tracking-tight" style={{ color: theme.pageText }}>
+              {isExemptOrg ? "₺0,00" : `₺${formatTL(annualPayableVat)}`}
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1 font-medium font-mono tabular-nums">
+              <span>Satış: ₺{formatTL(annualSalesVat)}</span>
+              <span>Alış: ₺{formatTL(annualPurchaseVat)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: 2 No.lu KDV (Tevkifat) */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">2 No.lu KDV</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-orange-500/10 text-orange-600 group-hover:scale-110 transition-transform">
+              <img src={ASSET_ICONS.sonBelgeler} alt="Tevkifat" className="w-5 h-5 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tabular-nums tracking-tight" style={{ color: theme.pageText }}>
+              ₺{formatTL(annualPurchaseKdvTevkifat)}
+            </div>
+            <div className="text-[11px] text-slate-400 mt-1 font-medium truncate font-mono tabular-nums">
+              {annualPurchaseKdvTevkifat > 0 ? `+ ₺${formatTL(annualKdv2Damga)} KDV-2 Damga` : "Tevkifatlı Alış Yok"}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Muhtasar & Stopaj */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Muhtasar & Stopaj</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#eaedff] text-[#00629e] group-hover:scale-110 transition-transform">
+              <img src={ASSET_ICONS.tahsilat} alt="Stopaj" className="w-5 h-5 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tabular-nums tracking-tight" style={{ color: theme.pageText }}>
+              ₺{formatTL(annualWithholding)}
+            </div>
+            <div className="text-[11px] text-slate-400 mt-1 font-medium truncate font-mono tabular-nums">
+              {annualPurchaseStopaj > 0 ? `Fatura: ₺${formatTL(annualPurchaseStopaj)} | Kira: ₺${formatTL(annualRentWithholding)}` : "Personel + Kira Stopajı"}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Gelir / Kurumlar Vergisi */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 truncate pr-2">
+              {isCorporate || isCoop ? "Kurumlar Vergisi" : "Gelir Vergisi"}
+            </span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-500/10 text-emerald-600 group-hover:scale-110 transition-transform flex-shrink-0">
+              <img src={ASSET_ICONS.ciro} alt="Vergi" className="w-5 h-5 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tabular-nums tracking-tight" style={{ color: theme.pageText }}>
+              ₺{formatTL(totalYearCalculatedTax)}
+            </div>
+            <div className="text-[11px] text-slate-400 mt-1 font-medium truncate font-mono tabular-nums">
+              {isCorporate || isCoop ? `Matrah: ₺${formatTL(corporateTaxableBase)}` : "Artan Oranlı Tarife (GVK M.103)"}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 5: Toplam Mali Yük */}
+        <div
+          className="rounded-2xl p-4 border shadow-2xs transition-all hover:shadow-md group flex flex-col justify-between"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 truncate pr-2">Toplam Mali Yük</span>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#eaedff] text-[#005289] group-hover:scale-110 transition-transform flex-shrink-0">
+              <img src={ASSET_ICONS.alacak} alt="Mali Yük" className="w-5 h-5 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl font-bold font-mono tabular-nums tracking-tight text-[#005289]">
+              ₺{formatTL(annualMonthlyTaxLoad + totalYearCalculatedTax + totalGeçiciDamga + YILLIK_DAMGA_VERGISI)}
+            </div>
+            <div className="text-[11px] text-slate-400 mt-1 font-medium truncate">
+              Tüm Yasal Vergiler + Damga
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SUB-TAB NAVIGATION */}
+      <div
+        className="flex items-center gap-1.5 p-1.5 rounded-2xl border shadow-2xs overflow-x-auto"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <button
+          onClick={() => setActiveTab("monthly")}
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "monthly"
+              ? "bg-[#0f6bae] text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+          }`}
+        >
+          <Receipt className="w-3.5 h-3.5" />
+          12 Aylık Vergi Detay Matrisi
+        </button>
+
+        <button
+          onClick={() => setActiveTab("periodic")}
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "periodic"
+              ? "bg-[#0f6bae] text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+          }`}
+        >
+          <Percent className="w-3.5 h-3.5" />
+          4 Dönemlik Geçici Vergi
+        </button>
+
+        <button
+          onClick={() => setActiveTab("ledger")}
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "ledger"
+              ? "bg-[#0f6bae] text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+          }`}
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          Genel Muavin & Defter Kayıtları
+        </button>
+
+        <button
+          onClick={() => setActiveTab("guidelines")}
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "guidelines"
+              ? "bg-[#0f6bae] text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          Vergi Takvimi & Mevzuat Rehberi
+        </button>
+
+        <button
+          onClick={() => setActiveTab("ai_insights")}
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "ai_insights"
+              ? "bg-gradient-to-r from-[#0f6bae] to-[#005289] text-white shadow-xs font-black"
+              : "text-blue-600 dark:text-blue-400 hover:text-blue-800 hover:bg-blue-50/70 dark:hover:bg-blue-950/40"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+          <span>AI Gelir/Gider Örüntü Analitiği & Aksiyonlar</span>
+        </button>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* TAB 1: DÖNEMSEL VERGİ VE ALIM-SATIM DETAY RAPORU */}
+      {/* ========================================================================= */}
+      {activeTab === "monthly" && (
+        <div className="space-y-4 animate-fadeIn">
+          {renderDateFilterBar("Dönemsel Vergi ve Ay Analiz Filtresi")}
+
+          {/* PERIOD & MONTH SELECTOR PILLS BAR */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+            {/* 1. ÇEYREK SEÇİMİ (4 DÖNEM GEÇİCİ VERGİ) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
+                <span className="flex items-center gap-1.5 text-[#131b2e] font-black">
+                  <Percent className="w-4 h-4 text-[#005289]" />
+                  Dönemsel Çeyrek Seçimi (4 Dönem Geçici Vergi & Mali Yıl):
+                </span>
+                <span className="text-[11px] font-mono tabular-nums text-[#005289] bg-[#eaedff] px-2.5 py-0.5 rounded-md border border-[#dae2fd] font-bold">
+                  {selectedYear} Mali Yılı
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                {[
+                  { label: "1. Çeyrek (Oca - Mar)", key: "q1", qIdx: 0, sub: "1. Geçici Vergi Dönemi" },
+                  { label: "2. Çeyrek (Nis - Haz)", key: "q2", qIdx: 1, sub: "2. Geçici Vergi Dönemi" },
+                  { label: "3. Çeyrek (Tem - Eyl)", key: "q3", qIdx: 2, sub: "3. Geçici Vergi Dönemi" },
+                  { label: "4. Çeyrek (Ek - Ara)", key: "q4", qIdx: 3, sub: "4. Geçici Vergi Dönemi" },
+                  { label: `Tüm Yıl (${selectedYear})`, key: "all", qIdx: -1, sub: "Yıllık Beyanname Dökümü" },
+                ].map((item) => {
+                  const isSelected = item.qIdx === -1
+                    ? selectedPeriod.type === "all"
+                    : selectedPeriod.type === "quarter" && selectedPeriod.index === item.qIdx;
+
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => {
+                        if (item.qIdx === -1) {
+                          handleApplyPreset("all");
+                        } else {
+                          handleApplyPreset(item.key as any);
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between border ${
+                        isSelected
+                          ? "bg-[#005289] text-white border-[#005289] shadow-sm ring-2 ring-[#0f6bae]/40"
+                          : "bg-[#f2f3ff]/80 hover:bg-[#eaedff] text-[#131b2e] border-[#dae2fd]"
+                      }`}
+                    >
+                      <span className="text-xs font-black truncate">{item.label}</span>
+                      <span className={`text-[10px] mt-0.5 font-medium truncate ${isSelected ? "text-[#d9e8ff]" : "text-[#005289]"}`}>
+                        {item.sub}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. AYLIK DETAY SEÇİMİ (12 AY) */}
+            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                <span className="flex items-center gap-1.5 text-slate-800 font-bold">
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  Tekil Ay Seçimi (Aylık Break-down):
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {MONTH_NAMES.map((mName, mIdx) => {
+                  const mData = monthlyTaxDetails[mIdx];
+                  const totalActivity = mData.invoiceCount + mData.txCount;
+                  const isSelected = selectedPeriod.type === "month" && selectedPeriod.index === mIdx;
+
+                  return (
+                    <button
+                      key={mIdx}
+                      onClick={() => {
+                        setSelectedPeriod({ type: "month", index: mIdx });
+                        const mStr = String(mIdx + 1).padStart(2, "0");
+                        setStartDate(`${selectedYear}-${mStr}-01`);
+                        setEndDate(`${selectedYear}-${mStr}-31`);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isSelected
+                          ? "bg-[#005289] text-white shadow-xs font-black ring-2 ring-[#0f6bae]/50"
+                          : totalActivity > 0
+                          ? "bg-slate-100 text-slate-800 hover:bg-[#eaedff] hover:text-[#005289] border border-slate-200"
+                          : "bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200/60"
+                      }`}
+                    >
+                      <span>{mName}</span>
+                      {totalActivity > 0 && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono tabular-nums font-extrabold ${
+                            isSelected ? "bg-[#00365d] text-[#d9e8ff]" : "bg-[#dae2fd] text-[#005289]"
+                          }`}
+                        >
+                          {totalActivity}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* DYNAMIC PERIOD DETAILS & STATUTORY TAXES */}
+          {(() => {
+            let periodTitle = "";
+            let periodBadge = "";
+            let periodMonths: number[] = [];
+
+            if (selectedPeriod.type === "quarter") {
+              const qIdx = selectedPeriod.index;
+              periodMonths = [qIdx * 3, qIdx * 3 + 1, qIdx * 3 + 2];
+              periodTitle = `${qIdx + 1}. Çeyrek (${MONTH_NAMES[qIdx * 3]} - ${MONTH_NAMES[qIdx * 3 + 2]} ${selectedYear}) Beyanname, Vergi ve Alım-Satım Analizi`;
+              periodBadge = `${qIdx + 1}. Geçici Vergi Dönemi | Son Ödeme: ${
+                qIdx === 0 ? "17 Mayıs" : qIdx === 1 ? "17 Ağustos" : qIdx === 2 ? "17 Kasım" : "17 Şubat"
+              }`;
+            } else if (selectedPeriod.type === "month") {
+              const mIdx = selectedPeriod.index;
+              periodMonths = [mIdx];
+              periodTitle = `${MONTH_NAMES[mIdx]} ${selectedYear} Ayı Beyanname, Vergi ve Alım-Satım Analizi`;
+              periodBadge = `${MONTH_NAMES[mIdx]} Ayı Detayı`;
+            } else {
+              periodMonths = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+              periodTitle = `${selectedYear} Mali Yılı Tüm Dönemler Vergi ve Alım-Satım Analizi`;
+              periodBadge = `2026 Yıllık Rapor`;
+            }
+
+            const targetMonthlyDetails = periodMonths.map((mIdx) => monthlyTaxDetails[mIdx]);
+
+            const periodIncome = targetMonthlyDetails.reduce((sum, m) => sum + m.totalIncome, 0);
+            const periodExpense = targetMonthlyDetails.reduce((sum, m) => sum + m.totalExpense, 0);
+            const periodNetProfit = periodIncome - periodExpense;
+
+            const periodSalesVat = targetMonthlyDetails.reduce((sum, m) => sum + m.salesVat, 0);
+            const periodPurchaseVat = targetMonthlyDetails.reduce((sum, m) => sum + m.purchaseVat, 0);
+            const periodPayableVat = targetMonthlyDetails.reduce((sum, m) => sum + m.payableVat, 0);
+            const periodNetVat = periodSalesVat - periodPurchaseVat;
+            const periodDeferredVat = isExemptOrg ? 0 : periodNetVat < 0 ? Math.abs(periodNetVat) : 0;
+            const periodKdvDamga = targetMonthlyDetails.reduce((sum, m) => sum + m.kdvDamga, 0);
+
+            // KDV Tevkifatı (2 No.lu KDV)
+            const periodPurchaseKdvTevkifat = targetMonthlyDetails.reduce((sum, m) => sum + m.purchaseKdvTevkifat, 0);
+            const periodSalesKdvTevkifat = targetMonthlyDetails.reduce((sum, m) => sum + m.salesKdvTevkifat, 0);
+            const periodKdv2Payable = targetMonthlyDetails.reduce((sum, m) => sum + m.kdv2Payable, 0);
+            const periodKdv2Damga = targetMonthlyDetails.reduce((sum, m) => sum + m.kdv2Damga, 0);
+            const periodTotalKdv2Load = periodKdv2Payable + periodKdv2Damga;
+
+            // Muhtasar & Stopaj Detayları
+            const periodPurchaseStopaj = targetMonthlyDetails.reduce((sum, m) => sum + m.purchaseStopaj, 0);
+            const periodRentAmount = targetMonthlyDetails.reduce((sum, m) => sum + m.rentAmount, 0);
+            const periodRentWithholding = targetMonthlyDetails.reduce((sum, m) => sum + m.rentWithholding, 0);
+            const periodPayrollIncomeTax = targetMonthlyDetails.reduce((sum, m) => sum + m.payrollIncomeTax, 0);
+            const periodPayrollStampTax = targetMonthlyDetails.reduce((sum, m) => sum + m.payrollStampTax, 0);
+            const periodTotalWithholding = targetMonthlyDetails.reduce((sum, m) => sum + m.totalWithholding, 0);
+            const periodMuhtasarDamga = targetMonthlyDetails.reduce((sum, m) => sum + m.muhtasarDamga, 0);
+            const periodPayrollSgkShare = targetMonthlyDetails.reduce((sum, m) => sum + m.payrollSgkShare, 0);
+
+            // Calculate Provisional / Corporate Tax for the selected period
+            let provisionalTaxTitle = isCorporate ? "Geçici Kurumlar Vergisi (%25)" : "Geçici Gelir Vergisi";
+            let provisionalTaxBase = 0;
+            let provisionalTaxPayable = 0;
+            let provisionalTaxDescription = "";
+
+            if (selectedPeriod.type === "quarter") {
+              const qIdx = selectedPeriod.index;
+              const qData = quarterDetails[qIdx];
+              provisionalTaxBase = qData.qProfit;
+              provisionalTaxPayable = qData.qPayableTax;
+              provisionalTaxDescription = `${qIdx + 1}. Çeyrek net karı (₺${formatTL(qData.qProfit)}) ve kumulatif matrah (₺${formatTL(qData.cumulativeProfit)}) üzerinden hesaplanan ödenecek geçici vergi.`;
+            } else if (selectedPeriod.type === "month") {
+              const mIdx = selectedPeriod.index;
+              provisionalTaxBase = Math.max(0, periodNetProfit);
+              const estimatedTaxRate = isCorporate ? 0.25 : 0.15;
+              provisionalTaxPayable = Math.max(0, Math.round(provisionalTaxBase * estimatedTaxRate));
+              provisionalTaxDescription = `${MONTH_NAMES[mIdx]} ayının net matrahı üzerinden hesaplanan tahmini vergi payı.`;
+            } else {
+              provisionalTaxBase = Math.max(0, totalYearNetProfit);
+              provisionalTaxPayable = totalYearCalculatedTax;
+              provisionalTaxDescription = `Tüm yıl net matrahı üzerinden hesaplanan yıllık toplam vergi.`;
+            }
+
+            // Filter invoices for selected period
+            const periodInvoices = invoices.filter((inv) => {
+              const d = new Date(inv.issueDate);
+              const monthMatch = periodMonths.includes(d.getMonth()) && (d.getFullYear() === selectedYear || !inv.issueDate);
+              if (!monthMatch) return false;
+
+              if (startDate && inv.issueDate < startDate) return false;
+              if (endDate && inv.issueDate > endDate) return false;
+
+              if (searchTerm) {
+                const s = searchTerm.toLowerCase();
+                const matchContact = (inv.contactName || "").toLowerCase().includes(s);
+                const matchDoc = (inv.invoiceNumber || "").toLowerCase().includes(s);
+                const matchNotes = (inv.notes || "").toLowerCase().includes(s);
+                if (!matchContact && !matchDoc && !matchNotes) return false;
+              }
+              return true;
+            }).sort((a, b) => {
+              const timeA = new Date(a.issueDate).getTime();
+              const timeB = new Date(b.issueDate).getTime();
+              return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
+            });
+
+            const periodSalesInvoices = periodInvoices.filter((i) => i.type === "sales");
+            const periodPurchaseInvoices = periodInvoices.filter((i) => i.type === "purchase");
+
+            // Filter invoices with specific withholding & stopaj
+            const periodPurchaseTevkifatInvoices = periodPurchaseInvoices.filter((inv) => {
+              const direct = (inv.totalWithholding || 0) > 0;
+              const inItems = inv.taxItems && inv.taxItems.some(
+                (t) => t.taxType === "KDV Tevkifatı" || (t.taxName && t.taxName.toLowerCase().includes("tevkifat"))
+              );
+              return direct || inItems;
+            });
+
+            const periodPurchaseStopajInvoices = periodPurchaseInvoices.filter((inv) => {
+              const direct = (inv.totalStopaj || 0) > 0;
+              const inItems = inv.taxItems && inv.taxItems.some(
+                (t) => t.taxType === "Stopaj" || (t.taxName && (t.taxName.toLowerCase().includes("stopaj") || t.taxName.toLowerCase().includes("gelir vergisi kesintisi")))
+              );
+              return direct || inItems;
+            });
+
+            // Filter expense & payroll transactions for selected period
+            const periodExpenseTransactions = transactions.filter((tx) => {
+              const isExpense = tx.type === "expense" || tx.type === "payment";
+              if (!isExpense) return false;
+              const d = new Date(tx.date);
+              const monthMatch = periodMonths.includes(d.getMonth()) && (d.getFullYear() === selectedYear || !tx.date);
+              if (!monthMatch) return false;
+
+              if (startDate && tx.date < startDate) return false;
+              if (endDate && tx.date > endDate) return false;
+
+              if (searchTerm) {
+                const s = searchTerm.toLowerCase();
+                const matchContact = (tx.contactName || "").toLowerCase().includes(s);
+                const matchAcc = (tx.accountName || "").toLowerCase().includes(s);
+                const matchCat = (tx.category || "").toLowerCase().includes(s);
+                const matchDesc = (tx.description || "").toLowerCase().includes(s);
+                const matchDoc = (tx.documentNo || "").toLowerCase().includes(s);
+                if (!matchContact && !matchAcc && !matchCat && !matchDesc && !matchDoc) return false;
+              }
+              return true;
+            }).sort((a, b) => {
+              const timeA = new Date(a.date).getTime();
+              const timeB = new Date(b.date).getTime();
+              return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
+            });
+
+            const totalPeriodDirectExpenses = periodExpenseTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+
+            return (
+              <div className="space-y-5 animate-fadeIn">
+                {/* Header for Selected Period */}
+                <div className="bg-gradient-to-br from-[#00365d] via-[#005289] to-[#131b2e] text-white p-5 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/10">
+                      <Calendar className="w-6 h-6 text-[#9dcaff]" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-extrabold bg-[#005289]/40 text-[#d9e8ff] border border-[#0f6bae]/40 px-2.5 py-0.5 rounded-full">
+                          {activeTaxpayerType}
+                        </span>
+                        <span className="text-xs font-mono tabular-nums text-[#d9e8ff]">
+                          {periodBadge}
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-black mt-0.5">
+                        {periodTitle}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setIsWhatsAppReportModalOpen(true)}
+                      className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      title="Yöneticiye WhatsApp Mali Durum Raporu Gönder"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-emerald-200 fill-emerald-200" />
+                      <span>WhatsApp Rapor İlet</span>
+                    </button>
+
+                    <ExportButtons
+                      getExportData={() => ({
+                        filename: `Muavin_Dönemsel_Vergi_Raporu_${selectedYear}`,
+                        title: `${periodTitle.toUpperCase()} (${activeTaxpayerType})`,
+                        subtitle: `Dönem: ${periodBadge} | Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
+                        headers: [
+                          "Tür / İşlem", "Matrah / Tutar", "KDV / Vergi", "Net Yük / Toplam"
+                        ],
+                        rows: [
+                          ["Faturalı Satışlar", formatCurrency(periodIncome, "TRY"), formatCurrency(periodSalesVat, "TRY"), formatCurrency(periodIncome, "TRY")],
+                          ["Faturalı Alışlar", formatCurrency(periodExpense, "TRY"), formatCurrency(periodPurchaseVat, "TRY"), formatCurrency(periodExpense, "TRY")],
+                          ["Faturalı Net Matrah", formatCurrency(periodNetProfit, "TRY"), "-", formatCurrency(periodNetProfit, "TRY")],
+                          ["1 No.lu KDV (Ödenecek/Devir)", "-", formatCurrency(periodSalesVat - periodPurchaseVat, "TRY"), formatCurrency(periodPayableVat, "TRY")],
+                          ["2 No.lu KDV (KDV Tevkifatı)", "-", formatCurrency(periodPurchaseKdvTevkifat, "TRY"), formatCurrency(periodTotalKdv2Load, "TRY")],
+                          ["Muhtasar & Stopaj", formatCurrency(periodRentAmount, "TRY"), formatCurrency(periodTotalWithholding, "TRY"), formatCurrency(periodTotalWithholding, "TRY")],
+                          ["SGK Primi Yükü", "-", "-", formatCurrency(periodPayrollSgkShare, "TRY")],
+                          [provisionalTaxTitle, formatCurrency(provisionalTaxBase, "TRY"), "-", formatCurrency(provisionalTaxPayable, "TRY")],
+                        ],
+                      })}
+                      contacts={contacts}
+                      companyName={companySettings.companyName}
+                      size="sm"
+                    />
+                  </div>
+                </div>
+
+                {/* STATUTORY OBLIGATIONS CARDS (5 Main Categories: Geçici/Kurumlar, KDV 1, KDV 2 Tevkifat, Muhtasar Stopaj, SGK) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                  {/* 1. Geçici / Kurumlar Vergisi Card */}
+                  <div className="bg-white p-4 rounded-2xl border border-[#dae2fd] shadow-2xs space-y-2.5 hover:border-[#9dcaff] transition-all">
+                    <div className="flex items-center justify-between border-b border-[#eaedff] pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="p-1.5 rounded-xl bg-[#eaedff] text-[#005289]">
+                          <Building2 className="w-3.5 h-3.5" />
+                        </div>
+                        <h4 className="font-black text-xs text-slate-900 truncate">
+                          {isCorporate ? "Geçici Kurumlar" : "Geçici Gelir"}
+                        </h4>
+                      </div>
+                      <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-[#f2f3ff] text-[#005289] border border-[#dae2fd]">
+                        {isCorporate ? "%25" : "Tarife"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-[11px] font-medium text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Dönem Matrahı:</span>
+                        <span className="font-mono tabular-nums font-bold text-slate-900">₺{formatTL(provisionalTaxBase)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-slate-100 text-[#131b2e] font-bold">
+                        <span>Geçici Vergi:</span>
+                        <span className="font-mono tabular-nums text-xs text-[#005289] font-black">
+                          ₺{formatTL(provisionalTaxPayable)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. 1 No.lu Katma Değer Vergisi (KDV 1) Card */}
+                  <div className="bg-white p-4 rounded-2xl border border-amber-200/80 shadow-2xs space-y-2.5 hover:border-amber-300 transition-all">
+                    <div className="flex items-center justify-between border-b border-amber-100 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="p-1.5 rounded-xl bg-amber-100 text-amber-900">
+                          <Receipt className="w-3.5 h-3.5" />
+                        </div>
+                        <h4 className="font-black text-xs text-slate-900 truncate">1 No.lu KDV</h4>
+                      </div>
+                      <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200">
+                        KDV-1
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-[11px] font-medium text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Satış KDV:</span>
+                        <span className="font-mono tabular-nums font-bold text-slate-900">₺{formatTL(periodSalesVat)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Alış KDV:</span>
+                        <span className="font-mono tabular-nums font-bold text-slate-900">₺{formatTL(periodPurchaseVat)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-amber-950">
+                        <span>{periodDeferredVat > 0 ? "Devir KDV:" : "Ödenecek KDV:"}</span>
+                        <span className={`font-mono tabular-nums text-xs font-black ${periodDeferredVat > 0 ? "text-blue-700" : "text-amber-950"}`}>
+                          ₺{formatTL(periodDeferredVat > 0 ? periodDeferredVat : periodPayableVat)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. 2 No.lu KDV (KDV Tevkifatı Ödemesi) Card */}
+                  <div className="bg-white p-4 rounded-2xl border border-orange-200/80 shadow-2xs space-y-2.5 hover:border-orange-300 transition-all">
+                    <div className="flex items-center justify-between border-b border-orange-100 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="p-1.5 rounded-xl bg-orange-100 text-orange-900">
+                          <FileCheck className="w-3.5 h-3.5" />
+                        </div>
+                        <h4 className="font-black text-xs text-slate-900 truncate">2 No.lu KDV (Tevkifat)</h4>
+                      </div>
+                      <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-orange-50 text-orange-900 border border-orange-200">
+                        KDV-2
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-[11px] font-medium text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Tevkif Edilen KDV:</span>
+                        <span className="font-mono tabular-nums font-bold text-orange-950">₺{formatTL(periodPurchaseKdvTevkifat)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>KDV-2 Damga:</span>
+                        <span className="font-mono tabular-nums font-bold text-slate-900">₺{formatTL(periodKdv2Damga)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-orange-950">
+                        <span>Toplam KDV-2:</span>
+                        <span className="font-mono tabular-nums text-xs text-orange-900 font-black">
+                          ₺{formatTL(periodTotalKdv2Load)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Muhtasar Stopaj Vergisi Card */}
+                  <div className="bg-white p-4 rounded-2xl border border-[#cfe5ff] shadow-2xs space-y-2.5 hover:border-[#99cbff] transition-all">
+                    <div className="flex items-center justify-between border-b border-[#e2e7ff] pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="p-1.5 rounded-xl bg-[#eaedff] text-[#00629e]">
+                          <FileText className="w-3.5 h-3.5" />
+                        </div>
+                        <h4 className="font-black text-xs text-slate-900 truncate">Muhtasar Stopaj</h4>
+                      </div>
+                      <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-[#f2f3ff] text-[#00629e] border border-[#cfe5ff]">
+                        Stopaj
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-[11px] font-medium text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Fatura / SMM:</span>
+                        <span className="font-mono tabular-nums font-bold text-[#00426d]">₺{formatTL(periodPurchaseStopaj)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Kira + Personel GV:</span>
+                        <span className="font-mono tabular-nums font-bold text-slate-900">₺{formatTL(periodRentWithholding + periodPayrollIncomeTax)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-[#00426d]">
+                        <span>Toplam Stopaj:</span>
+                        <span className="font-mono tabular-nums text-xs text-[#00629e] font-black">
+                          ₺{formatTL(periodTotalWithholding + periodMuhtasarDamga)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 5. SGK Sigorta Primi Card */}
+                  <div className="bg-white p-4 rounded-2xl border border-emerald-200/80 shadow-2xs space-y-2.5 hover:border-emerald-300 transition-all">
+                    <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="p-1.5 rounded-xl bg-emerald-100 text-emerald-900">
+                          <Users className="w-3.5 h-3.5" />
+                        </div>
+                        <h4 className="font-black text-xs text-slate-900 truncate">SGK Sigorta</h4>
+                      </div>
+                      <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-900 border border-emerald-200">
+                        {employees.length} Kişi
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-[11px] font-medium text-slate-600">
+                      <div className="flex justify-between">
+                        <span>İşçi Payı (%15):</span>
+                        <span className="font-mono tabular-nums font-bold text-slate-900">
+                          ₺{formatTL(periodMonths.length * employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.15), 0))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>İşveren Payı (%20.5):</span>
+                        <span className="font-mono tabular-nums font-bold text-slate-900">
+                          ₺{formatTL(periodMonths.length * employees.reduce((sum, emp) => sum + Math.round((emp.salary || 20002.5) * 0.205), 0))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-slate-100 font-bold text-emerald-950">
+                        <span>Toplam SGK:</span>
+                        <span className="font-mono tabular-nums text-xs text-emerald-700 font-black">
+                          ₺{formatTL(periodPayrollSgkShare)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TEVKİFAT VE STOPAJ DETAY BİLGİLENDİRME BANNERI (ÖZEL VURGU KARTI) */}
+                {(periodPurchaseKdvTevkifat > 0 || periodPurchaseStopaj > 0) && (
+                  <div className="bg-gradient-to-r from-orange-50/80 via-amber-50/60 to-[#eaedff]/60 border border-[#dae2fd] rounded-2xl p-4.5 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-orange-200/60 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-xl bg-orange-100 text-orange-900">
+                          <AlertCircle className="w-5 h-5 text-orange-700" />
+                        </div>
+                        <div>
+                          <h4 className="font-black text-sm text-slate-950">
+                            Dönemsel Tevkifat ve Stopaj Yükümlülük Bildirimi (2 No.lu KDV & Muhtasar)
+                          </h4>
+                          <p className="text-[11px] text-slate-600 font-semibold">
+                            Gelen faturalarınızda tespit edilen tevkif edilen KDV ve stopaj kesintileri her ay ilgili beyannameler ile devlete ödenir.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {periodPurchaseKdvTevkifat > 0 && (
+                          <span className="bg-orange-100 text-orange-950 border border-orange-300 font-mono tabular-nums font-black text-xs px-2.5 py-1 rounded-xl">
+                            2 No.lu KDV: ₺{formatTL(periodPurchaseKdvTevkifat)}
+                          </span>
+                        )}
+                        {periodPurchaseStopaj > 0 && (
+                          <span className="bg-[#eaedff] text-[#00629e] border border-[#cfe5ff] font-mono tabular-nums font-black text-xs px-2.5 py-1 rounded-xl">
+                            Fatura Stopajı: ₺{formatTL(periodPurchaseStopaj)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Tevkifatlı Faturalar Listesi */}
+                      {periodPurchaseKdvTevkifat > 0 && (
+                        <div className="bg-white/80 rounded-xl p-3 border border-orange-200 space-y-2">
+                          <div className="flex items-center justify-between text-xs font-black text-orange-950">
+                            <span className="flex items-center gap-1.5">
+                              <Receipt className="w-4 h-4 text-orange-700" />
+                              Tevkifatlı Alış Faturaları ({periodPurchaseTevkifatInvoices.length} Adet)
+                            </span>
+                            <span className="font-mono tabular-nums text-orange-800">
+                              Toplam Tevkifat: ₺{formatTL(periodPurchaseKdvTevkifat)}
+                            </span>
+                          </div>
+                          <div className="divide-y divide-orange-100 text-xs">
+                            {periodPurchaseTevkifatInvoices.map((inv) => {
+                              let tevkifatAmt = inv.totalWithholding || 0;
+                              if (!tevkifatAmt && inv.taxItems) {
+                                const tItems = inv.taxItems.filter(
+                                  (t) => t.taxType === "KDV Tevkifatı" || (t.taxName && t.taxName.toLowerCase().includes("tevkifat"))
+                                );
+                                tevkifatAmt = tItems.reduce((s, t) => s + (t.taxAmount || 0), 0);
+                              }
+                              return (
+                                <div key={inv.id} className="py-1.5 flex items-center justify-between font-medium">
+                                  <div>
+                                    <div className="font-bold text-slate-900">{inv.contactName}</div>
+                                    <div className="text-[10px] text-slate-500 font-mono tabular-nums">
+                                      {inv.invoiceNumber} | {formatDate(inv.issueDate)}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="font-mono tabular-nums font-black text-orange-800">₺{formatTL(tevkifatAmt)}</div>
+                                    <div className="text-[10px] text-slate-500">2 No.lu KDV'ye Aktarılır</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="text-[10px] text-slate-500 italic pt-1 border-t border-orange-100">
+                            * 3065 sayılı KDV Kanunu M.9 uyarınca satıcıdan tevkif edilen KDV, alıcı tarafından 2 No.lu KDV Beyannamesi ile vergi dairesine yatırılır.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Stopajlı Faturalar Listesi */}
+                      {periodPurchaseStopaj > 0 && (
+                        <div className="bg-white/80 rounded-xl p-3 border border-[#cfe5ff] space-y-2">
+                          <div className="flex items-center justify-between text-xs font-black text-[#00426d]">
+                            <span className="flex items-center gap-1.5">
+                              <FileText className="w-4 h-4 text-[#00629e]" />
+                              Stopajlı Alış / Makbuz Belgeleri ({periodPurchaseStopajInvoices.length} Adet)
+                            </span>
+                            <span className="font-mono tabular-nums text-[#00629e]">
+                              Toplam Stopaj: ₺{formatTL(periodPurchaseStopaj)}
+                            </span>
+                          </div>
+                          <div className="divide-y divide-[#eaedff] text-xs">
+                            {periodPurchaseStopajInvoices.map((inv) => {
+                              let stopajAmt = inv.totalStopaj || 0;
+                              if (!stopajAmt && inv.taxItems) {
+                                const sItems = inv.taxItems.filter(
+                                  (t) => t.taxType === "Stopaj" || (t.taxName && (t.taxName.toLowerCase().includes("stopaj") || t.taxName.toLowerCase().includes("gelir vergisi kesintisi")))
+                                );
+                                stopajAmt = sItems.reduce((s, t) => s + (t.taxAmount || 0), 0);
+                              }
+                              return (
+                                <div key={inv.id} className="py-1.5 flex items-center justify-between font-medium">
+                                  <div>
+                                    <div className="font-bold text-slate-900">{inv.contactName}</div>
+                                    <div className="text-[10px] text-slate-500 font-mono tabular-nums">
+                                      {inv.invoiceNumber} | {formatDate(inv.issueDate)}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="font-mono tabular-nums font-black text-[#00629e]">₺{formatTL(stopajAmt)}</div>
+                                    <div className="text-[10px] text-slate-500">Muhtasar Beyannameye Aktarılır</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="text-[10px] text-slate-500 italic pt-1 border-t border-[#eaedff]">
+                            * 193 sayılı GVK M.94 uyarınca serbest meslek, kira ve gider pusulası stopajları Muhtasar Beyanname ile beyan edilip ödenir.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* DETAILED INVOICE BREAKDOWN (ALIM & SATIŞ DETAYLARI) FOR SELECTED PERIOD */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* Faturalı Satışlar Tablosu */}
+                  <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
+                          <ArrowUpRight className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-sm text-slate-900">Faturalı Satışlar ({periodSalesInvoices.length})</h4>
+                          <p className="text-[11px] text-slate-500 font-medium">Seçilen dönemde kesilen tüm satış faturaları</p>
+                        </div>
+                      </div>
+                      <span className="font-mono tabular-nums font-black text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
+                        Toplam: ₺{formatTL(periodIncome)}
+                      </span>
+                    </div>
+
+                    {periodSalesInvoices.length === 0 ? (
+                      <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs italic">
+                        Seçilen döneme ait kesilmiş satış faturası bulunmamaktadır.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200">
+                        <table className="w-full text-left text-xs border-collapse min-w-[450px]">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-extrabold text-[10px] uppercase tracking-wider border-b border-slate-200">
+                              <th className="p-2.5">Tarih</th>
+                              <th className="p-2.5">Fatura No</th>
+                              <th className="p-2.5">Müşteri / Unvan</th>
+                              <th className="p-2.5 text-right">Matrah (Net)</th>
+                              <th className="p-2.5 text-right">KDV</th>
+                              <th className="p-2.5 text-right">Toplam</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                            {periodSalesInvoices.map((inv) => (
+                              <tr key={inv.id} className="hover:bg-emerald-50/40 transition-colors">
+                                <td className="p-2.5 font-mono tabular-nums text-slate-700">{formatDate(inv.issueDate)}</td>
+                                <td className="p-2.5 font-mono tabular-nums font-bold text-slate-900">{inv.invoiceNumber}</td>
+                                <td className="p-2.5 font-semibold text-slate-800 truncate max-w-[150px]">{inv.contactName}</td>
+                                <td className="p-2.5 text-right font-mono tabular-nums text-slate-700">₺{formatTL(inv.subtotal || 0)}</td>
+                                <td className="p-2.5 text-right font-mono tabular-nums text-emerald-700 font-semibold">₺{formatTL(inv.totalVat || 0)}</td>
+                                <td className="p-2.5 text-right font-mono tabular-nums font-bold text-emerald-800">₺{formatTL(inv.grandTotal || 0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Faturalı Alışlar Tablosu (TEVKİFAT & STOPAJ GÖSTERGELİ) */}
+                  <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-xl bg-rose-100 text-rose-800">
+                          <ArrowDownLeft className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-sm text-slate-900">Faturalı Alışlar ({periodPurchaseInvoices.length})</h4>
+                          <p className="text-[11px] text-slate-500 font-medium">Alış faturaları, giderler, KDV tevkifatı ve stopaj dökümleri</p>
+                        </div>
+                      </div>
+                      <span className="font-mono tabular-nums font-black text-xs text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-xl">
+                        Toplam: ₺{formatTL(periodExpense)}
+                      </span>
+                    </div>
+
+                    {periodPurchaseInvoices.length === 0 ? (
+                      <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs italic">
+                        Seçilen döneme ait alış faturası bulunmamaktadır.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200">
+                        <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-extrabold text-[10px] uppercase tracking-wider border-b border-slate-200">
+                              <th className="p-2.5">Tarih</th>
+                              <th className="p-2.5">Fatura No</th>
+                              <th className="p-2.5">Tedarikçi / Unvan</th>
+                              <th className="p-2.5 text-right">Matrah (Net)</th>
+                              <th className="p-2.5 text-right">KDV</th>
+                              <th className="p-2.5 text-right">Tevkifat / Stopaj</th>
+                              <th className="p-2.5 text-right">Toplam</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                            {periodPurchaseInvoices.map((inv) => {
+                              let tevkifatAmt = inv.totalWithholding || 0;
+                              if (!tevkifatAmt && inv.taxItems) {
+                                const tItems = inv.taxItems.filter(
+                                  (t) => t.taxType === "KDV Tevkifatı" || (t.taxName && t.taxName.toLowerCase().includes("tevkifat"))
+                                );
+                                tevkifatAmt = tItems.reduce((s, t) => s + (t.taxAmount || 0), 0);
+                              }
+
+                              let stopajAmt = inv.totalStopaj || 0;
+                              if (!stopajAmt && inv.taxItems) {
+                                const sItems = inv.taxItems.filter(
+                                  (t) => t.taxType === "Stopaj" || (t.taxName && (t.taxName.toLowerCase().includes("stopaj") || t.taxName.toLowerCase().includes("gelir vergisi kesintisi")))
+                                );
+                                stopajAmt = sItems.reduce((s, t) => s + (t.taxAmount || 0), 0);
+                              }
+
+                              return (
+                                <tr key={inv.id} className="hover:bg-rose-50/40 transition-colors">
+                                  <td className="p-2.5 font-mono tabular-nums text-slate-700">{formatDate(inv.issueDate)}</td>
+                                  <td className="p-2.5 font-mono tabular-nums font-bold text-slate-900">{inv.invoiceNumber}</td>
+                                  <td className="p-2.5 font-semibold text-slate-800">
+                                    <div className="truncate max-w-[150px]">{inv.contactName}</div>
+                                    {inv.taxItems && inv.taxItems.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-0.5">
+                                        {inv.taxItems.map((ti, tiIdx) => (
+                                          <span
+                                            key={tiIdx}
+                                            className="text-[9px] font-mono tabular-nums px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200"
+                                            title={ti.taxName}
+                                          >
+                                            {ti.taxType} (%{ti.taxRate}): ₺{formatTL(ti.taxAmount)}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2.5 text-right font-mono tabular-nums text-slate-700">₺{formatTL(inv.subtotal || 0)}</td>
+                                  <td className="p-2.5 text-right font-mono tabular-nums text-[#00629e] font-semibold">₺{formatTL(inv.totalVat || 0)}</td>
+                                  <td className="p-2.5 text-right font-mono tabular-nums">
+                                    {tevkifatAmt > 0 && (
+                                      <span className="inline-block bg-orange-100 text-orange-950 font-bold px-1.5 py-0.5 rounded text-[10px] border border-orange-200 mr-1" title="2 No.lu KDV Tevkifatı">
+                                        Tevkifat: ₺{formatTL(tevkifatAmt)}
+                                      </span>
+                                    )}
+                                    {stopajAmt > 0 && (
+                                      <span className="inline-block bg-[#eaedff] text-[#00629e] font-bold px-1.5 py-0.5 rounded text-[10px] border border-[#cfe5ff]" title="Muhtasar Stopaj">
+                                        Stopaj: ₺{formatTL(stopajAmt)}
+                                      </span>
+                                    )}
+                                    {tevkifatAmt === 0 && stopajAmt === 0 && (
+                                      <span className="text-slate-400 text-[11px]">-</span>
+                                    )}
+                                  </td>
+                                  <td className="p-2.5 text-right font-mono tabular-nums font-bold text-rose-800">₺{formatTL(inv.grandTotal || 0)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* DÖNEM GİDER VE BORDRO MASRAFLARI (VERGİLENDİRME / GİDERLER LİSTESİ) */}
+                <div className="bg-white p-4.5 rounded-2xl border border-[#dae2fd] shadow-2xs space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#eaedff] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-purple-50 text-purple-700">
+                        <TrendingDown className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-black text-sm text-slate-900">
+                          {periodTitle} - Giderler ve Otomatik Bordro Masrafları ({periodExpenseTransactions.length})
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          Bordro tahakkukları ve şirket gider kalemlerinin masraf yansımaları
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-slate-500 font-medium">Toplam Masraf & Gider: </span>
+                      <span className="text-sm font-black font-mono text-purple-900">
+                        ₺{formatTL(totalPeriodDirectExpenses)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {periodExpenseTransactions.length === 0 ? (
+                    <div className="py-6 text-center text-slate-500 text-xs font-medium">
+                      Bu dönem için henüz kaydedilmiş gider veya bordro masraf işlemi bulunmamaktadır.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-slate-50 text-slate-800 font-black border-b border-slate-200">
+                          <tr>
+                            <th className="p-2.5">Tarih</th>
+                            <th className="p-2.5">Kategori / Masraf Türü</th>
+                            <th className="p-2.5">Açıklama</th>
+                            <th className="p-2.5">Personel / Muhatap</th>
+                            <th className="p-2.5">Kasa / Hesap</th>
+                            <th className="p-2.5">Belge No</th>
+                            <th className="p-2.5 text-right">Tutar (TL)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {periodExpenseTransactions.map((tx) => {
+                            const isPayroll = (tx.category || "").toLowerCase().includes("bordro") || 
+                                              (tx.category || "").toLowerCase().includes("maaş") || 
+                                              (tx.id || "").startsWith("tx_payroll_");
+                            return (
+                              <tr key={tx.id} className={`hover:bg-slate-50/80 transition-colors ${isPayroll ? "bg-purple-50/20" : ""}`}>
+                                <td className="p-2.5 font-mono text-slate-700 whitespace-nowrap">{tx.date}</td>
+                                <td className="p-2.5">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                    isPayroll 
+                                      ? "bg-purple-100 text-purple-900 border border-purple-200" 
+                                      : "bg-rose-100 text-rose-900 border border-rose-200"
+                                  }`}>
+                                    {tx.category || (isPayroll ? "Personel ve Maaş Giderleri" : "Genel Gider")}
+                                  </span>
+                                </td>
+                                <td className="p-2.5 font-medium text-slate-800 max-w-xs truncate" title={tx.description}>
+                                  {tx.description || "-"}
+                                </td>
+                                <td className="p-2.5 font-semibold text-slate-800">{tx.contactName || "-"}</td>
+                                <td className="p-2.5 text-slate-600 font-mono text-[11px]">{tx.accountName || "-"}</td>
+                                <td className="p-2.5 font-mono text-slate-600 text-[11px]">{tx.documentNo || "-"}</td>
+                                <td className="p-2.5 text-right font-mono tabular-nums font-bold text-rose-800 whitespace-nowrap">
+                                  ₺{formatTL(tx.amount || 0)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* 12 AYLIK RESMİ VERGİ, KDV TEVKİFATI VE MUHTASAR MATRİSİ TABLOSU */}
+                <div className="bg-white p-4.5 rounded-2xl border border-[#dae2fd] shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-[#eaedff] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-[#eaedff] text-[#005289]">
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-black text-sm text-slate-900">
+                          {selectedYear} Mali Yılı 12 Aylık Karşılaştırmalı Vergi, KDV-2 Tevkifat ve Muhtasar Matrisi
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          Her ay için tahakkuk eden 1 No.lu KDV, 2 No.lu KDV Tevkifatı, Muhtasar Stopaj ve SGK yükümlülükleri
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono tabular-nums font-black text-[#005289] bg-[#eaedff] border border-[#dae2fd] px-3 py-1 rounded-xl">
+                      Yıllık Toplam Mali Yük: ₺{formatTL(annualMonthlyTaxLoad)}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+                      <thead>
+                        <tr className="bg-[#00365d] text-white font-black text-[10px] uppercase tracking-wider">
+                          <th className="p-2.5">Ay</th>
+                          <th className="p-2.5 text-right">Satış KDV</th>
+                          <th className="p-2.5 text-right">Alış KDV</th>
+                          <th className="p-2.5 text-right">1 No.lu KDV (Ödeme/Devir)</th>
+                          <th className="p-2.5 text-right text-amber-200">2 No.lu KDV (Tevkifat)</th>
+                          <th className="p-2.5 text-right text-[#d9e8ff]">Muhtasar Stopaj</th>
+                          <th className="p-2.5 text-right">SGK Primi</th>
+                          <th className="p-2.5 text-right">Damga Vergileri</th>
+                          <th className="p-2.5 text-right">Toplam Aylık Vergi</th>
+                          <th className="p-2.5 text-center">İncele</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                        {monthlyTaxDetails.map((m, mIdx) => {
+                          const isCurrentSelected = selectedPeriod.type === "month" && selectedPeriod.index === mIdx;
+                          const totalDamga = m.kdvDamga + m.kdv2Damga + m.muhtasarDamga;
+
+                          return (
+                            <tr
+                              key={mIdx}
+                              className={`transition-colors ${
+                                isCurrentSelected
+                                  ? "bg-[#eaedff] font-bold"
+                                  : m.totalTaxLoad > 0
+                                  ? "hover:bg-[#f2f3ff]"
+                                  : "hover:bg-slate-50 opacity-70"
+                              }`}
+                            >
+                              <td className="p-2.5 font-bold text-slate-900 flex items-center gap-1.5">
+                                <span className={`w-2 h-2 rounded-full ${m.totalTaxLoad > 0 ? "bg-[#0f6bae]" : "bg-slate-300"}`} />
+                                {m.monthName}
+                              </td>
+                              <td className="p-2.5 text-right font-mono tabular-nums text-slate-700">₺{formatTL(m.salesVat)}</td>
+                              <td className="p-2.5 text-right font-mono tabular-nums text-slate-700">₺{formatTL(m.purchaseVat)}</td>
+                              <td className="p-2.5 text-right font-mono tabular-nums font-semibold">
+                                {m.deferredVat > 0 ? (
+                                  <span className="text-blue-700" title="Devreden KDV">Devir: ₺{formatTL(m.deferredVat)}</span>
+                                ) : (
+                                  <span className="text-amber-950" title="Ödenecek KDV">Ödeme: ₺{formatTL(m.payableVat)}</span>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-right font-mono tabular-nums font-bold text-orange-950 bg-orange-50/40">
+                                {m.purchaseKdvTevkifat > 0 ? (
+                                  <span title={`${m.purchaseTevkifatInvoices.length} adet tevkifatlı alış faturası`}>
+                                    ₺{formatTL(m.purchaseKdvTevkifat)}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-normal">₺0,00</span>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-right font-mono tabular-nums font-bold text-[#00426d] bg-[#eaedff]/30">
+                                {m.totalWithholding > 0 ? (
+                                  <span title={`Fatura Stopajı: ₺${formatTL(m.purchaseStopaj)} | Kira: ₺${formatTL(m.rentWithholding)}`}>
+                                    ₺{formatTL(m.totalWithholding)}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-normal">₺0,00</span>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-right font-mono tabular-nums text-emerald-800">₺{formatTL(m.payrollSgkShare)}</td>
+                              <td className="p-2.5 text-right font-mono tabular-nums text-slate-600">₺{formatTL(totalDamga)}</td>
+                              <td className="p-2.5 text-right font-mono tabular-nums font-black text-[#005289]">
+                                ₺{formatTL(m.totalTaxLoad)}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <button
+                                  onClick={() => {
+                                    setSelectedPeriod({ type: "month", index: mIdx });
+                                    const mStr = String(mIdx + 1).padStart(2, "0");
+                                    setStartDate(`${selectedYear}-${mStr}-01`);
+                                    setEndDate(`${selectedYear}-${mStr}-31`);
+                                  }}
+                                  className="px-2 py-1 rounded-lg text-[10px] font-bold bg-[#eaedff] hover:bg-[#005289] hover:text-white text-[#005289] transition-colors cursor-pointer"
+                                >
+                                  {isCurrentSelected ? "Seçili" : "Seç"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-100 font-black text-xs border-t-2 border-slate-300">
+                          <td className="p-2.5 text-slate-900">YILLIK TOPLAM</td>
+                          <td className="p-2.5 text-right font-mono tabular-nums text-slate-900">₺{formatTL(annualSalesVat)}</td>
+                          <td className="p-2.5 text-right font-mono tabular-nums text-slate-900">₺{formatTL(annualPurchaseVat)}</td>
+                          <td className="p-2.5 text-right font-mono tabular-nums text-amber-950">₺{formatTL(annualPayableVat)}</td>
+                          <td className="p-2.5 text-right font-mono tabular-nums text-orange-950 bg-orange-100/60">₺{formatTL(annualPurchaseKdvTevkifat)}</td>
+                          <td className="p-2.5 text-right font-mono tabular-nums text-[#00426d] bg-[#eaedff]/60">₺{formatTL(annualWithholding)}</td>
+                          <td className="p-2.5 text-right font-mono tabular-nums text-emerald-900">
+                            ₺{formatTL(monthlyTaxDetails.reduce((s, m) => s + m.payrollSgkShare, 0))}
+                          </td>
+                          <td className="p-2.5 text-right font-mono tabular-nums text-slate-700">
+                            ₺{formatTL(annualKdvDamga + annualKdv2Damga + annualMuhtasarDamga)}
+                          </td>
+                          <td className="p-2.5 text-right font-mono tabular-nums text-[#005289] text-sm">
+                            ₺{formatTL(annualMonthlyTaxLoad)}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                {/* WhatsApp Report Modal */}
+                {isWhatsAppReportModalOpen && (
+                  <UniversalWhatsAppModal
+                    isOpen={isWhatsAppReportModalOpen}
+                    onClose={() => setIsWhatsAppReportModalOpen(false)}
+                    title="WhatsApp ile Yönetici Mali Durum Raporu Gönder"
+                    documentTypeLabel="Yönetim & Vergi Raporu"
+                    recipientName={companySettings.eDevletCredentials?.managerName || "Şirket Yetkilisi"}
+                    recipientPhone={companySettings.eDevletCredentials?.mobileSignaturePhone || companySettings.phone || ""}
+                    defaultMessage={`📊 *${companySettings.companyName || "Şirketimiz"} - ${periodTitle} Mali Durum & Vergi Özeti*\n\n📅 *Dönem:* ${periodBadge} (${selectedYear})\n🏢 *Mükellefiyet Türü:* ${activeTaxpayerType}\n\n📈 *Faturalı Satışlar (Ciro):* ${formatCurrency(periodIncome, "TRY")}\n📉 *Faturalı Alışlar (Gider):* ${formatCurrency(periodExpense, "TRY")}\n💵 *Net Faaliyet Matrahı:* ${formatCurrency(periodNetProfit, "TRY")}\n\n🏛️ *Dönemsel Vergi ve Yasal Yükümlülükler:*\n• 1 No'lu KDV: ${formatCurrency(periodPayableVat, "TRY")}\n• 2 No'lu KDV (Tevkifat): ${formatCurrency(periodTotalKdv2Load, "TRY")}\n• Muhtasar & Stopaj: ${formatCurrency(periodTotalWithholding, "TRY")}\n• SGK Primleri Yükü: ${formatCurrency(periodPayrollSgkShare, "TRY")}\n• ${provisionalTaxTitle}: ${formatCurrency(provisionalTaxPayable, "TRY")}\n\n📄 Ayrıntılı Yönetim Raporu PDF olarak ekte sunulmuştur.`}
+                    documentFileName={`Yonetim_Raporu_${selectedYear}_${periodBadge.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`}
+                    companySettings={companySettings}
+                    onGeneratePdf={async () => {
+                      const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+                      const expData: ExportData = {
+                        filename: `Yonetim_Raporu_${selectedYear}`,
+                        title: `${companySettings.companyName || "Şirketimiz"} - ${periodTitle} (${activeTaxpayerType})`,
+                        subtitle: `Dönem: ${periodBadge} | Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
+                        headers: ["Tür / İşlem", "Matrah / Tutar", "KDV / Vergi", "Net Yük / Toplam"],
+                        rows: [
+                          ["Faturalı Satışlar (Ciro)", formatCurrency(periodIncome, "TRY"), formatCurrency(periodSalesVat, "TRY"), formatCurrency(periodIncome, "TRY")],
+                          ["Faturalı Alışlar (Maliyet/Gider)", formatCurrency(periodExpense, "TRY"), formatCurrency(periodPurchaseVat, "TRY"), formatCurrency(periodExpense, "TRY")],
+                          ["Faturalı Net Faaliyet Matrahı", formatCurrency(periodNetProfit, "TRY"), "-", formatCurrency(periodNetProfit, "TRY")],
+                          ["1 No'lu KDV (Ödenecek/Devir)", "-", formatCurrency(periodSalesVat - periodPurchaseVat, "TRY"), formatCurrency(periodPayableVat, "TRY")],
+                          ["2 No'lu KDV (Tevkifat)", "-", formatCurrency(periodPurchaseKdvTevkifat, "TRY"), formatCurrency(periodTotalKdv2Load, "TRY")],
+                          ["Muhtasar & Stopaj", formatCurrency(periodRentAmount, "TRY"), formatCurrency(periodTotalWithholding, "TRY"), formatCurrency(periodTotalWithholding, "TRY")],
+                          ["SGK Primi Yükü", "-", "-", formatCurrency(periodPayrollSgkShare, "TRY")],
+                          [provisionalTaxTitle, formatCurrency(provisionalTaxBase, "TRY"), "-", formatCurrency(provisionalTaxPayable, "TRY")],
+                        ],
+                      };
+                      return generateAutoTableFromExportData(expData);
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: DÖNEMSEL VE YILLIK VERGİ HESAPLAYICISI */}
+      {/* ========================================================================= */}
+      {activeTab === "periodic" && (
+        <div className="space-y-4 animate-fadeIn">
+          {renderDateFilterBar("Dönemsel Vergi Hesaplama Filtresi")}
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold bg-[#eaedff] text-[#005289] border border-[#dae2fd] px-2.5 py-0.5 rounded-full">
+                    {activeTaxpayerType}
+                  </span>
+                  <span className="text-xs font-mono tabular-nums font-bold text-slate-500">
+                    GİB Mevzuatı {selectedYear}
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 mt-1 flex items-center gap-2">
+                  <Calculator className="w-5 h-5 text-[#005289]" />
+                  4 Dönemlik Geçici Vergi & Yıllık Mahsup Dökümü
+                </h3>
+              </div>
+
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-950 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Geçici Vergi Oranı: {isCorporate ? "%25 Düz Oran" : "%15 - %40 Artan Oranlı"}</span>
+              </div>
+            </div>
+
+            {/* 4 Quarterly Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {quarterDetails.map((q) => (
+                <div
+                  key={q.qIndex}
+                  className="bg-[#131b2e] text-white p-5 rounded-2xl border border-[#283044] space-y-3 shadow-xs flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-extrabold text-[#9dcaff] border-b border-[#283044] pb-2">
+                      <span>{q.qName}</span>
+                      <span className="text-[10px] bg-[#283044] text-emerald-400 px-2 py-0.5 rounded font-mono tabular-nums">
+                        {q.dueDate}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs text-slate-300 font-medium">
+                      <div className="flex justify-between">
+                        <span>Dönemsel Gelir:</span>
+                        <span className="font-mono tabular-nums text-emerald-400">₺{formatTL(q.qIncome)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Dönemsel Gider:</span>
+                        <span className="font-mono tabular-nums text-rose-300">₺{formatTL(q.qExpense)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-[#283044] font-bold text-white">
+                        <span>Kümülatif Matrah:</span>
+                        <span className="font-mono tabular-nums">₺{formatTL(q.cumulativeProfit)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-[#283044] space-y-1">
+                    <div className="text-[11px] text-slate-400">Hesaplanan Geçici Vergi:</div>
+                    <div className="text-xl font-black text-emerald-400 font-mono tabular-nums">
+                      ₺{formatTL(q.qPayableTax)}
+                    </div>
+                    <div className="text-[10px] text-slate-400 flex justify-between">
+                      <span>Beyanname Damgası:</span>
+                      <span className="font-mono tabular-nums text-slate-300">₺{formatTL(q.damgaVergisi)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Annual Settlement Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+              <div className="lg:col-span-2 space-y-3">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="font-extrabold text-sm text-slate-900 border-b border-slate-200 pb-2 flex items-center justify-between">
+                    <span>Yıllık Beyanname Mahsup ve Net Ödeme Özeti ({selectedYear})</span>
+                    <span className="text-xs text-[#005289] font-bold bg-[#eaedff] border border-[#dae2fd] px-2.5 py-0.5 rounded-full">
+                      {isCorporate ? "Son Gün: 30 Nisan" : "Son Gün: 31 Mart"}
+                    </span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
+                      <span className="text-slate-500 font-semibold block">Yıllık Toplam Matrah:</span>
+                      <span className="text-lg font-black text-slate-900 font-mono tabular-nums">
+                        ₺{formatTL(totalYearNetProfit)}
+                      </span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
+                      <span className="text-slate-500 font-semibold block">Ödenen Geçici Vergiler:</span>
+                      <span className="text-lg font-black text-[#00629e] font-mono tabular-nums">
+                        ₺{formatTL(totalGeçiciVergiPayable)}
+                      </span>
+                    </div>
+
+                    <div className="bg-[#00365d] text-white p-3 rounded-xl space-y-1 shadow-xs">
+                      <span className="text-[#d9e8ff] font-semibold block">Net Ödenecek Yıllık Vergi:</span>
+                      <span className="text-xl font-black text-emerald-300 font-mono tabular-nums">
+                        ₺{formatTL(finalPayableAnnualTax)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Kurumlar Vergisi Beyannamesi & Hesaplama Cetveli (KVK M.32) */}
+                  {(isCorporate || isCoop) && (
+                    <div className="space-y-4 pt-3 border-t border-slate-200">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-[#00365d] text-white p-3.5 rounded-xl shadow-xs">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-5 h-5 text-[#9dcaff]" />
+                          <div>
+                            <h5 className="font-extrabold text-xs sm:text-sm">
+                              Kurumlar Vergisi Beyanname ve Hesaplama Cetveli (5520 Sayılı KVK M.32)
+                            </h5>
+                            <p className="text-[11px] text-[#d9e8ff] font-medium">
+                              {selectedYear} Mali Yılı %25 Oranlı Kurumlar Vergisi Matrah ve Mahsup Tablosu
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-xs font-mono tabular-nums font-bold bg-[#131b2e] text-emerald-300 border border-[#0f6bae] px-3 py-1 rounded-lg">
+                          Oran: %25 Sabit
+                        </span>
+                      </div>
+
+                      {/* Interactive Matrah Adjustment Parameters */}
+                      <div className="bg-white p-4 rounded-xl border border-[#dae2fd] space-y-3 shadow-2xs">
+                        <div className="text-xs font-extrabold text-[#131b2e] flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <Scale className="w-4 h-4 text-[#005289]" />
+                            Matrah ve Mahsup Düzeltme Parametreleri (GİB Beyanname Kalemleri):
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-normal">Tüm değerler ₺ (TL) cinsindendir</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-semibold">
+                          {/* KKEG */}
+                          <div className="space-y-1 bg-[#f2f3ff] p-2.5 rounded-xl border border-[#dae2fd]">
+                            <label className="text-[#005289] font-bold block text-[11px]">
+                              (+) KKEG (Kanunen Kabul Edilmeyen Gid.):
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={kkegAmount || ""}
+                              onChange={(e) => setKkegAmount(Number(e.target.value) || 0)}
+                              placeholder="0,00"
+                              className="w-full bg-white text-slate-900 border border-[#dae2fd] rounded-lg p-1.5 font-mono tabular-nums font-bold text-xs focus:ring-2 focus:ring-[#0f6bae] focus:outline-none"
+                            />
+                            <span className="text-[10px] text-slate-500 block">KVK M.11 Matraha ilave</span>
+                          </div>
+
+                          {/* İndirim & İstisnalar */}
+                          <div className="space-y-1 bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100">
+                            <label className="text-emerald-950 font-bold block text-[11px]">
+                              (-) İndirim ve İstisnalar (Ar-Ge/İhracat):
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={exemptionsAmount || ""}
+                              onChange={(e) => setExemptionsAmount(Number(e.target.value) || 0)}
+                              placeholder="0,00"
+                              className="w-full bg-white text-slate-900 border border-emerald-300 rounded-lg p-1.5 font-mono tabular-nums font-bold text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                            />
+                            <span className="text-[10px] text-slate-500 block">KVK M.5 / M.10 İndirimler</span>
+                          </div>
+
+                          {/* Geçmiş Yıl Zararları */}
+                          <div className="space-y-1 bg-[#f2f3ff] p-2.5 rounded-xl border border-[#cfe5ff]">
+                            <label className="text-[#00629e] font-bold block text-[11px]">
+                              (-) Geçmiş Yıl Mali Zararları:
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={priorLossesAmount || ""}
+                              onChange={(e) => setPriorLossesAmount(Number(e.target.value) || 0)}
+                              placeholder="0,00"
+                              className="w-full bg-white text-slate-900 border border-[#cfe5ff] rounded-lg p-1.5 font-mono tabular-nums font-bold text-xs focus:ring-2 focus:ring-[#00629e] focus:outline-none"
+                            />
+                            <span className="text-[10px] text-slate-500 block">KVK M.9 (Son 5 Yıl)</span>
+                          </div>
+
+                          {/* Stopaj Mahsubu */}
+                          <div className="space-y-1 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100">
+                            <label className="text-amber-950 font-bold block text-[11px]">
+                              (-) Kesinti Stopajı Mahsubu:
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={prepaidWithholdingAmount || ""}
+                              onChange={(e) => setPrepaidWithholdingAmount(Number(e.target.value) || 0)}
+                              placeholder="0,00"
+                              className="w-full bg-white text-slate-900 border border-amber-300 rounded-lg p-1.5 font-mono tabular-nums font-bold text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            />
+                            <span className="text-[10px] text-slate-500 block">GVK M.94 / KVK M.15 Kesintiler</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Official Step-by-Step Kurumlar Vergisi Table */}
+                      <div className="overflow-x-auto custom-scrollbar rounded-xl border border-[#dae2fd] bg-white">
+                        <table className="w-full text-left text-xs border-collapse min-w-[550px]">
+                          <thead>
+                            <tr className="bg-[#00365d] text-white font-extrabold text-[11px]">
+                              <th className="p-2.5 w-12 text-center">Satır</th>
+                              <th className="p-2.5">Beyanname Kalemi / İşlem Açıklaması</th>
+                              <th className="p-2.5 text-right font-mono tabular-nums">Tutar (₺)</th>
+                              <th className="p-2.5">Mevzuat / Açıklama</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-mono tabular-nums font-medium text-slate-800">
+                            <tr className="hover:bg-slate-50">
+                              <td className="p-2 text-center font-bold text-slate-500">1</td>
+                              <td className="p-2 font-sans font-semibold text-slate-900">Ticari Bilanço Net Karı (Gelir - Gider)</td>
+                              <td className="p-2 text-right font-bold text-slate-900">₺{formatTL(totalYearNetProfit)}</td>
+                              <td className="p-2 font-sans text-[11px] text-slate-500">690 Dönem Net Karı Hesabı</td>
+                            </tr>
+                            <tr className="hover:bg-[#f2f3ff]">
+                              <td className="p-2 text-center font-bold text-[#005289]">2</td>
+                              <td className="p-2 font-sans font-semibold text-[#005289]">(+) Kanunen Kabul Edilmeyen Giderler (KKEG)</td>
+                              <td className="p-2 text-right font-bold text-[#005289]">+₺{formatTL(kkegAmount || 0)}</td>
+                              <td className="p-2 font-sans text-[11px] text-slate-500">KVK M.11 Matraha İlave</td>
+                            </tr>
+                            <tr className="hover:bg-emerald-50/30">
+                              <td className="p-2 text-center font-bold text-emerald-700">3</td>
+                              <td className="p-2 font-sans font-semibold text-emerald-950">(-) İndirim ve İstisnalar Toplamı</td>
+                              <td className="p-2 text-right font-bold text-emerald-700">-₺{formatTL(exemptionsAmount || 0)}</td>
+                              <td className="p-2 font-sans text-[11px] text-slate-500">KVK M.5 / M.10 İndirimler</td>
+                            </tr>
+                            <tr className="hover:bg-[#f2f3ff]">
+                              <td className="p-2 text-center font-bold text-[#00629e]">4</td>
+                              <td className="p-2 font-sans font-semibold text-[#00629e]">(-) Geçmiş Yıl Mali Zararları Mahsubu</td>
+                              <td className="p-2 text-right font-bold text-[#00629e]">-₺{formatTL(priorLossesAmount || 0)}</td>
+                              <td className="p-2 font-sans text-[11px] text-slate-500">KVK M.9 (Son 5 Yıl)</td>
+                            </tr>
+                            <tr className="bg-[#eaedff] font-bold border-y-2 border-[#9dcaff]">
+                              <td className="p-2.5 text-center text-[#005289] font-black">5</td>
+                              <td className="p-2.5 font-sans font-black text-[#005289] text-xs sm:text-sm">KURUMLAR VERGİSİ MATRAHI (Mali Kar)</td>
+                              <td className="p-2.5 text-right font-black text-[#005289] text-sm sm:text-base">₺{formatTL(corporateTaxableBase)}</td>
+                              <td className="p-2.5 font-sans text-xs text-[#005289] font-extrabold">Vergilendirilecek Net Matrah</td>
+                            </tr>
+                            <tr className="hover:bg-slate-50">
+                              <td className="p-2 text-center font-bold text-slate-500">6</td>
+                              <td className="p-2 font-sans font-semibold text-slate-900">Kurumlar Vergisi Oranı</td>
+                              <td className="p-2 text-right font-bold text-[#005289]">%25</td>
+                              <td className="p-2 font-sans text-[11px] text-slate-500">5520 Sayılı KVK M.32 Oranı</td>
+                            </tr>
+                            <tr className="bg-[#f2f3ff] font-bold">
+                              <td className="p-2.5 text-center text-[#005289]">7</td>
+                              <td className="p-2.5 font-sans font-extrabold text-[#005289]">HESAPLANAN KURUMLAR VERGİSİ (Matrah × %25)</td>
+                              <td className="p-2.5 text-right font-black text-[#005289] text-sm">₺{formatTL(calculatedCorporateTax)}</td>
+                              <td className="p-2.5 font-sans text-[11px] text-[#0f6bae] font-bold">Yıllık Brüt Vergi Yükü</td>
+                            </tr>
+                            <tr className="hover:bg-slate-50">
+                              <td className="p-2 text-center font-bold text-slate-500">8</td>
+                              <td className="p-2 font-sans font-semibold text-slate-900">(-) Ödenen Geçici Vergiler Toplamı (1-4. Dönem)</td>
+                              <td className="p-2 text-right font-bold text-[#00629e]">-₺{formatTL(totalGeçiciVergiPayable)}</td>
+                              <td className="p-2 font-sans text-[11px] text-slate-500">GVK M.120 / KVK M.32 Geçici Vergi</td>
+                            </tr>
+                            <tr className="hover:bg-slate-50">
+                              <td className="p-2 text-center font-bold text-slate-500">9</td>
+                              <td className="p-2 font-sans font-semibold text-slate-900">(-) Kesinti Yoluyla Ödenen Vergiler (Stopaj)</td>
+                              <td className="p-2 text-right font-bold text-amber-700">-₺{formatTL(prepaidWithholdingAmount || 0)}</td>
+                              <td className="p-2 font-sans text-[11px] text-slate-500">GVK M.94 / KVK M.15 Stopaj</td>
+                            </tr>
+                            <tr className={`font-black text-sm border-t-2 ${netPayableCorporateTax > 0 ? "bg-[#00365d] text-white" : "bg-emerald-800 text-white"}`}>
+                              <td className="p-3 text-center">10</td>
+                              <td className="p-3 font-sans uppercase">
+                                {netPayableCorporateTax > 0 ? "ÖDENECEK KURUMLAR VERGİSİ" : "İADE ALINACAK KURUMLAR VERGİSİ"}
+                              </td>
+                              <td className="p-3 text-right font-mono tabular-nums text-base text-emerald-300">
+                                ₺{formatTL(netPayableCorporateTax > 0 ? netPayableCorporateTax : corporateRefundTax)}
+                              </td>
+                              <td className="p-3 font-sans text-xs text-[#d9e8ff] font-semibold">
+                                {netPayableCorporateTax > 0 ? "Son Beyan: 30 Nisan 2027" : "İade / Mahsup Talebi"}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Kar Dağıtım Stopajı Bilgi Kartı (A.Ş. & Ltd. Şti.) */}
+                      <div className="bg-[#131b2e] text-white p-4 rounded-xl space-y-2 border border-[#283044]">
+                        <div className="flex items-center justify-between text-xs font-bold text-[#9dcaff]">
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-amber-400" />
+                            Kar Dağıtımı Stopajı Rehberi (GVK M.94 / 6-b):
+                          </span>
+                          <span className="text-[10px] bg-[#00365d] text-[#d9e8ff] border border-[#0f6bae] px-2 py-0.5 rounded font-mono tabular-nums">
+                            Stopaj Oranı: %10
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1 font-mono tabular-nums">
+                          <div className="bg-[#283044]/80 p-2.5 rounded-lg">
+                            <span className="text-slate-400 text-[10px] block font-sans">Net Dağıtılabilir Kar:</span>
+                            <span className="font-bold text-white">₺{formatTL(Math.max(0, totalYearNetProfit - calculatedCorporateTax))}</span>
+                          </div>
+                          <div className="bg-[#283044]/80 p-2.5 rounded-lg">
+                            <span className="text-slate-400 text-[10px] block font-sans">Ortaklara Dağıtılırsa Stopaj (%10):</span>
+                            <span className="font-bold text-amber-400">₺{formatTL(Math.round(Math.max(0, totalYearNetProfit - calculatedCorporateTax) * 0.10))}</span>
+                          </div>
+                          <div className="bg-[#283044]/80 p-2.5 rounded-lg">
+                            <span className="text-slate-400 text-[10px] block font-sans">Ortakların Ele Geçen Net Kar:</span>
+                            <span className="font-bold text-emerald-400">₺{formatTL(Math.round(Math.max(0, totalYearNetProfit - calculatedCorporateTax) * 0.90))}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Progressive Bracket table if Individual */}
+                  {isIndividual || isPartnership ? (
+                    <div className="space-y-2 pt-2 border-t border-slate-200">
+                      <div className="font-bold text-xs text-slate-900">
+                        2026 Gelir Vergisi Dilimlerine Göre Dağılım Tablosu (GVK M.103)
+                      </div>
+                      <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200 bg-white">
+                        <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold text-[11px]">
+                              <th className="p-2">Gelir Vergisi Dilimi</th>
+                              <th className="p-2 text-right">Dilime Giren Matrah</th>
+                              <th className="p-2 text-right">Oran</th>
+                              <th className="p-2 text-right">Vergi Tutarı</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-mono tabular-nums font-medium">
+                            {calculateIndividualIncomeTax(totalYearNetProfit).bracketBreakdown.map((item, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="p-2 font-sans font-semibold text-slate-800">{item.bracket}</td>
+                                <td className="p-2 text-right text-slate-900">₺{formatTL(item.taxableAmount)}</td>
+                                <td className="p-2 text-right text-[#005289] font-bold">%{item.rate}</td>
+                                <td className="p-2 text-right text-emerald-700 font-bold">₺{formatTL(item.taxAmount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Damga Vergileri Özeti */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
+                <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+                  <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-[#005289]" />
+                    <span>Resmi Beyanname Damga Vergisi Tarifesi</span>
+                  </h4>
+                  <span className="text-[10px] font-mono tabular-nums font-extrabold bg-[#eaedff] text-[#005289] border border-[#dae2fd] px-2 py-0.5 rounded-md">
+                    GİB Resmi Tarifesi
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 text-xs font-semibold text-slate-700">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] hover:border-[#9dcaff] transition-all">
+                    <span className="text-slate-800 font-medium">Yıllık Gelir Vergisi Beyannamesi</span>
+                    <span className="font-mono tabular-nums font-extrabold text-[#005289] text-xs ml-2 shrink-0">₺{YILLIK_GELIR_DAMGA_VERGISI.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] hover:border-[#9dcaff] transition-all">
+                    <span className="text-slate-800 font-medium">Kurumlar Vergisi Beyannamesi</span>
+                    <span className="font-mono tabular-nums font-extrabold text-[#005289] text-xs ml-2 shrink-0">₺{KURUMLAR_DAMGA_VERGISI.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-all">
+                    <span className="text-slate-800 font-medium">Katma Değer Vergisi (KDV) Beyannamesi</span>
+                    <span className="font-mono tabular-nums font-bold text-slate-900 text-xs ml-2 shrink-0">₺{KDV_DAMGA_VERGISI.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-all">
+                    <span className="text-slate-800 font-medium">Muhtasar Beyanname</span>
+                    <span className="font-mono tabular-nums font-bold text-slate-900 text-xs ml-2 shrink-0">₺{SADECE_MUHTASAR_DAMGA_VERGISI.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#eaedff] border border-[#cfe5ff] hover:border-[#99cbff] transition-all">
+                    <span className="text-[#00426d] font-bold">Muhtasar ve Prim Hizmet Beyannamesi</span>
+                    <span className="font-mono tabular-nums font-extrabold text-[#00629e] text-xs ml-2 shrink-0">₺{MUHTASAR_PRIM_DAMGA_VERGISI.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-all">
+                    <span className="text-slate-800 font-medium">Diğer Beyannameler (Geçici vb.)</span>
+                    <span className="font-mono tabular-nums font-bold text-slate-900 text-xs ml-2 shrink-0">₺{DIGER_VERGI_DAMGA_VERGISI.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: GENEL MUAVİN & DEFTER KAYITLARI (TARİH SIRALI DÖKÜM) */}
+      {/* ========================================================================= */}
+      {activeTab === "ledger" && (
+        <div className="space-y-4 animate-fadeIn">
+          {renderDateFilterBar("Genel Muavin Defter Kayıtları Döküm Filtresi")}
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold bg-[#eaedff] text-[#005289] border border-[#dae2fd] px-2.5 py-0.5 rounded-full">
+                    Tarih Sıralı
+                  </span>
+                  <span className="text-xs font-mono tabular-nums font-bold text-slate-500">
+                    {ledgerWithRunningBalance.length} Kayıt Listeleniyor
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 mt-1 flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-[#005289]" />
+                  Kronolojik Genel Muavin Defteri Dökümü
+                </h3>
+              </div>
+
+              <ExportButtons
+                getExportData={() => ({
+                  filename: `Muavin_Defter_Kayitlari_${selectedYear}`,
+                  title: `GENEL MUAVİN DEFTER KAYITLARI DÖKÜMÜ (${activeTaxpayerType})`,
+                  subtitle: `Tarih Aralığı: ${startDate || "Tüm Yıl"} - ${endDate || "Tüm Yıl"}`,
+                  headers: [
+                    "Tarih", "İşlem Türü", "Kategori", "Belge No", "Cari / İlgili",
+                    "Borç (Gider/Çıkış)", "Alacak (Gelir/Giriş)", "KDV Tutarı", "Yürüyen Bakiye"
+                  ],
+                  rows: ledgerWithRunningBalance.map((item) => [
+                    formatDate(item.date),
+                    item.typeLabel,
+                    item.category,
+                    item.documentNo,
+                    item.contactName,
+                    formatCurrency(item.debit, item.currency),
+                    formatCurrency(item.credit, item.currency),
+                    formatCurrency(item.vatAmount, item.currency),
+                    formatCurrency(item.runningBalance, item.currency),
+                  ]),
+                })}
+                contacts={contacts}
+                companyName={companySettings.companyName}
+                size="sm"
+              />
+            </div>
+
+            {/* General Ledger Table */}
+            <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200">
+              <table className="w-full text-left text-xs border-collapse min-w-[900px]">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-700 font-extrabold text-[11px] uppercase tracking-wider border-b border-slate-200">
+                    <th className="p-3">Tarih</th>
+                    <th className="p-3">İşlem Türü</th>
+                    <th className="p-3">Belge / Referans No</th>
+                    <th className="p-3">Cari / Açıklama</th>
+                    <th className="p-3 text-right">Borç (Çıkış/Gider)</th>
+                    <th className="p-3 text-right">Alacak (Giriş/Gelir)</th>
+                    <th className="p-3 text-right">KDV</th>
+                    <th className="p-3 text-right">Yürüyen Bakiye</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                  {ledgerWithRunningBalance.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-400 italic">
+                        Seçilen kriterlere uygun muavin kaydı bulunamadı.
+                      </td>
+                    </tr>
+                  ) : (
+                    ledgerWithRunningBalance.map((item) => (
+                      <tr key={item.id} className="hover:bg-[#f2f3ff]/60 transition-colors">
+                        <td className="p-3 font-mono tabular-nums font-bold text-slate-900 whitespace-nowrap">
+                          {formatDate(item.date)}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              item.typeLabel.includes("Satış") || item.typeLabel.includes("Tahsilat")
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-rose-100 text-rose-800"
+                            }`}
+                          >
+                            {item.typeLabel}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono tabular-nums text-slate-600 font-semibold">{item.documentNo}</td>
+                        <td className="p-3">
+                          <div className="font-bold text-slate-900">{item.contactName}</div>
+                          <div className="text-[10px] text-slate-500 font-normal truncate max-w-[220px]">
+                            {item.description}
+                          </div>
+                        </td>
+                        <td className="p-3 text-right font-mono tabular-nums font-bold text-rose-700">
+                          {item.debit > 0 ? `₺${item.debit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "-"}
+                        </td>
+                        <td className="p-3 text-right font-mono tabular-nums font-bold text-emerald-700">
+                          {item.credit > 0 ? `₺${item.credit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "-"}
+                        </td>
+                        <td className="p-3 text-right font-mono tabular-nums text-[#005289] font-semibold">
+                          {item.vatAmount > 0 ? `₺${formatTL(item.vatAmount)}` : "-"}
+                        </td>
+                        <td className="p-3 text-right font-mono tabular-nums font-black text-slate-900">
+                          ₺{item.runningBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: VERGİ TAKVİMİ & MEVZUAT REHBERİ */}
+      {/* ========================================================================= */}
+      {activeTab === "guidelines" && (
+        <div className="space-y-4 animate-fadeIn">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-[#005289]" />
+                {activeTaxpayerType} - Yasal Vergi Takvimi & Mevzuat Rehberi
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Gelir İdaresi Başkanlığı (GİB) 2026 resmi beyanname son verme ve ödeme tarihleri.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                <div className="font-extrabold text-[#00365d] flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-[#005289]" />
+                  Katma Değer Vergisi (KDV-1)
+                </div>
+                <p className="text-slate-600 font-medium">
+                  Takip eden ayın 28'inci günü akşamına kadar beyan edilir ve ödenir.
+                </p>
+                <div className="text-[11px] font-bold text-[#005289] bg-[#eaedff] border border-[#dae2fd] p-2 rounded-lg font-mono tabular-nums">
+                  Son Ödeme: Her Ayın 28'i
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                <div className="font-extrabold text-[#00426d] flex items-center gap-2">
+                  <FileCheck className="w-4 h-4 text-[#00629e]" />
+                  Muhtasar ve Prim Hizmet
+                </div>
+                <p className="text-slate-600 font-medium">
+                  Takip eden ayın 26'ncı günü akşamına kadar beyan edilir ve ödenir.
+                </p>
+                <div className="text-[11px] font-bold text-[#00629e] bg-[#f2f3ff] border border-[#cfe5ff] p-2 rounded-lg font-mono tabular-nums">
+                  Son Ödeme: Her Ayın 26'sı
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                <div className="font-extrabold text-emerald-950 flex items-center gap-2">
+                  <Percent className="w-4 h-4 text-emerald-600" />
+                  Geçici Vergi Beyannamesi
+                </div>
+                <p className="text-slate-600 font-medium">
+                  Üçer aylık dönemleri izleyen ikinci ayın 17'nci günü akşamına kadar.
+                </p>
+                <div className="text-[11px] font-bold text-emerald-900 bg-emerald-100/70 border border-emerald-200 p-2 rounded-lg font-mono tabular-nums">
+                  17 Mayıs, 17 Ağustos, 17 Kasım, 17 Şubat
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: AI GELİR/GİDER ÖRÜNTÜ ANALİTİĞİ & AKSİYON ÖNERİLERİ */}
+      {/* ========================================================================= */}
+      {activeTab === "ai_insights" && (
+        <AIReportInsights
+          invoices={invoices}
+          transactions={transactions}
+          selectedYear={selectedYear}
+          onNavigateToTab={(tab) => {
+            if (tab === "monthly" || tab === "periodic" || tab === "ledger" || tab === "guidelines") {
+              setActiveTab(tab);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+};

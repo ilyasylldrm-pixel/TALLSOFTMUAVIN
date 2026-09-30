@@ -1,0 +1,4647 @@
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  Invoice,
+  InvoiceItem,
+  InvoiceType,
+  InvoiceProfileType,
+  InvoiceScenario,
+  InvoiceStatus,
+  Contact,
+  Product,
+  Account,
+  CompanySettings,
+  getContactAccountCode,
+  EXPENSE_CATEGORIES,
+  ExpenseCategory,
+} from "../types";
+import { InvoicePrintModal } from "./InvoicePrintModal";
+import { InvoicePreviewModal } from "./InvoicePreviewModal";
+import { InvoiceCreatePreviewPanel } from "./InvoiceCreatePreviewPanel";
+import { InvoiceTaxSettingsModal } from "./InvoiceTaxSettingsModal";
+import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerModal";
+import { ExportButtons } from "./ExportButtons";
+import { Pagination } from "./common/Pagination";
+import { ExportData, formatCurrency, formatDate, exportToExcel, exportToPDF } from "../utils/exportUtils";
+import { useTheme } from "../context/ThemeContext";
+import { ASSET_ICONS } from "../utils/assetIcons";
+import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
+import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
+import { TableColumnFilterInput } from "./common/TableColumnFilterInput";
+import { ColumnManagementDropdown } from "./common/ColumnManagementDropdown";
+import { useColumnVisibility, ColumnDef } from "../hooks/useColumnVisibility";
+import { TableCheckbox } from "./common/TableCheckbox";
+import { BulkActionBar } from "./common/BulkActionBar";
+import { useTableSelection } from "../hooks/useTableSelection";
+import {
+  computeInvoiceTotals,
+  formatWithholdingBadge,
+  generateInvoiceLegalTaxNotes,
+} from "../utils/taxCalculationService";
+import { DetailPageLayout, BreadcrumbItem } from "./common/DetailPageLayout";
+import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
+import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { NavItem } from "./Sidebar";
+import {
+  sendMysoftOutgoingInvoice,
+  checkRecipientTaxpayerStatus,
+  RecipientTaxpayerStatus,
+} from "../services/mysoftEDocumentService";
+import {
+  buildMysoftInvoiceOutboxPayload,
+  extractMysoftOutboxResult,
+} from "../services/mysoftInvoicePayload";
+import { MysoftTenantPicker } from "./MysoftTenantPicker";
+import { readStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
+import { normalizeMysoftTenantIdentifier } from "../services/mysoftEDocumentService";
+import {
+  FileText,
+  FileSpreadsheet,
+  Plus,
+  Search,
+  Printer,
+  MessageCircle,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  XCircle,
+  Trash2,
+  ArrowUpRight,
+  ArrowDownLeft,
+  X,
+  CreditCard,
+  DollarSign,
+  PlusCircle,
+  Users,
+  Package,
+  ExternalLink,
+  AlertCircle,
+  Building2,
+  MapPin,
+  Eye,
+  Calendar,
+  Filter,
+  Tag,
+  Sparkles,
+  UploadCloud,
+  Loader2,
+  Camera,
+  ChevronRight,
+  ChevronDown,
+  Receipt,
+  ScanLine,
+  Edit2,
+  Hash,
+  Sliders,
+  Percent,
+  ShieldCheck,
+  Scale,
+} from "lucide-react";
+
+const TURKISH_MONTHS = [
+  { id: 1, name: "Ocak" },
+  { id: 2, name: "Şubat" },
+  { id: 3, name: "Mart" },
+  { id: 4, name: "Nisan" },
+  { id: 5, name: "Mayıs" },
+  { id: 6, name: "Haziran" },
+  { id: 7, name: "Temmuz" },
+  { id: 8, name: "Ağustos" },
+  { id: 9, name: "Eylül" },
+  { id: 10, name: "Ekim" },
+  { id: 11, name: "Kasım" },
+  { id: 12, name: "Aralık" },
+];
+
+const getDateYearAndMonth = (dateStr?: string) => {
+  if (!dateStr) return { year: null, month: null };
+  if (dateStr.includes("-")) {
+    const parts = dateStr.split("-");
+    if (parts.length >= 2) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  if (dateStr.includes(".")) {
+    const parts = dateStr.split(".");
+    if (parts.length >= 3) {
+      const y = parseInt(parts[2], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) return { year: y, month: m };
+    }
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  }
+  return { year: null, month: null };
+};
+
+interface InvoicesProps {
+  invoices: Invoice[];
+  contacts: Contact[];
+  products: Product[];
+  accounts: Account[];
+  companySettings: CompanySettings;
+  forcedType?: "sales" | "purchase";
+  globalSearchTerm?: string;
+  onAddInvoice: (invoice: Invoice) => void;
+  onUpdateInvoice: (invoice: Invoice) => void;
+  onDeleteInvoice: (id: string) => void;
+  onBulkDeleteInvoices?: (ids: string[]) => void;
+  onAddTransactionFromInvoice: (
+    invoice: Invoice,
+    accountId: string,
+    paidAmount: number
+  ) => void;
+  initialContactIdForNewInvoice?: string | null;
+  onCollectAllInvoices?: (targetAccountId?: string) => void;
+  onSelectTab?: (tab: NavItem) => void;
+}
+
+const INVOICE_TABLE_COLUMNS: ColumnDef[] = [
+  { id: "invoiceNo", label: "Fatura No & Tip", alwaysVisible: true },
+  { id: "contact", label: "Cari Hesap", defaultVisible: true },
+  { id: "date", label: "Tarih & Vade", defaultVisible: true },
+  { id: "subtotal", label: "KDV Hariç Tutar", defaultVisible: true },
+  { id: "grandTotal", label: "Genel Toplam", defaultVisible: true },
+  { id: "status", label: "Durum", defaultVisible: true },
+  { id: "actions", label: "İşlemler", alwaysVisible: true },
+];
+
+export const Invoices: React.FC<InvoicesProps> = ({
+  invoices,
+  contacts,
+  products,
+  accounts,
+  companySettings,
+  forcedType,
+  globalSearchTerm = "",
+  onAddInvoice,
+  onUpdateInvoice,
+  onDeleteInvoice,
+  onBulkDeleteInvoices,
+  onAddTransactionFromInvoice,
+  initialContactIdForNewInvoice,
+  onCollectAllInvoices,
+  onSelectTab,
+}) => {
+  const { theme } = useTheme();
+  const selection = useTableSelection();
+  const [filterType, setFilterType] = useState<string>(forcedType || "all");
+  const [docSubTab, setDocSubTab] = useState<"invoices" | "receipts" | "all">("invoices");
+  const [formDocKind, setFormDocKind] = useState<"invoice" | "receipt">("invoice");
+  const [search, setSearch] = useState<string>("");
+  const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedExpenseCategoryFilter, setSelectedExpenseCategoryFilter] = useState<string>("all");
+
+  // Navigation & Detail View
+  const detailNav = useDetailNavigation<Invoice>({
+    moduleKey: forcedType === "purchase" ? "purchase-invoices" : forcedType === "sales" ? "sales-invoices" : "invoices",
+    initialMode: initialContactIdForNewInvoice ? "create" : "list",
+  });
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [editingInvoiceNumber, setEditingInvoiceNumber] = useState<string | null>(null);
+  const [isAiScannerModalOpen, setIsAiScannerModalOpen] = useState<boolean>(false);
+  const [printingInvoice, setPrintingInvoice] = useState<Invoice | null>(null);
+  const [whatsAppInvoice, setWhatsAppInvoice] = useState<Invoice | null>(null);
+  const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState<boolean>(false);
+  const [paymentModalInvoice, setPaymentModalInvoice] = useState<Invoice | null>(null);
+  const [isCollectAllModalOpen, setIsCollectAllModalOpen] = useState<boolean>(false);
+  const [collectAllAccountId, setCollectAllAccountId] = useState<string>(accounts[0]?.id || "");
+
+  // Master-Detail Expanded Rows State (set of expanded invoice IDs)
+  const [expandedInvoiceIds, setExpandedInvoiceIds] = useState<Set<string>>(new Set());
+
+  const toggleInvoiceExpand = (id: string) => {
+    setExpandedInvoiceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(15);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterType, docSubTab, selectedYear, selectedMonth, selectedExpenseCategoryFilter, forcedType, globalSearchTerm]);
+
+  // Payment Form State
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(
+    accounts[0]?.id || ""
+  );
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+
+  // Quick Picker Modals
+  const [isContactPickerOpen, setIsContactPickerOpen] = useState<boolean>(false);
+  const [contactPickerSearch, setContactPickerSearch] = useState<string>("");
+  const [isQuickContactFormOpen, setIsQuickContactFormOpen] = useState<boolean>(false);
+  const [newContactName, setNewContactName] = useState<string>("");
+  const [newContactTaxNo, setNewContactTaxNo] = useState<string>("");
+  const [newContactPhone, setNewContactPhone] = useState<string>("");
+  const [newContactType, setNewContactType] = useState<"customer" | "vendor" | "both">("both");
+
+  const [isProductPickerOpen, setIsProductPickerOpen] = useState<boolean>(false);
+  const [productPickerSearch, setProductPickerSearch] = useState<string>("");
+  const [targetItemRowId, setTargetItemRowId] = useState<string | null>(null);
+  const [productCategoryFilter, setProductCategoryFilter] = useState<string>("all");
+
+  // New Invoice Form State
+  const [invType, setInvType] = useState<InvoiceType>(forcedType || "sales");
+  const [invoiceScenario, setInvoiceScenario] = useState<InvoiceScenario>("TICARIFATURA");
+  const [invoiceProfileType, setInvoiceProfileType] = useState<InvoiceProfileType>("SATIS");
+  const [taxModalItem, setTaxModalItem] = useState<InvoiceItem | null>(null);
+  const [taxModalInitialTab, setTaxModalInitialTab] = useState<"tevkifat" | "ozel_matrah" | "istisna" | "ek_vergiler" | undefined>(undefined);
+  const [invoiceNumberInput, setInvoiceNumberInput] = useState<string>("");
+  const [contactId, setContactId] = useState<string>(
+    initialContactIdForNewInvoice || contacts[0]?.id || ""
+  );
+  const [vknSearchInput, setVknSearchInput] = useState<string>(() => {
+    const initContact = contacts.find(
+      (c) => c.id === (initialContactIdForNewInvoice || contacts[0]?.id)
+    );
+    return initContact?.taxNumber ? initContact.taxNumber.replace(/\D/g, "") : "";
+  });
+
+  const handleVknInputChange = (val: string) => {
+    const cleanVal = val.replace(/\D/g, "").slice(0, 11);
+    setVknSearchInput(cleanVal);
+
+    if (cleanVal.length >= 2) {
+      // 1. Exact match on taxNumber
+      const exactMatch = contacts.find(
+        (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === cleanVal
+      );
+      if (exactMatch) {
+        setContactId(exactMatch.id);
+        return;
+      }
+
+      // 2. Starts with search if >= 6 digits or 10/11 digits
+      if (cleanVal.length >= 6) {
+        const startsWithMatches = contacts.filter(
+          (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "").startsWith(cleanVal)
+        );
+        if (startsWithMatches.length === 1) {
+          setContactId(startsWithMatches[0].id);
+        }
+      }
+    }
+  };
+
+  const handleContactSelectChange = (newContactId: string) => {
+    setContactId(newContactId);
+    const found = contacts.find((c) => c.id === newContactId);
+    if (found && found.taxNumber) {
+      setVknSearchInput(found.taxNumber.replace(/\D/g, ""));
+    } else {
+      setVknSearchInput("");
+    }
+  };
+
+  // Delivery Address State
+  const [hasDifferentDeliveryAddress, setHasDifferentDeliveryAddress] = useState<boolean>(false);
+  const [deliveryAddress, setDeliveryAddress] = useState<string>("");
+  /** Mysoft Giden Fatura (invoiceOutbox) — only for gelir e-fatura. */
+  const [sendToMysoft, setSendToMysoft] = useState(true);
+  const [mysoftEDocType, setMysoftEDocType] = useState<"e_fatura" | "e_arsiv">("e_fatura");
+  const [isSavingMysoft, setIsSavingMysoft] = useState(false);
+  const [mysoftSaveError, setMysoftSaveError] = useState<string | null>(null);
+  const [mysoftSaveNotice, setMysoftSaveNotice] = useState<string | null>(null);
+
+  const handleCloseDetail = useCallback(() => {
+    setEditingInvoiceId(null);
+    setEditingInvoiceNumber(null);
+    setMysoftSaveError(null);
+    detailNav.backToList();
+  }, [detailNav]);
+
+  const isCreateModalOpen = detailNav.isDetailView;
+  const setIsCreateModalOpen = useCallback(
+    (open: boolean) => {
+      if (open) {
+        detailNav.openCreate();
+      } else {
+        handleCloseDetail();
+      }
+    },
+    [detailNav, handleCloseDetail]
+  );
+  const [mysoftTenantVkn, setMysoftTenantVkn] = useState<string | undefined>(() =>
+    readStoredMysoftTenantVkn() ||
+      normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber),
+  );
+  const [recipientStatus, setRecipientStatus] = useState<RecipientTaxpayerStatus | null>(null);
+  const [isCheckingRecipient, setIsCheckingRecipient] = useState<boolean>(false);
+
+  useEffect(() => {
+    const fromSettings = normalizeMysoftTenantIdentifier(
+      companySettings.tenantIdentifierNumber,
+    );
+    if (fromSettings) setMysoftTenantVkn(fromSettings);
+  }, [companySettings.tenantIdentifierNumber]);
+
+  // Live e-Fatura vs e-Arşiv Recipient Taxpayer Auto-Detection
+  useEffect(() => {
+    const contact = contacts.find((c) => c.id === contactId);
+    const taxNum = (contact?.taxNumber || "").replace(/\D/g, "").trim();
+    if (!taxNum || (taxNum.length !== 10 && taxNum.length !== 11)) {
+      setRecipientStatus(null);
+      return;
+    }
+
+    let isMounted = true;
+    setIsCheckingRecipient(true);
+    checkRecipientTaxpayerStatus(taxNum)
+      .then((status) => {
+        if (isMounted) {
+          setRecipientStatus(status);
+          if (status.isEFaturaUser) {
+            setMysoftEDocType("e_fatura");
+          } else {
+            setMysoftEDocType("e_arsiv");
+          }
+        }
+      })
+      .finally(() => {
+        if (isMounted) setIsCheckingRecipient(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [contactId, contacts]);
+
+  const handleQuickCreateContact = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newContactName.trim()) return;
+
+    const createdContact: Contact = {
+      id: "cnt_" + Date.now(),
+      name: newContactName.trim(),
+      taxNumber: newContactTaxNo.trim() || undefined,
+      phone: newContactPhone.trim() || undefined,
+      contactType: newContactType,
+      balance: 0,
+      balanceType: "balanced",
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+
+    contacts.push(createdContact);
+    setContactId(createdContact.id);
+    setVknSearchInput(createdContact.taxNumber ? createdContact.taxNumber.replace(/\D/g, "") : "");
+    setIsQuickContactFormOpen(false);
+    setIsContactPickerOpen(false);
+    setNewContactName("");
+    setNewContactTaxNo("");
+    setNewContactPhone("");
+  };
+
+  const handleSelectProductFromPicker = (prod: Product) => {
+    const defaultUnitPrice = invType === "sales" ? prod.sellPrice : prod.buyPrice;
+    const desc = `${prod.name}${prod.code ? ` (${prod.code})` : ""}`;
+    const vat = prod.vatRate || 20;
+
+    if (targetItemRowId) {
+      setItems((prevItems) =>
+        prevItems.map((item) => {
+          if (item.id === targetItemRowId) {
+            const qty = Number(item.quantity) || 1;
+            const gross = qty * defaultUnitPrice;
+            let discAmt = Number(item.discountAmount) || 0;
+            if (item.discountRate && item.discountRate > 0) {
+              discAmt = parseFloat(((gross * item.discountRate) / 100).toFixed(2));
+            } else if (discAmt > gross) {
+              discAmt = gross;
+            }
+            const lineNoVat = Math.max(0, gross - discAmt);
+            const lineVat = (lineNoVat * vat) / 100;
+            return {
+              ...item,
+              productId: prod.id,
+              description: desc,
+              unit: prod.unit || "Adet",
+              unitPrice: defaultUnitPrice,
+              vatRate: vat,
+              discountAmount: discAmt,
+              totalWithoutVat: lineNoVat,
+              vatAmount: lineVat,
+              totalWithVat: lineNoVat + lineVat,
+            };
+          }
+          return item;
+        })
+      );
+    } else {
+      const lineNoVat = 1 * defaultUnitPrice;
+      const lineVat = (lineNoVat * vat) / 100;
+      const newItem: InvoiceItem = {
+        id: "item_" + Date.now(),
+        productId: prod.id,
+        description: desc,
+        quantity: 1,
+        unit: prod.unit || "Adet",
+        unitPrice: defaultUnitPrice,
+        vatRate: vat,
+        totalWithoutVat: lineNoVat,
+        vatAmount: lineVat,
+        totalWithVat: lineNoVat + lineVat,
+      };
+      setItems((prev) => [...prev, newItem]);
+    }
+
+    setIsProductPickerOpen(false);
+    setTargetItemRowId(null);
+  };
+  const [issueDate, setIssueDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [dueDate, setDueDate] = useState<string>(
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+  );
+  const [notes, setNotes] = useState<string>("Ödemenin süresinde yapılması rica olunur.");
+
+  const [items, setItems] = useState<InvoiceItem[]>([
+    {
+      id: "item_1",
+      description: "Yazılım Danışmanlık ve Sistem Destek Hizmeti",
+      quantity: 1,
+      unit: "Adet",
+      unitPrice: 5000,
+      vatRate: 20,
+      totalWithoutVat: 5000,
+      vatAmount: 1000,
+      totalWithVat: 6000,
+    },
+  ]);
+
+  const handleOpenNewInvoiceModal = (
+    docKind: "invoice" | "receipt" = "invoice",
+    type?: InvoiceType
+  ) => {
+    setEditingInvoiceId(null);
+    setEditingInvoiceNumber(null);
+    setInvoiceScenario("TICARIFATURA");
+    setInvoiceProfileType("SATIS");
+    setTaxModalItem(null);
+    setTaxModalInitialTab(undefined);
+    setFormDocKind(docKind);
+    const targetType = type || forcedType || "sales";
+    setInvType(targetType);
+    const nextSeq = String(invoices.length + 1).padStart(7, "0");
+    const prefix = targetType === "sales" ? "MUV2026" : "TED2026";
+    setInvoiceNumberInput(`${prefix}${nextSeq}`);
+    const targetContactId = initialContactIdForNewInvoice || contacts[0]?.id || "";
+    setContactId(targetContactId);
+    const targetContact = contacts.find((c) => c.id === targetContactId);
+    setVknSearchInput(targetContact?.taxNumber ? targetContact.taxNumber.replace(/\D/g, "") : "");
+    setIssueDate(new Date().toISOString().split("T")[0]);
+    setDueDate(
+      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0]
+    );
+    setNotes("Ödemenin süresinde yapılması rica olunur.");
+    setHasDifferentDeliveryAddress(false);
+    setDeliveryAddress("");
+    setItems([
+      {
+        id: "item_1",
+        description:
+          targetType === "purchase"
+            ? "Ofis & Kırtasiye / Mal & Hizmet Alımı"
+            : "Yazılım Danışmanlık ve Sistem Destek Hizmeti",
+        quantity: 1,
+        unit: "Adet",
+        unitPrice: targetType === "purchase" ? 1500 : 5000,
+        vatRate: 20,
+        totalWithoutVat: targetType === "purchase" ? 1500 : 5000,
+        vatAmount: targetType === "purchase" ? 300 : 1000,
+        totalWithVat: targetType === "purchase" ? 1800 : 6000,
+      },
+    ]);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleOpenEditInvoiceModal = (inv: Invoice) => {
+    setEditingInvoiceId(inv.id);
+    setEditingInvoiceNumber(inv.invoiceNumber);
+    setInvoiceNumberInput(inv.invoiceNumber || "");
+    setInvType(inv.type);
+    setInvoiceScenario(inv.invoiceScenario || "TICARIFATURA");
+    setInvoiceProfileType(inv.invoiceProfileType || "SATIS");
+    setTaxModalItem(null);
+    setTaxModalInitialTab(undefined);
+    setFormDocKind(inv.docKind || "invoice");
+    const editContactId = inv.contactId || contacts[0]?.id || "";
+    setContactId(editContactId);
+    const editContact = contacts.find((c) => c.id === editContactId);
+    setVknSearchInput(
+      editContact?.taxNumber
+        ? editContact.taxNumber.replace(/\D/g, "")
+        : inv.taxNumber
+        ? inv.taxNumber.replace(/\D/g, "")
+        : ""
+    );
+    setIssueDate(inv.issueDate || new Date().toISOString().split("T")[0]);
+    setDueDate(inv.dueDate || new Date().toISOString().split("T")[0]);
+
+    let noteText = inv.notes || "";
+    if (noteText.includes("Teslimat Adresi: ")) {
+      const match = noteText.match(/Teslimat Adresi:\s*(.*)/);
+      if (match && match[1]) {
+        setHasDifferentDeliveryAddress(true);
+        setDeliveryAddress(match[1]);
+        noteText = noteText.replace(/Teslimat Adresi:\s*.*\n?/, "").trim();
+      }
+    } else {
+      setHasDifferentDeliveryAddress(false);
+      setDeliveryAddress("");
+    }
+    setNotes(noteText);
+
+    if (inv.items && inv.items.length > 0) {
+      setItems(
+        inv.items.map((item, idx) => ({
+          ...item,
+          id: item.id || `item_${idx}_${Date.now()}`,
+        }))
+      );
+    } else {
+      setItems([
+        {
+          id: "item_1",
+          description: "Hizmet / Ürün Kalemi",
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: inv.subtotal || 0,
+          vatRate: 20,
+          totalWithoutVat: inv.subtotal || 0,
+          vatAmount: inv.totalVat || 0,
+          totalWithVat: inv.grandTotal || 0,
+        },
+      ]);
+    }
+    detailNav.openEdit(inv, inv.id);
+  };
+
+  // Switch invoice profile type and update line items immediately so changes reflect everywhere in real-time
+  const handleSelectInvoiceProfile = (profile: InvoiceProfileType) => {
+    setInvoiceProfileType(profile);
+
+    setItems((prevItems) => {
+      const updatedItems = prevItems.map((item) => {
+        if (profile === "SATIS") {
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+            exemptionCode: undefined,
+            exemptionReason: undefined,
+          };
+        } else if (profile === "TEVKIFAT") {
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            withholdingCode: item.withholdingCode || "601",
+            withholdingRateNumerator: item.withholdingRateNumerator || 4,
+            withholdingRateDenominator: item.withholdingRateDenominator || 10,
+            withholdingRate: (item.withholdingRateNumerator || 4) / (item.withholdingRateDenominator || 10),
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+            exemptionCode: undefined,
+            exemptionReason: undefined,
+          };
+        } else if (profile === "OZELMATRAH") {
+          const lineTotal = item.quantity * item.unitPrice;
+          const defaultMargin = item.specialTaxBase !== undefined && item.specialTaxBase !== null
+            ? item.specialTaxBase
+            : Math.max(0, lineTotal * 0.1);
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            specialTaxBaseCode: item.specialTaxBaseCode || "809",
+            specialTaxBase: defaultMargin,
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            exemptionCode: undefined,
+            exemptionReason: undefined,
+          };
+        } else if (profile === "ISTISNA") {
+          return {
+            ...item,
+            vatRate: 0,
+            exemptionCode: item.exemptionCode || "301",
+            exemptionReason: item.exemptionReason || "301 - Mal İhracatı",
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+          };
+        } else if (profile === "IADE") {
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+            exemptionCode: undefined,
+            exemptionReason: undefined,
+          };
+        } else if (profile === "IHRACKAYITLI") {
+          return {
+            ...item,
+            vatRate: item.vatRate === 0 ? 20 : item.vatRate,
+            exemptionCode: "701",
+            exemptionReason: "3065 SK. 11/1-c İhraç Kayıtlı Teslimler",
+            withholdingCode: undefined,
+            withholdingRateNumerator: undefined,
+            withholdingRateDenominator: undefined,
+            withholdingRate: undefined,
+            withholdingAmount: undefined,
+            specialTaxBase: undefined,
+            specialTaxBaseCode: undefined,
+            costPrice: undefined,
+          };
+        }
+        return item;
+      });
+
+      // GİB Yasal Şerhlerini ve Oranlarını Otomatik Fatura Altı Notlarına Senkronize Et
+      const legalNotes = generateInvoiceLegalTaxNotes(updatedItems, profile);
+      if (legalNotes.length > 0) {
+        setNotes((prevNotes) => {
+          let n = prevNotes.trim();
+          legalNotes.forEach((ln) => {
+            if (!n.includes(ln)) {
+              n = n ? `${n}\n${ln}` : ln;
+            }
+          });
+          return n;
+        });
+      }
+
+      return updatedItems;
+    });
+  };
+
+  // Recalculate invoice totals dynamically using central taxCalculationService
+  const calculateTotals = () => {
+    return computeInvoiceTotals(items);
+  };
+
+  const getDraftInvoice = (): Partial<Invoice> => {
+    const contact = contacts.find((c) => c.id === contactId);
+    const {
+      grossTotal,
+      totalDiscount,
+      subtotal,
+      effectiveTaxableAmount,
+      totalVat,
+      totalWithholding,
+      payableVat,
+      grandTotal,
+      payableAmount,
+      taxItems,
+      computedItems,
+    } = calculateTotals();
+    const isReceipt = formDocKind === "receipt";
+    const prefix = invType === "sales"
+      ? isReceipt ? "GLF2026" : "MUV2026"
+      : isReceipt ? "GDF2026" : "TED2026";
+    const nextSeq = String(invoices.length + 1).padStart(7, "0");
+    const customNum = String(invoiceNumberInput || "").trim();
+
+    let finalNotes = String(notes || "").trim();
+    const safeDelivery = String(deliveryAddress || "").trim();
+    if (hasDifferentDeliveryAddress && safeDelivery) {
+      const deliveryTag = `Teslimat Adresi: ${safeDelivery}`;
+      if (!finalNotes.includes(safeDelivery)) {
+        finalNotes = finalNotes ? `${finalNotes}\n${deliveryTag}` : deliveryTag;
+      }
+    }
+
+    // GİB Resmi Vergi Notları & Şerhleri (Tevkifat, Özel Matrah, İstisna, İhraç Kayıtlı)
+    const legalNotes = generateInvoiceLegalTaxNotes(computedItems, invoiceProfileType);
+    if (legalNotes.length > 0) {
+      legalNotes.forEach((ln) => {
+        if (!finalNotes.includes(ln)) {
+          finalNotes = finalNotes ? `${finalNotes}\n${ln}` : ln;
+        }
+      });
+    }
+
+    const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
+
+    return {
+      invoiceNumber: customNum ? `${customNum} (TASLAK)` : `${prefix}${nextSeq} (TASLAK)`,
+      type: invType,
+      invoiceScenario,
+      invoiceProfileType,
+      docKind: forcedType ? formDocKind : "invoice",
+      expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
+      contactId: contactId,
+      contactName: contact?.name || "Cari Seçilmedi",
+      taxNumber: contact?.taxNumber || "",
+      issueDate,
+      dueDate,
+      items: computedItems,
+      grossTotal,
+      totalDiscount,
+      subtotal,
+      effectiveTaxableAmount,
+      totalVat,
+      totalWithholding,
+      payableVat,
+      grandTotal,
+      payableAmount,
+      taxItems,
+      paidAmount: 0,
+      remainingAmount: payableAmount,
+      status: "draft",
+      currency: "TRY",
+      notes: finalNotes,
+    };
+  };
+
+  const buildMysoftPreviewPayload = useCallback((): Record<string, unknown> | null => {
+    const contact = contacts.find((c) => c.id === contactId);
+    if (!contact) return null;
+    const { subtotal, totalVat, grandTotal, computedItems } = calculateTotals();
+    if (!computedItems.some((item) => String(item.description || "").trim())) {
+      return null;
+    }
+    const draft = getDraftInvoice();
+    const invoiceForPayload = {
+      ...draft,
+      id: `preview_${Date.now()}`,
+      type: invType,
+      docKind: formDocKind,
+      issueDate,
+      dueDate,
+      items: computedItems,
+      contactId,
+      contactName: contact.name,
+      taxNumber: contact.taxNumber || "",
+      subtotal,
+      totalVat,
+      grandTotal,
+      status: "draft" as InvoiceStatus,
+      currency: "TRY",
+      paidAmount: 0,
+      remainingAmount: grandTotal,
+      createdAt: new Date().toISOString().split("T")[0],
+    } as Invoice;
+    return buildMysoftInvoiceOutboxPayload({
+      invoice: invoiceForPayload,
+      contact,
+      company: companySettings,
+      eDocumentType: mysoftEDocType,
+      isSaveAsDraft: true,
+      tenantIdentifierNumber: mysoftTenantVkn,
+      pkAlias: recipientStatus?.pkAlias,
+      gbAlias: recipientStatus?.gbAlias,
+    });
+  }, [
+    contactId,
+    contacts,
+    companySettings,
+    mysoftTenantVkn,
+    recipientStatus,
+    dueDate,
+    formDocKind,
+    invType,
+    issueDate,
+    items,
+    mysoftEDocType,
+    notes,
+    hasDifferentDeliveryAddress,
+    deliveryAddress,
+    invoices.length,
+  ]);
+
+  const showCreatePreviewPanel =
+    formDocKind === "invoice" && (forcedType === "sales" || invType === "sales");
+
+  const handleAddItem = () => {
+    setItems([
+      ...items,
+      {
+        id: "item_" + Date.now(),
+        description: "",
+        quantity: 1,
+        unit: "Adet",
+        unitPrice: 0,
+        vatRate: 20,
+        totalWithoutVat: 0,
+        vatAmount: 0,
+        totalWithVat: 0,
+      },
+    ]);
+  };
+
+  const handleAddExpenseCategoryItem = (cat: string) => {
+    const isFirstEmpty =
+      items.length === 1 &&
+      (!items[0].description ||
+        items[0].description === "Yazılım Danışmanlık ve Sistem Destek Hizmeti" ||
+        (EXPENSE_CATEGORIES as readonly string[]).includes(items[0].description));
+
+    if (isFirstEmpty) {
+      setItems([
+        {
+          id: items[0].id,
+          expenseCategory: cat,
+          description: cat,
+          quantity: items[0].quantity || 1,
+          unit: "Adet",
+          unitPrice: items[0].unitPrice || 0,
+          vatRate: 20,
+          totalWithoutVat: 0,
+          vatAmount: 0,
+          totalWithVat: 0,
+        },
+      ]);
+    } else {
+      setItems([
+        ...items,
+        {
+          id: "item_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+          expenseCategory: cat,
+          description: cat,
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: 0,
+          vatRate: 20,
+          totalWithoutVat: 0,
+          vatAmount: 0,
+          totalWithVat: 0,
+        },
+      ]);
+    }
+  };
+
+  const handleRemoveItem = (id: string) => {
+    if (items.length <= 1) return;
+    setItems(items.filter((i) => i.id !== id));
+  };
+
+  const handleItemChange = (id: string, field: keyof InvoiceItem, value: any) => {
+    setItems(
+      items.map((item) => {
+        if (item.id === id) {
+          const updated = { ...item, [field]: value };
+          if (field === "productId" && value) {
+            const prod = products.find((p) => p.id === value);
+            if (prod) {
+              let desc = prod.name;
+              if (prod.imeiOrSerialNo) {
+                desc += ` (SN/IMEI: ${prod.imeiOrSerialNo})`;
+              }
+              updated.description = desc;
+              updated.unit = prod.unit;
+              updated.unitPrice = invType === "sales" ? prod.sellPrice : prod.buyPrice;
+              updated.vatRate = prod.vatRate;
+            }
+          }
+
+          const qty = Number(updated.quantity) || 0;
+          const price = Number(updated.unitPrice) || 0;
+          const gross = qty * price;
+
+          if (field === "discountAmount") {
+            const rawVal = parseFloat(value);
+            const discAmt = isNaN(rawVal) ? 0 : Math.max(0, rawVal);
+            updated.discountAmount = discAmt;
+            updated.discountRate = gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+          } else if (field === "discountRate") {
+            const rawVal = parseFloat(value);
+            const discRate = isNaN(rawVal) ? 0 : Math.max(0, Math.min(100, rawVal));
+            updated.discountRate = discRate;
+            updated.discountAmount = parseFloat(((gross * discRate) / 100).toFixed(2));
+          } else if (field === "quantity" || field === "unitPrice" || field === "productId") {
+            if (updated.discountRate && updated.discountRate > 0) {
+              updated.discountAmount = parseFloat(((gross * updated.discountRate) / 100).toFixed(2));
+            } else if (updated.discountAmount && updated.discountAmount > 0) {
+              if (updated.discountAmount > gross) {
+                updated.discountAmount = gross;
+              }
+              updated.discountRate = gross > 0 ? parseFloat(((updated.discountAmount / gross) * 100).toFixed(2)) : 0;
+            }
+          }
+
+          const disc = Number(updated.discountAmount) || 0;
+          const net = Math.max(0, gross - disc);
+          updated.totalWithoutVat = net;
+          updated.vatAmount = (net * (Number(updated.vatRate) || 0)) / 100;
+          updated.totalWithVat = net + updated.vatAmount;
+
+          return updated;
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleSaveInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const contact = contacts.find((c) => c.id === contactId);
+    if (!contact) return;
+    if (isSavingMysoft) return;
+
+    const {
+      grossTotal,
+      totalDiscount,
+      subtotal,
+      effectiveTaxableAmount,
+      totalVat,
+      totalWithholding,
+      payableVat,
+      grandTotal,
+      payableAmount,
+      taxItems,
+      computedItems,
+    } = calculateTotals();
+
+    const isReceipt = formDocKind === "receipt";
+    const prefix = invType === "sales"
+      ? isReceipt ? "GLF2026" : "MUV2026"
+      : isReceipt ? "GDF2026" : "TED2026";
+    const nextSeq = String(invoices.length + 1).padStart(7, "0");
+    const effectiveInvoiceNumber = String(invoiceNumberInput || "").trim() || `${prefix}${nextSeq}`;
+
+    let finalNotes = String(notes || "").trim();
+    const safeDelivery = String(deliveryAddress || "").trim();
+    if (hasDifferentDeliveryAddress && safeDelivery) {
+      const deliveryTag = `Teslimat Adresi: ${safeDelivery}`;
+      if (!finalNotes.includes(safeDelivery)) {
+        finalNotes = finalNotes ? `${finalNotes}\n${deliveryTag}` : deliveryTag;
+      }
+    }
+
+    // GİB Resmi Vergi Notları & Şerhleri (Tevkifat, Özel Matrah, İstisna, İhraç Kayıtlı)
+    const legalNotes = generateInvoiceLegalTaxNotes(computedItems, invoiceProfileType);
+    if (legalNotes.length > 0) {
+      legalNotes.forEach((ln) => {
+        if (!finalNotes.includes(ln)) {
+          finalNotes = finalNotes ? `${finalNotes}\n${ln}` : ln;
+        }
+      });
+    }
+
+    const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
+    const shouldSendMysoft =
+      sendToMysoft &&
+      invType === "sales" &&
+      formDocKind === "invoice" &&
+      !editingInvoiceId;
+
+    if (editingInvoiceId) {
+      const existing = invoices.find((i) => i.id === editingInvoiceId);
+      const paid = existing?.paidAmount || 0;
+      const remaining = Math.max(0, payableAmount - paid);
+      let status: InvoiceStatus = existing?.status || "sent";
+      if (status !== "cancelled") {
+        if (remaining <= 0) {
+          status = "paid";
+        } else if (paid > 0) {
+          status = "partial";
+        } else {
+          status = "sent";
+        }
+      }
+
+      const updatedInvoice: Invoice = {
+        id: editingInvoiceId,
+        invoiceNumber: String(invoiceNumberInput || "").trim() || existing?.invoiceNumber || `${prefix}${nextSeq}`,
+        type: invType,
+        invoiceScenario,
+        invoiceProfileType,
+        docKind: formDocKind,
+        expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
+        contactId: contact.id,
+        contactName: contact.name,
+        taxNumber: contact.taxNumber,
+        issueDate,
+        dueDate,
+        items: computedItems,
+        grossTotal,
+        totalDiscount,
+        subtotal,
+        effectiveTaxableAmount,
+        totalVat,
+        totalWithholding,
+        payableVat,
+        taxItems,
+        grandTotal,
+        payableAmount,
+        paidAmount: paid,
+        remainingAmount: remaining,
+        status,
+        currency: existing?.currency || "TRY",
+        notes: finalNotes,
+        createdAt: existing?.createdAt || new Date().toISOString().split("T")[0],
+        eDocumentType: existing?.eDocumentType,
+        eDocumentEttn: existing?.eDocumentEttn,
+      };
+
+      onUpdateInvoice(updatedInvoice);
+      setEditingInvoiceId(null);
+      setEditingInvoiceNumber(null);
+      setHasDifferentDeliveryAddress(false);
+      setDeliveryAddress("");
+      setIsCreateModalOpen(false);
+      return;
+    }
+
+    let newInvoice: Invoice = {
+      id: "inv_" + Date.now(),
+      invoiceNumber: effectiveInvoiceNumber,
+      type: invType,
+      invoiceScenario,
+      invoiceProfileType,
+      docKind: forcedType ? formDocKind : "invoice",
+      expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
+      contactId: contact.id,
+      contactName: contact.name,
+      taxNumber: contact.taxNumber,
+      issueDate,
+      dueDate,
+      items: computedItems,
+      grossTotal,
+      totalDiscount,
+      subtotal,
+      effectiveTaxableAmount,
+      totalVat,
+      totalWithholding,
+      payableVat,
+      taxItems,
+      grandTotal,
+      payableAmount,
+      paidAmount: 0,
+      remainingAmount: payableAmount,
+      status: "sent",
+      currency: "TRY",
+      notes: finalNotes,
+      createdAt: new Date().toISOString().split("T")[0],
+      eDocumentType: shouldSendMysoft ? mysoftEDocType : undefined,
+    };
+
+    if (shouldSendMysoft) {
+      setMysoftSaveError(null);
+      setMysoftSaveNotice(null);
+      if (!mysoftTenantVkn) {
+        setMysoftSaveError(
+          "Mysoft kesimi için mükellef seçin. Listeyi yükleyip VKN/TCKN seçin veya VKN ile getirin.",
+        );
+        return;
+      }
+      setIsSavingMysoft(true);
+      try {
+        const payload = buildMysoftInvoiceOutboxPayload({
+          invoice: newInvoice,
+          contact,
+          company: companySettings,
+          eDocumentType: mysoftEDocType,
+          isSaveAsDraft: false,
+          tenantIdentifierNumber: mysoftTenantVkn,
+          pkAlias: recipientStatus?.pkAlias,
+          gbAlias: recipientStatus?.gbAlias,
+        });
+        const result = await sendMysoftOutgoingInvoice(payload);
+        const outbox = extractMysoftOutboxResult(result);
+        if (outbox.invoiceETTN) {
+          newInvoice = {
+            ...newInvoice,
+            eDocumentEttn: outbox.invoiceETTN,
+            invoiceNumber: outbox.docNo || newInvoice.invoiceNumber,
+            eDocumentType: mysoftEDocType,
+          };
+        }
+        setMysoftSaveNotice(
+          outbox.invoiceETTN
+            ? `Mysoft'a gönderildi. ETTN: ${outbox.invoiceETTN}`
+            : "Fatura Mysoft giden kutuya iletildi.",
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Mysoft giden fatura gönderimi başarısız.";
+        setMysoftSaveError(message);
+        setIsSavingMysoft(false);
+        return;
+      } finally {
+        setIsSavingMysoft(false);
+      }
+    }
+
+    onAddInvoice(newInvoice);
+    if (forcedType) {
+      setDocSubTab(formDocKind === "receipt" ? "receipts" : "invoices");
+    }
+    setHasDifferentDeliveryAddress(false);
+    setDeliveryAddress("");
+    setIsCreateModalOpen(false);
+  };
+
+  const handleRecordPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentModalInvoice || paymentAmount <= 0) return;
+
+    onAddTransactionFromInvoice(paymentModalInvoice, selectedAccountId, paymentAmount);
+    setPaymentModalInvoice(null);
+  };
+
+  const handleSaveInvoiceDirectlyFromAi = (
+    newInvoice: Invoice,
+    paymentInfo?: { accountId: string; paidAmount: number; paymentMethod: string }
+  ) => {
+    // If contact doesn't exist, create it locally
+    const existingContact = contacts.find((c) => c.id === newInvoice.contactId);
+    if (!existingContact && newInvoice.contactName) {
+      const newContact: Contact = {
+        id: newInvoice.contactId,
+        name: newInvoice.contactName,
+        taxNumber: newInvoice.taxNumber || undefined,
+        contactType: "vendor",
+        balance: 0,
+        balanceType: "balanced",
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      contacts.push(newContact);
+    }
+
+    onAddInvoice(newInvoice);
+
+    if (paymentInfo && paymentInfo.paidAmount > 0) {
+      onAddTransactionFromInvoice(newInvoice, paymentInfo.accountId, paymentInfo.paidAmount);
+    }
+  };
+
+  const handleApplyAiDataToForm = (data: ExtractedExpenseData, matchedContactId?: string) => {
+    setInvType("purchase");
+    setFormDocKind(data.docType === "Fatura" ? "invoice" : "receipt");
+    if (data.invoiceNumber) {
+      setInvoiceNumberInput(data.invoiceNumber);
+    } else {
+      const nextSeq = String(invoices.length + 1).padStart(7, "0");
+      setInvoiceNumberInput(`TED2026${nextSeq}`);
+    }
+
+    if (matchedContactId) {
+      setContactId(matchedContactId);
+    } else if (data.companyTitle) {
+      const createdContact: Contact = {
+        id: "cnt_ocr_" + Date.now(),
+        name: String(data.companyTitle || "Cari").trim(),
+        taxNumber: String(data.taxNumber || "").trim() || undefined,
+        contactType: "vendor",
+        balance: 0,
+        balanceType: "balanced",
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      contacts.push(createdContact);
+      setContactId(createdContact.id);
+    }
+
+    if (data.issueDate) {
+      setIssueDate(data.issueDate);
+      setDueDate(data.issueDate);
+    }
+
+    if (data.notes) {
+      setNotes(data.notes);
+    }
+
+    const subtotal = data.subtotal || 0;
+    const vatRate = data.vatRate || 20;
+    const vatAmount = data.vatAmount || (subtotal * vatRate) / 100;
+    const grandTotal = data.grandTotal || subtotal + vatAmount;
+    const expenseCategory = data.expenseCategory || "Yemek ve ulaşım";
+
+    setItems([
+      {
+        id: "item_ocr_" + Date.now(),
+        description: `${data.companyTitle || "Gider"} - ${expenseCategory}`,
+        expenseCategory: expenseCategory,
+        quantity: 1,
+        unit: "Adet",
+        unitPrice: subtotal,
+        vatRate: vatRate,
+        totalWithoutVat: subtotal,
+        vatAmount: vatAmount,
+        totalWithVat: grandTotal,
+      },
+    ]);
+
+    setIsCreateModalOpen(true);
+  };
+
+  // Years memo
+  const availableYears = React.useMemo(() => {
+    const yearsSet = new Set<number>();
+    yearsSet.add(new Date().getFullYear());
+    invoices.forEach((inv) => {
+      const { year } = getDateYearAndMonth(inv.issueDate || inv.createdAt);
+      if (year) yearsSet.add(year);
+    });
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [invoices]);
+
+  // Counts for Gelir Faturası vs Gelir Fişi
+  const salesInvoicesCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "sales" && (i.docKind === "invoice" || !i.docKind)).length;
+  }, [invoices]);
+
+  const salesReceiptsCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "sales" && i.docKind === "receipt").length;
+  }, [invoices]);
+
+  const allSalesCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "sales").length;
+  }, [invoices]);
+
+  // Counts for Gider Faturası vs Gider Fişi
+  const purchaseInvoicesCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "purchase" && (i.docKind === "invoice" || !i.docKind)).length;
+  }, [invoices]);
+
+  const purchaseReceiptsCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "purchase" && i.docKind === "receipt").length;
+  }, [invoices]);
+
+  const allPurchaseCount = React.useMemo(() => {
+    return invoices.filter((i) => i.type === "purchase").length;
+  }, [invoices]);
+
+  // Sütun Bazlı Filtreleme Durumu
+  const [colFilters, setColFilters] = useState<{
+    invoiceNo: string;
+    contact: string;
+    date: string;
+    subtotal: string;
+    grandTotal: string;
+    status: string;
+  }>({
+    invoiceNo: "",
+    contact: "",
+    date: "",
+    subtotal: "",
+    grandTotal: "",
+    status: "",
+  });
+  const [showColFilters, setShowColFilters] = useState(true);
+
+  const activeColFilterCount = React.useMemo(() => {
+    return (Object.values(colFilters) as string[]).filter((v) => Boolean(v && typeof v === "string" && v.trim() !== "")).length;
+  }, [colFilters]);
+
+  const clearAllColFilters = () => {
+    setColFilters({
+      invoiceNo: "",
+      contact: "",
+      date: "",
+      subtotal: "",
+      grandTotal: "",
+      status: "",
+    });
+  };
+
+  // Sütun Görünürlüğü (Kolon Yönetimi & LocalStorage)
+  const {
+    columns: invoiceColumns,
+    columnVisibility: invoiceColVisibility,
+    isVisible: isInvoiceColVisible,
+    toggleColumn: toggleInvoiceCol,
+    setAllColumns: setAllInvoiceCols,
+    resetToDefaults: resetInvoiceCols,
+    hiddenCount: hiddenInvoiceColsCount,
+  } = useColumnVisibility("invoices", INVOICE_TABLE_COLUMNS);
+
+  const visibleInvoiceColCount = React.useMemo(() => {
+    return 1 + invoiceColumns.filter((col) => isInvoiceColVisible(col.id)).length;
+  }, [invoiceColumns, isInvoiceColVisible]);
+
+  // Filter logic
+  const activeSearchQuery = String(globalSearchTerm || search || "").toLowerCase().trim();
+  const filteredInvoices = invoices.filter((inv) => {
+    // Sütun Bazlı Filtreler (Header Inputs)
+    if (colFilters.invoiceNo) {
+      const q = colFilters.invoiceNo.toLowerCase().trim();
+      const typeStr = inv.type === "sales" ? "satış gelir" : "alış gider";
+      const noStr = (inv.invoiceNumber || "").toLowerCase();
+      if (!noStr.includes(q) && !typeStr.includes(q)) return false;
+    }
+
+    if (colFilters.contact) {
+      const q = colFilters.contact.toLowerCase().trim();
+      if (!inv.contactName.toLowerCase().includes(q)) return false;
+    }
+
+    if (colFilters.date) {
+      const q = colFilters.date.toLowerCase().trim();
+      const issueStr = formatDate(inv.issueDate).toLowerCase();
+      const dueStr = inv.dueDate ? formatDate(inv.dueDate).toLowerCase() : "";
+      if (!issueStr.includes(q) && !dueStr.includes(q) && !inv.issueDate.includes(q)) return false;
+    }
+
+    if (colFilters.subtotal) {
+      const q = colFilters.subtotal.toLowerCase().trim();
+      const subFormatted = inv.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 });
+      if (!subFormatted.includes(q) && !String(inv.subtotal).includes(q)) return false;
+    }
+
+    if (colFilters.grandTotal) {
+      const q = colFilters.grandTotal.toLowerCase().trim();
+      const totalFormatted = inv.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 });
+      if (!totalFormatted.includes(q) && !String(inv.grandTotal).includes(q)) return false;
+    }
+
+    if (colFilters.status) {
+      const q = colFilters.status.toLowerCase().trim();
+      const statusMap: Record<string, string> = {
+        paid: "ödendi tahsil edildi",
+        overdue: "vadesi geçmiş gecikmiş",
+        sent: "bekliyor bekleyen açık",
+        partial: "kısmi ödendi parça",
+        cancelled: "iptal edildi",
+      };
+      const mapped = statusMap[inv.status] || inv.status;
+      if (!mapped.includes(q) && inv.status !== q) return false;
+    }
+
+    // Year & Month Filter
+    const { year: invYear, month: invMonth } = getDateYearAndMonth(inv.issueDate || inv.createdAt);
+
+    if (selectedYear !== "all" && invYear !== parseInt(selectedYear, 10)) {
+      return false;
+    }
+
+    if (selectedMonth !== "all" && invMonth !== parseInt(selectedMonth, 10)) {
+      return false;
+    }
+
+    if (selectedExpenseCategoryFilter !== "all") {
+      const matchesCat =
+        inv.expenseCategory === selectedExpenseCategoryFilter ||
+        inv.items.some(
+          (item) =>
+            item.expenseCategory === selectedExpenseCategoryFilter ||
+            item.description === selectedExpenseCategoryFilter
+        );
+      if (!matchesCat) return false;
+    }
+
+    const matchesSearch =
+      !activeSearchQuery ||
+      inv.invoiceNumber.toLowerCase().includes(activeSearchQuery) ||
+      inv.contactName.toLowerCase().includes(activeSearchQuery) ||
+      (inv.notes && inv.notes.toLowerCase().includes(activeSearchQuery)) ||
+      inv.items.some((item) => item.description.toLowerCase().includes(activeSearchQuery));
+
+    if (!matchesSearch) return false;
+
+    // When inside "Gelir Faturaları" module (forcedType === "sales")
+    if (forcedType === "sales") {
+      if (inv.type !== "sales") return false;
+    } else if (forcedType === "purchase") {
+      // When inside "Gider Faturaları" module (forcedType === "purchase")
+      if (inv.type !== "purchase") return false;
+    } else {
+      if (filterType === "sales") return inv.type === "sales";
+      if (filterType === "purchase") return inv.type === "purchase";
+    }
+
+    if (filterType === "overdue") return inv.status === "overdue";
+    if (filterType === "paid") return inv.status === "paid";
+    if (filterType === "pending") return inv.status === "sent" || inv.status === "partial";
+
+    return true;
+  });
+
+  const displayedInvoices = React.useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredInvoices.slice(start, start + pageSize);
+  }, [filteredInvoices, currentPage, pageSize]);
+
+  const displayedInvoiceIds = React.useMemo(() => {
+    return displayedInvoices.map((inv) => inv.id);
+  }, [displayedInvoices]);
+
+  const kpiStats = React.useMemo(() => {
+    const relevant = forcedType
+      ? invoices.filter((i) => i.type === forcedType)
+      : invoices;
+
+    let totalAmount = 0;
+    let paidAmount = 0;
+    let remainingAmount = 0;
+    let overdueAmount = 0;
+    let overdueCount = 0;
+
+    relevant.forEach((inv) => {
+      const gTotal = inv.grandTotal || 0;
+      const paid = inv.paidAmount || 0;
+      const remaining = inv.remainingAmount !== undefined ? inv.remainingAmount : Math.max(0, gTotal - paid);
+      totalAmount += gTotal;
+      paidAmount += paid;
+      remainingAmount += remaining;
+      if (inv.status === "overdue" || (remaining > 0 && inv.dueDate && new Date(inv.dueDate) < new Date())) {
+        overdueAmount += remaining;
+        overdueCount += 1;
+      }
+    });
+
+    return {
+      totalAmount,
+      paidAmount,
+      remainingAmount,
+      overdueAmount,
+      overdueCount,
+      totalCount: relevant.length,
+    };
+  }, [invoices, forcedType]);
+
+  const { subtotal, totalVat, grandTotal } = calculateTotals();
+
+  const getInvoicesExportData = (targetInvoices: Invoice[] = filteredInvoices): ExportData => {
+    const headers = [
+      "Fatura / Fiş No",
+      "Belge Türü",
+      "Cari Hesap / Müşteri",
+      "Düzenleme Tarihi",
+      "Vade Tarihi",
+      "Stok / Kalem Adı",
+      "Miktar",
+      "Birim",
+      "Birim Fiyat",
+      "KDV (%)",
+      "KDV Tutarı",
+      "Kalem Toplamı (KDV Dahil)",
+      "Fatura Genel Toplamı",
+      "Ödenen Tutar",
+      "Kalan Bakiye",
+      "Para Birimi",
+      "Durum",
+      "Açıklama / Not",
+    ];
+
+    const rows: (string | number | boolean | null | undefined)[][] = [];
+
+    targetInvoices.forEach((inv) => {
+      const statusLabel =
+        inv.status === "paid"
+          ? "Ödendi"
+          : inv.status === "partial"
+          ? "Kısmi Ödendi"
+          : inv.status === "overdue"
+          ? "Vadesi Geçti"
+          : inv.status === "sent"
+          ? "Gönderildi"
+          : "Taslak";
+      const typeLabel =
+        inv.type === "sales"
+          ? inv.docKind === "receipt"
+            ? "Satış (Gelir) Fişi"
+            : "Satış (Gelir) Faturası"
+          : inv.docKind === "receipt"
+          ? "Alış (Gider) Fişi"
+          : "Alış (Gider) Faturası";
+      const invCurrency = inv.currency || "TRY";
+
+      if (inv.items && inv.items.length > 0) {
+        inv.items.forEach((item) => {
+          rows.push([
+            inv.invoiceNumber,
+            typeLabel,
+            inv.contactName,
+            inv.issueDate,
+            inv.dueDate || "-",
+            item.description || "Belirtilmedi",
+            item.quantity ?? 0,
+            item.unit || "Adet",
+            formatCurrency(item.unitPrice || 0, invCurrency),
+            `%${item.vatRate ?? 0}`,
+            formatCurrency(item.vatAmount || 0, invCurrency),
+            formatCurrency(item.totalWithVat ?? ((item.totalWithoutVat || 0) + (item.vatAmount || 0)), invCurrency),
+            formatCurrency(inv.grandTotal || 0, invCurrency),
+            formatCurrency(inv.paidAmount || 0, invCurrency),
+            formatCurrency(inv.remainingAmount ?? ((inv.grandTotal || 0) - (inv.paidAmount || 0)), invCurrency),
+            invCurrency,
+            statusLabel,
+            inv.notes || "-",
+          ]);
+        });
+      } else {
+        rows.push([
+          inv.invoiceNumber,
+          typeLabel,
+          inv.contactName,
+          inv.issueDate,
+          inv.dueDate || "-",
+          inv.notes || "Genel Kalem / Belirtilmedi",
+          1,
+          "Adet",
+          formatCurrency(inv.subtotal || inv.grandTotal || 0, invCurrency),
+          `%${inv.totalVat && inv.subtotal ? Math.round((inv.totalVat / inv.subtotal) * 100) : 0}`,
+          formatCurrency(inv.totalVat || 0, invCurrency),
+          formatCurrency(inv.grandTotal || 0, invCurrency),
+          formatCurrency(inv.grandTotal || 0, invCurrency),
+          formatCurrency(inv.paidAmount || 0, invCurrency),
+          formatCurrency(inv.remainingAmount ?? ((inv.grandTotal || 0) - (inv.paidAmount || 0)), invCurrency),
+          invCurrency,
+          statusLabel,
+          inv.notes || "-",
+        ]);
+      }
+    });
+
+    return {
+      filename: `Fatura_Detayli_Stok_Listesi_${new Date().toISOString().split("T")[0]}`,
+      title:
+        forcedType === "sales"
+          ? "SATIŞ (GELİR) FATURALARI STOK & KALEM DETAY LİSTESİ"
+          : forcedType === "purchase"
+          ? "ALIŞ (GİDER) FATURALARI STOK & KALEM DETAY LİSTESİ"
+          : "GELİR VE GİDER FATURALARI STOK & KALEM DETAY LİSTESİ",
+      subtitle: `Toplam ${targetInvoices.length} Adet Fatura (${rows.length} Satır Kalem Kaydı)`,
+      headers,
+      rows,
+    };
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = selection.selectedIdArray;
+    if (onBulkDeleteInvoices) {
+      onBulkDeleteInvoices(ids);
+    } else {
+      ids.forEach((id) => onDeleteInvoice(id));
+    }
+    selection.clearSelection();
+  };
+
+  const handleBulkExportExcel = () => {
+    const selectedInvs = filteredInvoices.filter((i) => selection.isSelected(i.id));
+    exportToExcel(getInvoicesExportData(selectedInvs));
+  };
+
+  const handleBulkExportPdf = () => {
+    const selectedInvs = filteredInvoices.filter((i) => selection.isSelected(i.id));
+    exportToPDF(getInvoicesExportData(selectedInvs));
+  };
+
+  // Detail Page Header & Actions
+  const detailTitle = editingInvoiceId
+    ? invType === "sales"
+      ? "Gelir Faturasını Düzenle"
+      : "Gider Faturasını Düzenle"
+    : forcedType === "sales" || invType === "sales"
+    ? formDocKind === "receipt"
+      ? "Yeni Satış (Gelir) Fişi"
+      : "Yeni Gelir Faturası Kes / Hazırla"
+    : forcedType === "purchase" || invType === "purchase"
+    ? formDocKind === "receipt"
+      ? "Yeni Alış (Gider) Fişi"
+      : "Yeni Gider Faturası Kaydet / Hazırla"
+    : "Yeni Fatura Hazırla (Satış / Alış)";
+
+  const detailBreadcrumbs: BreadcrumbItem[] = [
+    {
+      label:
+        forcedType === "sales"
+          ? "Satış Faturaları"
+          : forcedType === "purchase"
+          ? "Alış Faturaları"
+          : "Faturalar",
+      onClick: handleCloseDetail,
+    },
+    {
+      label: editingInvoiceId
+        ? `${editingInvoiceNumber || "Fatura"} - Düzenle`
+        : forcedType === "sales" || invType === "sales"
+        ? formDocKind === "receipt"
+          ? "Yeni Satış Fişi"
+          : "Yeni Satış Faturası"
+        : formDocKind === "receipt"
+        ? "Yeni Alış Fişi"
+        : "Yeni Gider Faturası",
+      active: true,
+    },
+  ];
+
+  const detailStatusBadge = editingInvoiceId ? (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-100 text-blue-800 border border-blue-200 shadow-2xs">
+      <Edit2 className="w-3.5 h-3.5" /> Düzenleme Modu
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs">
+      <Clock className="w-3.5 h-3.5" /> Taslak Belge
+    </span>
+  );
+
+  const detailPageActions = (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={handleCloseDetail}
+        className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+      >
+        Vazgeç
+      </button>
+      <button
+        type="button"
+        onClick={() => setIsDraftPreviewOpen(true)}
+        className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+      >
+        <Eye className="w-4 h-4 text-indigo-600" />
+        <span>{formDocKind === "receipt" ? "Fişi Önizle" : "Faturayı Önizle"}</span>
+      </button>
+      <button
+        type="submit"
+        form="invoice-create-form"
+        disabled={isSavingMysoft}
+        className={`px-5 py-2 rounded-xl text-xs font-extrabold text-white shadow-2xs cursor-pointer disabled:opacity-60 flex items-center gap-2 transition-all active:scale-95 ${
+          forcedType === "purchase" || invType === "purchase"
+            ? formDocKind === "receipt"
+              ? "bg-orange-600 hover:bg-orange-700"
+              : "bg-amber-600 hover:bg-amber-700"
+            : formDocKind === "receipt"
+            ? "bg-indigo-600 hover:bg-indigo-700"
+            : "bg-purple-600 hover:bg-purple-700"
+        }`}
+      >
+        {isSavingMysoft && <Loader2 className="w-4 h-4 animate-spin" />}
+        <span>
+          {editingInvoiceId
+            ? "Değişiklikleri Kaydet"
+            : forcedType === "sales" || invType === "sales"
+            ? formDocKind === "receipt"
+              ? "Gelir Fişini Kaydet"
+              : sendToMysoft
+              ? isSavingMysoft
+                ? "Mysoft'a Gönderiliyor..."
+                : "Kaydet & Mysoft'a Kes"
+              : "Gelir Faturasını Kaydet & Kes"
+            : forcedType === "purchase" || invType === "purchase"
+            ? formDocKind === "receipt"
+              ? "Gider Fişini Kaydet"
+              : "Gider Faturasını Kaydet"
+            : "Faturayı Kaydet ve Oluştur"}
+        </span>
+      </button>
+    </div>
+  );
+
+  // If Detail View is active (Create / Edit Invoice), render Full Page Detail Layout directly
+  if (detailNav.isDetailView) {
+    // 1. DRAFT INVOICE PREVIEW
+    if (isDraftPreviewOpen) {
+      return (
+        <InvoicePreviewModal
+          invoice={getDraftInvoice()}
+          companySettings={companySettings}
+          contact={contacts.find((c) => c.id === contactId)}
+          isDraft={true}
+          onClose={() => setIsDraftPreviewOpen(false)}
+          onConfirm={() => {
+            setIsDraftPreviewOpen(false);
+            const dummyEvent = { preventDefault: () => {} } as React.FormEvent;
+            handleSaveInvoice(dummyEvent);
+          }}
+          onSelectTab={onSelectTab}
+        />
+      );
+    }
+
+    // 2. TAX & WITHHOLDING SETTINGS
+    if (taxModalItem) {
+      return (
+        <InvoiceTaxSettingsModal
+          isOpen={true}
+          item={taxModalItem}
+          initialTab={taxModalInitialTab}
+          currency="TRY"
+          onClose={() => {
+            setTaxModalItem(null);
+            setTaxModalInitialTab(undefined);
+          }}
+          onApply={(updatedItem) => {
+            const nextItems = items.map((it) => (it.id === updatedItem.id ? updatedItem : it));
+            setItems(nextItems);
+
+            let nextProfile = invoiceProfileType;
+            if (updatedItem.withholdingCode || (updatedItem.withholdingRate && updatedItem.withholdingRate > 0)) {
+              if (invoiceProfileType === "SATIS") {
+                nextProfile = "TEVKIFAT";
+                setInvoiceProfileType("TEVKIFAT");
+              }
+            } else if (updatedItem.specialTaxBaseCode || (updatedItem.specialTaxBase !== undefined && updatedItem.specialTaxBase !== null)) {
+              if (invoiceProfileType === "SATIS") {
+                nextProfile = "OZELMATRAH";
+                setInvoiceProfileType("OZELMATRAH");
+              }
+            } else if (updatedItem.exemptionCode || updatedItem.vatRate === 0) {
+              if (invoiceProfileType === "SATIS") {
+                nextProfile = "ISTISNA";
+                setInvoiceProfileType("ISTISNA");
+              }
+            }
+
+            const legalNotes = generateInvoiceLegalTaxNotes(nextItems, nextProfile);
+            if (legalNotes.length > 0) {
+              setNotes((prevNotes) => {
+                let n = prevNotes.trim();
+                legalNotes.forEach((ln) => {
+                  if (!n.includes(ln)) {
+                    n = n ? `${n}\n${ln}` : ln;
+                  }
+                });
+                return n;
+              });
+            }
+
+            setTaxModalItem(null);
+            setTaxModalInitialTab(undefined);
+          }}
+        />
+      );
+    }
+
+    // 3. QUICK CONTACT CREATION
+    if (isQuickContactFormOpen) {
+      return (
+        <DetailPageLayout
+          title="Hızlı Yeni Cari Ekle"
+          subtitle="Fatura için yeni müşteri veya tedarikçi kartı oluşturun"
+          breadcrumbs={[
+            { label: "Fatura Düzenle", onClick: () => setIsQuickContactFormOpen(false) },
+            { label: "Hızlı Cari Ekle", active: true },
+          ]}
+          onBack={() => setIsQuickContactFormOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              YENİ CARİ
+            </span>
+          }
+          headerIcon={<Users className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsQuickContactFormOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickCreateContact}
+                className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs transition-colors cursor-pointer active:scale-95"
+              >
+                Cariyi Kaydet & Seç
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-lg mx-auto p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Cari Ünvanı / Adı *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Örn: ABC Lojistik A.Ş."
+                  value={newContactName}
+                  onChange={(e) => setNewContactName(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">VKN / TCKN</label>
+                <input
+                  type="text"
+                  maxLength={11}
+                  placeholder="10 VKN veya 11 TCKN..."
+                  value={newContactTaxNo}
+                  onChange={(e) => setNewContactTaxNo(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Telefon</label>
+                <input
+                  type="text"
+                  placeholder="05XX XXX XX XX"
+                  value={newContactPhone}
+                  onChange={(e) => setNewContactPhone(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Cari Türü</label>
+                <select
+                  value={newContactType}
+                  onChange={(e) => setNewContactType(e.target.value as any)}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                >
+                  <option value="both">Müşteri & Tedarikçi (Her İkisi)</option>
+                  <option value="customer">Yalnızca Müşteri (120)</option>
+                  <option value="vendor">Yalnızca Tedarikçi (320)</option>
+                </select>
+              </div>
+            </div>
+            <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsQuickContactFormOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickCreateContact}
+                className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs cursor-pointer active:scale-95"
+              >
+                Kaydet & Seç
+              </button>
+            </div>
+          </div>
+        </DetailPageLayout>
+      );
+    }
+
+    // 4. CONTACT PICKER
+    if (isContactPickerOpen) {
+      return (
+        <DetailPageLayout
+          title="Cari Hesap Seç ve Faturaya Ekle"
+          subtitle="Faturanız için cari seçin veya hızlıca yeni cari oluşturun"
+          breadcrumbs={[
+            { label: "Fatura Düzenle", onClick: () => setIsContactPickerOpen(false) },
+            { label: "Cari Seçici", active: true },
+          ]}
+          onBack={() => setIsContactPickerOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              CARİ LİSTESİ
+            </span>
+          }
+          headerIcon={<Users className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsContactPickerOpen(false);
+                  setIsQuickContactFormOpen(true);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 cursor-pointer"
+              >
+                + Yeni Cari Oluştur
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsContactPickerOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+              >
+                Vazgeç
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-2xl mx-auto p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="relative">
+              <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Cari adı, vergi no veya telefon ile ara..."
+                value={contactPickerSearch}
+                onChange={(e) => setContactPickerSearch(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400"
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar pr-1">
+              {contacts
+                .filter((c) => {
+                  const s = contactPickerSearch.toLowerCase().trim();
+                  if (!s) return true;
+                  return (
+                    c.name.toLowerCase().includes(s) ||
+                    (c.taxNumber && c.taxNumber.includes(s)) ||
+                    (c.phone && c.phone.includes(s))
+                  );
+                })
+                .map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => {
+                      setContactId(c.id);
+                      setVknSearchInput(c.taxNumber ? c.taxNumber.replace(/\D/g, "") : "");
+                      setIsContactPickerOpen(false);
+                    }}
+                    className="p-3.5 rounded-2xl border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 transition-all cursor-pointer flex items-center justify-between group"
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900 group-hover:text-purple-900">{c.name}</div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        VKN/TCKN: {c.taxNumber || "-"} • Tel: {c.phone || "-"}
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-purple-700 bg-purple-50 group-hover:bg-purple-600 group-hover:text-white px-3 py-1.5 rounded-xl border border-purple-200 transition-colors">
+                      Seç
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </DetailPageLayout>
+      );
+    }
+
+    // 5. PRODUCT PICKER
+    if (isProductPickerOpen) {
+      return (
+        <DetailPageLayout
+          title="Stok & Hizmet Listesinden Seç ve Faturaya Ekle"
+          subtitle="Faturanıza eklemek istediğiniz stok veya hizmeti seçin"
+          breadcrumbs={[
+            { label: "Fatura Düzenle", onClick: () => setIsProductPickerOpen(false) },
+            { label: "Stok & Hizmet Seçici", active: true },
+          ]}
+          onBack={() => setIsProductPickerOpen(false)}
+          statusBadge={
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-1 rounded-xl">
+              ÜRÜN REHBERİ
+            </span>
+          }
+          headerIcon={<Package className="w-5 h-5 text-purple-600" />}
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsProductPickerOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+              >
+                Vazgeç
+              </button>
+            </div>
+          }
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-3xl mx-auto p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Ürün adı, stok kodu veya barkod ile ara..."
+                  value={productPickerSearch}
+                  onChange={(e) => setProductPickerSearch(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400"
+                />
+              </div>
+
+              <select
+                value={productCategoryFilter}
+                onChange={(e) => setProductCategoryFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 w-full sm:w-auto"
+              >
+                <option value="all">Tüm Kategoriler</option>
+                {Array.from(new Set(products.map((p) => p.category).filter(Boolean))).map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar pr-1">
+              {products
+                .filter((p) => {
+                  const s = productPickerSearch.toLowerCase().trim();
+                  const matchesSearch = !s || p.name.toLowerCase().includes(s) || (p.code && p.code.toLowerCase().includes(s)) || (p.barcode && p.barcode.includes(s));
+                  const matchesCat = productCategoryFilter === "all" || p.category === productCategoryFilter;
+                  return matchesSearch && matchesCat;
+                })
+                .map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleSelectProductFromPicker(p)}
+                    className="p-3.5 rounded-2xl border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 transition-all cursor-pointer flex items-center justify-between group"
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900 group-hover:text-purple-900">{p.name}</div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        Kod: {p.code || "-"} • Stok: <strong className={p.stock <= 0 ? "text-rose-600" : "text-emerald-700"}>{p.stock ?? 0} {p.unit || "Adet"}</strong>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono font-bold text-xs text-purple-700">
+                        ₺{invType === "purchase" ? p.buyPrice.toLocaleString("tr-TR") : p.sellPrice.toLocaleString("tr-TR")}
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-semibold">+%{p.vatRate ?? 20} KDV</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </DetailPageLayout>
+      );
+    }
+
+    // 6. AI EXPENSE SCANNER
+    if (isAiScannerModalOpen) {
+      return (
+        <AiExpenseScannerModal
+          isOpen={isAiScannerModalOpen}
+          onClose={() => setIsAiScannerModalOpen(false)}
+          contacts={contacts}
+          accounts={accounts}
+          onSaveInvoiceDirectly={handleSaveInvoiceDirectlyFromAi}
+          onApplyToForm={handleApplyAiDataToForm}
+        />
+      );
+    }
+    return (
+      <div className="animate-fadeIn">
+        <DetailPageLayout
+          title={detailTitle}
+          subtitle="Resmi e-Fatura, e-Arşiv ve ticari fatura oluşturucu"
+          breadcrumbs={detailBreadcrumbs}
+          onBack={handleCloseDetail}
+          statusBadge={detailStatusBadge}
+          headerIcon={
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
+                forcedType === "purchase" || invType === "purchase"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-purple-100 text-purple-700"
+              }`}
+            >
+              <FileText className="w-5 h-5" />
+            </div>
+          }
+          actions={detailPageActions}
+          fullWidth={true}
+        >
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            {/* Sol Taraf: Form Alanları ve Kalemler Tablosu (8 Kolon) */}
+            <div className="xl:col-span-8 min-w-0 space-y-6">
+<form id="invoice-create-form" onSubmit={handleSaveInvoice} className="space-y-5 min-w-0">
+              {/* AI OCR Scanner Shortcut for Gider Faturaları */}
+              {(forcedType === "purchase" || invType === "purchase") && (
+                <div
+                  className="p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs transition-all"
+                  style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-600 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold" style={{ color: theme.pageText }}>
+                          Faturanız Var mı?
+                        </span>
+                        <span className="bg-purple-500/10 text-purple-600 border border-purple-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          AI OCR Otomatik Doldurma
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-medium" style={{ color: theme.pageTextMuted }}>
+                        Fotoğraf veya PDF yükleyin; firma ünvanı, VKN, tutar, KDV ve masraf kalemi anında doldurulsun.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAiScannerModalOpen(true);
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all shrink-0 active:scale-95"
+                  >
+                    <UploadCloud className="w-4 h-4 text-purple-200" />
+                    <span>AI ile Fatura Tara</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Top Controls & Selected Cari Information */}
+              <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
+                  {/* 1. VKN / TCKN No ile Arama / Otomatik Getirme (Kompakt Genişlik) */}
+                  <div className="w-full md:w-36 lg:w-40 shrink-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <CreditCard className="w-3.5 h-3.5 text-purple-600" />
+                        <span>VKN / TCKN No</span>
+                      </label>
+                      {vknSearchInput && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                            contacts.some(
+                              (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
+                            )
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              : vknSearchInput.length >= 10
+                              ? "bg-amber-100 text-amber-800 border border-amber-200"
+                              : "text-slate-400 font-semibold"
+                          }`}
+                        >
+                          {contacts.some(
+                            (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
+                          )
+                            ? "✓ Kayıtlı"
+                            : vknSearchInput.length >= 10
+                            ? "Yok"
+                            : `${vknSearchInput.length}/11`}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        maxLength={11}
+                        placeholder="10 VKN / 11 TCKN..."
+                        value={vknSearchInput}
+                        onChange={(e) => handleVknInputChange(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 2. Cari Hesap Seçimi (Daraltılmış / Dengeli Alan) */}
+                  <div className="flex-1 min-w-[180px]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700">
+                        Cari Hesap *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewContactTaxNo(vknSearchInput);
+                          setIsContactPickerOpen(true);
+                        }}
+                        className="text-[11px] font-bold text-purple-600 hover:text-purple-800 cursor-pointer flex items-center gap-0.5"
+                      >
+                        <Search className="w-3 h-3" />
+                        <span>Rehber</span>
+                      </button>
+                    </div>
+                    <select
+                      value={contactId}
+                      onChange={(e) => handleContactSelectChange(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 truncate shadow-2xs"
+                    >
+                      {contacts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          [{getContactAccountCode(c)}] {c.name} {c.taxNumber ? `(VKN: ${c.taxNumber})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 3. Fatura Numarası (Yeni Eklenen Bölüm) */}
+                  <div className="w-full md:w-40 lg:w-44 shrink-0">
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Hash className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Fatura Numarası *</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Örn: MUV20260000001"
+                      value={invoiceNumberInput}
+                      onChange={(e) => setInvoiceNumberInput(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                    />
+                  </div>
+
+                  {/* 4. Fatura Tarihi (Kompakt Tarih Alanı) */}
+                  <div className="w-full md:w-36 lg:w-38 shrink-0">
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Fatura Tarihi *</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={issueDate}
+                      onChange={(e) => setIssueDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Selected Cari Details Card */}
+                {(() => {
+                  const selectedContact = contacts.find((c) => c.id === contactId);
+                  if (!selectedContact) return null;
+
+                  return (
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs space-y-2 shadow-2xs">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-purple-600 shrink-0" />
+                          <span className="font-extrabold text-slate-900 text-sm">
+                            {selectedContact.name}
+                          </span>
+                          {selectedContact.contactType && (
+                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-100 uppercase">
+                              {selectedContact.contactType === "customer"
+                                ? "Müşteri"
+                                : selectedContact.contactType === "vendor"
+                                ? "Tedarikçi"
+                                : "Müşteri & Tedarikçi"}
+                            </span>
+                          )}
+                        </div>
+                        {onSelectTab && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCreateModalOpen(false);
+                              onSelectTab("contacts");
+                            }}
+                            className="text-[11px] font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 cursor-pointer"
+                            title="Cari detaylarına git"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Cari Listesinde Aç</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-slate-700">
+                        <div>
+                          <span className="text-slate-400 font-semibold block text-[10px] uppercase">VKN / TCKN</span>
+                          <span className="font-extrabold text-slate-900">
+                            {selectedContact.taxNumber || "— (Belirtilmedi)"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-semibold block text-[10px] uppercase">Vergi Dairesi</span>
+                          <span className="font-semibold text-slate-800">
+                            {selectedContact.taxOffice || "— (Belirtilmedi)"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-semibold block text-[10px] uppercase">Telefon / E-posta</span>
+                          <span className="font-medium text-slate-800">
+                            {[selectedContact.phone, selectedContact.email].filter(Boolean).join(" | ") || "— (Belirtilmedi)"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {(selectedContact.address || selectedContact.district || selectedContact.city) && (
+                        <div className="pt-1.5 border-t border-slate-100 text-[11px] text-slate-600 flex items-start gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                          <span>
+                            {[selectedContact.address, selectedContact.neighborhood, selectedContact.street, selectedContact.district, selectedContact.city]
+                              .filter(Boolean)
+                              .join(" - ")}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Fatura Senaryosu ve Fatura Türü (Aynı Satırda - Teslimat / Sevkiyat Adresi Bölümünün Üstünde) */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {/* Sol Sütun: Fatura Senaryosu (GİB e-Belge) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Fatura Senaryosu:</span>
+                        </label>
+                        <span className="text-[10px] font-mono font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md border border-purple-200">
+                          {invoiceScenario}
+                        </span>
+                      </div>
+                      <select
+                        value={invoiceScenario}
+                        onChange={(e) => setInvoiceScenario(e.target.value as InvoiceScenario)}
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                      >
+                        <option value="TICARIFATURA">TICARIFATURA - Ticari Fatura (7 Gün İtiraz/Kabul Süreli)</option>
+                        <option value="TEMELFATURA">TEMELFATURA - Temel Fatura (Doğrudan Kabul Edilen)</option>
+                        <option value="EARSIVFATURA">EARSIVFATURA - e-Arşiv Fatura (Standart / Nihai Tüketici)</option>
+                        <option value="IHRACAT">IHRACAT - İhracat e-Faturası (Gümrük Çıkışlı)</option>
+                        <option value="KAMU">KAMU - Kamu Kurumu Faturası</option>
+                        <option value="HAL">HAL - Hal Kayıt Sistemi (HKS) Faturası</option>
+                      </select>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {invoiceScenario === "TICARIFATURA" && "Alıcı firma 7 gün içerisinde sistem üzerinden kabul veya ticari ret verebilir."}
+                        {invoiceScenario === "TEMELFATURA" && "Sistemden doğrudan kabul edilir; itirazlar harici yollarla yapılır."}
+                        {invoiceScenario === "EARSIVFATURA" && "e-Fatura mükellefi olmayanlara ve nihai tüketicilere iletilen arşiv faturası."}
+                        {invoiceScenario === "IHRACAT" && "Gümrük ve Ticaret Bakanlığı GTİP onaylı mal ihracatı faturası senaryosu."}
+                        {invoiceScenario === "KAMU" && "Kamu kurum ve kuruluşlarına yönelik harcama onaylı kamu faturası."}
+                        {invoiceScenario === "HAL" && "Hal Kayıt Sistemi bildirimli toptancı hal satış faturası senaryosu."}
+                      </p>
+                    </div>
+
+                    {/* Sağ Sütun: Fatura Türü (GİB Standardı) ve Ek Vergi Butonu */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Fatura Türü (GİB Standardı):</span>
+                        </label>
+                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                          {invoiceProfileType}
+                        </span>
+                      </div>
+                      <select
+                        value={invoiceProfileType}
+                        onChange={(e) => handleSelectInvoiceProfile(e.target.value as InvoiceProfileType)}
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                      >
+                        <option value="SATIS">SATIŞ - Standart Satış Faturası</option>
+                        <option value="TEVKIFAT">TEVKİFAT - KDV Tevkifatlı Fatura (2/10, 5/10, 7/10, 9/10 vb.)</option>
+                        <option value="OZELMATRAH">ÖZEL MATRAH - 2. El Araç / Kâr Marjı / Kıymetli Maden (3065 SK. 23)</option>
+                        <option value="ISTISNA">İSTİSNA - KDV'den Muaf / İstisna Satış (%0 KDV)</option>
+                        <option value="IADE">İADE - Satış / Alış İade Faturası</option>
+                        <option value="IHRACKAYITLI">İHRAÇ KAYITLI - İhraç Kaydıyla Teslim (3065 SK. 11/1-c)</option>
+                        <option value="SGK">SGK - Sosyal Güvenlik Kurumu Faturası</option>
+                        <option value="KOMISYONCU">KOMİSYONCU - Komisyoncu / Aracı Faturası</option>
+                      </select>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {invoiceProfileType === "SATIS" && "Standart mal ve hizmet teslimi satış faturası profili."}
+                        {invoiceProfileType === "TEVKIFAT" && "KDV'nin bir kısmının alıcı tarafından sorumlu sıfatıyla ödendiği fatura türü."}
+                        {invoiceProfileType === "OZELMATRAH" && "KDV yalnızca kâr marjı veya işçilik farkı üzerinden hesaplanır."}
+                        {invoiceProfileType === "ISTISNA" && "Kanuni istisna maddeleri uyarınca %0 KDV uygulanan teslimler."}
+                        {invoiceProfileType === "IADE" && "Daha önce düzenlenen faturaya istinaden mal/hizmet iade faturası."}
+                        {invoiceProfileType === "IHRACKAYITLI" && "3065 SK. 11/1-c uyarınca ihraç kaydıyla teslim edilen mallar."}
+                        {invoiceProfileType === "SGK" && "Sosyal Güvenlik Kurumu'na yönelik sağlık ve medikal hizmet faturası."}
+                        {invoiceProfileType === "KOMISYONCU" && "Komisyonculuk ve aracılık faaliyetlerine konu fatura türü."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Delivery Address Section (Teslimat Adresi Farklı mı?) */}
+                <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-purple-950 select-none">
+                      <input
+                        type="checkbox"
+                        checked={hasDifferentDeliveryAddress}
+                        onChange={(e) => {
+                          setHasDifferentDeliveryAddress(e.target.checked);
+                          if (!e.target.checked) {
+                            setDeliveryAddress("");
+                          }
+                        }}
+                        className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
+                      />
+                      <MapPin className="w-4 h-4 text-purple-600" />
+                      <span>Teslimat / Sevkiyat Adresi Farklı mı?</span>
+                    </label>
+                  </div>
+
+                  {hasDifferentDeliveryAddress && (
+                    <div className="pt-1 animate-in fade-in duration-150 space-y-1">
+                      <label className="block text-[11px] font-bold text-purple-900">
+                        Farklı Teslimat Adresi (Faturaya not olarak eklenecektir):
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={deliveryAddress}
+                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                        placeholder="Örnek: Sevkiyat Depo - Org. Sanayi Bölgesi 3. Cadde No:12 Nilüfer / Bursa"
+                        className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-900 font-medium placeholder-slate-400 focus:ring-2 focus:ring-purple-500 outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Dynamic Invoice Items Table */}
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-xs font-bold uppercase text-slate-700 tracking-wider">
+                    {invType === "purchase" ? "Gider / Masraf Kalemleri & Ürünler" : "Fatura Kalemleri & Ürün/Hizmetler"}
+                  </h4>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddItem}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 cursor-pointer border border-indigo-200 px-3 py-1.5 rounded-lg bg-indigo-50/50 hover:bg-indigo-100 transition-colors"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>Boş Satır Ekle</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left text-xs min-w-[880px]">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                        <th className="py-2 px-3">
+                          <span>{invType === "purchase" ? "Masraf Kalemi / Açıklama" : "Ürün / Açıklama"}</span>
+                        </th>
+                        <th className="py-2 px-2.5 w-16 text-center">Miktar</th>
+                        <th className="py-2 px-2.5 w-16 text-center">Birim</th>
+                        <th className="py-2 px-2.5 w-24 text-right">Birim Fiyat</th>
+                        <th className="py-2 px-2 w-24 text-right">İskonto Tutarı</th>
+                        <th className="py-2 px-1.5 w-16 text-center">İskonto %</th>
+                        <th className="py-2 px-1.5 w-16 text-center">KDV %</th>
+                        <th className="py-2 px-2.5 w-28 text-right">Toplam (TL)</th>
+                        <th className="py-2 px-3 w-40 text-center">Tevkifat & Ek Vergi</th>
+                        <th className="py-2 px-2 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {items.map((item) => {
+                        const withholdingBadge = formatWithholdingBadge(item);
+                        const isSpecialTaxBase = item.specialTaxBase !== undefined && item.specialTaxBase !== null;
+                        const isExempt = item.exemptionCode || item.vatRate === 0;
+
+                        return (
+                        <tr key={item.id} className="hover:bg-slate-50">
+                          <td className="p-2">
+                            <div className="space-y-1.5">
+                              {invType === "purchase" ? (
+                                <div className="space-y-1.5">
+                                  <select
+                                    value={item.expenseCategory || ""}
+                                    onChange={(e) => {
+                                      const selectedCat = e.target.value;
+                                      handleItemChange(item.id, "expenseCategory", selectedCat);
+                                      if (
+                                        selectedCat &&
+                                        (!item.description ||
+                                          (EXPENSE_CATEGORIES as readonly string[]).includes(item.description) ||
+                                          item.description === "Yazılım Danışmanlık ve Sistem Destek Hizmeti")
+                                      ) {
+                                        handleItemChange(item.id, "description", selectedCat);
+                                      }
+                                    }}
+                                    className="w-full bg-amber-50/90 border border-amber-300 rounded-lg p-1.5 text-xs font-bold text-amber-950 focus:ring-2 focus:ring-amber-500"
+                                  >
+                                    <option value="">-- Masraf / Gider Kalemi Seçin ({EXPENSE_CATEGORIES.length} Kalem) --</option>
+                                    {EXPENSE_CATEGORIES.map((cat) => (
+                                      <option key={cat} value={cat}>
+                                        {cat}
+                                      </option>
+                                    ))}
+                                  </select>
+
+                                  {/* Stok Rehberi Kutucuğu */}
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      id={`stock-directory-trigger-purchase-${item.id}`}
+                                      onClick={() => {
+                                        setTargetItemRowId(item.id);
+                                        setIsProductPickerOpen(true);
+                                      }}
+                                      className="flex-1 flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-purple-50/70 border border-slate-200 hover:border-purple-300 rounded-lg text-xs cursor-pointer transition-all shadow-2xs group text-left"
+                                      title="Stok Rehberini Aç ve Ürün / Hizmet / Malzeme Seç"
+                                    >
+                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                        <Package className="w-3.5 h-3.5 text-purple-600 shrink-0 group-hover:scale-110 transition-transform" />
+                                        <span className="font-bold text-[11px] text-slate-700 shrink-0">Stok Rehberi:</span>
+                                        <span className="text-[11px] text-slate-600 font-medium truncate">
+                                          {item.productId
+                                            ? (products.find((p) => p.id === item.productId)?.name || item.description || "Stok Seçildi")
+                                            : "Stok rehberinden ürün / hammadde seçin..."}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {item.productId && (
+                                          <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
+                                            {products.find((p) => p.id === item.productId)?.code || "Seçili"}
+                                          </span>
+                                        )}
+                                        <span className="text-[10px] font-bold text-purple-700 bg-white border border-purple-200 group-hover:bg-purple-100 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition-colors">
+                                          <Search className="w-2.5 h-2.5 text-purple-600" />
+                                          <span>Rehber</span>
+                                        </span>
+                                      </div>
+                                    </button>
+                                    {item.productId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleItemChange(item.id, "productId", "");
+                                        }}
+                                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                                        title="Stok seçimini temizle"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Açıklama / Masraf Detayı (ör: Araç Yakıtı - 34 ABC 123 Plaka)"
+                                    value={item.description}
+                                    onChange={(e) =>
+                                      handleItemChange(item.id, "description", e.target.value)
+                                    }
+                                    className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 placeholder-slate-400 font-medium"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {/* Stok Rehberi Kutucuğu */}
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      id={`stock-directory-trigger-${item.id}`}
+                                      onClick={() => {
+                                        setTargetItemRowId(item.id);
+                                        setIsProductPickerOpen(true);
+                                      }}
+                                      className="flex-1 flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-purple-50/70 border border-slate-200 hover:border-purple-300 rounded-lg text-xs cursor-pointer transition-all shadow-2xs group text-left"
+                                      title="Stok Rehberini Aç ve Ürün/Hizmet Seç"
+                                    >
+                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                        <Package className="w-3.5 h-3.5 text-purple-600 shrink-0 group-hover:scale-110 transition-transform" />
+                                        <span className="font-bold text-[11px] text-slate-700 shrink-0">Stok Rehberi:</span>
+                                        <span className="text-[11px] text-slate-600 font-medium truncate">
+                                          {item.productId
+                                            ? (products.find((p) => p.id === item.productId)?.name || item.description || "Stok Seçildi")
+                                            : "Stok rehberinden ürün / hizmet seçin..."}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {item.productId && (
+                                          <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
+                                            {products.find((p) => p.id === item.productId)?.code || "Seçili"}
+                                          </span>
+                                        )}
+                                        <span className="text-[10px] font-bold text-purple-700 bg-white border border-purple-200 group-hover:bg-purple-100 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition-colors">
+                                          <Search className="w-2.5 h-2.5 text-purple-600" />
+                                          <span>Rehber</span>
+                                        </span>
+                                      </div>
+                                    </button>
+                                    {item.productId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleItemChange(item.id, "productId", "");
+                                        }}
+                                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                                        title="Stok seçimini temizle"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Açıklama (ör: Yazılım danışmanlık hizmeti)"
+                                    value={item.description}
+                                    onChange={(e) =>
+                                      handleItemChange(item.id, "description", e.target.value)
+                                    }
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 placeholder-slate-400 font-medium"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              min="1"
+                              step="any"
+                              value={item.quantity}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "quantity",
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-center font-bold text-slate-900"
+                            />
+                          </td>
+
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              value={item.unit}
+                              onChange={(e) =>
+                                handleItemChange(item.id, "unit", e.target.value)
+                              }
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-center text-slate-900"
+                            />
+                          </td>
+
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              step="any"
+                              value={item.unitPrice}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "unitPrice",
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-right font-mono font-bold text-slate-900"
+                            />
+                          </td>
+
+                          {/* İskonto Tutarı (TL) */}
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="0,00"
+                              value={item.discountAmount !== undefined && item.discountAmount !== null && item.discountAmount !== 0 ? item.discountAmount : ""}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "discountAmount",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-right font-mono font-bold text-slate-900 placeholder:text-slate-300 focus:bg-white focus:ring-2 focus:ring-purple-500/20"
+                              title="İskonto Tutarı (TL)"
+                            />
+                          </td>
+
+                          {/* İskonto Oranı (%) */}
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="any"
+                              placeholder="%0"
+                              value={item.discountRate !== undefined && item.discountRate !== null && item.discountRate !== 0 ? item.discountRate : ""}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "discountRate",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-center font-mono font-bold text-slate-900 placeholder:text-slate-300 focus:bg-white focus:ring-2 focus:ring-purple-500/20"
+                              title="İskonto Oranı (%)"
+                            />
+                          </td>
+
+                          <td className="p-2">
+                            <select
+                              value={item.vatRate}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "vatRate",
+                                  parseInt(e.target.value) || 0
+                                )
+                              }
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-center text-slate-900"
+                            >
+                              <option value={20}>%20</option>
+                              <option value={10}>%10</option>
+                              <option value={1}>%1</option>
+                              <option value={0}>%0</option>
+                            </select>
+                          </td>
+
+                          <td className="p-2 text-right font-extrabold font-mono text-slate-900">
+                            {(() => {
+                              const singleTotals = computeInvoiceTotals([item]);
+                              return (
+                                <div>
+                                  <div>
+                                    ₺{singleTotals.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                  </div>
+                                  {singleTotals.totalDiscount > 0 && (
+                                    <div className="text-[9px] font-semibold text-rose-600 font-sans">
+                                      -₺{singleTotals.totalDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} İskonto
+                                    </div>
+                                  )}
+                                  {singleTotals.totalExtraTaxes > 0 && (
+                                    <div className="text-[9px] font-bold text-indigo-700 font-sans">
+                                      +₺{singleTotals.totalExtraTaxes.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} Ek Vergi
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
+
+                          {/* Vergi, Tevkifat & Tekil Ek Vergi Ayar Butonları */}
+                          <td className="p-2 text-center">
+                            <div className="space-y-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTaxModalItem(item);
+                                  setTaxModalInitialTab(undefined);
+                                }}
+                                className={`w-full px-2 py-1.5 rounded-lg text-[11px] font-extrabold flex flex-col items-center justify-center gap-0.5 transition-all border cursor-pointer active:scale-95 ${
+                                  withholdingBadge
+                                    ? "bg-purple-100 text-purple-800 border-purple-300 shadow-2xs"
+                                    : isSpecialTaxBase
+                                    ? "bg-amber-100 text-amber-800 border-amber-300 shadow-2xs"
+                                    : isExempt
+                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                    : "bg-slate-100 hover:bg-purple-50 text-slate-600 hover:text-purple-700 border-slate-200"
+                                }`}
+                                title="Kalem Vergi, Tevkifat ve Özel Matrah Ayarlarını Aç"
+                              >
+                                <div className="flex items-center gap-1">
+                                  <Sliders className="w-3 h-3" />
+                                  <span>
+                                    {withholdingBadge
+                                      ? withholdingBadge
+                                      : isSpecialTaxBase
+                                      ? "Özel Matrah"
+                                      : isExempt
+                                      ? "İstisna"
+                                      : "Ayarlar"}
+                                  </span>
+                                </div>
+                                {withholdingBadge && (
+                                  <span className="text-[9px] font-normal text-purple-700">Tevkifatlı</span>
+                                )}
+                              </button>
+
+                              {/* Tekli Kalem İçin GİB Listesinden Ek Vergi Ekleme Butonu */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTaxModalItem(item);
+                                  setTaxModalInitialTab("ek_vergiler");
+                                }}
+                                className={`w-full px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center justify-center gap-1 transition-all border cursor-pointer active:scale-95 ${
+                                  item.additionalTaxes && item.additionalTaxes.length > 0
+                                    ? "bg-indigo-100 text-indigo-900 border-indigo-300 shadow-2xs"
+                                    : "bg-white hover:bg-indigo-50 text-indigo-700 border-dashed border-indigo-300"
+                                }`}
+                                title="Bu kaleme GİB ek vergi listesinden (ÖTV, ÖİV, Damga vb.) vergi ekle"
+                              >
+                                <Plus className="w-2.5 h-2.5 shrink-0" />
+                                <span className="truncate">
+                                  {item.additionalTaxes && item.additionalTaxes.length > 0
+                                    ? `${item.additionalTaxes.length} Ek Vergi`
+                                    : "+ Ek Vergi"}
+                                </span>
+                              </button>
+                            </div>
+                          </td>
+
+                          <td className="p-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Bottom Calculations Summary */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-end pt-2">
+                <div className="space-y-3">
+                  <div className="w-full sm:w-48">
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Son Ödeme (Vade) Tarihi *</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-700">
+                        Fatura Alt Notu / Şartlar & Yasal Şerhler
+                      </label>
+                      {(() => {
+                        const legalNotes = generateInvoiceLegalTaxNotes(items, invoiceProfileType);
+                        if (legalNotes.length === 0) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNotes((prevNotes) => {
+                                let n = prevNotes.trim();
+                                legalNotes.forEach((ln) => {
+                                  if (!n.includes(ln)) {
+                                    n = n ? `${n}\n${ln}` : ln;
+                                  }
+                                });
+                                return n;
+                              });
+                            }}
+                            className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded cursor-pointer transition-all"
+                          >
+                            + Yasal Şerhleri Notlara Aktar
+                          </button>
+                        );
+                      })()}
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium"
+                      placeholder="Ödeme koşulları, banka hesap/IBAN bilgileri veya fatura notlarınızı buraya ekleyebilirsiniz..."
+                    />
+
+                    {/* GİB Resmi Vergi Notları ve Şerhleri Özeti (Tevkifat, Özel Matrah, İstisna, İhraç Kayıtlı) */}
+                    {(() => {
+                      const legalNotes = generateInvoiceLegalTaxNotes(items, invoiceProfileType);
+                      if (legalNotes.length === 0) return null;
+                      return (
+                        <div className="p-2.5 bg-purple-50/70 border border-purple-200 rounded-xl text-[11px] text-purple-950 space-y-1">
+                          <div className="flex items-center justify-between text-[10px] font-black uppercase text-purple-900 tracking-wider">
+                            <span>GİB Resmi Vergi Şerhleri & Oranları:</span>
+                            <span className="bg-purple-200/80 text-purple-900 px-1.5 py-0.2 rounded text-[9px]">
+                              Mevzuata Uygun
+                            </span>
+                          </div>
+                          <div className="space-y-1 text-slate-700">
+                            {legalNotes.map((note, idx) => (
+                              <div key={idx} className="flex items-start gap-1.5 leading-snug">
+                                <span className="font-bold text-purple-700 shrink-0">•</span>
+                                <span className="font-medium">{note}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-purple-800 font-semibold pt-0.5">
+                            * Bu açıklamalar ve oranlar e-Fatura / e-Arşiv faturanızın resmi alt notuna otomatik olarak yansıtılacaktır.
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {(() => {
+                  const totals = calculateTotals();
+                  return (
+                    <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2 text-xs">
+                      {totals.totalDiscount > 0 && (
+                        <>
+                          <div className="flex justify-between text-slate-500">
+                            <span>Brüt Tutar (İskonto Öncesi):</span>
+                            <span className="font-mono font-bold text-slate-800">
+                              ₺{totals.grossTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-rose-700 bg-rose-50 p-1.5 rounded-lg border border-rose-100 font-medium">
+                            <span className="font-bold">(-) Toplam İskonto:</span>
+                            <span className="font-mono font-bold">
+                              -₺{totals.totalDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      <div className="flex justify-between text-slate-500">
+                        <span>{totals.totalDiscount > 0 ? "Ara Toplam (Net KDV Hariç):" : "Ara Toplam (KDV Hariç):"}</span>
+                        <span className="font-mono font-bold text-slate-800">
+                          ₺{totals.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {totals.effectiveTaxableAmount !== totals.subtotal && (
+                        <div className="flex justify-between text-amber-700 bg-amber-50 p-1.5 rounded-lg border border-amber-200 font-medium">
+                          <span>Özel KDV Matrahı:</span>
+                          <span className="font-mono font-bold">
+                            ₺{totals.effectiveTaxableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between text-slate-500">
+                        <span>Toplam Hesaplanan KDV:</span>
+                        <span className="font-mono font-bold text-slate-800">
+                          ₺{totals.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {totals.totalWithholding > 0 && (
+                        <div className="flex justify-between text-purple-700 font-medium bg-purple-50 p-1.5 rounded-lg border border-purple-100">
+                          <span className="font-bold">(-) Tevkif Edilen KDV:</span>
+                          <span className="font-mono font-bold">
+                            -₺{totals.totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between text-slate-600 pt-1 border-t border-slate-200">
+                        <span>Fatura Genel Toplamı:</span>
+                        <span className="font-mono font-bold">
+                          ₺{totals.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-300 flex justify-between items-center text-sm font-black">
+                        <span className="text-slate-900">🎯 ÖDENECEK / TAHSİL EDİLECEK:</span>
+                        <span className="text-indigo-600 font-mono text-base">
+                          ₺{totals.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="pt-3 flex flex-col gap-3 border-t border-slate-200">
+                {invType === "sales" && formDocKind === "invoice" && !editingInvoiceId && (
+                  <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-3 space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sendToMysoft}
+                        onChange={(event) => setSendToMysoft(event.target.checked)}
+                        className="mt-0.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span>
+                        <span className="block text-xs font-bold text-purple-950">
+                          Resmi e-fatura / e-arşiv olarak kes (Mysoft)
+                        </span>
+                        <span className="block text-[11px] text-purple-800/80 mt-0.5">
+                          Sağdaki Mysoft sekmesinde portal şablonunuzla taslak önizleme alınır.
+                        </span>
+                      </span>
+                    </label>
+                    {sendToMysoft && (
+                      <div className="pl-6 space-y-3">
+                        <MysoftTenantPicker
+                          variant="compact"
+                          hintVkn={companySettings.tenantIdentifierNumber}
+                          onSelect={setMysoftTenantVkn}
+                        />
+                        {/* Live GİB Recipient Taxpayer Status Card */}
+                        {isCheckingRecipient ? (
+                          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs text-slate-600">
+                            <span className="w-3.5 h-3.5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Alıcı GİB e-Fatura mükellefiyeti sorgulanıyor...</span>
+                          </div>
+                        ) : recipientStatus ? (
+                          recipientStatus.isEFaturaUser ? (
+                            <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  🟢 GİB e-Fatura Mükellefi (Otomatik Algılandı)
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-200 text-emerald-800">
+                                  e-Fatura Zorunlu
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-emerald-700">
+                                Alıcı vergi kimlik numarası GİB sistemine kayıtlıdır. Fatura doğrudan UBL posta kutusuna iletilecektir.
+                              </p>
+                              {recipientStatus.pkAlias && (
+                                <div className="text-[10px] font-mono text-emerald-800 bg-white/70 border border-emerald-200 px-2 py-0.5 rounded inline-block">
+                                  Posta Kutusu: {recipientStatus.pkAlias}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-2.5 bg-sky-50/80 border border-sky-200 rounded-xl space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-sky-900">
+                                  <span className="w-2 h-2 rounded-full bg-sky-500" />
+                                  🔵 e-Arşiv Fatura Alıcısı
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-sky-200 text-sky-800">
+                                  e-Arşiv
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-sky-700">
+                                Alıcının GİB e-Fatura kaydı bulunmamaktadır (Şahıs / Nihai Tüketici / e-Faturaya geçmemiş). Belge resmi e-Arşiv Fatura olarak düzenlenecektir.
+                              </p>
+                            </div>
+                          )
+                        ) : null}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setMysoftEDocType("e_fatura")}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                              mysoftEDocType === "e_fatura"
+                                ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            <span>e-Fatura</span>
+                            {recipientStatus?.isEFaturaUser && (
+                              <span className="text-[9px] bg-emerald-400 text-emerald-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMysoftEDocType("e_arsiv")}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                              mysoftEDocType === "e_arsiv"
+                                ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            <span>e-Arşiv</span>
+                            {recipientStatus && !recipientStatus.isEFaturaUser && (
+                              <span className="text-[9px] bg-sky-300 text-sky-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {mysoftSaveError && (
+                      <p className="text-[11px] font-semibold text-rose-700 pl-6">{mysoftSaveError}</p>
+                    )}
+                    {mysoftSaveNotice && (
+                      <p className="text-[11px] font-semibold text-emerald-700 pl-6">{mysoftSaveNotice}</p>
+                    )}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingInvoiceId(null);
+                      setEditingInvoiceNumber(null);
+                      setMysoftSaveError(null);
+                      setIsCreateModalOpen(false);
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
+                  >
+                    Vazgeç / İptal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDraftPreviewOpen(true)}
+                    className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 text-indigo-600" />
+                    <span>
+                      {formDocKind === "receipt" ? "Fişi Önizle" : "Faturayı Önizle"}
+                    </span>
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingMysoft}
+                    className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-sm cursor-pointer disabled:opacity-60 flex items-center gap-2 transition-all active:scale-95 ${
+                      forcedType === "purchase" || invType === "purchase"
+                        ? formDocKind === "receipt"
+                          ? "bg-orange-600 hover:bg-orange-700"
+                          : "bg-amber-600 hover:bg-amber-700"
+                        : formDocKind === "receipt"
+                        ? "bg-indigo-600 hover:bg-indigo-700"
+                        : "bg-purple-600 hover:bg-purple-700"
+                    }`}
+                  >
+                    {isSavingMysoft && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {editingInvoiceId
+                      ? "Değişiklikleri Güncelle & Kaydet"
+                      : forcedType === "sales" || invType === "sales"
+                        ? formDocKind === "receipt"
+                          ? "Gelir Fişini Kaydet"
+                          : sendToMysoft
+                            ? isSavingMysoft
+                              ? "Mysoft'a Gönderiliyor..."
+                              : "Kaydet & Mysoft'a Kes"
+                            : "Gelir Faturasını Kaydet & Kes"
+                        : forcedType === "purchase" || invType === "purchase"
+                          ? formDocKind === "receipt"
+                            ? "Gider Fişini Kaydet"
+                            : "Gider Faturasını Kaydet"
+                          : "Faturayı Kaydet ve Oluştur"}
+                  </button>
+                </div>
+              </div>
+            </form>
+            </div>
+
+            {/* Sağ Taraf: Canlı Hesaplama Özeti ve Belge Önizleme (4 Kolon) */}
+            <div className="xl:col-span-4 min-w-0 space-y-6 xl:sticky xl:top-20">
+              {/* Canlı Hesaplama Özeti Kartı */}
+              {(() => {
+                const totals = calculateTotals();
+                return (
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-purple-600" />
+                        <span>Fatura Hesaplama Özeti</span>
+                      </h3>
+                      <span className="text-[11px] font-bold text-slate-500 font-mono">
+                        {items.length} Kalem
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Ara Toplam (KDV Hariç):</span>
+                        <span className="font-mono font-bold text-slate-900">
+                          ₺{totals.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {totals.effectiveTaxableAmount !== totals.subtotal && (
+                        <div className="flex justify-between text-amber-700 bg-amber-50 p-2 rounded-xl border border-amber-200 font-medium">
+                          <span>Özel KDV Matrahı:</span>
+                          <span className="font-mono font-bold">
+                            ₺{totals.effectiveTaxableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between text-slate-600">
+                        <span>Toplam Hesaplanan KDV:</span>
+                        <span className="font-mono font-bold text-slate-900">
+                          ₺{totals.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {totals.totalWithholding > 0 && (
+                        <div className="flex justify-between text-purple-700 font-medium bg-purple-50 p-2 rounded-xl border border-purple-100">
+                          <span className="font-bold">(-) Tevkif Edilen KDV:</span>
+                          <span className="font-mono font-black">
+                            -₺{totals.totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      {totals.totalWithholding > 0 && (
+                        <div className="flex justify-between text-slate-700 text-xs">
+                          <span>Beyan Edilecek KDV:</span>
+                          <span className="font-mono font-bold">
+                            ₺{totals.payableVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="pt-3 border-t border-slate-200">
+                        <div className="flex justify-between items-baseline bg-gradient-to-r from-purple-50 via-fuchsia-50/50 to-purple-50 p-3.5 rounded-xl border border-purple-200">
+                          <div>
+                            <span className="block text-xs font-black text-purple-950 uppercase tracking-tight">Ödenecek Tutar:</span>
+                            <span className="text-[10px] text-purple-700 font-medium">Genel Toplam (KDV Dahil)</span>
+                          </div>
+                          <span className="text-xl font-black font-mono text-purple-950">
+                            ₺{totals.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Canlı Belge Önizlemesi Kartı */}
+              {showCreatePreviewPanel && (
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                      <Eye className="w-3.5 h-3.5 text-purple-600" />
+                      <span>GİB / Mysoft Canlı Belge Şablonu</span>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700">
+                      {mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
+                    </span>
+                  </div>
+                  <InvoiceCreatePreviewPanel
+                    invoice={getDraftInvoice()}
+                    companySettings={companySettings}
+                    contact={contacts.find((c) => c.id === contactId)}
+                    mysoftEnabled={sendToMysoft && !editingInvoiceId}
+                    eDocumentLabel={mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
+                    buildMysoftPayload={buildMysoftPreviewPayload}
+                  />
+                </div>
+              )}
+
+              {/* Sağ Yan Hızlı İşlem Kartı */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+                <button
+                  type="submit"
+                  form="invoice-create-form"
+                  disabled={isSavingMysoft}
+                  className={`w-full py-3 rounded-xl text-xs font-black text-white shadow-2xs cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                    forcedType === "purchase" || invType === "purchase"
+                      ? formDocKind === "receipt"
+                        ? "bg-orange-600 hover:bg-orange-700"
+                        : "bg-amber-600 hover:bg-amber-700"
+                      : formDocKind === "receipt"
+                      ? "bg-indigo-600 hover:bg-indigo-700"
+                      : "bg-purple-600 hover:bg-purple-700"
+                  }`}
+                >
+                  {isSavingMysoft && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>
+                    {editingInvoiceId
+                      ? "Değişiklikleri Güncelle & Kaydet"
+                      : forcedType === "sales" || invType === "sales"
+                      ? formDocKind === "receipt"
+                        ? "Gelir Fişini Kaydet"
+                        : sendToMysoft
+                        ? isSavingMysoft
+                          ? "Mysoft'a Gönderiliyor..."
+                          : "Kaydet & Mysoft'a Kes"
+                        : "Gelir Faturasını Kaydet & Kes"
+                      : forcedType === "purchase" || invType === "purchase"
+                      ? formDocKind === "receipt"
+                        ? "Gider Fişini Kaydet"
+                        : "Gider Faturasını Kaydet"
+                      : "Faturayı Kaydet ve Oluştur"}
+                  </span>
+                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDraftPreviewOpen(true)}
+                    className="py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 text-indigo-600" />
+                    <span>{formDocKind === "receipt" ? "Fişi Önizle" : "Önizle"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseDetail}
+                    className="py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer text-center"
+                  >
+                    Vazgeç / İptal
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DetailPageLayout>
+
+      </div>
+    );
+  }
+
+  // 1. FULL-PAGE EXISTING INVOICE PREVIEW & DETAIL VIEW
+  if (printingInvoice) {
+    return (
+      <InvoicePreviewModal
+        invoice={printingInvoice}
+        companySettings={companySettings}
+        contact={contacts.find((c) => c.id === printingInvoice.contactId)}
+        onClose={() => setPrintingInvoice(null)}
+        onEdit={() => {
+          const invToEdit = printingInvoice;
+          setPrintingInvoice(null);
+          handleOpenEditInvoiceModal(invToEdit);
+        }}
+        onSelectTab={onSelectTab}
+      />
+    );
+  }
+
+  // 2. FULL-PAGE PAYMENT & COLLECTION VIEW
+  if (paymentModalInvoice) {
+    return (
+      <DetailPageLayout
+        title={paymentModalInvoice.type === "sales" ? "Faturadan Tahsilat Ekle (Kasa / Banka Girişi)" : "Faturaya Ödeme Yap (Kasa / Banka Çıkışı)"}
+        subtitle={`${paymentModalInvoice.contactName} • Fatura No: ${paymentModalInvoice.invoiceNumber} • Kalan Bakiye: ₺${paymentModalInvoice.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
+        breadcrumbs={[
+          { label: "Faturalar", onClick: () => setPaymentModalInvoice(null) },
+          { label: paymentModalInvoice.invoiceNumber, onClick: () => setPaymentModalInvoice(null) },
+          { label: paymentModalInvoice.type === "sales" ? "Tahsilat Al" : "Ödeme Yap", active: true },
+        ]}
+        onBack={() => setPaymentModalInvoice(null)}
+        statusBadge={
+          <span className={`px-3 py-1 rounded-xl text-xs font-bold border ${
+            paymentModalInvoice.type === "sales"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+              : "bg-blue-50 text-blue-800 border-blue-200"
+          }`}>
+            {paymentModalInvoice.type === "sales" ? "GELİR TAHSİLATI" : "GİDER ÖDEMESİ"}
+          </span>
+        }
+        headerIcon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPaymentModalInvoice(null)}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="payment-record-form"
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer active:scale-95 transition-all"
+            >
+              {paymentModalInvoice.type === "sales" ? "Tahsilatı İşle" : "Ödemeyi Kaydet"}
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-xl mx-auto bg-white border border-slate-200 text-slate-900 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500 font-semibold">Cari Hesap:</span>
+              <strong className="text-slate-800 font-bold">{paymentModalInvoice.contactName}</strong>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500 font-semibold">Fatura Numarası:</span>
+              <strong className="font-mono text-slate-800 font-bold">{paymentModalInvoice.invoiceNumber}</strong>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+              <span className="text-slate-500 font-semibold">Fatura Toplamı:</span>
+              <span className="font-bold text-slate-700">₺{paymentModalInvoice.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500 font-semibold">Kalan Ödenecek / Tahsil Edilecek:</span>
+              <span className="font-extrabold text-emerald-700 text-sm">₺{paymentModalInvoice.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          <form id="payment-record-form" onSubmit={handleRecordPayment} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Kasa / Banka Hesabı Seçin *
+              </label>
+              <select
+                value={selectedAccountId}
+                onChange={(e) => setSelectedAccountId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} (Mevcut: ₺{a.balance.toLocaleString("tr-TR")})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Ödenen Tutar (TL) *
+              </label>
+              <input
+                type="number"
+                step="any"
+                required
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900"
+              />
+            </div>
+
+            <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPaymentModalInvoice(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+              >
+                {paymentModalInvoice.type === "sales" ? "Tahsilatı İşle" : "Ödemeyi Kaydet"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  // 3. FULL-PAGE COLLECT ALL INVOICES VIEW
+  if (isCollectAllModalOpen) {
+    return (
+      <DetailPageLayout
+        title="Tüm Faturaları Toplu Tahsil Et & Öde"
+        subtitle="Açık ve vadesi gelen tüm fatura bakiyelerinin tek tıkla kapatılması ve muhasebeleştirilmesi"
+        breadcrumbs={[
+          { label: "Faturalar", onClick: () => setIsCollectAllModalOpen(false) },
+          { label: "Toplu Tahsilat & Tediye", active: true },
+        ]}
+        onBack={() => setIsCollectAllModalOpen(false)}
+        statusBadge={
+          <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+            TOPLU İŞLEM
+          </span>
+        }
+        headerIcon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCollectAllModalOpen(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onCollectAllInvoices) {
+                  onCollectAllInvoices(collectAllAccountId);
+                }
+                setIsCollectAllModalOpen(false);
+              }}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Evet, Hepsini Tahsil Et & Öde</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-xl mx-auto bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 space-y-6">
+          <div className="space-y-4 text-xs text-slate-600">
+            {(() => {
+              const uncollectedInvoices = invoices.filter((i) => i.status !== "cancelled" && i.remainingAmount > 0);
+              const totalAmount = uncollectedInvoices.reduce((acc, i) => acc + i.remainingAmount, 0);
+
+              return (
+                <>
+                  <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-5 space-y-3 text-emerald-950">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">Bekleyen Açık Fatura Sayısı:</span>
+                      <span className="font-bold text-sm text-emerald-700">{uncollectedInvoices.length} Adet</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-emerald-200">
+                      <span className="font-semibold">Kapatılacak Toplam Tutar:</span>
+                      <span className="font-black text-lg text-emerald-800">
+                        ₺{totalAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1.5">
+                      Tahsilat / Ödemenin İşleneceği Kasa / Banka Hesabı *
+                    </label>
+                    <select
+                      value={collectAllAccountId}
+                      onChange={(e) => setCollectAllAccountId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    >
+                      {accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name} ({acc.type === "cash" ? "Kasa" : "Banka"}) - ₺{acc.balance.toLocaleString("tr-TR")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <p className="text-slate-500 text-[11px] leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    Bu işlem sonucunda sistemdeki tüm açık, bekleyen veya kısmi ödenmiş gelir ve gider faturaları <strong>"Ödendi"</strong> statüsüne getirilecek ve kasa/banka hareketleri otomatik olarak muhasebeleştirilecektir.
+                  </p>
+                </>
+              );
+            })()}
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsCollectAllModalOpen(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onCollectAllInvoices) {
+                  onCollectAllInvoices(collectAllAccountId);
+                }
+                setIsCollectAllModalOpen(false);
+              }}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95 transition-all"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Evet, Hepsini Tahsil Et & Öde</span>
+            </button>
+          </div>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  // 4. FULL-PAGE WHATSAPP SHARE VIEW
+  if (whatsAppInvoice) {
+    return (
+      <UniversalWhatsAppModal
+        isOpen={!!whatsAppInvoice}
+        onClose={() => setWhatsAppInvoice(null)}
+        title="WhatsApp ile Fatura Paylaş"
+        documentTypeLabel={whatsAppInvoice.type === "sales" ? "Satış e-Arşiv Faturası" : "Alış Faturası"}
+        recipientName={whatsAppInvoice.contactName}
+        recipientPhone={contacts.find((c) => c.id === whatsAppInvoice.contactId)?.phone || ""}
+        defaultMessage={formatInvoiceWhatsAppMessage(
+          whatsAppInvoice,
+          companySettings,
+          contacts.find((c) => c.id === whatsAppInvoice.contactId)
+        )}
+        documentFileName={`${whatsAppInvoice.invoiceNumber}_Fatura.pdf`}
+        companySettings={companySettings}
+        onGeneratePdf={async () => {
+          const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+          const expData: ExportData = {
+            filename: `${whatsAppInvoice.invoiceNumber}_Fatura`,
+            title: `${companySettings?.companyName || "Fatura"} - ${whatsAppInvoice.invoiceNumber}`,
+            subtitle: `Cari: ${whatsAppInvoice.contactName} | Tarih: ${formatDate(whatsAppInvoice.issueDate)} | Genel Toplam: ${formatCurrency(whatsAppInvoice.grandTotal)}`,
+            headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV Oranı", "Toplam Tutar"],
+            rows: (whatsAppInvoice.items || []).map((i) => [
+              i.description,
+              i.quantity,
+              i.unit || "Adet",
+              formatCurrency(i.unitPrice),
+              `%${i.vatRate ?? 20}`,
+              formatCurrency(i.totalWithVat),
+            ]),
+          };
+          return generateAutoTableFromExportData(expData);
+        }}
+      />
+    );
+  }
+
+  // AI & OCR EXPENSE SCANNER FULL-PAGE VIEW
+  if (isAiScannerModalOpen) {
+    return (
+      <AiExpenseScannerModal
+        isOpen={isAiScannerModalOpen}
+        onClose={() => setIsAiScannerModalOpen(false)}
+        contacts={contacts}
+        accounts={accounts}
+        onSaveInvoiceDirectly={handleSaveInvoiceDirectlyFromAi}
+        onApplyToForm={handleApplyAiDataToForm}
+      />
+    );
+  }
+
+  return (
+    <div className="p-4 sm:p-6 space-y-6 sm:space-y-7 max-w-7xl mx-auto">
+      {/* 1. Modern Clean Header With Editorial Background */}
+      <ModuleEntranceHeader
+        badge={
+          forcedType === "sales"
+            ? "Gelir Faturaları"
+            : forcedType === "purchase"
+            ? "Gider & Alış Faturaları"
+            : "E-Fatura & E-Arşiv"
+        }
+        title={
+          forcedType === "sales"
+            ? "Gelir Faturaları"
+            : forcedType === "purchase"
+            ? "Gider Faturaları"
+            : "Faturalar & Belgeler"
+        }
+        description={
+          forcedType === "sales"
+            ? "Müşterilerinize düzenlenen satış faturaları ve tahsilat takibi."
+            : forcedType === "purchase"
+            ? "Tedarikçilerden gelen alış/gider faturaları ve ödeme takibi."
+            : "Resmi e-Fatura / e-Arşiv uyumlu faturalarınızı oluşturun ve ödeme takibi yapın."
+        }
+        actions={
+          <>
+            <button
+              onClick={() => setIsCollectAllModalOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-2xs cursor-pointer transition-all shrink-0"
+              title="Tüm açık/ödenmemiş faturaları topluca tahsil et"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-100" />
+              <span>Tümünü Tahsil Et</span>
+            </button>
+
+            {(forcedType === "purchase" || !forcedType) && (
+              <button
+                onClick={() => setIsAiScannerModalOpen(true)}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-2 shadow-2xs cursor-pointer transition-all shrink-0"
+                title="Yapay Zeka (AI OCR) ile fatura tara"
+              >
+                <Sparkles className="w-4 h-4 text-amber-100" />
+                <span>AI Fatura Tara</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => handleOpenNewInvoiceModal("invoice", forcedType || "sales")}
+              className="text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all shrink-0"
+              style={{ backgroundColor: theme.primaryColor }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>
+                {forcedType === "sales"
+                  ? "+ Yeni Gelir Faturası Kes"
+                  : forcedType === "purchase"
+                  ? "+ Yeni Gider Faturası"
+                  : "+ Yeni Fatura Kes / Kaydet"}
+              </span>
+            </button>
+          </>
+        }
+      />
+
+      {/* 2. Top 4 KPI Summary Cards Grid (Reference Design) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Ciro / Toplam Tutar */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between haze-kpi-card-bg relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">
+                {forcedType === "purchase"
+                  ? "Toplam Gider / Alış"
+                  : forcedType === "sales"
+                  ? "Toplam Ciro / Satış"
+                  : "Genel Fatura Hacmi"}
+              </p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-slate-900 mt-2">
+                ₺{kpiStats.totalAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.ciro} alt="Ciro" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="font-semibold text-purple-700">{kpiStats.totalCount}</span>
+            <span>fatura kaydı</span>
+          </div>
+        </div>
+
+        {/* Card 2: Tahsil Edilen */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between haze-kpi-card-bg relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">
+                {forcedType === "purchase" ? "Ödenen Gider Tutarı" : "Tahsil Edilen Tutar"}
+              </p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-emerald-600 mt-2">
+                ₺{kpiStats.paidAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.tahsilat} alt="Tahsilat" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Kapanmış / Ödenmiş</span>
+          </div>
+        </div>
+
+        {/* Card 3: Bekleyen / Açık Alacak */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between haze-kpi-card-bg relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">
+                {forcedType === "purchase" ? "Ödenecek Borç Bakiye" : "Açık / Bekleyen Alacak"}
+              </p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-blue-600 mt-2">
+                ₺{kpiStats.remainingAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.alacak} alt="Alacak" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+            <span>Tahsilat / Ödeme bekleyen</span>
+          </div>
+        </div>
+
+        {/* Card 4: Vadesi Geçen */}
+        <div
+          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between haze-kpi-card-bg relative overflow-hidden"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-400">Vadesi Geçen Tutar</p>
+              <p className="text-2xl font-bold font-mono tracking-tight text-rose-600 mt-2">
+                ₺{kpiStats.overdueAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
+              <img src={ASSET_ICONS.vadesiGecenAlacak} alt="Gecikmiş" className="w-6 h-6 object-contain" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="font-semibold text-rose-600">{kpiStats.overdueCount}</span>
+            <span>fatura gecikmede</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Filter & Action Toolbar */}
+      <div
+        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        {/* Filter Buttons */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+          {!forcedType ? (
+            <>
+              <button
+                onClick={() => setFilterType("all")}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  filterType === "all"
+                    ? "bg-slate-900 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                Tümü ({invoices.length})
+              </button>
+              <button
+                onClick={() => setFilterType("sales")}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  filterType === "sales"
+                    ? "bg-purple-600 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                Gelir Faturaları
+              </button>
+              <button
+                onClick={() => setFilterType("purchase")}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  filterType === "purchase"
+                    ? "bg-amber-600 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                Gider Faturaları
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setFilterType(forcedType)}
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                filterType === forcedType
+                  ? "bg-slate-900 text-white font-bold shadow-2xs"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              Tümü ({invoices.filter((i) => i.type === forcedType).length})
+            </button>
+          )}
+
+          <button
+            onClick={() => setFilterType("pending")}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+              filterType === "pending"
+                ? "bg-blue-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            Bekleyenler
+          </button>
+          <button
+            onClick={() => setFilterType("overdue")}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+              filterType === "overdue"
+                ? "bg-rose-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            Vadesi Geçenler
+          </button>
+          <button
+            onClick={() => setFilterType("paid")}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+              filterType === "paid"
+                ? "bg-emerald-600 text-white font-bold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            Ödenmiş
+          </button>
+        </div>
+
+        {/* Filter Controls: Year, Month, Masraf, Search, Export */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Yıl Dropdown */}
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="rounded-xl px-2.5 py-1.5 border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm Yıllar</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y.toString()}>{y}</option>
+            ))}
+          </select>
+
+          {/* Ay Dropdown */}
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="rounded-xl px-2.5 py-1.5 border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+          >
+            <option value="all">Tüm Aylar</option>
+            {TURKISH_MONTHS.map((m) => (
+              <option key={m.id} value={m.id.toString()}>{m.name}</option>
+            ))}
+          </select>
+
+          {/* Masraf Kalemi (Gider Modülü veya Gider Seçiliyken) */}
+          {(forcedType === "purchase" || filterType === "purchase") && (
+            <select
+              value={selectedExpenseCategoryFilter}
+              onChange={(e) => setSelectedExpenseCategoryFilter(e.target.value)}
+              className="rounded-xl px-2.5 py-1.5 border border-amber-200 bg-amber-50/50 text-xs font-semibold text-amber-900 focus:outline-none cursor-pointer max-w-[140px] truncate"
+            >
+              <option value="all">Tüm Masraflar ({EXPENSE_CATEGORIES.length})</option>
+              {EXPENSE_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          )}
+
+          {(selectedYear !== "all" || selectedMonth !== "all" || selectedExpenseCategoryFilter !== "all") && (
+            <button
+              onClick={() => {
+                setSelectedYear("all");
+                setSelectedMonth("all");
+                setSelectedExpenseCategoryFilter("all");
+              }}
+              className="text-xs text-rose-600 hover:text-rose-800 font-semibold bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-colors"
+              title="Filtreleri temizle"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Temizle</span>
+            </button>
+          )}
+
+          {/* Search Box */}
+          <div className="relative min-w-[200px] flex-1 sm:flex-initial">
+            <img
+              src={ASSET_ICONS.search}
+              alt="Search"
+              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none"
+            />
+            <input
+              type="text"
+              placeholder="Fatura No veya Cari ara..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-slate-50 text-slate-800 placeholder-slate-400 text-xs rounded-xl pl-9 pr-8 py-2 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-300 transition-all"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowColFilters((prev) => !prev)}
+            className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+              showColFilters
+                ? "bg-purple-50 border-purple-200 text-purple-900 font-bold"
+                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium"
+            }`}
+            title="Sütun bazlı arama ve filtreleme alanlarını göster/gizle"
+          >
+            <Filter className="w-3.5 h-3.5 text-purple-600" />
+            <span className="hidden sm:inline">Sütun Filtreleri</span>
+            {activeColFilterCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {activeColFilterCount}
+              </span>
+            )}
+          </button>
+          <ColumnManagementDropdown
+            columns={invoiceColumns}
+            columnVisibility={invoiceColVisibility}
+            onToggleColumn={toggleInvoiceCol}
+            onSetAllColumns={setAllInvoiceCols}
+            onResetToDefaults={resetInvoiceCols}
+            hiddenCount={hiddenInvoiceColsCount}
+          />
+          <ExportButtons getExportData={getInvoicesExportData} size="sm" />
+        </div>
+      </div>
+
+      <BulkActionBar
+        selectedCount={selection.selectedCount}
+        totalCount={filteredInvoices.length}
+        itemLabel="fatura"
+        onClearSelection={selection.clearSelection}
+        onSelectAll={() => selection.selectAll(filteredInvoices.map((i) => i.id))}
+        onDelete={handleBulkDelete}
+        deleteLabel="Seçilen Faturaları Sil"
+        onExportExcel={handleBulkExportExcel}
+        onExportPdf={handleBulkExportPdf}
+      />
+
+      {/* 4. Modern Invoices Table */}
+      <div
+        className="rounded-2xl border shadow-2xs overflow-hidden"
+        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+      >
+        <div className="overflow-x-auto custom-scrollbar w-full">
+          <table className="w-full text-left text-xs min-w-[750px]">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="w-10 py-3.5 px-3 text-center">
+                  <TableCheckbox
+                    checked={displayedInvoiceIds.length > 0 && selection.isAllSelected(displayedInvoiceIds)}
+                    indeterminate={selection.isIndeterminate(displayedInvoiceIds)}
+                    onChange={() => selection.toggleSelectAll(displayedInvoiceIds)}
+                    title="Tümünü Seç / Seçimi Kaldır"
+                  />
+                </th>
+                {isInvoiceColVisible("invoiceNo") && <th className="py-3.5 px-4">Fatura No / Tip</th>}
+                {isInvoiceColVisible("contact") && <th className="py-3.5 px-4">Cari Hesap</th>}
+                {isInvoiceColVisible("date") && <th className="py-3.5 px-4">Tarih / Vade</th>}
+                {isInvoiceColVisible("subtotal") && <th className="py-3.5 px-4 text-right">KDV Hariç</th>}
+                {isInvoiceColVisible("grandTotal") && <th className="py-3.5 px-4 text-right">Genel Toplam</th>}
+                {isInvoiceColVisible("status") && <th className="py-3.5 px-4 text-center">Durum</th>}
+                {isInvoiceColVisible("actions") && <th className="py-3.5 px-4 text-center">İşlemler</th>}
+              </tr>
+              {/* Sütun Bazlı Filtreleme Satırı */}
+              {showColFilters && (
+                <tr
+                  className="border-b bg-slate-50/40 dark:bg-slate-800/40 transition-colors"
+                  style={{ borderColor: theme.cardBorder }}
+                >
+                  <th className="w-10 py-2 px-3 text-center"></th>
+                  {isInvoiceColVisible("invoiceNo") && (
+                    <th className="py-2 px-3 font-normal">
+                      <TableColumnFilterInput
+                        value={colFilters.invoiceNo}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, invoiceNo: val }))}
+                        placeholder="Fatura No / Tip..."
+                      />
+                    </th>
+                  )}
+                  {isInvoiceColVisible("contact") && (
+                    <th className="py-2 px-3 font-normal">
+                      <TableColumnFilterInput
+                        value={colFilters.contact}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, contact: val }))}
+                        placeholder="Cari ara..."
+                      />
+                    </th>
+                  )}
+                  {isInvoiceColVisible("date") && (
+                    <th className="py-2 px-3 font-normal w-32">
+                      <TableColumnFilterInput
+                        value={colFilters.date}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, date: val }))}
+                        placeholder="Tarih / Vade..."
+                      />
+                    </th>
+                  )}
+                  {isInvoiceColVisible("subtotal") && (
+                    <th className="py-2 px-3 font-normal w-28">
+                      <TableColumnFilterInput
+                        value={colFilters.subtotal}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, subtotal: val }))}
+                        placeholder="Tutar..."
+                      />
+                    </th>
+                  )}
+                  {isInvoiceColVisible("grandTotal") && (
+                    <th className="py-2 px-3 font-normal w-28">
+                      <TableColumnFilterInput
+                        value={colFilters.grandTotal}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, grandTotal: val }))}
+                        placeholder="Toplam..."
+                      />
+                    </th>
+                  )}
+                  {isInvoiceColVisible("status") && (
+                    <th className="py-2 px-2 font-normal w-28">
+                      <TableColumnFilterInput
+                        type="select"
+                        value={colFilters.status}
+                        onChange={(val) => setColFilters((prev) => ({ ...prev, status: val }))}
+                        options={[
+                          { label: "Tümü", value: "" },
+                          { label: "Ödendi", value: "paid" },
+                          { label: "Bekliyor", value: "sent" },
+                          { label: "Kısmi", value: "partial" },
+                          { label: "Gecikmiş", value: "overdue" },
+                          { label: "İptal", value: "cancelled" },
+                        ]}
+                      />
+                    </th>
+                  )}
+                  {isInvoiceColVisible("actions") && (
+                    <th className="py-2 px-2 font-normal text-center">
+                      {activeColFilterCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={clearAllColFilters}
+                          className="px-2 py-1 text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="Tüm sütun filtrelerini temizle"
+                        >
+                          <X className="w-3 h-3" />
+                          <span>Temizle</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">Filtrele</span>
+                      )}
+                    </th>
+                  )}
+                </tr>
+              )}
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredInvoices.length === 0 ? (
+                <tr>
+                  <td colSpan={visibleInvoiceColCount} className="text-center py-12 text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <FileText className="w-10 h-10 text-slate-300 stroke-[1.5]" />
+                      <p className="font-semibold text-slate-600">
+                        {forcedType === "sales"
+                          ? "Kayıtlı gelir faturası bulunamadı."
+                          : forcedType === "purchase"
+                          ? "Kayıtlı gider faturası bulunamadı."
+                          : "Kayıtlı fatura bulunamadı."}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {forcedType === "sales"
+                          ? "Yukarıdaki '+ Yeni Gelir Faturası Kes' butonuyla yeni fatura oluşturabilirsiniz."
+                          : forcedType === "purchase"
+                          ? "Yukarıdaki '+ Yeni Gider Faturası' butonuyla yeni fatura kaydedebilirsiniz."
+                          : "Yeni fatura eklemek için yukarıdaki butonu kullanabilirsiniz."}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                displayedInvoices.map((inv) => {
+                  const isExpanded = expandedInvoiceIds.has(inv.id);
+                  const isRowSelected = selection.isSelected(inv.id);
+                  return (
+                    <React.Fragment key={inv.id}>
+                      <tr
+                        className={`transition-colors group cursor-pointer ${
+                          isRowSelected
+                            ? "bg-indigo-50/80 dark:bg-indigo-950/40"
+                            : isExpanded
+                            ? "bg-[var(--color-periwinkle-wash)] shadow-2xs row-clicked-highlight"
+                            : "hover:bg-blue-50/80"
+                        }`}
+                      >
+                        <td className="w-10 py-3.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <TableCheckbox
+                            checked={isRowSelected}
+                            onChange={() => selection.toggleSelect(inv.id)}
+                            title="Faturayı Seç"
+                          />
+                        </td>
+                        {/* Fatura No with Clickable Chevron */}
+                        {isInvoiceColVisible("invoiceNo") && (
+                          <td className="py-3.5 px-4 font-mono tabular-nums whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              {/* Clickable Chevron Icon for Master-Detail Toggle */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleInvoiceExpand(inv.id);
+                                }}
+                                aria-expanded={isExpanded}
+                                className={`p-1.5 -ml-1 rounded-lg transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                                  isExpanded
+                                    ? "bg-purple-100 text-purple-700 shadow-2xs ring-1 ring-purple-300"
+                                    : "text-slate-400 hover:text-purple-600 hover:bg-slate-100"
+                                }`}
+                                title={isExpanded ? "Detayları gizle" : "Detayları aç (Sayfadan ayrılmadan incele)"}
+                              >
+                                <ChevronRight
+                                  className={`w-4 h-4 transition-transform duration-200 ${
+                                    isExpanded ? "rotate-90 text-purple-700" : "text-slate-400"
+                                  }`}
+                                />
+                              </button>
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleInvoiceExpand(inv.id)}
+                                  className="font-bold text-slate-900 font-mono tabular-nums text-xs text-left hover:text-purple-600 cursor-pointer block"
+                                  title="Satır Detayını Aç / Kapat"
+                                >
+                                  {inv.invoiceNumber}
+                                </button>
+                                <div className="flex items-center gap-1 mt-1">
+                                  {inv.type === "sales" ? (
+                                    inv.docKind === "receipt" ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        Gelir Fişi
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                                        Gelir Faturası
+                                      </span>
+                                    )
+                                  ) : inv.docKind === "receipt" ? (
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                                        Gider Fişi
+                                      </span>
+                                      {(inv.expenseCategory || inv.items?.find((i) => i.expenseCategory)?.expenseCategory) && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-900 border border-amber-200 truncate max-w-[130px]">
+                                          {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                        Gider Faturası
+                                      </span>
+                                      {(inv.expenseCategory || inv.items?.find((i) => i.expenseCategory)?.expenseCategory) && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-900 border border-amber-200 truncate max-w-[130px]">
+                                          {inv.expenseCategory || inv.items.find((i) => i.expenseCategory)?.expenseCategory}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        )}
+
+                        {isInvoiceColVisible("contact") && (
+                          <td className="py-3.5 px-4">
+                            <div className="min-w-0">
+                              {onSelectTab ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onSelectTab("contacts")}
+                                  className="text-left font-bold text-slate-900 hover:text-purple-600 transition-colors truncate block text-xs cursor-pointer"
+                                  title="Cari detayı"
+                                >
+                                  {inv.contactName}
+                                </button>
+                              ) : (
+                                <div className="font-bold text-slate-900 truncate text-xs">
+                                  {inv.contactName}
+                                </div>
+                              )}
+
+                              <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                                {inv.taxNumber && <span>VKN: {inv.taxNumber}</span>}
+                                {inv.items?.[0] && (
+                                  <span className="truncate max-w-[140px] text-slate-400">
+                                    • {inv.items[0].description}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        )}
+
+                        {isInvoiceColVisible("date") && (
+                          <td className="py-3.5 px-4 font-mono tabular-nums">
+                            <div className="font-medium text-slate-800 font-mono tabular-nums">{formatDate(inv.issueDate)}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5 font-mono tabular-nums">Vade: {formatDate(inv.dueDate)}</div>
+                          </td>
+                        )}
+
+                        {isInvoiceColVisible("subtotal") && (
+                          <td className="py-3.5 px-4 text-right font-mono tabular-nums font-tabular-num-md font-medium text-slate-700">
+                            ₺{inv.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                        )}
+
+                        {isInvoiceColVisible("grandTotal") && (
+                          <td className="py-3.5 px-4 text-right font-mono tabular-nums font-tabular-num-md font-bold text-slate-900 text-sm">
+                            ₺{inv.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </td>
+                        )}
+
+                        {isInvoiceColVisible("status") && (
+                          <td className="py-3.5 px-4 text-center">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                                inv.status === "paid"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : inv.status === "overdue"
+                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                  : "bg-blue-50 text-blue-700 border border-blue-200"
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  inv.status === "paid"
+                                    ? "bg-emerald-500"
+                                    : inv.status === "overdue"
+                                    ? "bg-rose-500"
+                                    : "bg-blue-500"
+                                }`}
+                              />
+                              {inv.status === "paid"
+                                ? "Ödendi"
+                                : inv.status === "overdue"
+                                ? "Vadesi Geçti"
+                                : "Bekliyor"}
+                            </span>
+                          </td>
+                        )}
+
+                        {isInvoiceColVisible("actions") && (
+                          <td className="py-3.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => toggleInvoiceExpand(inv.id)}
+                                title={isExpanded ? "Detayları Gizle" : "Hızlı İncele (Master-Detail)"}
+                                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                                  isExpanded
+                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                                }`}
+                              >
+                                <ChevronDown
+                                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                    isExpanded ? "rotate-180 text-purple-600" : "text-slate-600"
+                                  }`}
+                                />
+                              </button>
+
+                              <button
+                                onClick={() => handleOpenEditInvoiceModal(inv)}
+                                title={inv.docKind === "receipt" ? "Fişi Düzenle" : "Faturayı Düzenle"}
+                                className="p-1.5 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-600 hover:text-amber-700 transition-colors cursor-pointer"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                onClick={() => setPrintingInvoice(inv)}
+                                title="Faturayı Görüntüle & e-Fatura Yazdır"
+                                className="p-1.5 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 transition-colors cursor-pointer"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                onClick={() => setWhatsAppInvoice(inv)}
+                                title="Faturayı WhatsApp ile Paylaş"
+                                className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                              </button>
+
+                              {inv.status !== "paid" && (
+                                <button
+                                  onClick={() => {
+                                    setPaymentModalInvoice(inv);
+                                    setPaymentAmount(inv.remainingAmount);
+                                  }}
+                                  title="Tahsilat / Ödeme Ekle"
+                                  className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => onDeleteInvoice(inv.id)}
+                                title="Faturayı Sil"
+                                className="p-1.5 rounded-lg border border-transparent hover:border-rose-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+
+                      {/* Hidden Master-Detail View Section for Invoice */}
+                      {isExpanded && (
+                        <tr className="expanded-detail-row bg-slate-50/70 border-y border-slate-200" data-skip-row-highlight="true">
+                          <td colSpan={visibleInvoiceColCount} className="p-0">
+                            <div className="p-4 sm:p-6 bg-gradient-to-br from-slate-50 via-[#eaedff]/40 to-white border-l-4 border-l-[#005289] space-y-4">
+                              {/* Header strip */}
+                              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                                <div className="flex flex-wrap items-center gap-2.5">
+                                  <span
+                                    className={`px-2.5 py-1 rounded-full text-xs font-black border ${
+                                      inv.type === "sales"
+                                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                                        : "bg-amber-50 text-amber-700 border-amber-200"
+                                    }`}
+                                  >
+                                    {inv.type === "sales" ? "SATIŞ / GELİR FATURASI" : "ALIŞ / GİDER FATURASI"}
+                                  </span>
+                                  <span className="text-xs text-slate-500 font-medium">
+                                    Fatura No:{" "}
+                                    <span className="font-mono tabular-nums font-bold text-slate-900">
+                                      {inv.invoiceNumber}
+                                    </span>
+                                  </span>
+                                  {inv.profileType && (
+                                    <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                                      {inv.profileType.toUpperCase()}
+                                    </span>
+                                  )}
+                                  {inv.scenario && (
+                                    <span className="text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full">
+                                      {inv.scenario === "commercial" ? "Ticari Fatura" : "Temel Fatura"}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Quick inline actions */}
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPrintingInvoice(inv)}
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                                    title="Yazdır / Görüntüle"
+                                  >
+                                    <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span>Yazdır / e-Belge</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setWhatsAppInvoice(inv)}
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                    title="WhatsApp ile Paylaş"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                    <span>WhatsApp</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditInvoiceModal(inv)}
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                                    title="Düzenle"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5 text-amber-700" />
+                                    <span>Düzenle</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Master-Detail Metadata Grid */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-3.5 rounded-xl border border-slate-200 text-xs shadow-2xs">
+                                <div>
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    Düzenlenme Tarihi
+                                  </span>
+                                  <span className="font-mono tabular-nums font-bold text-slate-800 mt-0.5 block">
+                                    {formatDate(inv.issueDate)}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    Vade / Ödeme Tarihi
+                                  </span>
+                                  <span className="font-mono tabular-nums font-bold text-slate-800 mt-0.5 block">
+                                    {formatDate(inv.dueDate)}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    Cari & Vergi Bilgisi
+                                  </span>
+                                  <span className="font-bold text-slate-900 truncate block mt-0.5" title={inv.contactName}>
+                                    {inv.contactName}
+                                  </span>
+                                  {inv.taxNumber && (
+                                    <span className="text-[10px] text-slate-400 font-mono tabular-nums block">
+                                      VKN/TC: {inv.taxNumber} {inv.taxOffice ? `(${inv.taxOffice})` : ""}
+                                    </span>
+                                  )}
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    Ödeme Durumu
+                                  </span>
+                                  <div className="mt-1 flex items-center gap-1.5">
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                        inv.status === "paid"
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : inv.status === "overdue"
+                                          ? "bg-rose-100 text-rose-800"
+                                          : "bg-blue-100 text-blue-800"
+                                      }`}
+                                    >
+                                      {inv.status === "paid"
+                                        ? "Tamamen Ödendi"
+                                        : inv.status === "overdue"
+                                        ? "Vadesi Geçti"
+                                        : "Tahsilat Bekliyor"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Itemized Line Items Table */}
+                              {inv.items && inv.items.length > 0 && (
+                                <div className="space-y-2">
+                                  <div className="text-[11px] font-bold uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                                    <FileText className="w-3.5 h-3.5 text-purple-600" />
+                                    <span>Fatura Kalemleri ({inv.items.length} Kalem)</span>
+                                  </div>
+                                  <div className="border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar bg-white shadow-2xs">
+                                    <table className="w-full text-left text-xs min-w-[580px]">
+                                      <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                                          <th className="py-2.5 px-3">Mal / Hizmet Açıklaması</th>
+                                          <th className="py-2.5 px-3 text-center">Miktar</th>
+                                          <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
+                                          <th className="py-2.5 px-3 text-center">İskonto %</th>
+                                          <th className="py-2.5 px-3 text-center">KDV %</th>
+                                          <th className="py-2.5 px-3 text-right">Net Tutar</th>
+                                          <th className="py-2.5 px-3 text-right">Genel Toplam</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {inv.items.map((item, idx) => (
+                                          <tr key={idx} className="hover:bg-blue-50/80 transition-colors">
+                                            <td className="py-2.5 px-3 font-semibold text-slate-800">
+                                              {item.description}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center font-mono tabular-nums text-slate-700">
+                                              {item.quantity} {item.unit || "Adet"}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono tabular-nums font-tabular-num-md text-slate-700">
+                                              ₺{item.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center font-mono tabular-nums font-tabular-num-md text-slate-500">
+                                              {item.discountPercent ? `%${item.discountPercent}` : "-"}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center font-mono tabular-nums font-tabular-num-md text-slate-600">
+                                              %{item.vatRate}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono tabular-nums font-tabular-num-md text-slate-700">
+                                              ₺{((item.quantity * item.unitPrice) * (1 - (item.discountPercent || 0) / 100)).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono tabular-nums font-tabular-num-md font-bold text-slate-900">
+                                              ₺{item.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Description & Financial Summary Footer */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                                <div className="md:col-span-2 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs text-xs space-y-2">
+                                  <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
+                                    Fatura Notları & Bilgilendirme
+                                  </span>
+                                  <p className="text-slate-700 font-medium leading-relaxed">
+                                    {inv.notes || "Fatura için ilave not eklenmemiş."}
+                                  </p>
+                                  {inv.paymentTerms && (
+                                    <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                                      <span className="font-semibold text-slate-700">Ödeme Şartı:</span> {inv.paymentTerms}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="bg-purple-50/60 border border-purple-200/80 p-3.5 rounded-xl shadow-2xs space-y-1.5 text-xs">
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Ara Toplam (Matrah):</span>
+                                    <span className="font-mono tabular-nums font-bold text-slate-800">
+                                      ₺{inv.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                  {inv.totalDiscount !== undefined && inv.totalDiscount > 0 && (
+                                    <div className="flex justify-between text-rose-600">
+                                      <span>İskonto Toplamı:</span>
+                                      <span className="font-mono tabular-nums font-bold">
+                                        -₺{inv.totalDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Toplam KDV:</span>
+                                    <span className="font-mono tabular-nums font-bold text-slate-800">
+                                      ₺{inv.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                  {inv.withholdingAmount !== undefined && inv.withholdingAmount > 0 && (
+                                    <div className="flex justify-between text-amber-700">
+                                      <span>Tevkifat Tutarı:</span>
+                                      <span className="font-mono tabular-nums font-bold">
+                                        -₺{inv.withholdingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between pt-1.5 border-t border-purple-200 font-bold text-sm">
+                                    <span className="text-slate-800">Fatura Genel Toplamı:</span>
+                                    <span className="font-mono tabular-nums font-black text-purple-900">
+                                      ₺{inv.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                  {inv.remainingAmount > 0 && inv.status !== "paid" && (
+                                    <div className="flex justify-between text-rose-700 font-semibold text-xs pt-1 border-t border-purple-200/40">
+                                      <span>Kalan Bakiye:</span>
+                                      <span className="font-mono tabular-nums font-bold">
+                                        ₺{inv.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredInvoices.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          pageSizeOptions={[10, 15, 25, 50, 100]}
+          itemLabel="fatura"
+          className="border-t border-slate-100"
+        />
+      </div>
+    </div>
+  );
+};
