@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Building2, Loader2, RefreshCw } from "lucide-react";
 import { useMysoftTenants } from "../hooks/useMysoftTenants";
 
 export interface MysoftTenantPickerProps {
+  value?: string;
   hintVkn?: string;
   /** compact = fatura formu; panel = e-belge ekranı */
   variant?: "compact" | "panel";
@@ -11,6 +12,7 @@ export interface MysoftTenantPickerProps {
 }
 
 export const MysoftTenantPicker: React.FC<MysoftTenantPickerProps> = ({
+  value,
   hintVkn,
   variant = "panel",
   className = "",
@@ -29,12 +31,24 @@ export const MysoftTenantPicker: React.FC<MysoftTenantPickerProps> = ({
     lookupByVkn,
     reload,
     selectedTenant,
-  } = useMysoftTenants({ hintVkn });
+  } = useMysoftTenants({ hintVkn: value || hintVkn });
+
+  useEffect(() => {
+    if (value !== undefined && value !== selectedVkn) {
+      setSelectedVkn(value);
+    }
+  }, [value, selectedVkn, setSelectedVkn]);
+
+  useEffect(() => {
+    if (selectedVkn && selectedVkn !== value) {
+      onSelect?.(selectedVkn);
+    }
+  }, [selectedVkn, value, onSelect]);
 
   const handleSelect = (vkn: string) => {
-    const value = vkn || undefined;
-    setSelectedVkn(value);
-    onSelect?.(value);
+    const nextVal = vkn || undefined;
+    setSelectedVkn(nextVal);
+    onSelect?.(nextVal);
   };
 
   const handleLookup = async () => {

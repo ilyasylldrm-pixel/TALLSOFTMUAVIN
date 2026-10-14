@@ -16,6 +16,16 @@ export function digitsOnly(value: unknown): string {
 
 /** Return a VKN/TCKN Mysoft will accept, or undefined so the field is omitted. */
 export function normalizeMysoftTenantIdentifier(value?: unknown): string | undefined {
+  if (value && typeof value === "object") {
+    const rec = value as Record<string, unknown>;
+    const candidate =
+      rec.tenantIdentifierNumber ??
+      rec.taxNumber ??
+      rec.vknTckn ??
+      rec.vkn ??
+      rec.tckn;
+    if (candidate) return normalizeMysoftTenantIdentifier(candidate);
+  }
   const digits = digitsOnly(value);
   return VKN_TCKN.test(digits) ? digits : undefined;
 }

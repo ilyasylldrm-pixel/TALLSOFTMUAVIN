@@ -14,6 +14,10 @@ import {
   isMysoftTenantScopeError,
   normalizeMysoftTenantIdentifier,
 } from "./mysoftTenant.ts";
+import {
+  calculateNextInvoiceNumber,
+  parseInvoiceDocNo,
+} from "./mysoftInvoiceNumber.ts";
 
 export type MysoftDirection = "incoming" | "outgoing";
 export type MysoftGrantType = "client_credentials" | "password";
@@ -863,11 +867,32 @@ export class MysoftEdocumentClient {
 
   /** Resolve an optional request tenant against the server-side default.
    * Only a 10/11-digit VKN/TCKN is forwarded; portal tenant ids are dropped. */
-  private effectiveTenant(value?: string): string | undefined {
+  effectiveTenant(value?: string): string | undefined {
     return (
       normalizeMysoftTenantIdentifier(value) ||
       normalizeMysoftTenantIdentifier(this.config.tenantIdentifierNumber)
     );
+  }
+
+  /**
+   * Resolve effective tenant VKN/TCKN asynchronously. If explicit value and
+   * MYSOFT_TENANT_IDENTIFIER_NUMBER are missing, auto-resolves from the API's linked tenant list.
+   */
+  async resolveEffectiveTenant(value?: string): Promise<string | undefined> {
+    const direct = this.effectiveTenant(value);
+    if (direct) return direct;
+    try {
+      const tenantsPayload = await this.listTenants({ limit: 5 });
+      const unwrapped = unwrapMysoftData(tenantsPayload);
+      const rows = asObjectArray(unwrapped);
+      const firstTax = rows
+        .map((r) => normalizeMysoftTenantIdentifier(r.taxNumber || r.vknTckn || r.identifierNumber))
+        .find(Boolean);
+      if (firstTax) return firstTax;
+    } catch {
+      // fallback
+    }
+    return undefined;
   }
 
   /** Execute one of the explicitly published non-invoice operations. */
@@ -1224,6 +1249,125 @@ export class MysoftEdocumentClient {
       xsltDesigns,
       prefixes,
       numeratorSets,
+    };
+  }
+
+  /**
+   * Belirtilen mükellef (tenant) için Mysoft giden faturalarını ve portal numaratörlerini
+   * kontrol ederek bir sonraki fatura numarasını hesaplar.
+   * Örn: Son fatura ABC2026000000206 ise sıradaki ABC2026000000207 olur.
+   */
+  async getNextInvoiceNumber(options: {
+    tenantIdentifierNumber?: string;
+    eDocumentType?: string;
+    prefix?: string;
+    year?: number;
+  } = {}): Promise<{
+    tenantIdentifierNumber?: string;
+    prefix: string;
+    year: number;
+    lastInvoiceNumber?: string;
+    lastSequence: number;
+    nextSequence: number;
+    nextInvoiceNumber: string;
+    eDocumentType: "EFATURA" | "EARSIVFATURA";
+    totalOutgoingChecked: number;
+  }> {
+    const tenant = (await this.resolveEffectiveTenant(options.tenantIdentifierNumber)) || "";
+    const rawType = String(options.eDocumentType || "EFATURA").toUpperCase().replace(/[ _-]/g, "");
+    const isEarsiv = rawType.includes("ARSIV");
+    const canonicalEDocType: "EFATURA" | "EARSIVFATURA" = isEarsiv ? "EARSIVFATURA" : "EFATURA";
+    const edocumentTypeCode = isEarsiv ? 2 : 1;
+    const year =
+      Number.isInteger(options.year) && options.year! >= 2000
+        ? options.year!
+        : new Date().getFullYear();
+
+    // 1. Prefix (Ön Ek) tespiti: Kullanıcı/Çağrıcı -> Portal Numaratör Tanımları -> Son Belgeler -> Standart Ön Ek
+    let resolvedPrefix = typeof options.prefix === "string" ? options.prefix.trim().toUpperCase() : "";
+
+    if (!resolvedPrefix && tenant) {
+      try {
+        const numRes = await this.getDocumentNumberList(tenant);
+        const prefixes = asObjectArray(unwrapMysoftData(numRes));
+        const typeCodeStr = String(edocumentTypeCode);
+        const matching = prefixes.filter((row) => {
+          const rowType = String(row.edocumentType ?? "");
+          return !rowType || rowType === typeCodeStr;
+        });
+        const defaultRow =
+          matching.find((row) => row.isDefault === true && row.isPassive !== true) ||
+          matching.find((row) => row.isPassive !== true) ||
+          matching[0];
+        if (typeof defaultRow?.prefix === "string" && defaultRow.prefix.trim()) {
+          resolvedPrefix = defaultRow.prefix.trim().toUpperCase();
+        }
+      } catch {
+        // Portal numaratör listesi alınamazsa devam et
+      }
+    }
+
+    // 2. Mysoft giden faturalarını (InvoiceOutbox) çek
+    let outboxList: Array<Record<string, unknown>> = [];
+    if (tenant) {
+      try {
+        const outboxRes = await this.listOutgoing({
+          tenantIdentifierNumber: tenant,
+          limit: 100,
+          eDocumentType: canonicalEDocType,
+        });
+        outboxList = asObjectArray(unwrapMysoftData(outboxRes));
+      } catch {
+        try {
+          const outboxRes = await this.listOutgoing({
+            tenantIdentifierNumber: tenant,
+            limit: 100,
+          });
+          outboxList = asObjectArray(unwrapMysoftData(outboxRes));
+        } catch {
+          // Devam et
+        }
+      }
+    }
+
+    // Eğer hâlâ prefix bulunamadıysa, son kesilen faturaların ön ekine bak
+    if (!resolvedPrefix && outboxList.length > 0) {
+      for (const item of outboxList) {
+        const docNo = typeof item.docNo === "string" ? item.docNo.trim().toUpperCase() : "";
+        const parsed = parseInvoiceDocNo(docNo);
+        if (parsed?.prefix) {
+          resolvedPrefix = parsed.prefix;
+          break;
+        }
+      }
+    }
+
+    if (!resolvedPrefix) {
+      resolvedPrefix = isEarsiv ? "EAR" : "GIB";
+    }
+
+    // 3. En yüksek sıra numarasını bul ve bir sonrakini ata (örn: 206 -> 207)
+    const existingDocNos = outboxList
+      .map((item) => (typeof item.docNo === "string" ? item.docNo : undefined))
+      .filter((doc): doc is string => typeof doc === "string" && doc.trim().length > 0);
+
+    const calcResult = calculateNextInvoiceNumber({
+      existingDocNos,
+      targetPrefix: resolvedPrefix,
+      targetYear: year,
+      fallbackPrefix: isEarsiv ? "EAR" : "GIB",
+    });
+
+    return {
+      tenantIdentifierNumber: tenant || undefined,
+      prefix: calcResult.prefix,
+      year: calcResult.year,
+      lastInvoiceNumber: calcResult.lastDocNo,
+      lastSequence: calcResult.lastSequence,
+      nextSequence: calcResult.nextSequence,
+      nextInvoiceNumber: calcResult.nextDocNo,
+      eDocumentType: canonicalEDocType,
+      totalOutgoingChecked: outboxList.length,
     };
   }
 
@@ -1597,11 +1741,18 @@ export class MysoftEdocumentClient {
   private async enrichInvoiceOutboxDefaults(payload: unknown): Promise<unknown> {
     if (!isObject(payload) || Array.isArray(payload)) return payload;
     const body = { ...payload } as Record<string, unknown>;
-    const tenant =
+    let tenant =
       typeof body.tenantIdentifierNumber === "string"
         ? normalizeMysoftTenantIdentifier(body.tenantIdentifierNumber) ||
           body.tenantIdentifierNumber.trim()
         : "";
+    if (!tenant) {
+      const resolved = await this.resolveEffectiveTenant();
+      if (resolved) {
+        tenant = resolved;
+        body.tenantIdentifierNumber = resolved;
+      }
+    }
     if (!tenant) return body;
 
     const needsXslt = !stringOrEmpty(body.xsltName) && !stringOrEmpty(body.xsltSetCode);

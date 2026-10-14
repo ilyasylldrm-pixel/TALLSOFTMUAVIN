@@ -29,6 +29,7 @@ function pickFromRows(rows: MysoftTenant[], current?: string, hint?: string): st
   if (hintMatch) return hintMatch.taxNumber;
   if (rows.length === 1) return rows[0].taxNumber;
   if (current && rows.some((row) => row.taxNumber === current)) return current;
+  if (rows.length > 0) return rows[0].taxNumber;
   return current;
 }
 

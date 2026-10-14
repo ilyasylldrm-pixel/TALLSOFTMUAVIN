@@ -1,5 +1,5 @@
 import type { CompanySettings, Contact, EDocumentType, Invoice, InvoiceItem } from "../types";
-import { normalizeMysoftTenantIdentifier } from "./mysoftTenant";
+import { normalizeMysoftTenantIdentifier } from "./mysoftTenant.ts";
 
 /**
  * Maps Muavin's "Yeni Gelir Faturası Kes / Hazırla" form onto Mysoft's
@@ -22,6 +22,8 @@ export interface BuildMysoftInvoiceOutboxOptions {
   /** @deprecated Mysoft: leave empty; field will be removed. Ignored by builder. */
   connectorGuid?: string;
   prefix?: string;
+  /** İlgili tenanttan veya sistemden atanan fatura numarası (örn: ABC2026000000207). */
+  docNo?: string;
   /** Portal numaratör set kodu — doluysa prefix kullanılmaz. */
   numeratorSetCode?: string;
   /** Portal dizayn set kodu (e-fatura / e-arşiv XSLT seti). */
@@ -156,17 +158,27 @@ export function buildMysoftInvoiceOutboxPayload(
     }
   }
 
-  // Yalnızca Mysoft'a bağlı gerçek mükellef VKN/TCKN kullanılır; demo firma
-  // taxNumber (8470291038) veya portal tenant id buraya düşmez.
+  // Mükellef VKN/TCKN çözümü: options -> company tenantIdentifierNumber -> taxNumber / vknTckn -> mysoftCredentials
   const tenant =
     normalizeMysoftTenantIdentifier(
       options.tenantIdentifierNumber ||
         company.tenantIdentifierNumber ||
+        company.taxNumber ||
+        company.vknTckn ||
         company.mysoftCredentials?.tenantIdentifierNumber,
     ) || undefined;
   const buyerTax = digits(contact.taxNumber || invoice.taxNumber);
+
+  const effectiveDocNo =
+    typeof options.docNo === "string" && options.docNo.trim()
+      ? options.docNo.trim()
+      : typeof invoice.invoiceNumber === "string" && invoice.invoiceNumber.trim()
+        ? invoice.invoiceNumber.trim()
+        : "";
+
   const prefix =
     options.prefix ||
+    (effectiveDocNo ? effectiveDocNo.replace(/\d+$/, "").slice(0, 3).toUpperCase() : undefined) ||
     String(invoice.invoiceNumber || "")
       .replace(/\d+$/, "")
       .slice(0, 3)
@@ -185,8 +197,7 @@ export function buildMysoftInvoiceOutboxPayload(
     numeratorSetCode: options.numeratorSetCode?.trim() || undefined,
     xsltSetCode: options.xsltSetCode?.trim() || undefined,
     xsltName: options.xsltName?.trim() || undefined,
-    // Leave docNo empty so Mysoft assigns from the numerator when possible.
-    docNo: "",
+    docNo: effectiveDocNo,
     docDate: toMysoftDateTime(invoice.issueDate),
     dueDate: invoice.dueDate
       ? toMysoftDateTime(invoice.dueDate)

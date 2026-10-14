@@ -45,6 +45,10 @@ import {
   sendMysoftOutgoingInvoice,
   checkRecipientTaxpayerStatus,
   RecipientTaxpayerStatus,
+  getNextMysoftInvoiceNumber,
+  type MysoftNextInvoiceNumberResult,
+  listMysoftTenants,
+  normalizeMysoftTenantIdentifier,
 } from "../services/mysoftEDocumentService";
 import {
   buildMysoftInvoiceOutboxPayload,
@@ -52,7 +56,10 @@ import {
 } from "../services/mysoftInvoicePayload";
 import { MysoftTenantPicker } from "./MysoftTenantPicker";
 import { readStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
-import { normalizeMysoftTenantIdentifier } from "../services/mysoftEDocumentService";
+import {
+  calculateNextInvoiceNumber,
+  parseInvoiceDocNo,
+} from "../services/mysoftInvoiceNumber";
 import {
   FileText,
   FileSpreadsheet,
@@ -95,6 +102,7 @@ import {
   Percent,
   ShieldCheck,
   Scale,
+  RefreshCw,
 } from "lucide-react";
 
 const TURKISH_MONTHS = [
@@ -335,19 +343,121 @@ export const Invoices: React.FC<InvoicesProps> = ({
     },
     [detailNav, handleCloseDetail]
   );
-  const [mysoftTenantVkn, setMysoftTenantVkn] = useState<string | undefined>(() =>
-    readStoredMysoftTenantVkn() ||
-      normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber),
-  );
+  const [mysoftTenantVkn, setMysoftTenantVkn] = useState<string | undefined>(() => {
+    return (
+      readStoredMysoftTenantVkn() ||
+      normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber) ||
+      normalizeMysoftTenantIdentifier(companySettings.taxNumber) ||
+      normalizeMysoftTenantIdentifier(companySettings.vknTckn) ||
+      normalizeMysoftTenantIdentifier(companySettings.mysoftCredentials?.tenantIdentifierNumber)
+    );
+  });
+  const [isFetchingNextDocNo, setIsFetchingNextDocNo] = useState<boolean>(false);
+  const [mysoftNumberInfo, setMysoftNumberInfo] = useState<MysoftNextInvoiceNumberResult | null>(null);
   const [recipientStatus, setRecipientStatus] = useState<RecipientTaxpayerStatus | null>(null);
   const [isCheckingRecipient, setIsCheckingRecipient] = useState<boolean>(false);
 
   useEffect(() => {
     const fromSettings = normalizeMysoftTenantIdentifier(
-      companySettings.tenantIdentifierNumber,
+      companySettings.tenantIdentifierNumber ||
+        companySettings.taxNumber ||
+        companySettings.vknTckn ||
+        companySettings.mysoftCredentials?.tenantIdentifierNumber,
     );
-    if (fromSettings) setMysoftTenantVkn(fromSettings);
-  }, [companySettings.tenantIdentifierNumber]);
+    if (fromSettings && !mysoftTenantVkn) {
+      setMysoftTenantVkn(fromSettings);
+    }
+  }, [
+    companySettings.tenantIdentifierNumber,
+    companySettings.taxNumber,
+    companySettings.vknTckn,
+    companySettings.mysoftCredentials?.tenantIdentifierNumber,
+    mysoftTenantVkn,
+  ]);
+
+  const fetchAndApplyNextInvoiceNumber = useCallback(
+    async (overrideTenant?: string, overrideDocType?: "e_fatura" | "e_arsiv") => {
+      let targetTenant =
+        overrideTenant ||
+        mysoftTenantVkn ||
+        readStoredMysoftTenantVkn() ||
+        normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber) ||
+        normalizeMysoftTenantIdentifier(companySettings.taxNumber) ||
+        normalizeMysoftTenantIdentifier(companySettings.vknTckn) ||
+        normalizeMysoftTenantIdentifier(companySettings.mysoftCredentials?.tenantIdentifierNumber);
+
+      if (!targetTenant) {
+        try {
+          const tenants = await listMysoftTenants();
+          if (tenants.length > 0) {
+            targetTenant = tenants[0].taxNumber;
+            setMysoftTenantVkn(targetTenant);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const targetDocType = overrideDocType || mysoftEDocType;
+      setIsFetchingNextDocNo(true);
+      try {
+        const result = await getNextMysoftInvoiceNumber({
+          tenantIdentifierNumber: targetTenant,
+          eDocumentType: targetDocType === "e_arsiv" ? "EARSIVFATURA" : "EFATURA",
+        });
+
+        // Localdeki faturaları da kontrol ederek çakışmayı önle
+        const localDocNos = invoices
+          .filter((inv) => inv.type === "sales")
+          .map((inv) => inv.invoiceNumber)
+          .filter(Boolean);
+
+        const mergedCalc = calculateNextInvoiceNumber({
+          existingDocNos: [
+            result.lastInvoiceNumber,
+            ...localDocNos,
+          ].filter((x): x is string => Boolean(x)),
+          targetPrefix: result.prefix,
+          targetYear: result.year,
+          fallbackPrefix: targetDocType === "e_arsiv" ? "EAR" : "GIB",
+        });
+
+        const finalNextDocNo =
+          mergedCalc.nextSequence > result.nextSequence
+            ? mergedCalc.nextDocNo
+            : result.nextInvoiceNumber;
+
+        setInvoiceNumberInput(finalNextDocNo);
+        setMysoftNumberInfo({
+          ...result,
+          lastSequence: Math.max(result.lastSequence, mergedCalc.lastSequence),
+          nextSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
+          nextInvoiceNumber: finalNextDocNo,
+        });
+        if (result.tenantIdentifierNumber && !mysoftTenantVkn) {
+          setMysoftTenantVkn(result.tenantIdentifierNumber);
+        }
+      } catch (err) {
+        console.warn("Mysoft sıradaki fatura numarası sorgusu başarısız:", err);
+      } finally {
+        setIsFetchingNextDocNo(false);
+      }
+    },
+    [mysoftTenantVkn, companySettings, mysoftEDocType, invoices],
+  );
+
+  const handleTenantSelect = useCallback((vkn: string | undefined) => {
+    setMysoftTenantVkn(vkn);
+    setMysoftSaveError(null);
+    if (vkn) {
+      void fetchAndApplyNextInvoiceNumber(vkn);
+    }
+  }, [fetchAndApplyNextInvoiceNumber]);
+
+  const handleEDocTypeChange = useCallback((nextType: "e_fatura" | "e_arsiv") => {
+    setMysoftEDocType(nextType);
+    void fetchAndApplyNextInvoiceNumber(undefined, nextType);
+  }, [fetchAndApplyNextInvoiceNumber]);
 
   // Live e-Fatura vs e-Arşiv Recipient Taxpayer Auto-Detection
   useEffect(() => {
@@ -364,11 +474,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
       .then((status) => {
         if (isMounted) {
           setRecipientStatus(status);
-          if (status.isEFaturaUser) {
-            setMysoftEDocType("e_fatura");
-          } else {
-            setMysoftEDocType("e_arsiv");
-          }
+          const nextType = status.isEFaturaUser ? "e_fatura" : "e_arsiv";
+          setMysoftEDocType(nextType);
+          void fetchAndApplyNextInvoiceNumber(undefined, nextType);
         }
       })
       .finally(() => {
@@ -378,7 +486,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [contactId, contacts]);
+  }, [contactId, contacts, fetchAndApplyNextInvoiceNumber]);
 
   const handleQuickCreateContact = (e: React.FormEvent) => {
     e.preventDefault();
@@ -499,6 +607,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const nextSeq = String(invoices.length + 1).padStart(7, "0");
     const prefix = targetType === "sales" ? "MUV2026" : "TED2026";
     setInvoiceNumberInput(`${prefix}${nextSeq}`);
+    if (targetType === "sales" && sendToMysoft) {
+      void fetchAndApplyNextInvoiceNumber();
+    }
     const targetContactId = initialContactIdForNewInvoice || contacts[0]?.id || "";
     setContactId(targetContactId);
     const targetContact = contacts.find((c) => c.id === targetContactId);
@@ -820,13 +931,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
       remainingAmount: grandTotal,
       createdAt: new Date().toISOString().split("T")[0],
     } as Invoice;
+
+    const effectiveTenant =
+      mysoftTenantVkn ||
+      readStoredMysoftTenantVkn() ||
+      normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber) ||
+      normalizeMysoftTenantIdentifier(companySettings.taxNumber) ||
+      normalizeMysoftTenantIdentifier(companySettings.vknTckn) ||
+      normalizeMysoftTenantIdentifier(companySettings.mysoftCredentials?.tenantIdentifierNumber);
+
     return buildMysoftInvoiceOutboxPayload({
       invoice: invoiceForPayload,
       contact,
       company: companySettings,
       eDocumentType: mysoftEDocType,
+      docNo: invoiceNumberInput,
       isSaveAsDraft: true,
-      tenantIdentifierNumber: mysoftTenantVkn,
+      tenantIdentifierNumber: effectiveTenant,
       pkAlias: recipientStatus?.pkAlias,
       gbAlias: recipientStatus?.gbAlias,
     });
@@ -835,6 +956,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     contacts,
     companySettings,
     mysoftTenantVkn,
+    invoiceNumberInput,
     recipientStatus,
     dueDate,
     formDocKind,
@@ -1118,7 +1240,32 @@ export const Invoices: React.FC<InvoicesProps> = ({
     if (shouldSendMysoft) {
       setMysoftSaveError(null);
       setMysoftSaveNotice(null);
-      if (!mysoftTenantVkn) {
+
+      let effectiveTenant = mysoftTenantVkn;
+      if (!effectiveTenant) {
+        effectiveTenant =
+          normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber) ||
+          normalizeMysoftTenantIdentifier(companySettings.taxNumber) ||
+          normalizeMysoftTenantIdentifier(companySettings.vknTckn) ||
+          normalizeMysoftTenantIdentifier(companySettings.mysoftCredentials?.tenantIdentifierNumber) ||
+          readStoredMysoftTenantVkn();
+        if (effectiveTenant) {
+          setMysoftTenantVkn(effectiveTenant);
+        }
+      }
+      if (!effectiveTenant) {
+        try {
+          const tenantRows = await listMysoftTenants();
+          if (tenantRows.length > 0) {
+            effectiveTenant = tenantRows[0].taxNumber;
+            setMysoftTenantVkn(effectiveTenant);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!effectiveTenant) {
         setMysoftSaveError(
           "Mysoft kesimi için mükellef seçin. Listeyi yükleyip VKN/TCKN seçin veya VKN ile getirin.",
         );
@@ -1131,8 +1278,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
           contact,
           company: companySettings,
           eDocumentType: mysoftEDocType,
+          docNo: newInvoice.invoiceNumber,
           isSaveAsDraft: false,
-          tenantIdentifierNumber: mysoftTenantVkn,
+          tenantIdentifierNumber: effectiveTenant,
           pkAlias: recipientStatus?.pkAlias,
           gbAlias: recipientStatus?.gbAlias,
         });
@@ -1148,8 +1296,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
         }
         setMysoftSaveNotice(
           outbox.invoiceETTN
-            ? `Mysoft'a gönderildi. ETTN: ${outbox.invoiceETTN}`
-            : "Fatura Mysoft giden kutuya iletildi.",
+            ? `Mysoft'a başarıyla iletildi. Belge No: ${newInvoice.invoiceNumber} (ETTN: ${outbox.invoiceETTN})`
+            : `Fatura Mysoft giden kutusuna iletildi (Belge No: ${newInvoice.invoiceNumber}).`,
         );
       } catch (error) {
         const message =
@@ -2231,19 +2379,56 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   </div>
 
                   {/* 3. Fatura Numarası (Yeni Eklenen Bölüm) */}
-                  <div className="w-full md:w-40 lg:w-44 shrink-0">
-                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                      <Hash className="w-3.5 h-3.5 text-purple-600" />
-                      <span>Fatura Numarası *</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Örn: MUV20260000001"
-                      value={invoiceNumberInput}
-                      onChange={(e) => setInvoiceNumberInput(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                    />
+                  <div className="w-full md:w-56 lg:w-60 shrink-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <Hash className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Fatura Numarası *</span>
+                      </label>
+                      {sendToMysoft && invType === "sales" && !editingInvoiceId && (
+                        <button
+                          type="button"
+                          onClick={() => void fetchAndApplyNextInvoiceNumber()}
+                          disabled={isFetchingNextDocNo}
+                          title="İlgili tenanttan son faturayı çek ve sıradaki numarayı otomatik ata"
+                          className="text-[10px] text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
+                          <span>{isFetchingNextDocNo ? "Çekiliyor..." : "Sıradaki No"}</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Örn: ABC2026000000207"
+                        value={invoiceNumberInput}
+                        onChange={(e) => setInvoiceNumberInput(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 pr-8 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                      />
+                      {sendToMysoft && invType === "sales" && !editingInvoiceId && (
+                        <button
+                          type="button"
+                          onClick={() => void fetchAndApplyNextInvoiceNumber()}
+                          disabled={isFetchingNextDocNo}
+                          title="Mysoft'tan Sıradaki Fatura Numarasını Çek (Örn: 206 -> 207)"
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
+                        </button>
+                      )}
+                    </div>
+                    {sendToMysoft && invType === "sales" && !editingInvoiceId && mysoftNumberInfo && (
+                      <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <span>
+                          {mysoftNumberInfo.lastInvoiceNumber
+                            ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
+                            : `İlk Numara: ${invoiceNumberInput}`}
+                        </span>
+                      </p>
+                    )}
                   </div>
 
                   {/* 4. Fatura Tarihi (Kompakt Tarih Alanı) */}
@@ -3024,9 +3209,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     {sendToMysoft && (
                       <div className="pl-6 space-y-3">
                         <MysoftTenantPicker
+                          value={mysoftTenantVkn}
                           variant="compact"
-                          hintVkn={companySettings.tenantIdentifierNumber}
-                          onSelect={setMysoftTenantVkn}
+                          hintVkn={
+                            companySettings.tenantIdentifierNumber ||
+                            companySettings.taxNumber ||
+                            companySettings.vknTckn ||
+                            companySettings.mysoftCredentials?.tenantIdentifierNumber
+                          }
+                          onSelect={handleTenantSelect}
                         />
                         {/* Live GİB Recipient Taxpayer Status Card */}
                         {isCheckingRecipient ? (
@@ -3076,7 +3267,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => setMysoftEDocType("e_fatura")}
+                            onClick={() => handleEDocTypeChange("e_fatura")}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
                               mysoftEDocType === "e_fatura"
                                 ? "bg-purple-600 text-white border-purple-600 shadow-xs"
@@ -3090,7 +3281,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => setMysoftEDocType("e_arsiv")}
+                            onClick={() => handleEDocTypeChange("e_arsiv")}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
                               mysoftEDocType === "e_arsiv"
                                 ? "bg-purple-600 text-white border-purple-600 shadow-xs"

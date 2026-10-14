@@ -1441,6 +1441,55 @@ export function sendMysoftOutgoingInvoiceWithUbl(
   return createMysoftOutgoingEDocumentWithUbl(payload, options);
 }
 
+export interface MysoftNextInvoiceNumberResult {
+  tenantIdentifierNumber?: string;
+  prefix: string;
+  year: number;
+  lastInvoiceNumber?: string;
+  lastSequence: number;
+  nextSequence: number;
+  nextInvoiceNumber: string;
+  eDocumentType: string;
+  totalOutgoingChecked: number;
+}
+
+/**
+ * Belirtilen mükellef (tenant) için Mysoft giden faturalarını tarayarak
+ * sıradaki fatura numarasını döner (örn: 206 -> 207).
+ */
+export async function getNextMysoftInvoiceNumber(
+  options: {
+    tenantIdentifierNumber?: string;
+    eDocumentType?: string;
+    prefix?: string;
+    year?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<MysoftNextInvoiceNumberResult> {
+  const query = makeQuery({
+    tenantIdentifierNumber: options.tenantIdentifierNumber,
+    eDocumentType: options.eDocumentType,
+    prefix: options.prefix,
+    year: options.year,
+  });
+  const { payload } = await proxyRequest(`/next-invoice-number${query}`, {
+    method: "GET",
+    signal: options.signal,
+  });
+  const data = (unwrapResult(payload) || {}) as Record<string, unknown>;
+  return {
+    tenantIdentifierNumber: firstString(data.tenantIdentifierNumber),
+    prefix: firstString(data.prefix) || "GIB",
+    year: Number(data.year) || new Date().getFullYear(),
+    lastInvoiceNumber: firstString(data.lastInvoiceNumber),
+    lastSequence: Number(data.lastSequence) || 0,
+    nextSequence: Number(data.nextSequence) || 1,
+    nextInvoiceNumber: firstString(data.nextInvoiceNumber) || "",
+    eDocumentType: firstString(data.eDocumentType) || "EFATURA",
+    totalOutgoingChecked: Number(data.totalOutgoingChecked) || 0,
+  };
+}
+
 export interface MysoftInvoiceDraftPreviewResult {
   kind: "html" | "pdf";
   objectUrl: string;

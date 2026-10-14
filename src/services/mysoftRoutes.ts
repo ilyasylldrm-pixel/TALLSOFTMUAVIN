@@ -220,8 +220,14 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
 
   const tenantFrom = (req: Request): string | undefined =>
     normalizeMysoftTenantIdentifier(
-      queryText(req, "tenantIdentifierNumber") ||
-        textParam((req.body as Record<string, unknown> | undefined)?.tenantIdentifierNumber),
+      req.headers["x-tenant-identifier"] ||
+        req.headers["x-mysoft-tenant"] ||
+        queryText(req, "tenantIdentifierNumber") ||
+        queryText(req, "vkn") ||
+        queryText(req, "vknTckn") ||
+        textParam((req.body as Record<string, unknown> | undefined)?.tenantIdentifierNumber) ||
+        textParam((req.body as Record<string, unknown> | undefined)?.vkn) ||
+        textParam((req.body as Record<string, unknown> | undefined)?.vknTckn),
     );
 
   const familyFrom = (req: Request) =>
@@ -558,6 +564,52 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     runBinary(async (req) => {
       const format = (queryText(req, "format") || "html").toLowerCase() === "pdf" ? "pdf" : "html";
       return client.getInvoiceOutboxDraftPreview(req.body, format);
+    }),
+  );
+
+  router.get(
+    "/next-invoice-number",
+    run((req) => {
+      const tenant = tenantFrom(req);
+      const eDocumentType = queryText(req, "eDocumentType") || queryText(req, "docType");
+      const prefix = queryText(req, "prefix");
+      const year = positiveInt(queryText(req, "year"));
+      return client.getNextInvoiceNumber({
+        tenantIdentifierNumber: tenant,
+        eDocumentType,
+        prefix,
+        year,
+      });
+    }),
+  );
+  router.get(
+    "/e-documents/next-invoice-number",
+    run((req) => {
+      const tenant = tenantFrom(req);
+      const eDocumentType = queryText(req, "eDocumentType") || queryText(req, "docType");
+      const prefix = queryText(req, "prefix");
+      const year = positiveInt(queryText(req, "year"));
+      return client.getNextInvoiceNumber({
+        tenantIdentifierNumber: tenant,
+        eDocumentType,
+        prefix,
+        year,
+      });
+    }),
+  );
+  router.get(
+    "/tenant/:vkn/next-invoice-number",
+    run((req) => {
+      const tenant = normalizeMysoftTenantIdentifier(req.params.vkn) || tenantFrom(req);
+      const eDocumentType = queryText(req, "eDocumentType") || queryText(req, "docType");
+      const prefix = queryText(req, "prefix");
+      const year = positiveInt(queryText(req, "year"));
+      return client.getNextInvoiceNumber({
+        tenantIdentifierNumber: tenant,
+        eDocumentType,
+        prefix,
+        year,
+      });
     }),
   );
 
