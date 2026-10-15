@@ -10,7 +10,7 @@ export function getGitHubRouter(): Router {
       const status = await gitHubSyncService.getStatus();
       res.json({ success: true, ...status });
     } catch (error: any) {
-      console.error("[GitHubRoute] Error getting status:", error);
+      console.warn("[GitHubRoute] Warning getting status:", error?.message || error);
       res.status(500).json({ success: false, error: error.message || "Durum alınamadı" });
     }
   });
@@ -27,18 +27,11 @@ export function getGitHubRouter(): Router {
       });
       res.json(result);
     } catch (error: any) {
-      if (error?.message?.includes("GitHub Personal Access Token")) {
-        console.warn("[GitHubRoute] Uyarı: GitHub Personal Access Token girilmemiş veya eksik.");
-        return res.status(400).json({
-          success: false,
-          code: "MISSING_TOKEN",
-          error: error.message,
-        });
-      }
-      console.error("[GitHubRoute] Error publishing to GitHub:", error);
-      res.status(500).json({
+      console.warn("[GitHubRoute] Warning publishing to GitHub:", error?.message || error);
+      res.json({
         success: false,
-        error: error.message || "GitHub senkronizasyonu başarısız oldu",
+        code: error?.message?.includes("GitHub Personal Access Token") ? "MISSING_TOKEN" : "PUBLISH_WARNING",
+        error: error.message || "GitHub senkronizasyonu tamamlanamadı",
       });
     }
   });
@@ -53,8 +46,8 @@ export function getGitHubRouter(): Router {
       });
       res.json(result);
     } catch (error: any) {
-      console.error("[GitHubRoute] Error pulling from GitHub:", error);
-      res.status(500).json({
+      console.warn("[GitHubRoute] Warning pulling from GitHub:", error?.message || error);
+      res.json({
         success: false,
         error: error.message || "GitHub'dan değişiklikler alınamadı",
       });
@@ -73,18 +66,11 @@ export function getGitHubRouter(): Router {
       });
       res.json(result);
     } catch (error: any) {
-      if (error?.message?.includes("GitHub Personal Access Token")) {
-        console.warn("[GitHubRoute] Uyarı: GitHub Personal Access Token girilmemiş veya eksik.");
-        return res.status(400).json({
-          success: false,
-          code: "MISSING_TOKEN",
-          error: error.message,
-        });
-      }
-      console.error("[GitHubRoute] Error syncing with GitHub:", error);
-      res.status(500).json({
+      console.warn("[GitHubRoute] Warning syncing with GitHub:", error?.message || error);
+      res.json({
         success: false,
-        error: error.message || "GitHub senkronizasyonu başarısız oldu",
+        code: error?.message?.includes("GitHub Personal Access Token") ? "MISSING_TOKEN" : "SYNC_WARNING",
+        error: error.message || "GitHub senkronizasyonu tamamlanamadı",
       });
     }
   });
@@ -112,53 +98,65 @@ export function getGitHubRouter(): Router {
         },
       });
     } catch (error: any) {
-      console.error("[GitHubRoute] Error saving config:", error);
+      console.warn("[GitHubRoute] Warning saving config:", error?.message || error);
       res.status(500).json({ success: false, error: error.message || "Ayarlar kaydedilemedi" });
     }
   });
 
-  // Test connection to GitHub with stored or passed token
+  // Test connection to GitHub with stored or passed token (verifies both read and write/push permissions)
   router.post("/test-connection", async (req, res) => {
     try {
       const config = gitHubSyncService.getConfig();
       const token = req.body?.token?.trim() || config.token;
-      const owner = req.body?.owner?.trim() || config.owner;
-      const repo = req.body?.repo?.trim() || config.repo;
+      const owner = req.body?.owner?.trim() || config.owner || "ilyasylldrm-pixel";
+      const repo = req.body?.repo?.trim() || config.repo || "TALLSOFTMUAVIN";
+      const branch = config.branch || "main";
 
       if (!token) {
-        return res.status(400).json({
+        return res.json({
           success: false,
+          code: "MISSING_TOKEN",
           error: "Test için GitHub Personal Access Token (PAT) gereklidir.",
         });
       }
 
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github.v3+json",
-          "User-Agent": "Muavin-Sync",
-        },
-      });
+      const permCheck = await gitHubSyncService.verifyTokenPermissions(token, owner, repo, branch, false);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        return res.status(response.status).json({
+      if (!permCheck.valid || !permCheck.canRead) {
+        return res.json({
           success: false,
-          error: (errorData as any).message || `GitHub API hatası (HTTP ${response.status})`,
+          code: permCheck.errorCode || "INVALID_TOKEN",
+          error: permCheck.errorReason || "GitHub bağlantısı doğrulanamadı.",
         });
       }
 
-      const repoData = await response.json();
+      if (!permCheck.canPush) {
+        return res.json({
+          success: false,
+          code: "TOKEN_READ_ONLY",
+          canRead: true,
+          canPush: false,
+          repoName: permCheck.repoName,
+          isPrivate: permCheck.isPrivate,
+          defaultBranch: permCheck.defaultBranch,
+          error:
+            permCheck.errorReason ||
+            "Token okuma (Pull) yetkisine sahip ancak yazma (Push) yetkisi kapalı (HTTP 403). GitHub Token ayarlarından 'Contents: Read and write' iznini açın.",
+        });
+      }
+
       return res.json({
         success: true,
-        message: "GitHub bağlantısı başarıyla doğrulandı!",
-        repoName: (repoData as any).full_name,
-        isPrivate: (repoData as any).private,
-        defaultBranch: (repoData as any).default_branch,
-        permissions: (repoData as any).permissions,
+        canRead: true,
+        canPush: true,
+        message: "GitHub okuma (Pull) ve yazma (Push) bağlantısı başarıyla doğrulandı!",
+        repoName: permCheck.repoName,
+        isPrivate: permCheck.isPrivate,
+        defaultBranch: permCheck.defaultBranch,
+        permissions: permCheck.permissions,
       });
     } catch (error: any) {
-      return res.status(500).json({
+      return res.json({
         success: false,
         error: error.message || "GitHub bağlantı testi başarısız oldu",
       });
@@ -167,3 +165,4 @@ export function getGitHubRouter(): Router {
 
   return router;
 }
+

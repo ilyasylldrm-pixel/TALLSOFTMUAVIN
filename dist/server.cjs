@@ -3507,9 +3507,15 @@ function maskToken(token) {
   if (token.length <= 8) return "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
   return token.substring(0, 7) + "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" + token.substring(token.length - 4);
 }
+function buildGitAuthArg(token) {
+  if (!token || !token.trim()) return "";
+  const basic = Buffer.from(`x-access-token:${token.trim()}`).toString("base64");
+  return `-c http.extraHeader="Authorization: Basic ${basic}"`;
+}
 var GitHubSyncService = class {
   constructor() {
     this.configCache = null;
+    this.lastTokenCheck = null;
     const cfg = this.getConfig();
     this.ensureGitInitialized(cfg.repoUrl, cfg.branch || "main").catch((err) => {
       console.warn("[GitHubSync] Background git init warning:", err?.message || err);
@@ -3523,7 +3529,7 @@ var GitHubSyncService = class {
         return this.configCache;
       }
     } catch (err) {
-      console.error("[GitHubSync] Error reading config file:", err);
+      console.warn("[GitHubSync] Warning reading config file:", err);
     }
     return {
       repoUrl: "https://github.com/ilyasylldrm-pixel/TALLSOFTMUAVIN.git",
@@ -3554,10 +3560,134 @@ var GitHubSyncService = class {
       }
       import_fs3.default.writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2), "utf-8");
       this.configCache = updated;
+      this.lastTokenCheck = null;
     } catch (err) {
-      console.error("[GitHubSync] Error saving config file:", err);
+      console.warn("[GitHubSync] Warning saving config file:", err);
     }
     return updated;
+  }
+  async verifyTokenPermissions(token, owner, repo, branch = "main", useCache = false) {
+    const cleanToken = (token || "").trim();
+    const isFineGrained = cleanToken.startsWith("github_pat_");
+    if (!cleanToken) {
+      return {
+        valid: false,
+        canRead: false,
+        canPush: false,
+        isFineGrained: false,
+        errorCode: "INVALID_TOKEN",
+        errorReason: "GitHub Personal Access Token (PAT) tan\u0131mlanmam\u0131\u015F."
+      };
+    }
+    if (useCache && this.lastTokenCheck && this.lastTokenCheck.token === cleanToken && this.lastTokenCheck.owner === owner && this.lastTokenCheck.repo === repo && Date.now() - this.lastTokenCheck.checkedAt < 3e4) {
+      return this.lastTokenCheck.result;
+    }
+    try {
+      const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers: {
+          Authorization: `Bearer ${cleanToken}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "Muavin-ERP-Sync"
+        }
+      });
+      if (repoRes.status === 401) {
+        const res = {
+          valid: false,
+          canRead: false,
+          canPush: false,
+          isFineGrained,
+          errorCode: "INVALID_TOKEN",
+          errorReason: "Girilen GitHub Personal Access Token (PAT) ge\xE7ersiz veya s\xFCresi dolmu\u015F (HTTP 401)."
+        };
+        this.lastTokenCheck = { token: cleanToken, owner, repo, checkedAt: Date.now(), result: res };
+        return res;
+      }
+      if (repoRes.status === 404) {
+        const res = {
+          valid: false,
+          canRead: false,
+          canPush: false,
+          isFineGrained,
+          errorCode: "REPO_NOT_FOUND",
+          errorReason: `${owner}/${repo} deposu bulunamad\u0131 veya token'\u0131n bu depoya eri\u015Fim izni yok (HTTP 404).`
+        };
+        this.lastTokenCheck = { token: cleanToken, owner, repo, checkedAt: Date.now(), result: res };
+        return res;
+      }
+      if (!repoRes.ok) {
+        const errBody = await repoRes.json().catch(() => ({}));
+        const res = {
+          valid: false,
+          canRead: false,
+          canPush: false,
+          isFineGrained,
+          errorCode: "INVALID_TOKEN",
+          errorReason: errBody.message || `GitHub API hatas\u0131 (HTTP ${repoRes.status})`
+        };
+        this.lastTokenCheck = { token: cleanToken, owner, repo, checkedAt: Date.now(), result: res };
+        return res;
+      }
+      const repoData = await repoRes.json();
+      const oauthScopes = repoRes.headers.get("x-oauth-scopes") || "";
+      let canPush = Boolean(repoData?.permissions?.push);
+      const refRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+        headers: {
+          Authorization: `Bearer ${cleanToken}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "Muavin-ERP-Sync"
+        }
+      });
+      if (refRes.ok) {
+        const refData = await refRes.json();
+        const remoteSha = refData?.object?.sha;
+        if (remoteSha) {
+          const writeTestRes = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+            {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${cleanToken}`,
+                Accept: "application/vnd.github.v3+json",
+                "Content-Type": "application/json",
+                "User-Agent": "Muavin-ERP-Sync"
+              },
+              body: JSON.stringify({ sha: remoteSha, force: false })
+            }
+          );
+          if (writeTestRes.status === 403 || writeTestRes.status === 401) {
+            canPush = false;
+          } else if (writeTestRes.ok || writeTestRes.status === 422) {
+            canPush = true;
+          }
+        }
+      } else if (!isFineGrained && oauthScopes) {
+        const scopes = oauthScopes.split(",").map((s) => s.trim());
+        canPush = scopes.includes("repo") || scopes.includes("public_repo");
+      }
+      const result = {
+        valid: true,
+        canRead: true,
+        canPush,
+        isFineGrained,
+        repoName: repoData.full_name || `${owner}/${repo}`,
+        isPrivate: Boolean(repoData.private),
+        defaultBranch: repoData.default_branch || branch,
+        permissions: repoData.permissions,
+        errorCode: canPush ? void 0 : "TOKEN_READ_ONLY",
+        errorReason: canPush ? void 0 : isFineGrained ? `Mevcut Fine-Grained Token (${maskToken(cleanToken)}) yaln\u0131zca "Salt Okunur" (Contents: Read-only) yetkisine sahip (HTTP 403). GitHub'a kod g\xF6ndermek (Push) i\xE7in GitHub > Settings > Developer settings > Personal access tokens > Fine-grained tokens men\xFCs\xFCnden bu token'\u0131n "Repository permissions > Contents" (ve "Workflows") iznini "Read and write" olarak g\xFCncelleyin.` : `Mevcut GitHub Token (${maskToken(cleanToken)}) yazma (push) yetkisine sahip de\u011Fil (HTTP 403). L\xFCtfen "repo" ve "workflow" kutucuklar\u0131 i\u015Faretli bir token girin.`
+      };
+      this.lastTokenCheck = { token: cleanToken, owner, repo, checkedAt: Date.now(), result };
+      return result;
+    } catch (err) {
+      return {
+        valid: false,
+        canRead: false,
+        canPush: false,
+        isFineGrained,
+        errorCode: "NETWORK_ERROR",
+        errorReason: err?.message || "GitHub API ba\u011Flant\u0131 kontrol\xFC s\u0131ras\u0131nda a\u011F hatas\u0131 olu\u015Ftu."
+      };
+    }
   }
   async ensureGitInitialized(repoUrl, branch = "main") {
     const cwd = process.cwd();
@@ -3571,6 +3701,8 @@ var GitHubSyncService = class {
     }
     try {
       await execPromise("git remote get-url origin", { cwd });
+      await execPromise(`git remote set-url origin "${repoUrl}"`, { cwd }).catch(() => {
+      });
     } catch {
       await execPromise(`git remote add origin "${repoUrl}"`, { cwd });
     }
@@ -3603,7 +3735,7 @@ var GitHubSyncService = class {
     let behindCount = 0;
     let gitInitialized = false;
     try {
-      await this.ensureGitInitialized(repoUrl, currentBranch);
+      await this.ensureGitInitialized(`https://github.com/${owner}/${repo}.git`, currentBranch);
       gitInitialized = true;
       try {
         const { stdout: branchOut } = await execPromise("git rev-parse --abbrev-ref HEAD", { cwd: process.cwd() });
@@ -3664,14 +3796,26 @@ var GitHubSyncService = class {
     } catch {
       gitInitialized = false;
     }
+    const hasToken = Boolean(config.token && config.token.length > 5);
+    let tokenCanPush = void 0;
+    let tokenPermissionWarning = void 0;
+    if (hasToken && config.token) {
+      const perm = await this.verifyTokenPermissions(config.token, owner, repo, currentBranch, true);
+      tokenCanPush = perm.canPush;
+      if (!perm.canPush && perm.errorReason) {
+        tokenPermissionWarning = perm.errorReason;
+      }
+    }
     return {
       initialized: gitInitialized,
       branch: currentBranch,
       repoUrl,
       owner,
       repo,
-      hasToken: Boolean(config.token && config.token.length > 5),
+      hasToken,
       maskedToken: maskToken(config.token),
+      tokenCanPush,
+      tokenPermissionWarning,
       isClean,
       uncommittedCount,
       uncommittedFiles,
@@ -3699,11 +3843,14 @@ var GitHubSyncService = class {
     }
     const cwd = process.cwd();
     const cleanUrl = `https://github.com/${owner}/${repo}.git`;
-    const remoteUrl = token ? `https://${owner}:${token}@github.com/${owner}/${repo}.git` : cleanUrl;
+    const authArg = buildGitAuthArg(token);
     await this.ensureGitInitialized(cleanUrl, branch);
     try {
-      await execPromise(`git remote set-url origin "${remoteUrl}"`, { cwd });
-      await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+      try {
+        await execPromise(`git ${authArg} fetch origin ${branch} --prune`, { cwd });
+      } catch {
+        await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+      }
       let hasHead = false;
       try {
         await execPromise("git rev-parse --verify HEAD", { cwd });
@@ -3777,16 +3924,21 @@ var GitHubSyncService = class {
     }
     const cwd = process.cwd();
     const cleanUrl = `https://github.com/${owner}/${repo}.git`;
+    const authArg = buildGitAuthArg(token);
+    const syncedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const actionsUrl = `https://github.com/${owner}/${repo}/actions`;
+    const deployUrl = "https://tallsoft.org";
     await this.ensureGitInitialized(cleanUrl, branch);
     await execPromise(`git branch -M ${branch}`, { cwd });
     if (params?.pullFirst !== false) {
       try {
-        const fetchUrl = token ? `https://${owner}:${token}@github.com/${owner}/${repo}.git` : cleanUrl;
-        await execPromise(`git remote set-url origin "${fetchUrl}"`, { cwd });
-        await execPromise(`git fetch origin ${branch} --prune`, { cwd });
-        await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd });
-      } catch (e) {
-        console.warn("[GitHubSync] Remote fetch warning:", e);
+        await execPromise(`git ${authArg} fetch origin ${branch} --prune`, { cwd });
+      } catch {
+        try {
+          await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+        } catch (e) {
+          console.warn("[GitHubSync] Remote fetch warning:", e);
+        }
       }
     }
     await execPromise("git add -A", { cwd });
@@ -3819,23 +3971,66 @@ var GitHubSyncService = class {
     } catch {
     }
     if (!token) {
-      throw new Error(
-        `T\xFCm de\u011Fi\u015Fiklikler yerel Git deposuna commit edildi (${sha.substring(0, 7)}) ve GitHub'dan g\xFCncel dal (origin/${branch}) al\u0131nd\u0131. GitHub'a push (g\xF6nderim) ve tallsoft.org yay\u0131n\u0131 i\xE7in GitHub Personal Access Token (PAT) gereklidir.`
-      );
+      const missingMsg = `T\xFCm de\u011Fi\u015Fiklikler yerel Git deposuna commit edildi (${sha.substring(0, 7)}) ve GitHub'dan g\xFCncel dal (origin/${branch}) al\u0131nd\u0131. GitHub'a push (g\xF6nderim) ve tallsoft.org yay\u0131n\u0131 i\xE7in GitHub Personal Access Token (PAT) gereklidir.`;
+      return {
+        success: false,
+        code: "MISSING_TOKEN",
+        committedLocalOnly: true,
+        commitSha: sha,
+        commitMessage: commitMsg,
+        syncedAt,
+        actionsUrl,
+        deployUrl,
+        message: missingMsg,
+        error: missingMsg
+      };
     }
-    const authUrl = `https://${owner}:${token}@github.com/${owner}/${repo}.git`;
-    try {
-      await execPromise(`git remote set-url origin "${authUrl}"`, { cwd });
-    } catch {
-      await execPromise(`git remote add origin "${authUrl}"`, { cwd });
+    this.saveConfig({
+      repoUrl: cleanUrl,
+      owner,
+      repo,
+      token,
+      lastSyncedAt: syncedAt
+    });
+    const permCheck = await this.verifyTokenPermissions(token, owner, repo, branch, false);
+    if (!permCheck.canPush) {
+      const errDetail = permCheck.errorReason || `Mevcut GitHub Token (${maskToken(token)}) yazma (push) yetkisine sahip de\u011Fil (HTTP 403).`;
+      const combinedMsg = `Yerel de\u011Fi\u015Fiklikler kaydedildi (${sha.substring(0, 7)}) ve GitHub'dan g\xFCncel kodlar al\u0131nd\u0131 (Pull tamamland\u0131). G\xF6nderim (Push) i\xE7in: ${errDetail}`;
+      return {
+        success: false,
+        code: permCheck.errorCode || "TOKEN_READ_ONLY",
+        committedLocalOnly: true,
+        commitSha: sha,
+        commitMessage: commitMsg,
+        syncedAt,
+        actionsUrl,
+        deployUrl,
+        message: combinedMsg,
+        error: combinedMsg
+      };
     }
     try {
-      await execPromise(`git push -u origin ${branch} --force`, { cwd });
+      await execPromise(`git ${authArg} push -u origin ${branch} --force`, { cwd });
+    } catch (pushErr) {
+      const rawErr = String(pushErr?.stderr || pushErr?.message || pushErr || "");
+      const is403 = rawErr.includes("403") || rawErr.toLowerCase().includes("permission") || rawErr.toLowerCase().includes("denied");
+      const isWorkflowScopeError = rawErr.toLowerCase().includes("workflow");
+      const friendlyError = isWorkflowScopeError ? `Yerel de\u011Fi\u015Fiklikler commit edildi (${sha.substring(0, 7)}), ancak GitHub Token'\u0131n\u0131zda "Workflows: Read and write" izni eksik oldu\u011Fu i\xE7in push reddedildi. L\xFCtfen GitHub token ayarlar\u0131ndan "Workflows" iznini a\xE7\u0131n.` : is403 ? `Yerel de\u011Fi\u015Fiklikler commit edildi (${sha.substring(0, 7)}) ve GitHub'dan g\xFCncel dal al\u0131nd\u0131; ancak GitHub Token (${maskToken(token)}) i\xE7in "Contents: Read and write" (Yazma) izni kapal\u0131 oldu\u011Fundan GitHub HTTP 403 d\xF6nd\xFCrd\xFC. L\xFCtfen GitHub > Settings > Developer settings > Personal access tokens ekran\u0131ndan "Contents" yetkisini "Read and write" yap\u0131n.` : `Yerel de\u011Fi\u015Fiklikler commit edildi (${sha.substring(0, 7)}), ancak GitHub push s\u0131ras\u0131nda hata olu\u015Ftu: ${rawErr.split("\n")[0]}`;
+      return {
+        success: false,
+        code: is403 ? "TOKEN_READ_ONLY" : "PUSH_FAILED",
+        committedLocalOnly: true,
+        commitSha: sha,
+        commitMessage: commitMsg,
+        syncedAt,
+        actionsUrl,
+        deployUrl,
+        message: friendlyError,
+        error: friendlyError
+      };
     } finally {
-      try {
-        await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd });
-      } catch {
-      }
+      await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {
+      });
     }
     try {
       await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/deploy.yml/dispatches`, {
@@ -3850,22 +4045,14 @@ var GitHubSyncService = class {
       });
     } catch {
     }
-    const syncedAt = (/* @__PURE__ */ new Date()).toISOString();
-    this.saveConfig({
-      repoUrl: cleanUrl,
-      owner,
-      repo,
-      token,
-      lastSyncedAt: syncedAt
-    });
     return {
       success: true,
       message: committed ? `T\xFCm de\u011Fi\u015Fiklikler ba\u015Far\u0131yla al\u0131nd\u0131, commit edildi, GitHub (${owner}/${repo}) ile e\u015Fitlendi ve tallsoft.org canl\u0131 yay\u0131n\u0131 tetiklendi.` : `GitHub deposu g\xFCncellendi (Al, G\xF6nder & Yay\u0131nla tamamland\u0131). Mevcut commit (${sha.substring(0, 7)}) GitHub'a g\xF6nderildi ve tallsoft.org yay\u0131n\u0131 tetiklendi.`,
       commitSha: sha,
       commitMessage: commitMsg,
       syncedAt,
-      actionsUrl: `https://github.com/${owner}/${repo}/actions`,
-      deployUrl: "https://tallsoft.org"
+      actionsUrl,
+      deployUrl
     };
   }
 };
@@ -3879,7 +4066,7 @@ function getGitHubRouter() {
       const status = await gitHubSyncService.getStatus();
       res.json({ success: true, ...status });
     } catch (error) {
-      console.error("[GitHubRoute] Error getting status:", error);
+      console.warn("[GitHubRoute] Warning getting status:", error?.message || error);
       res.status(500).json({ success: false, error: error.message || "Durum al\u0131namad\u0131" });
     }
   });
@@ -3894,18 +4081,11 @@ function getGitHubRouter() {
       });
       res.json(result);
     } catch (error) {
-      if (error?.message?.includes("GitHub Personal Access Token")) {
-        console.warn("[GitHubRoute] Uyar\u0131: GitHub Personal Access Token girilmemi\u015F veya eksik.");
-        return res.status(400).json({
-          success: false,
-          code: "MISSING_TOKEN",
-          error: error.message
-        });
-      }
-      console.error("[GitHubRoute] Error publishing to GitHub:", error);
-      res.status(500).json({
+      console.warn("[GitHubRoute] Warning publishing to GitHub:", error?.message || error);
+      res.json({
         success: false,
-        error: error.message || "GitHub senkronizasyonu ba\u015Far\u0131s\u0131z oldu"
+        code: error?.message?.includes("GitHub Personal Access Token") ? "MISSING_TOKEN" : "PUBLISH_WARNING",
+        error: error.message || "GitHub senkronizasyonu tamamlanamad\u0131"
       });
     }
   });
@@ -3918,8 +4098,8 @@ function getGitHubRouter() {
       });
       res.json(result);
     } catch (error) {
-      console.error("[GitHubRoute] Error pulling from GitHub:", error);
-      res.status(500).json({
+      console.warn("[GitHubRoute] Warning pulling from GitHub:", error?.message || error);
+      res.json({
         success: false,
         error: error.message || "GitHub'dan de\u011Fi\u015Fiklikler al\u0131namad\u0131"
       });
@@ -3936,18 +4116,11 @@ function getGitHubRouter() {
       });
       res.json(result);
     } catch (error) {
-      if (error?.message?.includes("GitHub Personal Access Token")) {
-        console.warn("[GitHubRoute] Uyar\u0131: GitHub Personal Access Token girilmemi\u015F veya eksik.");
-        return res.status(400).json({
-          success: false,
-          code: "MISSING_TOKEN",
-          error: error.message
-        });
-      }
-      console.error("[GitHubRoute] Error syncing with GitHub:", error);
-      res.status(500).json({
+      console.warn("[GitHubRoute] Warning syncing with GitHub:", error?.message || error);
+      res.json({
         success: false,
-        error: error.message || "GitHub senkronizasyonu ba\u015Far\u0131s\u0131z oldu"
+        code: error?.message?.includes("GitHub Personal Access Token") ? "MISSING_TOKEN" : "SYNC_WARNING",
+        error: error.message || "GitHub senkronizasyonu tamamlanamad\u0131"
       });
     }
   });
@@ -3973,7 +4146,7 @@ function getGitHubRouter() {
         }
       });
     } catch (error) {
-      console.error("[GitHubRoute] Error saving config:", error);
+      console.warn("[GitHubRoute] Warning saving config:", error?.message || error);
       res.status(500).json({ success: false, error: error.message || "Ayarlar kaydedilemedi" });
     }
   });
@@ -3981,39 +4154,48 @@ function getGitHubRouter() {
     try {
       const config = gitHubSyncService.getConfig();
       const token = req.body?.token?.trim() || config.token;
-      const owner = req.body?.owner?.trim() || config.owner;
-      const repo = req.body?.repo?.trim() || config.repo;
+      const owner = req.body?.owner?.trim() || config.owner || "ilyasylldrm-pixel";
+      const repo = req.body?.repo?.trim() || config.repo || "TALLSOFTMUAVIN";
+      const branch = config.branch || "main";
       if (!token) {
-        return res.status(400).json({
+        return res.json({
           success: false,
+          code: "MISSING_TOKEN",
           error: "Test i\xE7in GitHub Personal Access Token (PAT) gereklidir."
         });
       }
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github.v3+json",
-          "User-Agent": "Muavin-Sync"
-        }
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        return res.status(response.status).json({
+      const permCheck = await gitHubSyncService.verifyTokenPermissions(token, owner, repo, branch, false);
+      if (!permCheck.valid || !permCheck.canRead) {
+        return res.json({
           success: false,
-          error: errorData.message || `GitHub API hatas\u0131 (HTTP ${response.status})`
+          code: permCheck.errorCode || "INVALID_TOKEN",
+          error: permCheck.errorReason || "GitHub ba\u011Flant\u0131s\u0131 do\u011Frulanamad\u0131."
         });
       }
-      const repoData = await response.json();
+      if (!permCheck.canPush) {
+        return res.json({
+          success: false,
+          code: "TOKEN_READ_ONLY",
+          canRead: true,
+          canPush: false,
+          repoName: permCheck.repoName,
+          isPrivate: permCheck.isPrivate,
+          defaultBranch: permCheck.defaultBranch,
+          error: permCheck.errorReason || "Token okuma (Pull) yetkisine sahip ancak yazma (Push) yetkisi kapal\u0131 (HTTP 403). GitHub Token ayarlar\u0131ndan 'Contents: Read and write' iznini a\xE7\u0131n."
+        });
+      }
       return res.json({
         success: true,
-        message: "GitHub ba\u011Flant\u0131s\u0131 ba\u015Far\u0131yla do\u011Fruland\u0131!",
-        repoName: repoData.full_name,
-        isPrivate: repoData.private,
-        defaultBranch: repoData.default_branch,
-        permissions: repoData.permissions
+        canRead: true,
+        canPush: true,
+        message: "GitHub okuma (Pull) ve yazma (Push) ba\u011Flant\u0131s\u0131 ba\u015Far\u0131yla do\u011Fruland\u0131!",
+        repoName: permCheck.repoName,
+        isPrivate: permCheck.isPrivate,
+        defaultBranch: permCheck.defaultBranch,
+        permissions: permCheck.permissions
       });
     } catch (error) {
-      return res.status(500).json({
+      return res.json({
         success: false,
         error: error.message || "GitHub ba\u011Flant\u0131 testi ba\u015Far\u0131s\u0131z oldu"
       });

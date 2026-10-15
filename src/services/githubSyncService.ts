@@ -24,6 +24,8 @@ export interface GitHubSyncStatus {
   repo: string;
   hasToken: boolean;
   maskedToken?: string;
+  tokenCanPush?: boolean;
+  tokenPermissionWarning?: string;
   isClean: boolean;
   uncommittedCount: number;
   uncommittedFiles: string[];
@@ -49,14 +51,40 @@ export interface GitHubSyncStatus {
   deployUrl: string;
 }
 
+export interface TokenPermissionCheckResult {
+  valid: boolean;
+  canRead: boolean;
+  canPush: boolean;
+  isFineGrained: boolean;
+  repoName?: string;
+  isPrivate?: boolean;
+  defaultBranch?: string;
+  permissions?: Record<string, boolean>;
+  errorCode?: "INVALID_TOKEN" | "REPO_NOT_FOUND" | "TOKEN_READ_ONLY" | "NETWORK_ERROR";
+  errorReason?: string;
+}
+
 function maskToken(token?: string): string {
   if (!token) return "";
   if (token.length <= 8) return "••••••••";
   return token.substring(0, 7) + "••••••••" + token.substring(token.length - 4);
 }
 
+function buildGitAuthArg(token?: string): string {
+  if (!token || !token.trim()) return "";
+  const basic = Buffer.from(`x-access-token:${token.trim()}`).toString("base64");
+  return `-c http.extraHeader="Authorization: Basic ${basic}"`;
+}
+
 export class GitHubSyncService {
   private configCache: GitHubSyncConfig | null = null;
+  private lastTokenCheck: {
+    token: string;
+    owner: string;
+    repo: string;
+    checkedAt: number;
+    result: TokenPermissionCheckResult;
+  } | null = null;
 
   constructor() {
     // Initialize Git and attach to origin/main in the background on startup
@@ -74,7 +102,7 @@ export class GitHubSyncService {
         return this.configCache!;
       }
     } catch (err) {
-      console.error("[GitHubSync] Error reading config file:", err);
+      console.warn("[GitHubSync] Warning reading config file:", err);
     }
 
     return {
@@ -110,11 +138,170 @@ export class GitHubSyncService {
       }
       fs.writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2), "utf-8");
       this.configCache = updated;
+      this.lastTokenCheck = null;
     } catch (err) {
-      console.error("[GitHubSync] Error saving config file:", err);
+      console.warn("[GitHubSync] Warning saving config file:", err);
     }
 
     return updated;
+  }
+
+  public async verifyTokenPermissions(
+    token: string,
+    owner: string,
+    repo: string,
+    branch = "main",
+    useCache = false
+  ): Promise<TokenPermissionCheckResult> {
+    const cleanToken = (token || "").trim();
+    const isFineGrained = cleanToken.startsWith("github_pat_");
+
+    if (!cleanToken) {
+      return {
+        valid: false,
+        canRead: false,
+        canPush: false,
+        isFineGrained: false,
+        errorCode: "INVALID_TOKEN",
+        errorReason: "GitHub Personal Access Token (PAT) tanımlanmamış.",
+      };
+    }
+
+    if (
+      useCache &&
+      this.lastTokenCheck &&
+      this.lastTokenCheck.token === cleanToken &&
+      this.lastTokenCheck.owner === owner &&
+      this.lastTokenCheck.repo === repo &&
+      Date.now() - this.lastTokenCheck.checkedAt < 30_000
+    ) {
+      return this.lastTokenCheck.result;
+    }
+
+    try {
+      const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers: {
+          Authorization: `Bearer ${cleanToken}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "Muavin-ERP-Sync",
+        },
+      });
+
+      if (repoRes.status === 401) {
+        const res: TokenPermissionCheckResult = {
+          valid: false,
+          canRead: false,
+          canPush: false,
+          isFineGrained,
+          errorCode: "INVALID_TOKEN",
+          errorReason: "Girilen GitHub Personal Access Token (PAT) geçersiz veya süresi dolmuş (HTTP 401).",
+        };
+        this.lastTokenCheck = { token: cleanToken, owner, repo, checkedAt: Date.now(), result: res };
+        return res;
+      }
+
+      if (repoRes.status === 404) {
+        const res: TokenPermissionCheckResult = {
+          valid: false,
+          canRead: false,
+          canPush: false,
+          isFineGrained,
+          errorCode: "REPO_NOT_FOUND",
+          errorReason: `${owner}/${repo} deposu bulunamadı veya token'ın bu depoya erişim izni yok (HTTP 404).`,
+        };
+        this.lastTokenCheck = { token: cleanToken, owner, repo, checkedAt: Date.now(), result: res };
+        return res;
+      }
+
+      if (!repoRes.ok) {
+        const errBody = await repoRes.json().catch(() => ({}));
+        const res: TokenPermissionCheckResult = {
+          valid: false,
+          canRead: false,
+          canPush: false,
+          isFineGrained,
+          errorCode: "INVALID_TOKEN",
+          errorReason: (errBody as any).message || `GitHub API hatası (HTTP ${repoRes.status})`,
+        };
+        this.lastTokenCheck = { token: cleanToken, owner, repo, checkedAt: Date.now(), result: res };
+        return res;
+      }
+
+      const repoData: any = await repoRes.json();
+      const oauthScopes = repoRes.headers.get("x-oauth-scopes") || "";
+
+      // Check write (contents:write) capability on the target branch ref
+      let canPush = Boolean(repoData?.permissions?.push);
+
+      // For fine-grained PATs (or tokens without classic repo scope), repoData.permissions reflects the user's role,
+      // NOT whether the fine-grained PAT itself was granted "Contents: Read and write".
+      // Verify actual write access with a no-op PATCH on the current branch ref SHA.
+      const refRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+        headers: {
+          Authorization: `Bearer ${cleanToken}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "Muavin-ERP-Sync",
+        },
+      });
+
+      if (refRes.ok) {
+        const refData: any = await refRes.json();
+        const remoteSha = refData?.object?.sha;
+        if (remoteSha) {
+          const writeTestRes = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+            {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${cleanToken}`,
+                Accept: "application/vnd.github.v3+json",
+                "Content-Type": "application/json",
+                "User-Agent": "Muavin-ERP-Sync",
+              },
+              body: JSON.stringify({ sha: remoteSha, force: false }),
+            }
+          );
+
+          if (writeTestRes.status === 403 || writeTestRes.status === 401) {
+            canPush = false;
+          } else if (writeTestRes.ok || writeTestRes.status === 422) {
+            canPush = true;
+          }
+        }
+      } else if (!isFineGrained && oauthScopes) {
+        const scopes = oauthScopes.split(",").map((s) => s.trim());
+        canPush = scopes.includes("repo") || scopes.includes("public_repo");
+      }
+
+      const result: TokenPermissionCheckResult = {
+        valid: true,
+        canRead: true,
+        canPush,
+        isFineGrained,
+        repoName: repoData.full_name || `${owner}/${repo}`,
+        isPrivate: Boolean(repoData.private),
+        defaultBranch: repoData.default_branch || branch,
+        permissions: repoData.permissions,
+        errorCode: canPush ? undefined : "TOKEN_READ_ONLY",
+        errorReason: canPush
+          ? undefined
+          : isFineGrained
+          ? `Mevcut Fine-Grained Token (${maskToken(cleanToken)}) yalnızca "Salt Okunur" (Contents: Read-only) yetkisine sahip (HTTP 403). GitHub'a kod göndermek (Push) için GitHub > Settings > Developer settings > Personal access tokens > Fine-grained tokens menüsünden bu token'ın "Repository permissions > Contents" (ve "Workflows") iznini "Read and write" olarak güncelleyin.`
+          : `Mevcut GitHub Token (${maskToken(cleanToken)}) yazma (push) yetkisine sahip değil (HTTP 403). Lütfen "repo" ve "workflow" kutucukları işaretli bir token girin.`,
+      };
+
+      this.lastTokenCheck = { token: cleanToken, owner, repo, checkedAt: Date.now(), result };
+      return result;
+    } catch (err: any) {
+      return {
+        valid: false,
+        canRead: false,
+        canPush: false,
+        isFineGrained,
+        errorCode: "NETWORK_ERROR",
+        errorReason: err?.message || "GitHub API bağlantı kontrolü sırasında ağ hatası oluştu.",
+      };
+    }
   }
 
   private async ensureGitInitialized(repoUrl: string, branch = "main"): Promise<void> {
@@ -128,9 +315,10 @@ export class GitHubSyncService {
       await execPromise(`git branch -M ${branch}`, { cwd });
     }
 
-    // Ensure remote origin exists
+    // Ensure remote origin exists and always has a clean URL without embedded credentials
     try {
       await execPromise("git remote get-url origin", { cwd });
+      await execPromise(`git remote set-url origin "${repoUrl}"`, { cwd }).catch(() => {});
     } catch {
       await execPromise(`git remote add origin "${repoUrl}"`, { cwd });
     }
@@ -167,7 +355,7 @@ export class GitHubSyncService {
     let gitInitialized = false;
 
     try {
-      await this.ensureGitInitialized(repoUrl, currentBranch);
+      await this.ensureGitInitialized(`https://github.com/${owner}/${repo}.git`, currentBranch);
       gitInitialized = true;
 
       // Get branch
@@ -234,14 +422,28 @@ export class GitHubSyncService {
       gitInitialized = false;
     }
 
+    const hasToken = Boolean(config.token && config.token.length > 5);
+    let tokenCanPush: boolean | undefined = undefined;
+    let tokenPermissionWarning: string | undefined = undefined;
+
+    if (hasToken && config.token) {
+      const perm = await this.verifyTokenPermissions(config.token, owner, repo, currentBranch, true);
+      tokenCanPush = perm.canPush;
+      if (!perm.canPush && perm.errorReason) {
+        tokenPermissionWarning = perm.errorReason;
+      }
+    }
+
     return {
       initialized: gitInitialized,
       branch: currentBranch,
       repoUrl,
       owner,
       repo,
-      hasToken: Boolean(config.token && config.token.length > 5),
+      hasToken,
       maskedToken: maskToken(config.token),
+      tokenCanPush,
+      tokenPermissionWarning,
       isClean,
       uncommittedCount,
       uncommittedFiles,
@@ -281,15 +483,18 @@ export class GitHubSyncService {
 
     const cwd = process.cwd();
     const cleanUrl = `https://github.com/${owner}/${repo}.git`;
-    const remoteUrl = token ? `https://${owner}:${token}@github.com/${owner}/${repo}.git` : cleanUrl;
+    const authArg = buildGitAuthArg(token);
 
     await this.ensureGitInitialized(cleanUrl, branch);
 
     try {
-      await execPromise(`git remote set-url origin "${remoteUrl}"`, { cwd });
-
-      // Fetch latest from GitHub
-      await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+      // Fetch latest from GitHub using extraHeader if token is available
+      try {
+        await execPromise(`git ${authArg} fetch origin ${branch} --prune`, { cwd });
+      } catch {
+        // Fallback to unauthenticated fetch for public repository if token header fails
+        await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+      }
 
       // Check if local HEAD exists
       let hasHead = false;
@@ -361,7 +566,9 @@ export class GitHubSyncService {
     pullFirst?: boolean;
   }): Promise<{
     success: boolean;
+    code?: string;
     message: string;
+    error?: string;
     commitSha?: string;
     commitMessage?: string;
     syncedAt: string;
@@ -388,6 +595,10 @@ export class GitHubSyncService {
 
     const cwd = process.cwd();
     const cleanUrl = `https://github.com/${owner}/${repo}.git`;
+    const authArg = buildGitAuthArg(token);
+    const syncedAt = new Date().toISOString();
+    const actionsUrl = `https://github.com/${owner}/${repo}/actions`;
+    const deployUrl = "https://tallsoft.org";
 
     // 1. Ensure git is initialized and branch is main
     await this.ensureGitInitialized(cleanUrl, branch);
@@ -396,12 +607,13 @@ export class GitHubSyncService {
     // 2. Fetch from remote first if pullFirst is enabled (default true for bidirectional sync)
     if (params?.pullFirst !== false) {
       try {
-        const fetchUrl = token ? `https://${owner}:${token}@github.com/${owner}/${repo}.git` : cleanUrl;
-        await execPromise(`git remote set-url origin "${fetchUrl}"`, { cwd });
-        await execPromise(`git fetch origin ${branch} --prune`, { cwd });
-        await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd });
-      } catch (e) {
-        console.warn("[GitHubSync] Remote fetch warning:", e);
+        await execPromise(`git ${authArg} fetch origin ${branch} --prune`, { cwd });
+      } catch {
+        try {
+          await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+        } catch (e) {
+          console.warn("[GitHubSync] Remote fetch warning:", e);
+        }
       }
     }
 
@@ -440,28 +652,83 @@ export class GitHubSyncService {
     } catch {}
 
     if (!token) {
-      throw new Error(
-        `Tüm değişiklikler yerel Git deposuna commit edildi (${sha.substring(0, 7)}) ve GitHub'dan güncel dal (origin/${branch}) alındı. GitHub'a push (gönderim) ve tallsoft.org yayını için GitHub Personal Access Token (PAT) gereklidir.`
-      );
+      const missingMsg = `Tüm değişiklikler yerel Git deposuna commit edildi (${sha.substring(0, 7)}) ve GitHub'dan güncel dal (origin/${branch}) alındı. GitHub'a push (gönderim) ve tallsoft.org yayını için GitHub Personal Access Token (PAT) gereklidir.`;
+      return {
+        success: false,
+        code: "MISSING_TOKEN",
+        committedLocalOnly: true,
+        commitSha: sha,
+        commitMessage: commitMsg,
+        syncedAt,
+        actionsUrl,
+        deployUrl,
+        message: missingMsg,
+        error: missingMsg,
+      };
     }
 
-    // 5. Authenticated push to GitHub
-    const authUrl = `https://${owner}:${token}@github.com/${owner}/${repo}.git`;
-    try {
-      await execPromise(`git remote set-url origin "${authUrl}"`, { cwd });
-    } catch {
-      await execPromise(`git remote add origin "${authUrl}"`, { cwd });
+    // Save config before push check so user's entered token/repo are persisted
+    this.saveConfig({
+      repoUrl: cleanUrl,
+      owner,
+      repo,
+      token,
+      lastSyncedAt: syncedAt,
+    });
+
+    // 5. Verify token write (contents:write) permissions before invoking git push
+    // so Read-Only fine-grained PATs never trigger a fatal 403 git push error.
+    const permCheck = await this.verifyTokenPermissions(token, owner, repo, branch, false);
+    if (!permCheck.canPush) {
+      const errDetail =
+        permCheck.errorReason ||
+        `Mevcut GitHub Token (${maskToken(token)}) yazma (push) yetkisine sahip değil (HTTP 403).`;
+      const combinedMsg = `Yerel değişiklikler kaydedildi (${sha.substring(0, 7)}) ve GitHub'dan güncel kodlar alındı (Pull tamamlandı). Gönderim (Push) için: ${errDetail}`;
+      return {
+        success: false,
+        code: permCheck.errorCode || "TOKEN_READ_ONLY",
+        committedLocalOnly: true,
+        commitSha: sha,
+        commitMessage: commitMsg,
+        syncedAt,
+        actionsUrl,
+        deployUrl,
+        message: combinedMsg,
+        error: combinedMsg,
+      };
     }
 
+    // 6. Authenticated push to GitHub using http.extraHeader (x-access-token)
     try {
-      await execPromise(`git push -u origin ${branch} --force`, { cwd });
+      await execPromise(`git ${authArg} push -u origin ${branch} --force`, { cwd });
+    } catch (pushErr: any) {
+      const rawErr = String(pushErr?.stderr || pushErr?.message || pushErr || "");
+      const is403 = rawErr.includes("403") || rawErr.toLowerCase().includes("permission") || rawErr.toLowerCase().includes("denied");
+      const isWorkflowScopeError = rawErr.toLowerCase().includes("workflow");
+
+      const friendlyError = isWorkflowScopeError
+        ? `Yerel değişiklikler commit edildi (${sha.substring(0, 7)}), ancak GitHub Token'ınızda "Workflows: Read and write" izni eksik olduğu için push reddedildi. Lütfen GitHub token ayarlarından "Workflows" iznini açın.`
+        : is403
+        ? `Yerel değişiklikler commit edildi (${sha.substring(0, 7)}) ve GitHub'dan güncel dal alındı; ancak GitHub Token (${maskToken(token)}) için "Contents: Read and write" (Yazma) izni kapalı olduğundan GitHub HTTP 403 döndürdü. Lütfen GitHub > Settings > Developer settings > Personal access tokens ekranından "Contents" yetkisini "Read and write" yapın.`
+        : `Yerel değişiklikler commit edildi (${sha.substring(0, 7)}), ancak GitHub push sırasında hata oluştu: ${rawErr.split("\n")[0]}`;
+
+      return {
+        success: false,
+        code: is403 ? "TOKEN_READ_ONLY" : "PUSH_FAILED",
+        committedLocalOnly: true,
+        commitSha: sha,
+        commitMessage: commitMsg,
+        syncedAt,
+        actionsUrl,
+        deployUrl,
+        message: friendlyError,
+        error: friendlyError,
+      };
     } finally {
-      try {
-        await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd });
-      } catch {}
+      await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {});
     }
 
-    // 6. Trigger GitHub Actions deploy.yml workflow_dispatch as an additional guarantee
+    // 7. Trigger GitHub Actions deploy.yml workflow_dispatch as an additional guarantee
     try {
       await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/deploy.yml/dispatches`, {
         method: "POST",
@@ -477,16 +744,6 @@ export class GitHubSyncService {
       // Push already triggers workflow on main branch
     }
 
-    const syncedAt = new Date().toISOString();
-
-    this.saveConfig({
-      repoUrl: cleanUrl,
-      owner,
-      repo,
-      token,
-      lastSyncedAt: syncedAt,
-    });
-
     return {
       success: true,
       message: committed
@@ -495,11 +752,12 @@ export class GitHubSyncService {
       commitSha: sha,
       commitMessage: commitMsg,
       syncedAt,
-      actionsUrl: `https://github.com/${owner}/${repo}/actions`,
-      deployUrl: "https://tallsoft.org",
+      actionsUrl,
+      deployUrl,
     };
   }
 }
 
 export const gitHubSyncService = new GitHubSyncService();
+
 

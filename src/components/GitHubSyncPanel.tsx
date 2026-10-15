@@ -28,6 +28,8 @@ export interface GitHubStatusData {
   repo: string;
   hasToken: boolean;
   maskedToken?: string;
+  tokenCanPush?: boolean;
+  tokenPermissionWarning?: string;
   isClean: boolean;
   uncommittedCount: number;
   uncommittedFiles: string[];
@@ -219,12 +221,15 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
         }
         await fetchStatus();
       } else {
-        if (data.code === "MISSING_TOKEN") {
+        if (data.code === "MISSING_TOKEN" || data.code === "TOKEN_READ_ONLY" || data.code === "INVALID_TOKEN") {
           setShowConfig(true);
         }
         setFeedback({
-          type: "error",
-          message: data.error || "GitHub senkronizasyonu sırasında bir hata oluştu.",
+          type: data.committedLocalOnly ? "info" : "error",
+          message: data.error || data.message || "GitHub senkronizasyonu sırasında bir uyarı oluştu.",
+          details: data.commitSha
+            ? `Yerel Commit SHA: ${data.commitSha.substring(0, 7)} (Kaydedildi) | GitHub Push için Token "Contents: Read and write" izni gereklidir`
+            : undefined,
         });
         await fetchStatus();
       }
@@ -264,8 +269,12 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
         });
       } else {
         setFeedback({
-          type: "error",
+          type: data.code === "TOKEN_READ_ONLY" ? "info" : "error",
           message: data.error || "Bağlantı doğrulanamadı. Token veya repo izinlerini kontrol edin.",
+          details:
+            data.code === "TOKEN_READ_ONLY"
+              ? "GitHub > Settings > Developer settings > Personal access tokens > Fine-grained tokens > Token seçin > Repository permissions > Contents: Read and write yapın."
+              : undefined,
         });
       }
     } catch (err: any) {
@@ -533,7 +542,7 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
           </p>
         </div>
 
-        {/* Token Presence State Notice */}
+        {/* Token Presence & Write Permission State Notice */}
         {!status?.hasToken && !tokenInput.trim() ? (
           <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -553,10 +562,45 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
               Token Tanımla
             </button>
           </div>
+        ) : status?.tokenCanPush === false && !tokenInput.trim() ? (
+          <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-bold text-amber-900 dark:text-amber-100">
+                  Mevcut Token ({status?.maskedToken}) Salt Okunur (Read-Only) — Yazma (Push) İzni Kapalı (HTTP 403)
+                </div>
+                <div className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                  GitHub'dan kod alma (Pull) ve yerel commit aktif, ancak GitHub'a gönderim (Push) için token'ınızda{" "}
+                  <strong>Contents: Read and write</strong> ve <strong>Workflows: Read and write</strong> izinlerinin açık olması gerekir.
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href="https://github.com/settings/tokens?type=beta"
+                target="_blank"
+                rel="noreferrer"
+                className="px-2.5 py-1.5 text-[11px] font-semibold bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 rounded-lg hover:bg-amber-100 transition-colors flex items-center gap-1"
+              >
+                <span>GitHub Token İzinleri</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowConfig(true)}
+                className="px-2.5 py-1.5 text-[11px] font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors cursor-pointer"
+              >
+                Token Güncelle
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="flex items-center gap-2 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium px-1">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>GitHub Kimlik Doğrulaması Hazır ({status?.maskedToken || "Token Girildi"})</span>
+            <span>
+              GitHub Kimlik Doğrulaması ve Yazma (Push) Yetkisi Hazır ({status?.maskedToken || "Token Girildi"})
+            </span>
           </div>
         )}
 
