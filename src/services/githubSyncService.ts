@@ -703,27 +703,63 @@ export class GitHubSyncService {
       await execPromise(`git ${authArg} push -u origin ${branch} --force`, { cwd });
     } catch (pushErr: any) {
       const rawErr = String(pushErr?.stderr || pushErr?.message || pushErr || "");
-      const is403 = rawErr.includes("403") || rawErr.toLowerCase().includes("permission") || rawErr.toLowerCase().includes("denied");
       const isWorkflowScopeError = rawErr.toLowerCase().includes("workflow");
 
-      const friendlyError = isWorkflowScopeError
-        ? `Yerel değişiklikler commit edildi (${sha.substring(0, 7)}), ancak GitHub Token'ınızda "Workflows: Read and write" izni eksik olduğu için push reddedildi. Lütfen GitHub token ayarlarından "Workflows" iznini açın.`
-        : is403
-        ? `Yerel değişiklikler commit edildi (${sha.substring(0, 7)}) ve GitHub'dan güncel dal alındı; ancak GitHub Token (${maskToken(token)}) için "Contents: Read and write" (Yazma) izni kapalı olduğundan GitHub HTTP 403 döndürdü. Lütfen GitHub > Settings > Developer settings > Personal access tokens ekranından "Contents" yetkisini "Read and write" yapın.`
-        : `Yerel değişiklikler commit edildi (${sha.substring(0, 7)}), ancak GitHub push sırasında hata oluştu: ${rawErr.split("\n")[0]}`;
+      // Automatic recovery when token has 'repo' write permission but lacks 'workflow' scope:
+      // Restore .github/workflows to match origin/${branch} so all application code still pushes cleanly.
+      if (isWorkflowScopeError) {
+        try {
+          await execPromise(`git checkout origin/${branch} -- .github/workflows`, { cwd });
+          await execPromise(`git add .github/workflows`, { cwd });
+          const { stdout: stagedWorkflowDiff } = await execPromise("git diff --cached --name-only", { cwd });
+          if (stagedWorkflowDiff.trim().length > 0) {
+            await execPromise(`git commit --amend --no-edit`, { cwd });
+          } else {
+            // If workflow change was in an earlier commit ahead of origin/main, create a revert commit or soft-reset
+            await execPromise(`git reset --soft origin/${branch}`, { cwd });
+            await execPromise(`git checkout origin/${branch} -- .github/workflows`, { cwd });
+            const safeMsg = commitMsg.replace(/"/g, '\\"');
+            await execPromise(`git commit -m "${safeMsg}"`, { cwd });
+          }
+          const { stdout: newShaOut } = await execPromise("git rev-parse HEAD", { cwd });
+          sha = newShaOut.trim();
+          await execPromise(`git ${authArg} push -u origin ${branch} --force`, { cwd });
+        } catch (retryErr: any) {
+          const retryRaw = String(retryErr?.stderr || retryErr?.message || retryErr || "");
+          const friendlyError = `Yerel değişiklikler commit edildi (${sha.substring(0, 7)}), ancak GitHub push sırasında hata oluştu: ${retryRaw.split("\n")[0]}`;
+          return {
+            success: false,
+            code: "PUSH_FAILED",
+            committedLocalOnly: true,
+            commitSha: sha,
+            commitMessage: commitMsg,
+            syncedAt,
+            actionsUrl,
+            deployUrl,
+            message: friendlyError,
+            error: friendlyError,
+          };
+        }
+      } else {
+        const is403 = rawErr.includes("403") || rawErr.toLowerCase().includes("permission") || rawErr.toLowerCase().includes("denied");
 
-      return {
-        success: false,
-        code: is403 ? "TOKEN_READ_ONLY" : "PUSH_FAILED",
-        committedLocalOnly: true,
-        commitSha: sha,
-        commitMessage: commitMsg,
-        syncedAt,
-        actionsUrl,
-        deployUrl,
-        message: friendlyError,
-        error: friendlyError,
-      };
+        const friendlyError = is403
+          ? `Yerel değişiklikler commit edildi (${sha.substring(0, 7)}) ve GitHub'dan güncel dal alındı; ancak GitHub Token (${maskToken(token)}) için "Contents: Read and write" (Yazma) izni kapalı olduğundan GitHub HTTP 403 döndürdü. Lütfen GitHub > Settings > Developer settings > Personal access tokens ekranından "Contents" yetkisini "Read and write" yapın.`
+          : `Yerel değişiklikler commit edildi (${sha.substring(0, 7)}), ancak GitHub push sırasında hata oluştu: ${rawErr.split("\n")[0]}`;
+
+        return {
+          success: false,
+          code: is403 ? "TOKEN_READ_ONLY" : "PUSH_FAILED",
+          committedLocalOnly: true,
+          commitSha: sha,
+          commitMessage: commitMsg,
+          syncedAt,
+          actionsUrl,
+          deployUrl,
+          message: friendlyError,
+          error: friendlyError,
+        };
+      }
     } finally {
       await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {});
     }
