@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
+import { safeGetStorageItem, safeSetStorageItem } from "../utils/storage";
 
 export interface GitHubStatusData {
   initialized: boolean;
@@ -93,8 +94,8 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
         const data = await res.json();
         if (data.success) {
           // If server lost token after container restart, restore from browser localStorage automatically
-          const savedLocalToken = localStorage.getItem("muavin_github_pat") || "";
-          const savedLocalRepo = localStorage.getItem("muavin_github_repo_url") || "";
+          const savedLocalToken = safeGetStorageItem("muavin_github_pat") || "";
+          const savedLocalRepo = safeGetStorageItem("muavin_github_repo_url") || "";
           if (!data.hasToken && savedLocalToken) {
             try {
               const cfgRes = await fetch("/api/github/config", {
@@ -139,12 +140,12 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
   const handlePull = async () => {
     setIsPulling(true);
     setFeedback(null);
-    const effectiveToken = tokenInput.trim() || localStorage.getItem("muavin_github_pat") || undefined;
+    const effectiveToken = tokenInput.trim() || safeGetStorageItem("muavin_github_pat") || undefined;
     if (tokenInput.trim()) {
-      localStorage.setItem("muavin_github_pat", tokenInput.trim());
+      safeSetStorageItem("muavin_github_pat", tokenInput.trim());
     }
     if (repoUrlInput.trim()) {
-      localStorage.setItem("muavin_github_repo_url", repoUrlInput.trim());
+      safeSetStorageItem("muavin_github_repo_url", repoUrlInput.trim());
     }
     try {
       const res = await fetch("/api/github/pull", {
@@ -185,12 +186,12 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
   const handlePublish = async () => {
     setIsPublishing(true);
     setFeedback(null);
-    const effectiveToken = tokenInput.trim() || localStorage.getItem("muavin_github_pat") || undefined;
+    const effectiveToken = tokenInput.trim() || safeGetStorageItem("muavin_github_pat") || undefined;
     if (tokenInput.trim()) {
-      localStorage.setItem("muavin_github_pat", tokenInput.trim());
+      safeSetStorageItem("muavin_github_pat", tokenInput.trim());
     }
     if (repoUrlInput.trim()) {
-      localStorage.setItem("muavin_github_repo_url", repoUrlInput.trim());
+      safeSetStorageItem("muavin_github_repo_url", repoUrlInput.trim());
     }
 
     try {
@@ -240,7 +241,7 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
   const handleTestConnection = async () => {
     setIsTesting(true);
     setFeedback(null);
-    const effectiveToken = tokenInput.trim() || localStorage.getItem("muavin_github_pat") || undefined;
+    const effectiveToken = tokenInput.trim() || safeGetStorageItem("muavin_github_pat") || undefined;
 
     try {
       const res = await fetch("/api/github/test-connection", {
@@ -255,7 +256,7 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
 
       if (res.ok && data.success) {
         if (tokenInput.trim()) {
-          localStorage.setItem("muavin_github_pat", tokenInput.trim());
+          safeSetStorageItem("muavin_github_pat", tokenInput.trim());
         }
         setFeedback({
           type: "success",
@@ -280,17 +281,17 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
   const handleSaveConfig = async () => {
     setIsSavingConfig(true);
     if (tokenInput.trim()) {
-      localStorage.setItem("muavin_github_pat", tokenInput.trim());
+      safeSetStorageItem("muavin_github_pat", tokenInput.trim());
     }
     if (repoUrlInput.trim()) {
-      localStorage.setItem("muavin_github_repo_url", repoUrlInput.trim());
+      safeSetStorageItem("muavin_github_repo_url", repoUrlInput.trim());
     }
     try {
       const res = await fetch("/api/github/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token: tokenInput.trim() || localStorage.getItem("muavin_github_pat") || undefined,
+          token: tokenInput.trim() || safeGetStorageItem("muavin_github_pat") || undefined,
           repoUrl: repoUrlInput.trim() || undefined,
         }),
       });

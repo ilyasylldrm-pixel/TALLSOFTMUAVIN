@@ -1827,7 +1827,9 @@ export const CUSTOM_MODULES_STORAGE_KEY = "muavin_custom_app_modules_v1";
 export function getAllAppModulesWithCustom(): AppModuleDefinition[] {
   if (typeof window === "undefined") return ALL_APP_MODULES;
   try {
-    const raw = localStorage.getItem(CUSTOM_MODULES_STORAGE_KEY);
+    const raw =
+      window.localStorage?.getItem(CUSTOM_MODULES_STORAGE_KEY) ||
+      window.sessionStorage?.getItem(CUSTOM_MODULES_STORAGE_KEY);
     if (!raw) return ALL_APP_MODULES;
     const customList: AppModuleDefinition[] = JSON.parse(raw);
     if (!Array.isArray(customList) || customList.length === 0) return ALL_APP_MODULES;

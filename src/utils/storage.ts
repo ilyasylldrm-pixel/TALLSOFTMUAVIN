@@ -447,10 +447,29 @@ export function loadPayrollCustomizationsStorage(): Record<string, any> {
   }
 }
 
+const memoryStorageFallback = new Map<string, string>();
+
+export function compactEDocumentsForStorage(docs: any[], maxCount = 200): any[] {
+  if (!Array.isArray(docs)) return [];
+  return docs.slice(0, maxCount).map((doc) => {
+    if (!doc || typeof doc !== "object") return doc;
+    const { raw, lines, ...rest } = doc;
+    return rest;
+  });
+}
+
 export function cleanupOversizedStorage(aggressive = false) {
   if (typeof window === "undefined") return;
   try {
     const keysToRemove: string[] = [];
+    const activeCompId = (() => {
+      try {
+        return window.localStorage?.getItem(STORAGE_KEYS.ACTIVE_COMPANY_ID) || DEFAULT_COMPANY.id;
+      } catch {
+        return DEFAULT_COMPANY.id;
+      }
+    })();
+
     const len = window.localStorage?.length || 0;
     for (let i = 0; i < len; i++) {
       const key = window.localStorage.key(i);
@@ -465,34 +484,81 @@ export function cleanupOversizedStorage(aggressive = false) {
         keysToRemove.push(key);
       }
       // 3. Purge oversized branding cache if exceeding reasonable size
-      else if (key === "muavin_cloud_branding") {
+      else if (key === "muavin_cloud_branding" || key === "muavin_cloud_logo_url") {
         try {
-          const branding = window.localStorage.getItem("muavin_cloud_branding");
-          if (branding && branding.length > 50000) {
+          const val = window.localStorage.getItem(key);
+          if (val && (val.length > 40000 || aggressive)) {
             keysToRemove.push(key);
           }
         } catch (_) {}
       }
-      // 3.1. Compact oversized payroll customizations if bloated
+      // 3.1. Compact oversized company settings if base64 logoUrl bloated them
+      else if (key.startsWith("muavin_company_settings")) {
+        try {
+          const raw = window.localStorage.getItem(key);
+          if (raw && raw.length > 60000) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object" && typeof parsed.logoUrl === "string" && parsed.logoUrl.length > 40000) {
+              parsed.logoUrl = "/logo.svg";
+              window.localStorage.setItem(key, JSON.stringify(parsed));
+            }
+          }
+        } catch (_) {}
+      }
+      // 3.2. Compact oversized e-documents snapshot
+      else if (key.startsWith("muavin_e_documents")) {
+        try {
+          const raw = window.localStorage.getItem(key);
+          if (raw && (raw.length > 150000 || aggressive)) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const compacted = compactEDocumentsForStorage(parsed, aggressive ? 60 : 180);
+              window.localStorage.setItem(key, JSON.stringify(compacted));
+            } else {
+              keysToRemove.push(key);
+            }
+          }
+        } catch (_) {
+          keysToRemove.push(key);
+        }
+      }
+      // 3.3. Compact oversized payroll customizations if bloated
       else if (key === "muavin_payroll_customizations") {
         try {
           const raw = window.localStorage.getItem("muavin_payroll_customizations");
-          if (raw && (raw.length > 80000 || aggressive)) {
+          if (raw && (raw.length > 60000 || aggressive)) {
             const parsed = JSON.parse(raw);
             const sanitized = sanitizePayrollCustomizations(parsed);
             window.localStorage.setItem("muavin_payroll_customizations", JSON.stringify(sanitized));
           }
-        } catch (_) {}
+        } catch (_) {
+          keysToRemove.push(key);
+        }
       }
       // 4. In aggressive mode or when storage quota is exceeded, also purge non-essential transient caches
       else if (aggressive) {
         if (
           key.startsWith("muavin_col_widths_") ||
+          key.startsWith("muavin_col_vis_") ||
           key.startsWith("muavin_table_row_height") ||
           key.startsWith("tradres_") ||
           key.startsWith("construction_custom_cost_groups_") ||
           key.startsWith("construction_cost_packages_") ||
-          key.startsWith("construction_site_summary_")
+          key.startsWith("construction_site_summary_") ||
+          key === "muavin_local_users_backup"
+        ) {
+          keysToRemove.push(key);
+        } else if (
+          key.includes("_comp_") &&
+          !key.endsWith(`_${activeCompId}`) &&
+          (key.startsWith("muavin_construction_projects_") ||
+            key.startsWith("muavin_food_") ||
+            key.startsWith("muavin_boms_") ||
+            key.startsWith("muavin_work_orders_") ||
+            key.startsWith("muavin_auto_services_") ||
+            key.startsWith("muavin_it_services_") ||
+            key.startsWith("muavin_appliance_services_") ||
+            key.startsWith("muavin_cost_projects_"))
         ) {
           keysToRemove.push(key);
         }
@@ -514,6 +580,64 @@ export function cleanupOversizedStorage(aggressive = false) {
   }
 }
 
+/**
+ * Emergency eviction when localStorage is still full after standard aggressive cleanup:
+ * evicts the largest non-critical / rebuildable slices first so critical writes (like GitHub config, invoices, settings) always succeed.
+ */
+function evictLargestNonCriticalKeys(protectedKey: string) {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const protectedPrefixes = [
+      "muavin_github_",
+      "muavin_active_user",
+      "muavin_companies_list",
+      "muavin_active_company_id",
+      "muavin_mysoft_tenant_vkn",
+      "muavin_custom_app_modules",
+    ];
+    const entries: { key: string; size: number; priority: number }[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (!k || k === protectedKey) continue;
+      if (protectedPrefixes.some((p) => k.startsWith(p))) continue;
+      const val = window.localStorage.getItem(k) || "";
+      const isSecondaryMockSlice =
+        k.startsWith("muavin_construction_projects") ||
+        k.startsWith("muavin_food_") ||
+        k.startsWith("muavin_boms") ||
+        k.startsWith("muavin_work_orders") ||
+        k.startsWith("muavin_subcontract_orders") ||
+        k.startsWith("muavin_auto_services") ||
+        k.startsWith("muavin_it_services") ||
+        k.startsWith("muavin_appliance_services") ||
+        k.startsWith("muavin_e_documents") ||
+        k.startsWith("muavin_cost_projects") ||
+        k.startsWith("muavin_fixed_assets") ||
+        k.startsWith("muavin_asset_");
+      entries.push({
+        key: k,
+        size: val.length,
+        priority: isSecondaryMockSlice ? 1 : 2,
+      });
+    }
+    // Sort by priority (1 = secondary/rebuildable first), then largest size first
+    entries.sort((a, b) => a.priority - b.priority || b.size - a.size);
+    let freed = 0;
+    for (const item of entries) {
+      try {
+        // Keep in session/memory fallback before removing from localStorage
+        const existingVal = window.localStorage.getItem(item.key);
+        if (existingVal) {
+          memoryStorageFallback.set(item.key, existingVal);
+        }
+        window.localStorage.removeItem(item.key);
+        freed += item.size;
+        if (freed > 1200000) break; // Free ~1.2MB
+      } catch (_) {}
+    }
+  } catch (_) {}
+}
+
 // Immediately run cleanup when module loads
 if (typeof window !== "undefined") {
   cleanupOversizedStorage();
@@ -525,6 +649,7 @@ if (typeof window !== "undefined") {
  * and falls back to memory/sessionStorage without crashing the application.
  */
 export function safeSetStorageItem(key: string, valueString: string, preferSession = false): boolean {
+  memoryStorageFallback.set(key, valueString);
   if (typeof window === "undefined") return false;
 
   const targetStorage = preferSession ? window.sessionStorage : window.localStorage;
@@ -541,33 +666,45 @@ export function safeSetStorageItem(key: string, valueString: string, preferSessi
       targetStorage?.setItem(key, valueString);
       return true;
     } catch (_retryErr) {
+      evictLargestNonCriticalKeys(key);
       try {
-        fallbackStorage?.setItem(key, valueString);
+        targetStorage?.setItem(key, valueString);
         return true;
-      } catch (_fallbackErr) {
-        console.warn(`Could not persist ${key} in local/session storage due to browser quota limits:`, _fallbackErr);
-        return false;
+      } catch (_secondRetryErr) {
+        try {
+          fallbackStorage?.setItem(key, valueString);
+          return true;
+        } catch (_fallbackErr) {
+          console.warn(`Could not persist ${key} in local/session storage due to browser quota limits (kept in memory):`, _fallbackErr);
+          return false;
+        }
       }
     }
   }
 }
 
 /**
- * Safely gets an item checking localStorage first, then sessionStorage
+ * Safely gets an item checking localStorage first, then sessionStorage, then in-memory fallback
  */
 export function safeGetStorageItem(key: string): string | null {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined") return memoryStorageFallback.get(key) ?? null;
   try {
-    return window.localStorage?.getItem(key) ?? window.sessionStorage?.getItem(key) ?? null;
+    return (
+      window.localStorage?.getItem(key) ??
+      window.sessionStorage?.getItem(key) ??
+      memoryStorageFallback.get(key) ??
+      null
+    );
   } catch (_) {
-    return null;
+    return memoryStorageFallback.get(key) ?? null;
   }
 }
 
 /**
- * Safely removes an item from both localStorage and sessionStorage
+ * Safely removes an item from both localStorage, sessionStorage, and memory fallback
  */
 export function safeRemoveStorageItem(key: string): void {
+  memoryStorageFallback.delete(key);
   if (typeof window === "undefined") return;
   try {
     window.localStorage?.removeItem(key);
@@ -900,7 +1037,17 @@ export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any, target
   const activeCompId = targetCompanyId || getActiveCompanyId();
   const isDefault = activeCompId === DEFAULT_COMPANY.id;
   const storageKey = isDefault ? STORAGE_KEYS[key] : `${STORAGE_KEYS[key]}_${activeCompId}`;
-  safeSetStorageItem(storageKey, JSON.stringify(data));
+
+  let payloadToSave = data;
+  if (key === "SETTINGS" && data && typeof data === "object") {
+    if (typeof data.logoUrl === "string" && data.logoUrl.startsWith("data:") && data.logoUrl.length > 50000) {
+      payloadToSave = { ...data, logoUrl: "/logo.svg" };
+    }
+  } else if (key === "EDOCUMENTS" && Array.isArray(data)) {
+    payloadToSave = compactEDocumentsForStorage(data, 200);
+  }
+
+  safeSetStorageItem(storageKey, JSON.stringify(payloadToSave));
 }
 
 export function resetToDemoData() {

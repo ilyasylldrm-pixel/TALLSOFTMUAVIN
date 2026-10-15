@@ -60,6 +60,8 @@ import {
   updateCompanyItem,
   deleteCompanyItem,
   setActiveCompanyId,
+  safeGetStorageItem,
+  safeSetStorageItem,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import {
@@ -419,10 +421,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
 
     try {
-      const raw = localStorage.getItem(CUSTOM_MODULES_STORAGE_KEY);
+      const raw = safeGetStorageItem(CUSTOM_MODULES_STORAGE_KEY);
       const existing: AppModuleDefinition[] = raw ? JSON.parse(raw) : [];
       const updatedCustom = [...existing, createdModule];
-      localStorage.setItem(CUSTOM_MODULES_STORAGE_KEY, JSON.stringify(updatedCustom));
+      safeSetStorageItem(CUSTOM_MODULES_STORAGE_KEY, JSON.stringify(updatedCustom));
       setAllAppModules(getAllAppModulesWithCustom());
       setNewModuleForm({
         key: "",
@@ -441,10 +443,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleDeleteCustomModule = (moduleKey: AppModuleKey) => {
     if (!isAdminOrSysAdmin(currentUser)) return;
     try {
-      const raw = localStorage.getItem(CUSTOM_MODULES_STORAGE_KEY);
+      const raw = safeGetStorageItem(CUSTOM_MODULES_STORAGE_KEY);
       const existing: AppModuleDefinition[] = raw ? JSON.parse(raw) : [];
       const updated = existing.filter((m) => m.key !== moduleKey && m.parentKey !== moduleKey);
-      localStorage.setItem(CUSTOM_MODULES_STORAGE_KEY, JSON.stringify(updated));
+      safeSetStorageItem(CUSTOM_MODULES_STORAGE_KEY, JSON.stringify(updated));
       setAllAppModules(getAllAppModulesWithCustom());
     } catch (e) {
       console.error("Özel modül silinemedi:", e);
