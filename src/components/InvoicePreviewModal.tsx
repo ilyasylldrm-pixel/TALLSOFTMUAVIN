@@ -301,13 +301,32 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
           {/* Card 2: Tahsilat Durumu */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-              Tahsilat / Bakiye
+              Tahsilat / Ödeme Yöntemi
             </span>
             <div className={`text-xl font-black font-mono ${remainingAmount <= 0 ? "text-emerald-600" : "text-amber-600"}`}>
               {remainingAmount <= 0 ? "Tamamı Ödendi" : `${currSymbol}${remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              {paidAmount > 0 ? `Tahsil Edilen: ${currSymbol}${paidAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "Henüz ödeme alınmadı"}
+            <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-1.5">
+              {invoice.paymentMethod && (
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold border ${
+                    invoice.paymentMethod === "nakit"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : invoice.paymentMethod === "kredi_karti"
+                      ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                      : "bg-amber-50 text-amber-800 border-amber-200"
+                  }`}
+                >
+                  {invoice.paymentMethod === "nakit"
+                    ? "Nakit"
+                    : invoice.paymentMethod === "kredi_karti"
+                    ? "Kredi Kartı"
+                    : "Cari (Açık Hesap)"}
+                </span>
+              )}
+              <span>
+                {paidAmount > 0 ? `Tahsil Edilen: ${currSymbol}${paidAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "Açık Bakiye"}
+              </span>
             </div>
           </div>
 
@@ -381,7 +400,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                     ? "e-ARŞİV FATURA"
                     : "ALIŞ (GİDER) FATURASI"}
                 </div>
-                {(invoice.invoiceScenario || invoice.invoiceProfileType) && (
+                {(invoice.invoiceScenario || invoice.invoiceProfileType || invoice.paymentMethod) && (
                   <div className="flex flex-wrap items-center justify-start sm:justify-end gap-1.5 pt-0.5">
                     {invoice.invoiceScenario && (
                       <span className="text-[10px] font-mono font-bold bg-purple-50 text-purple-800 px-2 py-0.5 rounded border border-purple-200">
@@ -391,6 +410,24 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                     {invoice.invoiceProfileType && (
                       <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-300">
                         TİP: {invoice.invoiceProfileType}
+                      </span>
+                    )}
+                    {invoice.paymentMethod && (
+                      <span
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                          invoice.paymentMethod === "nakit"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                            : invoice.paymentMethod === "kredi_karti"
+                            ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                            : "bg-amber-50 text-amber-800 border-amber-200"
+                        }`}
+                      >
+                        ÖDEME:{" "}
+                        {invoice.paymentMethod === "nakit"
+                          ? "NAKİT"
+                          : invoice.paymentMethod === "kredi_karti"
+                          ? "KREDİ KARTI"
+                          : "CARİ HESAP"}
                       </span>
                     )}
                   </div>

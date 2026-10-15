@@ -219,9 +219,27 @@ export function buildMysoftInvoiceOutboxPayload(
     tenantIdentifierNumber: tenant,
     pkAlias: options.pkAlias?.trim() || undefined,
     gbAlias: options.gbAlias?.trim() || undefined,
-    notes: String(invoice.notes || "").trim()
-      ? [{ note: String(invoice.notes || "").trim() }]
-      : undefined,
+    notes: (() => {
+      const noteList: { note: string }[] = [];
+      if (invoice.paymentMethod) {
+        const pmLabel =
+          invoice.paymentMethod === "nakit"
+            ? "Nakit (Peşin Tahsilat)"
+            : invoice.paymentMethod === "kredi_karti"
+            ? "Kredi Kartı (POS Tahsilatı)"
+            : "Cari Hesap (Açık Hesap / Vadeli)";
+        const rawNoteText = String(invoice.notes || "");
+        if (!rawNoteText.includes("Ödeme Yöntemi:")) {
+          noteList.push({
+            note: `Ödeme Yöntemi: ${pmLabel}${invoice.paymentAccountName && invoice.paymentMethod !== "cari" ? ` (${invoice.paymentAccountName})` : ""}`,
+          });
+        }
+      }
+      if (String(invoice.notes || "").trim()) {
+        noteList.push({ note: String(invoice.notes || "").trim() });
+      }
+      return noteList.length > 0 ? noteList : undefined;
+    })(),
     invoiceAccount: {
       vknTckn: buyerTax || undefined,
       accountName: contact.name || invoice.contactName,

@@ -6,6 +6,7 @@ import {
   InvoiceProfileType,
   InvoiceScenario,
   InvoiceStatus,
+  InvoicePaymentMethod,
   Contact,
   Product,
   Account,
@@ -110,6 +111,8 @@ import {
   Phone,
   Info,
   RefreshCw,
+  Banknote,
+  Wallet,
 } from "lucide-react";
 import { TURKEY_PROVINCES_DATA } from "../data/locationAndTaxData";
 
@@ -276,6 +279,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [invType, setInvType] = useState<InvoiceType>(forcedType || "sales");
   const [invoiceScenario, setInvoiceScenario] = useState<InvoiceScenario>("TICARIFATURA");
   const [invoiceProfileType, setInvoiceProfileType] = useState<InvoiceProfileType>("SATIS");
+  const [paymentMethod, setPaymentMethod] = useState<InvoicePaymentMethod>("cari");
+  const [paymentAccountId, setPaymentAccountId] = useState<string>(() => {
+    const cashAcc = accounts.find((a) => a.type === "cash");
+    return cashAcc?.id || accounts[0]?.id || "";
+  });
   const [taxModalItem, setTaxModalItem] = useState<InvoiceItem | null>(null);
   const [taxModalInitialTab, setTaxModalInitialTab] = useState<"tevkifat" | "ozel_matrah" | "istisna" | "ek_vergiler" | undefined>(undefined);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState<string>("");
@@ -842,6 +850,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setInvoiceScenario("TICARIFATURA");
     setMysoftEDocType("e_fatura");
     setInvoiceProfileType("SATIS");
+    setPaymentMethod("cari");
+    const defaultCashAcc = accounts.find((a) => a.type === "cash") || accounts[0];
+    if (defaultCashAcc) {
+      setPaymentAccountId(defaultCashAcc.id);
+    }
     setTaxModalItem(null);
     setTaxModalInitialTab(undefined);
     setFormDocKind(docKind);
@@ -909,6 +922,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setInvType(inv.type);
     setInvoiceScenario(inv.invoiceScenario || "TICARIFATURA");
     setInvoiceProfileType(inv.invoiceProfileType || "SATIS");
+    setPaymentMethod(inv.paymentMethod || (inv.status === "paid" ? "nakit" : "cari"));
+    if (inv.paymentAccountId) {
+      setPaymentAccountId(inv.paymentAccountId);
+    } else if (accounts[0]?.id) {
+      setPaymentAccountId(accounts[0].id);
+    }
     setTaxModalItem(null);
     setTaxModalInitialTab(undefined);
     setFormDocKind(inv.docKind || "invoice");
@@ -1170,12 +1189,18 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
 
+    const selectedPaymentAccount = accounts.find((a) => a.id === paymentAccountId);
+    const isImmediatePayment = paymentMethod === "nakit" || paymentMethod === "kredi_karti";
+
     return {
       invoiceNumber: customNum ? `${customNum} (TASLAK)` : `${defaultNumber} (TASLAK)`,
       type: invType,
       invoiceScenario: isCurrentSalesEArsiv ? "EARSIVFATURA" : invoiceScenario,
       invoiceProfileType,
       docKind: forcedType ? formDocKind : "invoice",
+      paymentMethod,
+      paymentAccountId: isImmediatePayment ? paymentAccountId : undefined,
+      paymentAccountName: isImmediatePayment ? selectedPaymentAccount?.name : undefined,
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       contactId: customerMode === "manual" ? "manual_draft" : contactId,
       contactName: customerMode === "manual"
@@ -1204,8 +1229,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
       grandTotal,
       payableAmount,
       taxItems,
-      paidAmount: 0,
-      remainingAmount: payableAmount,
+      paidAmount: isImmediatePayment ? payableAmount : 0,
+      remainingAmount: isImmediatePayment ? 0 : payableAmount,
       status: "draft",
       currency: "TRY",
       notes: finalNotes,
@@ -1576,9 +1601,18 @@ export const Invoices: React.FC<InvoicesProps> = ({
       formDocKind === "invoice" &&
       !editingInvoiceId;
 
+    const selectedPaymentAccount =
+      accounts.find((a) => a.id === paymentAccountId) || accounts[0];
+    const isImmediatePayment =
+      paymentMethod === "nakit" || paymentMethod === "kredi_karti";
+
     if (editingInvoiceId) {
       const existing = invoices.find((i) => i.id === editingInvoiceId);
-      const paid = existing?.paidAmount || 0;
+      const wasUnpaid = (existing?.paidAmount || 0) <= 0;
+      const paid =
+        isImmediatePayment && wasUnpaid && !selectedPaymentAccount
+          ? payableAmount
+          : existing?.paidAmount || 0;
       const remaining = Math.max(0, payableAmount - paid);
       let status: InvoiceStatus = existing?.status || "sent";
       if (status !== "cancelled") {
@@ -1598,6 +1632,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
         invoiceScenario,
         invoiceProfileType,
         docKind: formDocKind,
+        paymentMethod,
+        paymentAccountId: isImmediatePayment ? selectedPaymentAccount?.id : undefined,
+        paymentAccountName: isImmediatePayment ? selectedPaymentAccount?.name : undefined,
         expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
         contactId: finalContactId,
         contactName: effectiveContactName,
@@ -1633,6 +1670,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
       };
 
       onUpdateInvoice(updatedInvoice);
+      if (isImmediatePayment && wasUnpaid && selectedPaymentAccount && payableAmount > 0) {
+        onAddTransactionFromInvoice(updatedInvoice, selectedPaymentAccount.id, payableAmount);
+      }
       setEditingInvoiceId(null);
       setEditingInvoiceNumber(null);
       setHasDifferentDeliveryAddress(false);
@@ -1651,6 +1691,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
           : invoiceScenario,
       invoiceProfileType,
       docKind: forcedType ? formDocKind : "invoice",
+      paymentMethod,
+      paymentAccountId: isImmediatePayment ? selectedPaymentAccount?.id : undefined,
+      paymentAccountName: isImmediatePayment ? selectedPaymentAccount?.name : undefined,
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       contactId: finalContactId,
       contactName: effectiveContactName,
@@ -1675,9 +1718,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
       taxItems,
       grandTotal,
       payableAmount,
-      paidAmount: 0,
-      remainingAmount: payableAmount,
-      status: "sent",
+      paidAmount: isImmediatePayment && !selectedPaymentAccount ? payableAmount : 0,
+      remainingAmount: isImmediatePayment && !selectedPaymentAccount ? 0 : payableAmount,
+      status: isImmediatePayment && !selectedPaymentAccount ? "paid" : "sent",
       currency: "TRY",
       notes: finalNotes,
       createdAt: new Date().toISOString().split("T")[0],
@@ -1849,6 +1892,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
     }
 
     onAddInvoice(newInvoice);
+    if (isImmediatePayment && selectedPaymentAccount && payableAmount > 0) {
+      onAddTransactionFromInvoice(newInvoice, selectedPaymentAccount.id, payableAmount);
+    }
     if (forcedType) {
       setDocSubTab(formDocKind === "receipt" ? "receipts" : "invoices");
     }
@@ -3479,6 +3525,235 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Ödeme Yöntemi Seçimi (Nakit, Cari, Kredi Kartı) */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <Wallet className="w-4 h-4 text-purple-600" />
+                      <span>Ödeme / Tahsilat Yöntemi:</span>
+                    </label>
+                    <span
+                      className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                        paymentMethod === "nakit"
+                          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                          : paymentMethod === "kredi_karti"
+                          ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                          : "bg-amber-50 text-amber-800 border-amber-200"
+                      }`}
+                    >
+                      {paymentMethod === "nakit"
+                        ? "Nakit (Peşin / Kasa Tahsilatı)"
+                        : paymentMethod === "kredi_karti"
+                        ? "Kredi Kartı (POS / Banka Tahsilatı)"
+                        : "Cari (Açık Hesap / Vadeli)"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {/* 1. NAKİT */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod("nakit");
+                        setDueDate(issueDate);
+                        const cashAcc = accounts.find((a) => a.type === "cash") || accounts[0];
+                        if (cashAcc) setPaymentAccountId(cashAcc.id);
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                        paymentMethod === "nakit"
+                          ? "bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs"
+                          : "bg-slate-50/70 hover:bg-white border-slate-200 hover:border-emerald-300"
+                      }`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          paymentMethod === "nakit"
+                            ? "bg-emerald-600 text-white shadow-2xs"
+                            : "bg-white text-emerald-600 border border-slate-200"
+                        }`}
+                      >
+                        <Banknote className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-extrabold text-slate-900">Nakit</span>
+                          {paymentMethod === "nakit" && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
+                          Peşin tahsilat • Kasa hesabına anında işlenir ve ödendi kapatılır
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* 2. CARİ */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod("cari");
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                        paymentMethod === "cari"
+                          ? "bg-purple-50/90 border-purple-400 ring-2 ring-purple-500/20 shadow-xs"
+                          : "bg-slate-50/70 hover:bg-white border-slate-200 hover:border-purple-300"
+                      }`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          paymentMethod === "cari"
+                            ? "bg-purple-600 text-white shadow-2xs"
+                            : "bg-white text-purple-600 border border-slate-200"
+                        }`}
+                      >
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-extrabold text-slate-900">Cari</span>
+                          {paymentMethod === "cari" && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
+                          Açık hesap / Vadeli • Müşteri cari bakiyesine borç olarak işlenir
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* 3. KREDİ KARTI */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod("kredi_karti");
+                        setDueDate(issueDate);
+                        const posOrBankAcc =
+                          accounts.find(
+                            (a) => a.type === "credit_card" || a.type === "pos" || a.type === "bank"
+                          ) || accounts[0];
+                        if (posOrBankAcc) setPaymentAccountId(posOrBankAcc.id);
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                        paymentMethod === "kredi_karti"
+                          ? "bg-indigo-50/90 border-indigo-400 ring-2 ring-indigo-500/20 shadow-xs"
+                          : "bg-slate-50/70 hover:bg-white border-slate-200 hover:border-indigo-300"
+                      }`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          paymentMethod === "kredi_karti"
+                            ? "bg-indigo-600 text-white shadow-2xs"
+                            : "bg-white text-indigo-600 border border-slate-200"
+                        }`}
+                      >
+                        <CreditCard className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-extrabold text-slate-900">Kredi Kartı</span>
+                          {paymentMethod === "kredi_karti" && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
+                          POS / Kart tahsilatı • Banka/POS hesabına işlenir ve ödendi kapatılır
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Seçilen Ödeme Yöntemine Göre Kasa / Banka / Vade Detay Alanı */}
+                  {paymentMethod === "nakit" || paymentMethod === "kredi_karti" ? (
+                    <div
+                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        paymentMethod === "nakit"
+                          ? "bg-emerald-50/60 border-emerald-200"
+                          : "bg-indigo-50/60 border-indigo-200"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-[220px]">
+                        <label
+                          className={`block text-[11px] font-bold mb-1 ${
+                            paymentMethod === "nakit" ? "text-emerald-950" : "text-indigo-950"
+                          }`}
+                        >
+                          {paymentMethod === "nakit"
+                            ? "Nakit Tahsilatın İşleneceği Kasa / Hesap *"
+                            : "Kredi Kartı (POS) Tahsilatının İşleneceği Banka / Hesap *"}
+                        </label>
+                        {accounts.length > 0 ? (
+                          <select
+                            value={paymentAccountId}
+                            onChange={(e) => setPaymentAccountId(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 shadow-2xs"
+                          >
+                            {accounts.map((acc) => (
+                              <option key={acc.id} value={acc.id}>
+                                {acc.name} ({acc.type === "cash" ? "Kasa" : acc.type === "bank" ? "Banka" : "POS / Kart"} • Bakiye: ₺
+                                {acc.balance.toLocaleString("tr-TR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                                )
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="text-xs font-semibold text-slate-600 bg-white px-3 py-2 rounded-xl border border-slate-200">
+                            Varsayılan Kasa / POS Hesabı (Otomatik Ödendi Olarak İşlenir)
+                          </div>
+                        )}
+                      </div>
+                      <div
+                        className={`text-[11px] font-semibold sm:max-w-xs leading-relaxed ${
+                          paymentMethod === "nakit" ? "text-emerald-800" : "text-indigo-800"
+                        }`}
+                      >
+                        ✓ Fatura kesildiğinde{" "}
+                        <strong>
+                          {paymentMethod === "nakit" ? "Nakit" : "Kredi Kartı"}
+                        </strong>{" "}
+                        olarak tahsil edilmiş sayılır ve fatura durumu{" "}
+                        <strong>Ödendi</strong> olarak kaydedilir.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-amber-900">
+                      <div className="flex items-center gap-1.5 font-semibold">
+                        <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>
+                          Fatura tutarı cari hesaba <strong>Açık Bakiye (Vadeli)</strong> olarak kaydedilir.
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className="text-[10px] font-bold text-amber-800 mr-1">Hızlı Vade:</span>
+                        {[
+                          { label: "Aynı Gün", days: 0 },
+                          { label: "+7 Gün", days: 7 },
+                          { label: "+15 Gün", days: 15 },
+                          { label: "+30 Gün", days: 30 },
+                          { label: "+60 Gün", days: 60 },
+                        ].map((preset) => (
+                          <button
+                            key={preset.days}
+                            type="button"
+                            onClick={() => {
+                              const base = issueDate ? new Date(issueDate) : new Date();
+                              const target = new Date(base.getTime() + preset.days * 24 * 60 * 60 * 1000);
+                              if (!isNaN(target.getTime())) {
+                                setDueDate(target.toISOString().split("T")[0]);
+                              }
+                            }}
+                            className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 cursor-pointer transition-colors"
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Delivery Address Section (Teslimat Adresi Farklı mı?) */}
@@ -5323,6 +5598,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                       )}
                                     </div>
                                   )}
+                                  {inv.paymentMethod && (
+                                    <span
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold rounded-full border ${
+                                        inv.paymentMethod === "nakit"
+                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                          : inv.paymentMethod === "kredi_karti"
+                                          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                          : "bg-amber-50 text-amber-800 border-amber-200"
+                                      }`}
+                                    >
+                                      {inv.paymentMethod === "nakit"
+                                        ? "Nakit"
+                                        : inv.paymentMethod === "kredi_karti"
+                                        ? "Kredi Kartı"
+                                        : "Cari"}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -5589,9 +5881,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 </div>
                                 <div>
                                   <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
-                                    Ödeme Durumu
+                                    Ödeme Durumu & Yöntemi
                                   </span>
-                                  <div className="mt-1 flex items-center gap-1.5">
+                                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                     <span
                                       className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                                         inv.status === "paid"
@@ -5607,6 +5899,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                         ? "Vadesi Geçti"
                                         : "Tahsilat Bekliyor"}
                                     </span>
+                                    {inv.paymentMethod && (
+                                      <span
+                                        className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                                          inv.paymentMethod === "nakit"
+                                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                            : inv.paymentMethod === "kredi_karti"
+                                            ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                                            : "bg-amber-50 text-amber-800 border-amber-200"
+                                        }`}
+                                      >
+                                        {inv.paymentMethod === "nakit"
+                                          ? "Nakit"
+                                          : inv.paymentMethod === "kredi_karti"
+                                          ? "Kredi Kartı"
+                                          : "Cari Hesap"}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>

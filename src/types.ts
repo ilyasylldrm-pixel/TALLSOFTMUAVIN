@@ -359,6 +359,8 @@ export interface MysoftCredentials {
 
 export type DocumentKind = "invoice" | "receipt"; // invoice = Fatura, receipt = Fiş (Gelir/Gider Fişi)
 
+export type InvoicePaymentMethod = "nakit" | "cari" | "kredi_karti";
+
 export interface Invoice {
   id: string;
   invoiceNumber: string; // ör: GIB20260000001
@@ -366,6 +368,9 @@ export interface Invoice {
   invoiceScenario?: InvoiceScenario; // "TICARIFATURA" | "TEMELFATURA" | "EARSIVFATURA" | "IHRACAT" | "KAMU" | "HAL"
   invoiceProfileType?: InvoiceProfileType; // "SATIS" | "TEVKIFAT" | "OZELMATRAH" | "ISTISNA" | "IADE" | "IHRACKAYITLI" | "SGK" | "KOMISYONCU"
   docKind?: DocumentKind; // "invoice" = Gelir/Gider Faturası, "receipt" = Gelir/Gider Fişi
+  paymentMethod?: InvoicePaymentMethod; // "nakit" = Nakit, "cari" = Cari (Açık Hesap), "kredi_karti" = Kredi Kartı
+  paymentAccountId?: string; // Tahsilat / Ödeme Kasa veya Banka/POS Hesabı ID
+  paymentAccountName?: string; // Tahsilat / Ödeme Kasa veya Banka/POS Hesabı Adı
   expenseCategory?: string; // Ana Masraf / Gider Kalemi
   contactId: string;
   contactName: string;

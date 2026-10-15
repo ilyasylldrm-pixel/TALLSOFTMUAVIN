@@ -1123,26 +1123,39 @@ export default function App() {
   ) => {
     const isSales = invoice.type === "sales";
     const acc = data.accounts.find((a) => a.id === accountId);
+    const methodLabel =
+      invoice.paymentMethod === "nakit"
+        ? "Nakit"
+        : invoice.paymentMethod === "kredi_karti"
+        ? "Kredi Kartı"
+        : "";
 
     const newTx: Transaction = {
       id: "tx_" + Date.now(),
-      date: new Date().toISOString().split("T")[0],
+      date: invoice.issueDate || new Date().toISOString().split("T")[0],
       type: isSales ? "collection" : "payment",
       amount: paidAmount,
-      currency: "TRY",
+      currency: invoice.currency || "TRY",
       accountId,
-      accountName: acc?.name || "Kasa/Banka",
+      accountName: acc?.name || invoice.paymentAccountName || "Kasa/Banka",
       contactId: invoice.contactId,
       contactName: invoice.contactName,
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
-      category: isSales ? "Fatura Tahsilatı" : "Fatura Ödemesi",
-      description: `${invoice.invoiceNumber} nolu fatura ${isSales ? "tahsilatı" : "ödemesi"}`,
+      category: isSales
+        ? methodLabel
+          ? `Fatura Tahsilatı (${methodLabel})`
+          : "Fatura Tahsilatı"
+        : methodLabel
+        ? `Fatura Ödemesi (${methodLabel})`
+        : "Fatura Ödemesi",
+      description: `${invoice.invoiceNumber} nolu fatura ${methodLabel ? `${methodLabel} ` : ""}${isSales ? "tahsilatı" : "ödemesi"}`,
     };
 
     // Update invoice status & remaining
+    const targetPayable = invoice.payableAmount ?? invoice.grandTotal;
     const newPaid = invoice.paidAmount + paidAmount;
-    const newRemaining = invoice.grandTotal - newPaid;
+    const newRemaining = targetPayable - newPaid;
     const newStatus = newRemaining <= 0 ? "paid" : "partial";
 
     const updatedInvoice: Invoice = {
@@ -1150,6 +1163,8 @@ export default function App() {
       paidAmount: newPaid,
       remainingAmount: Math.max(0, newRemaining),
       status: newStatus as any,
+      paymentAccountId: accountId || invoice.paymentAccountId,
+      paymentAccountName: acc?.name || invoice.paymentAccountName,
     };
 
     setData((prev) => ({
