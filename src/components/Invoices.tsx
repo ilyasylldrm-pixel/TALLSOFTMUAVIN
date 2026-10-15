@@ -527,13 +527,38 @@ export const Invoices: React.FC<InvoicesProps> = ({
             ? mergedCalc.nextDocNo
             : result.nextInvoiceNumber;
 
-        setInvoiceNumberInput(finalNextDocNo);
+        if (result.prefix) {
+          if (targetDocType === "e_arsiv") {
+            setSelectedEArsivPrefix(result.prefix);
+          } else {
+            setSelectedEFaturaPrefix(result.prefix);
+          }
+        }
+
         setMysoftNumberInfo({
           ...result,
           lastSequence: Math.max(result.lastSequence, mergedCalc.lastSequence),
           nextSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
           nextInvoiceNumber: finalNextDocNo,
         });
+
+        setInvoiceNumberInput(finalNextDocNo);
+
+        setMysoftMappingDefaults((prev) => ({
+          ...(prev || { vknTckn: targetTenant || "", prefixes: [] }),
+          ...(targetDocType === "e_arsiv"
+            ? {
+                eArsivPrefix: result.prefix,
+                eArsivNextNumber: finalNextDocNo,
+                eArsivSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
+              }
+            : {
+                eFaturaPrefix: result.prefix,
+                eFaturaNextNumber: finalNextDocNo,
+                eFaturaSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
+              }),
+        }));
+
         if (result.tenantIdentifierNumber && !mysoftTenantVkn) {
           setMysoftTenantVkn(result.tenantIdentifierNumber);
         }
@@ -721,6 +746,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const computeMysoftSequentialNumber = useCallback(
     (docType: "e_fatura" | "e_arsiv", customPrefix?: string): string => {
       const isEArsiv = docType === "e_arsiv";
+
+      // 1. Canlı Mysoft giden faturalarından çekilen numara varsa öncelikli olarak onu kullan
+      if (mysoftNumberInfo && mysoftNumberInfo.nextInvoiceNumber) {
+        const isInfoEArsiv = mysoftNumberInfo.eDocumentType === "EARSIVFATURA";
+        if (isInfoEArsiv === isEArsiv) {
+          if (!customPrefix || customPrefix.toUpperCase().slice(0, 3) === mysoftNumberInfo.prefix) {
+            return mysoftNumberInfo.nextInvoiceNumber;
+          }
+        }
+      }
+
       const rawPrefix =
         customPrefix ||
         (isEArsiv
@@ -789,6 +825,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       selectedEArsivPrefix,
       selectedEFaturaPrefix,
       mysoftMappingDefaults,
+      mysoftNumberInfo,
       companySettings.eArsivPrefix,
       companySettings.eFaturaPrefix,
       companySettings.defaultInvoicePrefix,
@@ -3035,7 +3072,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           {sendToMysoft && invType === "sales" && !editingInvoiceId ? (
                             <button
                               type="button"
-                              onClick={() => void fetchAndApplyNextInvoiceNumber()}
+                              onClick={() => {
+                                setIsManualInvoiceNumber(false);
+                                void fetchAndApplyNextInvoiceNumber();
+                              }}
                               disabled={isFetchingNextDocNo}
                               title="İlgili tenanttan son faturayı çek ve sıradaki numarayı otomatik ata"
                               className="text-[10px] text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
@@ -3064,7 +3104,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           {sendToMysoft && invType === "sales" && !editingInvoiceId && (
                             <button
                               type="button"
-                              onClick={() => void fetchAndApplyNextInvoiceNumber()}
+                              onClick={() => {
+                                setIsManualInvoiceNumber(false);
+                                void fetchAndApplyNextInvoiceNumber();
+                              }}
                               disabled={isFetchingNextDocNo}
                               title="Mysoft'tan Sıradaki Fatura Numarasını Çek (Örn: 206 -> 207)"
                               className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition cursor-pointer"
