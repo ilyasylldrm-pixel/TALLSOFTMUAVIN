@@ -2747,6 +2747,7 @@ export interface RecipientTaxpayerStatus {
   pkAlias?: string;
   gbAlias?: string;
   taxOffice?: string;
+  taxOfficeCode?: string;
   city?: string;
   district?: string;
   neighborhood?: string;
@@ -2759,6 +2760,11 @@ export interface RecipientTaxpayerStatus {
   phone?: string;
   email?: string;
   contactPerson?: string;
+  activityStatus?: "active" | "terminated" | "unknown";
+  activityStatusDescription?: string;
+  eInvoiceStartDate?: string;
+  eWaybillStartDate?: string;
+  isLiveTaxpayer?: boolean;
 }
 
 const recipientCache = new Map<string, RecipientTaxpayerStatus>();
@@ -2769,7 +2775,8 @@ const recipientCache = new Map<string, RecipientTaxpayerStatus>();
  */
 export async function checkRecipientTaxpayerStatus(
   vknTckn: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  tenantIdentifierNumber?: string,
 ): Promise<RecipientTaxpayerStatus> {
   const clean = String(vknTckn || "").replace(/\D/g, "").trim();
   if (!clean || (clean.length !== 10 && clean.length !== 11)) {
@@ -2780,18 +2787,20 @@ export async function checkRecipientTaxpayerStatus(
       suggestedProfile: "EARSIVFATURA",
     };
   }
-  if (recipientCache.has(clean)) {
-    return recipientCache.get(clean)!;
+  const cacheKey = `${clean}:${tenantIdentifierNumber || ""}`;
+  if (recipientCache.has(cacheKey)) {
+    return recipientCache.get(cacheKey)!;
   }
   try {
-    const res = await fetch(`/api/mysoft/check-recipient/${encodeURIComponent(clean)}`, {
+    const tenantQuery = tenantIdentifierNumber ? `?tenantIdentifierNumber=${encodeURIComponent(tenantIdentifierNumber)}` : "";
+    const res = await fetch(`/api/mysoft/check-recipient/${encodeURIComponent(clean)}${tenantQuery}`, {
       method: "GET",
       headers: { Accept: "application/json" },
       signal,
     });
     if (res.ok) {
       const data: RecipientTaxpayerStatus = await res.json();
-      recipientCache.set(clean, data);
+      recipientCache.set(cacheKey, data);
       return data;
     }
   } catch (err) {
@@ -2949,6 +2958,44 @@ export async function checkRecipientTaxpayerStatus(
   return fallback;
 }
 
+/**
+ * Official taxpayer detail lookup from Mysoft (Mükellef Detay Sorgula).
+ */
+export async function getTaxpayerDetails(
+  identifierNumber: string,
+  tenantIdentifierNumber?: string,
+  signal?: AbortSignal,
+): Promise<any> {
+  const clean = String(identifierNumber || "").replace(/\D/g, "").trim();
+  if (!clean) return null;
+  const tenantQuery = tenantIdentifierNumber ? `?tenantIdentifierNumber=${encodeURIComponent(tenantIdentifierNumber)}` : "";
+  const res = await fetch(`/api/mysoft/taxpayer/${encodeURIComponent(clean)}${tenantQuery}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!res.ok) throw new Error(`Mükellef sorgulama hatası: ${res.status}`);
+  return await res.json();
+}
+
+/**
+ * Official GİB account lookup from Mysoft (Gib Hesap Sorgula).
+ */
+export async function getGibAccountDetails(
+  vknTckn: string,
+  signal?: AbortSignal,
+): Promise<any> {
+  const clean = String(vknTckn || "").replace(/\D/g, "").trim();
+  if (!clean) return null;
+  const res = await fetch(`/api/mysoft/gib-account/${encodeURIComponent(clean)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!res.ok) throw new Error(`GİB hesap sorgulama hatası: ${res.status}`);
+  return await res.json();
+}
+
 // Stable alias for code that refers to this as the generic Mysoft service.
 export const mysoftEDocumentService = {
   list: listMysoftEDocuments,
@@ -2956,4 +3003,6 @@ export const mysoftEDocumentService = {
   download: downloadMysoftEDocument,
   sync: syncMysoftEDocuments,
   checkRecipient: checkRecipientTaxpayerStatus,
+  getTaxpayerDetails,
+  getGibAccountDetails,
 };

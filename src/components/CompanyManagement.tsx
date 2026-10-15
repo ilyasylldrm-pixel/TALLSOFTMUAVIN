@@ -28,6 +28,7 @@ import {
   setActiveCompanyId,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
+import { checkRecipientTaxpayerStatus } from "../services/mysoftEDocumentService";
 import {
   fetchCloudLogo,
   saveCloudLogo,
@@ -74,6 +75,7 @@ import {
   Cloud,
   RefreshCw,
   Sparkles,
+  Loader2,
   Image as ImageIcon,
   CheckCircle,
   Database as DatabaseIcon,
@@ -226,6 +228,8 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
   // Profile Form State
   const [profileForm, setProfileForm] = useState<CompanySettings>(settings);
+  const [isFetchingTaxpayer, setIsFetchingTaxpayer] = useState(false);
+  const [vknFetchFeedback, setVknFetchFeedback] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (settings) {
@@ -847,15 +851,63 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  VKN / TCKN No
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700">
+                    VKN / TCKN No
+                  </label>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const clean = String(profileForm.taxNumber || "").replace(/\D/g, "").trim();
+                      if (clean.length !== 10 && clean.length !== 11) return;
+                      setIsFetchingTaxpayer(true);
+                      setVknFetchFeedback(null);
+                      try {
+                        const status = await checkRecipientTaxpayerStatus(clean);
+                        if (status) {
+                          setProfileForm((prev) => ({
+                            ...prev,
+                            name: status.companyTitle || status.title || prev.name,
+                            companyName: status.companyTitle || status.title || prev.companyName,
+                            companyTitle: status.companyTitle || status.title || prev.companyTitle,
+                            taxOffice: status.taxOffice || prev.taxOffice,
+                            city: status.city || prev.city,
+                            district: status.district || prev.district,
+                            address: status.address || prev.address,
+                            tenantIdentifierNumber: clean,
+                          }));
+                          setVknFetchFeedback(
+                            status.isEFaturaUser
+                              ? `🟢 GİB e-Fatura Mükellefi: ${status.companyTitle || status.name} (Bilgiler Mysoft'tan dolduruldu)`
+                              : `🔵 e-Arşiv: ${status.companyTitle || status.name} (Bilgiler Mysoft'tan dolduruldu)`
+                          );
+                        }
+                      } catch {
+                        setVknFetchFeedback("⚠️ Mysoft'tan firma bilgisi alınamadı.");
+                      } finally {
+                        setIsFetchingTaxpayer(false);
+                      }
+                    }}
+                    disabled={isFetchingTaxpayer || !profileForm.taxNumber || (profileForm.taxNumber.replace(/\D/g, "").length !== 10 && profileForm.taxNumber.replace(/\D/g, "").length !== 11)}
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title="GİB & Mysoft'tan resmi şirket unvanı, vergi dairesi ve adresini çek"
+                  >
+                    {isFetchingTaxpayer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    <span>Mysoft'tan Getir</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={profileForm.taxNumber}
                   onChange={(e) => setProfileForm({ ...profileForm, taxNumber: e.target.value })}
+                  placeholder="10 VKN veya 11 TCKN..."
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
+                {vknFetchFeedback && (
+                  <p className="text-[11px] font-semibold text-emerald-700 mt-1 animate-fadeIn">
+                    {vknFetchFeedback}
+                  </p>
+                )}
               </div>
 
               <div>

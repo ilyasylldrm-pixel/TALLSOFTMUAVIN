@@ -611,7 +611,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     let isMounted = true;
     setIsCheckingRecipient(true);
-    checkRecipientTaxpayerStatus(taxNum)
+    checkRecipientTaxpayerStatus(taxNum, undefined, selectedTenantVkn)
       .then((status) => {
         if (isMounted) {
           setRecipientStatus(status);
@@ -627,6 +627,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
             );
           } else {
             setInvoiceScenario("EARSIVFATURA");
+          }
+          if (customerMode === "manual") {
+            if (!manualCustomerName.trim() && (status.companyTitle || status.title || status.name)) {
+              setManualCustomerName(status.companyTitle || status.title || status.name || "");
+            }
+            if (!manualTaxOffice.trim() && status.taxOffice) {
+              setManualTaxOffice(status.taxOffice);
+            }
+            if (!manualCity.trim() && status.city) {
+              setManualCity(status.city);
+            }
+            if (!manualDistrict.trim() && status.district) {
+              setManualDistrict(status.district);
+            }
+            if (!manualAddress.trim() && status.address) {
+              setManualAddress(status.address);
+            }
           }
           void fetchAndApplyNextInvoiceNumber(undefined, nextType);
         }
@@ -3259,21 +3276,79 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             11111111111 (Nihai)
                           </button>
                         </div>
-                        <input
-                          type="text"
-                          maxLength={11}
-                          placeholder="10 VKN veya 11 TCKN..."
-                          value={manualTaxNumber}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, "").slice(0, 11);
-                            setManualTaxNumber(val);
-                            if (val === "11111111111") {
-                              setInvoiceScenario("EARSIVFATURA");
-                              setMysoftEDocType("e_arsiv");
-                            }
-                          }}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            maxLength={11}
+                            placeholder="10 VKN veya 11 TCKN..."
+                            value={manualTaxNumber}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, "").slice(0, 11);
+                              setManualTaxNumber(val);
+                              if (val === "11111111111") {
+                                setInvoiceScenario("EARSIVFATURA");
+                                setMysoftEDocType("e_arsiv");
+                              }
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const clean = manualTaxNumber.replace(/\D/g, "").trim();
+                              if (clean.length === 10 || clean.length === 11) {
+                                setIsCheckingRecipient(true);
+                                checkRecipientTaxpayerStatus(clean, undefined, selectedTenantVkn)
+                                  .then((status) => {
+                                    setRecipientStatus(status);
+                                    if (status.companyTitle || status.title || status.name) {
+                                      setManualCustomerName(status.companyTitle || status.title || status.name || "");
+                                    }
+                                    if (status.taxOffice) setManualTaxOffice(status.taxOffice);
+                                    if (status.city) setManualCity(status.city);
+                                    if (status.district) setManualDistrict(status.district);
+                                    if (status.address) setManualAddress(status.address);
+                                    const nextType = status.isEFaturaUser ? "e_fatura" : "e_arsiv";
+                                    setMysoftEDocType(nextType);
+                                    setInvoiceScenario(status.isEFaturaUser ? (status.suggestedProfile === "TEMELFATURA" ? "TEMELFATURA" : "TICARIFATURA") : "EARSIVFATURA");
+                                    void fetchAndApplyNextInvoiceNumber(undefined, nextType);
+                                  })
+                                  .finally(() => setIsCheckingRecipient(false));
+                              }
+                            }}
+                            disabled={isCheckingRecipient || !manualTaxNumber || (manualTaxNumber.length !== 10 && manualTaxNumber.length !== 11) || manualTaxNumber === "11111111111"}
+                            className="px-2.5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                            title="GİB & Mysoft'tan firma ünvanı, vergi dairesi ve adresini otomatik getir"
+                          >
+                            {isCheckingRecipient ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+                            )}
+                            <span className="hidden sm:inline">Sorgula</span>
+                          </button>
+                        </div>
+                        {customerMode === "manual" && recipientStatus && recipientStatus.vknTckn === manualTaxNumber && (
+                          <div
+                            className={`mt-1.5 p-1.5 rounded-lg border text-[11px] flex items-center justify-between gap-1.5 animate-fadeIn ${
+                              recipientStatus.isEFaturaUser
+                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700"
+                                : "bg-sky-500/10 border-sky-500/20 text-sky-700"
+                            }`}
+                          >
+                            <span className="font-semibold truncate">
+                              {recipientStatus.isEFaturaUser
+                                ? "🟢 GİB e-Fatura Mükellefi"
+                                : "🔵 e-Arşiv Alıcısı"}
+                              {recipientStatus.activityStatus === "terminated" ? " (⚠️ Terk/Kapalı)" : ""}
+                            </span>
+                            {recipientStatus.pkAlias && (
+                              <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-white/60 border border-emerald-500/30 truncate max-w-[140px]" title={recipientStatus.pkAlias}>
+                                PK: {recipientStatus.pkAlias.split("@")[0]}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Vergi Dairesi */}

@@ -623,17 +623,26 @@ export const Contacts: React.FC<ContactsProps> = ({
         setIsCustomNeighborhood(true);
 
         const taxpayerTitle = res.companyTitle || res.title || "Mükellef";
-        if (res.isEFaturaUser) {
+        const isTerminated = res.activityStatus === "terminated";
+
+        if (isTerminated) {
           setTaxpayerFetchStatus({
             success: true,
-            message: `🟢 GİB e-Fatura Mükellefi (${taxpayerTitle}): Şirket unvanı, tam adres, vergi dairesi ve iletişim bilgileri eksiksiz dolduruldu.`,
+            message: `⚠️ GİB Kayıtlarında Terk (Kapanmış Firma) (${taxpayerTitle}): Vergi dairesi ve adres bilgileri dolduruldu, ancak firma terk durumundadır.`,
+            isEFatura: res.isEFaturaUser,
+            pkAlias: res.pkAlias,
+          });
+        } else if (res.isEFaturaUser) {
+          setTaxpayerFetchStatus({
+            success: true,
+            message: `🟢 GİB e-Fatura Mükellefi (${taxpayerTitle}): Şirket unvanı, resmi vergi dairesi ve tam adresi Mysoft'tan başarıyla dolduruldu.`,
             isEFatura: true,
             pkAlias: res.pkAlias,
           });
         } else {
           setTaxpayerFetchStatus({
             success: true,
-            message: `🔵 e-Arşiv Fatura Alıcısı (${taxpayerTitle}): Bilgiler, tam adres ve vergi dairesi eksiksiz dolduruldu.`,
+            message: `🔵 e-Arşiv Fatura Alıcısı (${taxpayerTitle}): Şirket unvanı, vergi dairesi ve tam adres Mysoft'tan başarıyla dolduruldu.`,
             isEFatura: false,
           });
         }
