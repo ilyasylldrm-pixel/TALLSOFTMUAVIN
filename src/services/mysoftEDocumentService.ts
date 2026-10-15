@@ -6,7 +6,7 @@ import {
   MysoftDocumentFamily,
   MysoftEDocument,
 } from "../types";
-import { saveStoredData } from "../utils/storage";
+import { getCompaniesList, getStoredData, saveStoredData } from "../utils/storage";
 import { initialMysoftEDocuments } from "../data/mysoftEDocumentMocks";
 import { auth } from "../lib/firebase";
 import {
@@ -1001,6 +1001,210 @@ export async function getMysoftTenantInfo(
   );
   const rows = tenantRows(payload);
   return rows.map(normalizeMysoftTenant).find(Boolean) || normalizeMysoftTenant(unwrapResult(payload));
+}
+
+export interface MysoftMappingDefaults {
+  vknTckn: string;
+  eFaturaPrefix: string;
+  eFaturaNextNumber: string;
+  eFaturaSequence: number;
+  eArsivPrefix: string;
+  eArsivNextNumber: string;
+  eArsivSequence: number;
+  prefixes: Array<{
+    prefix: string;
+    edocumentType?: number;
+    currentNumber?: number;
+    nextNumber?: string;
+    isDefault?: boolean;
+    isPassive?: boolean;
+  }>;
+}
+
+/**
+ * Retrieve Mysoft document prefixes and next consecutive sequential invoice numbers
+ * for e-Fatura and e-Arşiv.
+ */
+export async function getMysoftMappingDefaults(
+  identifierNumber: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<MysoftMappingDefaults> {
+  const identifier = identifierNumber.trim();
+  if (!identifier) throw new Error("VKN/TCKN gereklidir.");
+
+  const cleanId = identifier.replace(/\D/g, "");
+  const currentYear = new Date().getFullYear();
+
+  // Check saved company configuration & local invoices for this VKN/TCKN
+  let matchedComp: ReturnType<typeof getCompaniesList>[number] | undefined;
+  const maxLocalSeqByPrefix: Record<string, number> = {};
+  let maxEFatSeqFallback = 0;
+  let maxEArsSeqFallback = 0;
+
+  try {
+    const companies = getCompaniesList();
+    matchedComp = companies.find(
+      (c) =>
+        (c.tenantIdentifierNumber && c.tenantIdentifierNumber.replace(/\D/g, "") === cleanId) ||
+        (c.vkn && c.vkn.replace(/\D/g, "") === cleanId) ||
+        (c.tckn && c.tckn.replace(/\D/g, "") === cleanId) ||
+        (c.taxNumber && c.taxNumber.replace(/\D/g, "") === cleanId),
+    );
+  } catch {}
+
+  const recordDocNoSeq = (rawNo: string, isEArsivHint?: boolean) => {
+    const cleaned = String(rawNo || "")
+      .replace(/\s*\(TASLAK\)\s*$/i, "")
+      .trim();
+    const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(cleaned);
+    if (match) {
+      const pfx = match[1].toUpperCase();
+      const yr = Number(match[2]);
+      const seq = parseInt(match[3], 10);
+      if (yr === currentYear && !isNaN(seq)) {
+        if (!maxLocalSeqByPrefix[pfx] || seq > maxLocalSeqByPrefix[pfx]) {
+          maxLocalSeqByPrefix[pfx] = seq;
+        }
+        if (isEArsivHint || pfx === "EAR") {
+          if (seq > maxEArsSeqFallback) maxEArsSeqFallback = seq;
+        } else {
+          if (seq > maxEFatSeqFallback) maxEFatSeqFallback = seq;
+        }
+      }
+    }
+  };
+
+  try {
+    const localEDocs = readPersistedEDocuments();
+    for (const doc of localEDocs) {
+      recordDocNoSeq(
+        String(doc.documentNo || doc.documentNumber || ""),
+        doc.documentType === "e_arsiv",
+      );
+    }
+  } catch {}
+
+  try {
+    const storedApp = getStoredData(matchedComp?.id);
+    for (const inv of storedApp.invoices || []) {
+      if (inv.type === "sales") {
+        recordDocNoSeq(
+          String(inv.invoiceNumber || ""),
+          inv.eDocumentType === "e_arsiv" || inv.invoiceScenario === "EARSIVFATURA",
+        );
+      }
+    }
+  } catch {}
+
+  const parseSavedNextSeq = (savedNext: string | undefined, expectedPrefix: string): number => {
+    if (!savedNext) return 0;
+    const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(savedNext.trim());
+    if (
+      match &&
+      match[1].toUpperCase() === expectedPrefix.toUpperCase() &&
+      Number(match[2]) === currentYear
+    ) {
+      return parseInt(match[3], 10) || 0;
+    }
+    return 0;
+  };
+
+  try {
+    const { payload } = await proxyRequest(
+      `/${encodeURIComponent(identifier)}/document-numbers`,
+      { method: "GET", signal: options.signal },
+      "tenants",
+    );
+    const data = unwrapResult(payload) as any;
+    if (data && (data.eFaturaPrefix || data.prefixes?.length)) {
+      const apiPrefixes = Array.isArray(data.prefixes) ? data.prefixes : [];
+      const hasApiEFaturaPrefix =
+        (data.eFaturaPrefix && data.eFaturaPrefix !== "GIB") ||
+        apiPrefixes.some((p: any) => String(p.prefix || "").toUpperCase() === String(data.eFaturaPrefix || "").toUpperCase());
+      const hasApiEArsivPrefix =
+        (data.eArsivPrefix && data.eArsivPrefix !== "EAR") ||
+        apiPrefixes.some((p: any) => String(p.prefix || "").toUpperCase() === String(data.eArsivPrefix || "").toUpperCase());
+
+      const eFaturaPrefix = (
+        (hasApiEFaturaPrefix ? data.eFaturaPrefix : matchedComp?.eFaturaPrefix || data.eFaturaPrefix) ||
+        "GIB"
+      )
+        .toUpperCase()
+        .slice(0, 3);
+
+      const eArsivPrefix = (
+        (hasApiEArsivPrefix ? data.eArsivPrefix : matchedComp?.eArsivPrefix || data.eArsivPrefix) ||
+        "EAR"
+      )
+        .toUpperCase()
+        .slice(0, 3);
+
+      const eFaturaSequence = Math.max(
+        Number(data.eFaturaSequence) || 1,
+        parseSavedNextSeq(matchedComp?.eFaturaNextNumber, eFaturaPrefix),
+        (maxLocalSeqByPrefix[eFaturaPrefix] || 0) + 1,
+      );
+
+      const eArsivSequence = Math.max(
+        Number(data.eArsivSequence) || 1,
+        parseSavedNextSeq(matchedComp?.eArsivNextNumber, eArsivPrefix),
+        (maxLocalSeqByPrefix[eArsivPrefix] || 0) + 1,
+      );
+
+      return {
+        vknTckn: identifier,
+        eFaturaPrefix,
+        eFaturaNextNumber: `${eFaturaPrefix}${currentYear}${String(eFaturaSequence).padStart(9, "0")}`,
+        eFaturaSequence,
+        eArsivPrefix,
+        eArsivNextNumber: `${eArsivPrefix}${currentYear}${String(eArsivSequence).padStart(9, "0")}`,
+        eArsivSequence,
+        prefixes: apiPrefixes,
+      };
+    }
+  } catch {
+    // Graceful fallback to client-side sequential calculation
+  }
+
+  const fallbackEFatPrefix = (matchedComp?.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3);
+  const fallbackEArsPrefix = (matchedComp?.eArsivPrefix || "EAR").toUpperCase().slice(0, 3);
+
+  const nextEFatSeq = Math.max(
+    1,
+    parseSavedNextSeq(matchedComp?.eFaturaNextNumber, fallbackEFatPrefix),
+    (maxLocalSeqByPrefix[fallbackEFatPrefix] ?? maxEFatSeqFallback) + 1,
+  );
+  const nextEArsSeq = Math.max(
+    1,
+    parseSavedNextSeq(matchedComp?.eArsivNextNumber, fallbackEArsPrefix),
+    (maxLocalSeqByPrefix[fallbackEArsPrefix] ?? maxEArsSeqFallback) + 1,
+  );
+
+  return {
+    vknTckn: identifier,
+    eFaturaPrefix: fallbackEFatPrefix,
+    eFaturaNextNumber: `${fallbackEFatPrefix}${currentYear}${String(nextEFatSeq).padStart(9, "0")}`,
+    eFaturaSequence: nextEFatSeq,
+    eArsivPrefix: fallbackEArsPrefix,
+    eArsivNextNumber: `${fallbackEArsPrefix}${currentYear}${String(nextEArsSeq).padStart(9, "0")}`,
+    eArsivSequence: nextEArsSeq,
+    prefixes: [
+      {
+        prefix: fallbackEFatPrefix,
+        edocumentType: 1,
+        isDefault: true,
+        currentNumber: nextEFatSeq - 1,
+        nextNumber: `${fallbackEFatPrefix}${currentYear}${String(nextEFatSeq).padStart(9, "0")}`,
+      },
+      {
+        prefix: fallbackEArsPrefix,
+        edocumentType: 2,
+        isDefault: true,
+        currentNumber: nextEArsSeq - 1,
+        nextNumber: `${fallbackEArsPrefix}${currentYear}${String(nextEArsSeq).padStart(9, "0")}`,
+      },
+    ],
+  };
 }
 
 function fallbackDocuments(

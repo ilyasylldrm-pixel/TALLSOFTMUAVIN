@@ -28,7 +28,7 @@ import {
   Percent,
 } from "lucide-react";
 import { FoodRecipe, FoodIngredientItem, FoodCategory, Product } from "../../../types";
-import { formatCurrency, exportToExcel } from "../../../utils/exportUtils";
+import { formatCurrency, exportToExcel, exportToPDF, ExportData } from "../../../utils/exportUtils";
 
 interface FoodRecipeCostAnalysisViewProps {
   recipes: FoodRecipe[];
@@ -292,7 +292,7 @@ export const FoodRecipeCostAnalysisView: React.FC<FoodRecipeCostAnalysisViewProp
   }, [recipes]);
 
   // Export to Excel handler
-  const handleExportExcel = () => {
+  const getRecipeExportData = (): ExportData => {
     const headers = [
       "Reçete Kodu",
       "Yemek Adı",
@@ -325,28 +325,31 @@ export const FoodRecipeCostAnalysisView: React.FC<FoodRecipeCostAnalysisViewProp
         r.categoryLabel,
         r.standardPortionGrams,
         r.ingredients.length,
-        r.portionCost.toFixed(2),
-        labor.toFixed(2),
-        gas.toFixed(2),
-        overhead.toFixed(2),
-        r.totalCostPerPortion.toFixed(2),
-        r.suggestedSalePrice.toFixed(2),
-        profit,
+        formatCurrency(r.portionCost),
+        formatCurrency(labor),
+        formatCurrency(gas),
+        formatCurrency(overhead),
+        formatCurrency(r.totalCostPerPortion),
+        formatCurrency(r.suggestedSalePrice),
+        formatCurrency(Number(profit)),
         `%${margin}`,
         r.caloriePerPortion,
         topIng ? `${topIng.name} (${formatCurrency(topIng.portionCost)})` : "-",
       ];
     });
 
-    exportToExcel({
-      filename: `Yemek_Fabrikasi_Recete_Maliyet_Gramaj_Analizi_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    return {
+      filename: `Yemek_Fabrikasi_Recete_Maliyet_Gramaj_Analizi_${new Date().toISOString().slice(0, 10)}`,
       sheetName: "Reçete Maliyet Analizi",
-      title: "Yemek Fabrikası & Catering - Reçete Bazlı Hammadde Maliyet ve Gramaj Analiz Raporu",
-      subtitle: `Toplam ${filteredAndSortedRecipes.length} reçete analiz edildi. Rapor Oluşturma: ${new Date().toLocaleDateString("tr-TR")}`,
+      title: "YEMEK FABRİKASI - REÇETE BAZLI MALİYET VE GRAMAJ RAPORU",
+      subtitle: `Toplam ${filteredAndSortedRecipes.length} reçete analiz edildi - Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
       headers,
       rows,
-    });
+    };
   };
+
+  const handleExportExcel = () => exportToExcel(getRecipeExportData());
+  const handleExportPDF = () => exportToPDF(getRecipeExportData());
 
   // Print Handler
   const handlePrint = () => {
@@ -380,19 +383,31 @@ export const FoodRecipeCostAnalysisView: React.FC<FoodRecipeCostAnalysisViewProp
           <button
             type="button"
             onClick={handleExportExcel}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+            title="Reçete maliyet analizini Excel (.xlsx) olarak indir"
           >
             <Download className="w-4 h-4 text-emerald-600" />
-            <span>Excel (.xlsx) İndir</span>
+            <span className="hidden sm:inline">Excel İndir</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportPDF}
+            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+            title="Reçete maliyet analizini aynı formatta PDF (.pdf) olarak indir"
+          >
+            <Download className="w-4 h-4 text-rose-600" />
+            <span className="hidden sm:inline">PDF İndir</span>
           </button>
 
           <button
             type="button"
             onClick={handlePrint}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
+            title="Yazdır"
           >
             <Printer className="w-4 h-4 text-slate-500" />
-            <span>Yazdır / PDF</span>
+            <span>Yazdır</span>
           </button>
         </div>
       </div>

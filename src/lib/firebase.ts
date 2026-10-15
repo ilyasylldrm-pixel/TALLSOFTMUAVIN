@@ -35,7 +35,7 @@ import {
 } from "firebase/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
 import { InvoiceTaxItem, AppModuleKey } from "../types";
-import { safeGetStorageItem, safeSetStorageItem } from "../utils/storage";
+import { safeGetStorageItem, safeSetStorageItem, getCompaniesList } from "../utils/storage";
 
 // Initialize Firebase App lazily/safely
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -43,61 +43,6 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
-
-// Google Workspace & Sheets Scopes
-export const WORKSPACE_SCOPES = [
-  "https://www.googleapis.com/auth/spreadsheets",
-  "https://www.googleapis.com/auth/spreadsheets.readonly",
-  "https://www.googleapis.com/auth/drive",
-  "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.readonly",
-];
-
-WORKSPACE_SCOPES.forEach((scope) => {
-  googleProvider.addScope(scope);
-});
-
-// Flag to indicate active sign-in flow
-let isSigningIn = false;
-// In-memory token cache (NEVER stored in localStorage / sessionStorage)
-let cachedAccessToken: string | null = null;
-
-export const setCachedAccessToken = (token: string | null) => {
-  cachedAccessToken = token;
-};
-
-export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
-};
-
-export const clearAccessToken = () => {
-  cachedAccessToken = null;
-};
-
-// Initialize auth state listener to clear cached access token on sign-out
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    cachedAccessToken = null;
-  }
-});
-
-export const googleSignInWithWorkspace = async (): Promise<{ user: FirebaseUser; accessToken: string } | null> => {
-  try {
-    isSigningIn = true;
-    const result = await signInWithPopup(auth, googleProvider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error("Google Workspace erişim izni onaylandı ancak erişim anahtarı alınamadı.");
-    }
-    cachedAccessToken = credential.accessToken;
-    return { user: result.user, accessToken: cachedAccessToken };
-  } catch (error: any) {
-    console.error("Google Workspace Sign In error:", error);
-    throw error;
-  } finally {
-    isSigningIn = false;
-  }
-};
 
 // Configure Firestore with long-polling to prevent WebChannel streaming drops in iframes/proxies
 const targetDbId =
@@ -239,8 +184,10 @@ export interface UserFileMetadata {
 export interface UserProfileData {
   userId: string;
   email: string;
+  username?: string; // Uygulamaya giriş kullanıcı adı
   name: string;
   companyName: string;
+  companyId?: string; // İlgili şirket ID'si
   phone: string;
   taxNumber: string;
   selectedLogoId: number;
@@ -248,7 +195,7 @@ export interface UserProfileData {
   selectedLogoUrl: string;
   role: string;
   allowedModules?: AppModuleKey[]; // İzin verilen modüller (Boş/undefined ise tüm modüller serbesttir)
-  passwordPlain?: string; // Admin tarafından oluşturulduğunda kullanıcıya iletilen şifre
+  passwordPlain?: string; // Admin veya şirket açılışında tanımlanan şifre
   createdByAdmin?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -351,90 +298,250 @@ export async function getUserProfile(userId: string): Promise<UserProfileData | 
   return localList.find((u) => u.userId === userId) || null;
 }
 
-// Admin Operations: Get all users from Firestore with local backup union
+// Helper to enrich a UserProfileData with guaranteed username and passwordPlain
+function enrichUserProfileCredentials(user: UserProfileData, companies: ReturnType<typeof getCompaniesList>): UserProfileData {
+  const matchedCompany = companies.find(
+    (c) =>
+      (user.companyId && c.id === user.companyId) ||
+      (user.username && c.loginUsername && c.loginUsername.toLowerCase() === user.username.toLowerCase()) ||
+      (user.email && c.loginEmail && c.loginEmail.toLowerCase() === user.email.toLowerCase()) ||
+      (user.companyName && c.companyName && c.companyName.toLowerCase() === user.companyName.toLowerCase())
+  );
+
+  const isSysAdmin =
+    user.userId === "admin" ||
+    user.userId === "main_admin" ||
+    user.userId === "usr_admin_001" ||
+    user.email?.toLowerCase().includes("admin") ||
+    user.email?.toLowerCase() === "ilyasylldrm@gmail.com" ||
+    user.email?.toLowerCase() === "ilyasyildirim@outlook.com.tr" ||
+    user.role?.toLowerCase().includes("admin") ||
+    user.role === "Sistem Yöneticisi";
+
+  const derivedUsername =
+    user.username?.trim() ||
+    matchedCompany?.loginUsername?.trim() ||
+    (user.email ? user.email.split("@")[0].trim().toLowerCase() : "") ||
+    (isSysAdmin ? "admin" : "kullanici");
+
+  const derivedPassword =
+    user.passwordPlain?.trim() ||
+    matchedCompany?.loginPasswordPlain?.trim() ||
+    (isSysAdmin ? "Admin2026!" : "Muavin2026!");
+
+  return {
+    ...user,
+    username: derivedUsername,
+    passwordPlain: derivedPassword,
+    companyId: user.companyId || matchedCompany?.id,
+    companyName: user.companyName || matchedCompany?.companyName || "Muavin Finans & ERP",
+  };
+}
+
+// Admin Operations: Get all users from Firestore with local backup union and company users
 export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
   const localList = getLocalUsersBackup();
+  const companies = getCompaniesList();
+  const mergedMap = new Map<string, UserProfileData>();
+
+  // 1. Seed default system admin if no admin exists yet
+  const defaultAdmin: UserProfileData = {
+    userId: "usr_admin_001",
+    username: "admin",
+    name: "İlyas Yıldırım (Sistem Yöneticisi)",
+    email: "ilyasylldrm@gmail.com",
+    companyName: "MUAVİN BİLİŞİM TEKN.DAN.A.Ş. (TEST)",
+    companyId: "comp_default",
+    phone: "+90 (212) 555 0100",
+    taxNumber: "6220542314",
+    selectedLogoId: 1,
+    selectedLogoName: "E-MUAVİN Kurumsal Logo",
+    selectedLogoUrl: "/logo.svg",
+    role: "Sistem Yöneticisi (Admin)",
+    passwordPlain: "Admin2026!",
+    createdByAdmin: true,
+    createdAt: "2024-01-01T00:00:00.000Z",
+  };
+  mergedMap.set(defaultAdmin.email.toLowerCase(), defaultAdmin);
+
+  // 2. Include company login accounts from defined companies
+  companies.forEach((comp) => {
+    if (comp.loginUsername) {
+      const cleanUser = comp.loginUsername.trim().toLowerCase();
+      const email = (comp.loginEmail || `${cleanUser}@muavin.com`).trim().toLowerCase();
+      const compUser: UserProfileData = {
+        userId: `usr_${cleanUser}`,
+        username: cleanUser,
+        name: comp.loginFullName || `${comp.companyName} Yöneticisi`,
+        email,
+        companyName: comp.companyName,
+        companyId: comp.id,
+        phone: comp.phone || "+90 (212) 555 0100",
+        taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || comp.taxNumber || "1234567890",
+        selectedLogoId: 1,
+        selectedLogoName: "E-MUAVİN Kurumsal Logo",
+        selectedLogoUrl: "/logo.svg",
+        role: comp.loginRole || "Firma Yöneticisi",
+        allowedModules: comp.moduleRestrictionEnabled ? (comp.allowedModules as AppModuleKey[]) : undefined,
+        passwordPlain: comp.loginPasswordPlain || "Muavin2026!",
+        createdByAdmin: true,
+        createdAt: comp.createdAt || new Date().toISOString(),
+      };
+      mergedMap.set(email, compUser);
+    }
+  });
+
+  // 3. Add local backup users
+  localList.forEach((u) => {
+    const key = (u.email || u.userId || "").toLowerCase();
+    if (key) {
+      mergedMap.set(key, enrichUserProfileCredentials(u, companies));
+    }
+  });
+
+  // 4. Fetch Firestore users and merge
   try {
     const usersCol = collection(db, "users");
     const snapshot = await getDocs(usersCol);
-    const usersList: UserProfileData[] = [];
     snapshot.forEach((docSnap) => {
-      usersList.push(docSnap.data() as UserProfileData);
+      const u = docSnap.data() as UserProfileData;
+      const key = (u.email || u.userId || "").toLowerCase();
+      if (key) {
+        const existing = mergedMap.get(key);
+        const mergedUser: UserProfileData = {
+          ...existing,
+          ...u,
+          username: u.username || existing?.username,
+          passwordPlain: u.passwordPlain || existing?.passwordPlain,
+        };
+        mergedMap.set(key, enrichUserProfileCredentials(mergedUser, companies));
+      }
     });
-
-    if (usersList.length > 0) {
-      // Merge with local list so newly added offline/cached users are preserved
-      const mergedMap = new Map<string, UserProfileData>();
-      localList.forEach((u) => mergedMap.set(u.userId || u.email.toLowerCase(), u));
-      usersList.forEach((u) => mergedMap.set(u.userId || u.email.toLowerCase(), u));
-      const merged = Array.from(mergedMap.values());
-      saveLocalUsersBackup(merged);
-      return merged;
-    }
   } catch (err) {
     console.error("Error fetching all users for admin from Firestore, using local backup:", err);
   }
 
-  return localList;
+  const finalUsers = Array.from(mergedMap.values()).map((u) => enrichUserProfileCredentials(u, companies));
+  saveLocalUsersBackup(finalUsers);
+  return finalUsers;
 }
 
-// Find user profile by email across Firestore (direct query and case-insensitive fallback + local backup)
-export async function findUserProfileByEmail(email: string): Promise<UserProfileData | null> {
-  const cleanEmail = email.trim().toLowerCase();
-  if (!cleanEmail) return null;
+// Find user profile by email or username across Firestore (direct query and case-insensitive fallback + local backup)
+export async function findUserProfileByEmail(identifier: string): Promise<UserProfileData | null> {
+  const clean = identifier.trim().toLowerCase();
+  if (!clean) return null;
 
-  // 1. Direct Firestore query
+  // 1. Direct Firestore query by email or username
   try {
     const usersCol = collection(db, "users");
-    const q = query(usersCol, where("email", "==", cleanEmail));
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      const data = snapshot.docs[0].data() as UserProfileData;
-      return data;
+    // Check by email first
+    const qEmail = query(usersCol, where("email", "==", clean));
+    const snapshotEmail = await getDocs(qEmail);
+    if (!snapshotEmail.empty) {
+      return snapshotEmail.docs[0].data() as UserProfileData;
+    }
+
+    // Check by username
+    const qUser = query(usersCol, where("username", "==", clean));
+    const snapshotUser = await getDocs(qUser);
+    if (!snapshotUser.empty) {
+      return snapshotUser.docs[0].data() as UserProfileData;
     }
 
     // 2. Case-insensitive Firestore search across all profiles
     const allUsers = await getAllUsersProfiles();
     const match = allUsers.find(
-      (u) => u.email && u.email.trim().toLowerCase() === cleanEmail
+      (u) =>
+        (u.email && u.email.trim().toLowerCase() === clean) ||
+        (u.username && u.username.trim().toLowerCase() === clean)
     );
     if (match) return match;
   } catch (err) {
-    console.error("Error looking up user profile by email in Firestore:", err);
+    console.error("Error looking up user profile by email/username in Firestore:", err);
   }
 
   // 3. Fallback to local persistent backup
   const localList = getLocalUsersBackup();
   const localMatch = localList.find(
-    (u) => u.email && u.email.trim().toLowerCase() === cleanEmail
+    (u) =>
+      (u.email && u.email.trim().toLowerCase() === clean) ||
+      (u.username && u.username.trim().toLowerCase() === clean)
   );
-  return localMatch || null;
+  if (localMatch) return localMatch;
+
+  // 4. Fallback to registered companies list with login credentials
+  try {
+    const companies = getCompaniesList();
+    const matchedComp = companies.find(
+      (c) =>
+        (c.loginUsername && c.loginUsername.trim().toLowerCase() === clean) ||
+        (c.loginEmail && c.loginEmail.trim().toLowerCase() === clean) ||
+        (c.email && c.email.trim().toLowerCase() === clean)
+    );
+    if (matchedComp && matchedComp.loginUsername) {
+      const cleanUser = matchedComp.loginUsername.trim().toLowerCase();
+      const compProfile: UserProfileData = {
+        userId: `usr_${cleanUser}`,
+        username: cleanUser,
+        name: matchedComp.loginFullName || `${matchedComp.companyName} Yöneticisi`,
+        email: matchedComp.loginEmail || `${cleanUser}@muavin.com`,
+        companyName: matchedComp.companyName,
+        companyId: matchedComp.id,
+        phone: matchedComp.phone || "+90 (212) 555 0100",
+        taxNumber:
+          matchedComp.tenantIdentifierNumber ||
+          matchedComp.vkn ||
+          matchedComp.tckn ||
+          matchedComp.taxNumber ||
+          "1234567890",
+        selectedLogoId: 1,
+        selectedLogoName: "E-MUAVİN Kurumsal Logo",
+        selectedLogoUrl: "/logo.svg",
+        role: matchedComp.loginRole || "Firma Yöneticisi",
+        allowedModules: matchedComp.moduleRestrictionEnabled
+          ? (matchedComp.allowedModules as AppModuleKey[])
+          : undefined,
+        passwordPlain: matchedComp.loginPasswordPlain,
+        createdByAdmin: true,
+        createdAt: matchedComp.createdAt,
+        updatedAt: matchedComp.createdAt,
+      };
+      return compProfile;
+    }
+  } catch (compErr) {
+    console.warn("Error finding user profile from companies list:", compErr);
+  }
+
+  return null;
 }
+
+export const findUserProfileByIdentifier = findUserProfileByEmail;
 
 // System Policy Check: Check if user registration or login is authorized
 // "admin kullanıcı oluşturmadığı sürece yeni kayıt yapma"
-export async function isUserCreatedByAdmin(email: string): Promise<{
+export async function isUserCreatedByAdmin(identifier: string): Promise<{
   isAuthorized: boolean;
   isSysAdmin: boolean;
   existingProfile: UserProfileData | null;
   message?: string;
 }> {
-  const cleanEmail = email.trim().toLowerCase();
-  if (!cleanEmail) {
+  const clean = identifier.trim().toLowerCase();
+  if (!clean) {
     return {
       isAuthorized: false,
       isSysAdmin: false,
       existingProfile: null,
-      message: "Lütfen geçerli bir e-posta adresi giriniz.",
+      message: "Lütfen geçerli bir kullanıcı adı veya e-posta adresi giriniz.",
     };
   }
 
-  // Check if email belongs to root system administrator
+  // Check if identifier belongs to root system administrator
   const isSysAdmin =
-    cleanEmail === "ilyasyildirim@outlook.com.tr" ||
-    cleanEmail === "ilyasylldrm@gmail.com" ||
-    cleanEmail === "admin@muavin.com" ||
-    cleanEmail.includes("admin");
+    clean === "ilyasyildirim@outlook.com.tr" ||
+    clean === "ilyasylldrm@gmail.com" ||
+    clean === "admin@muavin.com" ||
+    clean === "admin" ||
+    clean.includes("admin");
 
   if (isSysAdmin) {
     return {
@@ -444,8 +551,8 @@ export async function isUserCreatedByAdmin(email: string): Promise<{
     };
   }
 
-  // Look up user in Firestore users collection
-  const existingProfile = await findUserProfileByEmail(cleanEmail);
+  // Look up user in Firestore users collection (by email or username)
+  const existingProfile = await findUserProfileByEmail(clean);
 
   if (existingProfile) {
     return {
@@ -459,13 +566,17 @@ export async function isUserCreatedByAdmin(email: string): Promise<{
     isAuthorized: false,
     isSysAdmin: false,
     existingProfile: null,
-    message: `Kayıt/Giriş Engellendi: '${cleanEmail}' adresi için Sistem Yöneticisi tarafından oluşturulmuş bir personel veya kullanıcı kaydı bulunmamaktadır. Admin kullanıcı oluşturmadığı sürece yeni kayıt yapılamaz.`,
+    message: `Kayıt/Giriş Engellendi: '${clean}' kullanıcısı için sistemde oluşturulmuş bir hesap kaydı bulunmamaktadır. Şirket veya Admin tarafından kullanıcı açılmadığı sürece sisteme giriş yapılamaz.`,
   };
 }
 
-// Admin Operations: Delete a user profile from Firestore
+// Admin Operations: Delete a user profile from Firestore and local backup
 export async function deleteUserProfile(userId: string): Promise<void> {
   try {
+    const existing = getLocalUsersBackup();
+    const filtered = existing.filter((u) => u.userId !== userId && (u as any).id !== userId);
+    saveLocalUsersBackup(filtered);
+
     const userRef = doc(db, "users", userId);
     await deleteDoc(userRef);
   } catch (err) {
@@ -477,6 +588,11 @@ export async function deleteUserProfile(userId: string): Promise<void> {
 // Admin Operations: Delete user profile and optionally their uploaded files
 export async function deleteUserProfileAndData(userId: string, deleteFiles: boolean = false): Promise<void> {
   try {
+    // 0. Remove from local persistent backup
+    const existing = getLocalUsersBackup();
+    const filtered = existing.filter((u) => u.userId !== userId && (u as any).id !== userId);
+    saveLocalUsersBackup(filtered);
+
     // 1. Delete user doc from 'users' collection
     const userRef = doc(db, "users", userId);
     await deleteDoc(userRef);
@@ -614,3 +730,7 @@ export async function deleteUserFile(fileId: string, storagePath?: string): Prom
   const fileRef = doc(db, "user_files", fileId);
   await deleteDoc(fileRef);
 }
+
+// Fallback stubs for legacy token helpers
+export const setCachedAccessToken = (_token?: string): void => {};
+export const getCachedAccessToken = (): string | null => null;

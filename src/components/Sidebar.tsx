@@ -44,8 +44,15 @@ import {
   HardHat,
   ExternalLink,
   UploadCloud,
+  Globe,
 } from "lucide-react";
-import { CompanySettings, ConstructionProject } from "../types";
+import {
+  CompanySettings,
+  ConstructionProject,
+  CompanyItem,
+  isAdminOrSysAdmin,
+  isModuleOrSubModuleAllowed,
+} from "../types";
 import { Logo } from "./Logo";
 import { FinanceSubModule } from "./Accounts";
 import { UserProfile } from "./AuthModal";
@@ -84,6 +91,8 @@ export type NavItem =
   | "reports"
   | "company"
   | "company_profile"
+  | "company_companies"
+  | "company_mysoft"
   | "company_branches"
   | "company_warehouses"
   | "company_settings"
@@ -110,6 +119,7 @@ interface SidebarProps {
   selectedConstructionProjectId?: string | null;
   onSelectConstructionProject?: (projectId: string) => void;
   onOpenGitHubPublish?: () => void;
+  activeCompany?: CompanyItem;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -129,6 +139,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedConstructionProjectId,
   onSelectConstructionProject,
   onOpenGitHubPublish,
+  activeCompany,
 }) => {
   const { theme } = useTheme();
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -141,14 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
   const [isConstructionExpanded, setIsConstructionExpanded] = useState(true);
 
-  const userEmail = currentUser?.email?.toLowerCase().trim() || "";
-  const isAdmin =
-    currentUser?.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" ||
-    currentUser?.id === "usr_admin_001" ||
-    currentUser?.role?.includes("Admin") ||
-    userEmail === "ilyasyildirim@outlook.com.tr" ||
-    userEmail === "ilyasylldrm@gmail.com" ||
-    userEmail.includes("admin");
+  const isAdmin = isAdminOrSysAdmin(currentUser);
 
   const allNavItems = [
     ...(isAdmin
@@ -175,24 +179,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "whatsapp" as NavItem, label: "WhatsApp Merkezi", icon: MessageSquare, badge: "Canlı" },
   ];
 
-  // Modül Kısıtlaması Kontrolü (Admin her zaman tüm modüllere erişebilir, normal kullanıcılara modül kısıtlaması uygulanır)
+  // Modül ve Alt Modül Kısıtlaması Kontrolü (Sadece Admin ve Sistem Yöneticisi Tarafından Yetkilendirilir)
   const navItems = allNavItems.filter((item) => {
     if (item.id === "admin") return isAdmin;
-    if (isAdmin) return true;
-    if (!currentUser?.allowedModules || currentUser.allowedModules.length === 0) {
-      return true; // Kısıtlama belirtilmemişse varsayılan olarak serbest
-    }
-    return currentUser.allowedModules.includes(item.id as any);
+    if (item.id === "dashboard") return true;
+    return isModuleOrSubModuleAllowed(item.id, undefined, currentUser, activeCompany);
   });
 
-  const companySubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
+  const allCompanySubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "company_profile", label: "Firma Profili & Adres", icon: Building },
+    { id: "company_companies", label: "Şirketler & Çoklu Şirket", icon: Building2 },
+    { id: "company_mysoft", label: "Mysoft VKN/TCKN Eşleştirme", icon: Globe },
     { id: "company_branches", label: "Şubeler", icon: Store },
     { id: "company_warehouses", label: "Depolar", icon: WarehouseIcon },
     { id: "company_settings", label: "Sistem Ayarları", icon: Settings },
   ];
+  const companySubModules = allCompanySubModules.filter((sub) =>
+    isModuleOrSubModuleAllowed(sub.id, "company", currentUser, activeCompany)
+  );
 
-  const invoiceSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
+  const allInvoiceSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "invoices_sales", label: "Gelir Faturaları", icon: FileText },
     { id: "invoices_purchase", label: "Gider Faturaları", icon: FileText },
     { id: "e_documents_incoming", label: "Gelen e-Faturalar", icon: ArrowDownLeft },
@@ -201,19 +207,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "waybills_dispatch", label: "Giden e-İrsaliyeler", icon: ArrowUpRight },
     { id: "waybills", label: "İrsaliye Oluştur", icon: FileText },
   ];
+  const invoiceSubModules = allInvoiceSubModules.filter((sub) =>
+    isModuleOrSubModuleAllowed(sub.id, "invoices", currentUser, activeCompany)
+  );
 
-  const orderSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
+  const allOrderSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "orders", label: "Siparişler & Sipariş Oluştur", icon: ShoppingCart },
     { id: "quotes", label: "Proforma Faturalar", icon: FileSpreadsheet },
   ];
+  const orderSubModules = allOrderSubModules.filter((sub) =>
+    isModuleOrSubModuleAllowed(sub.id, "orders_module", currentUser, activeCompany)
+  );
 
-  const financeSubModules: { id: FinanceSubModule; label: string; icon: React.ElementType }[] = [
-    { id: "kasa", label: "Kasa (Nakit)", icon: Banknote },
-    { id: "banka", label: "Banka Hesapları", icon: Building },
-    { id: "cek", label: "Çek Yönetimi", icon: FileCheck2 },
-    { id: "senet", label: "Senet Yönetimi", icon: Stamp },
-    { id: "virman", label: "Hesaplar Arası Virman", icon: ArrowRightLeft },
+  const allFinanceSubModules: { id: FinanceSubModule; moduleKey: string; label: string; icon: React.ElementType }[] = [
+    { id: "kasa", moduleKey: "finance_kasa", label: "Kasa (Nakit)", icon: Banknote },
+    { id: "banka", moduleKey: "finance_banka", label: "Banka Hesapları", icon: Building },
+    { id: "cek", moduleKey: "finance_cek", label: "Çek Yönetimi", icon: FileCheck2 },
+    { id: "senet", moduleKey: "finance_senet", label: "Senet Yönetimi", icon: Stamp },
+    { id: "virman", moduleKey: "finance_virman", label: "Hesaplar Arası Virman", icon: ArrowRightLeft },
   ];
+  const financeSubModules = allFinanceSubModules.filter((sub) =>
+    isModuleOrSubModuleAllowed(sub.moduleKey, "accounts", currentUser, activeCompany)
+  );
 
   const handleSelectTabWithMobileClose = (tab: NavItem) => {
     onSelectTab(tab);
@@ -226,7 +241,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Brand Header */}
       <div
-        className="px-4 py-3.5 border-b flex items-center justify-between gap-2 min-h-[72px] md:h-[72px]"
+        className="px-4 py-3.5 border-b flex items-center justify-between gap-2 min-h-[72px] md:h-[123px]"
         style={{ borderColor: theme.sidebarBorder }}
       >
         <div className="min-w-0 flex-1 flex flex-col justify-center">
@@ -239,9 +254,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             imageStyle={{ marginLeft: "11px", marginTop: "11px" }}
           />
           {settings.companyName && (
-            <p className="text-[11px] font-medium truncate mt-1 opacity-75 ml-[21px]" style={{ color: theme.sidebarText, marginLeft: "21px" }}>
+            <p
+              className="text-[11px] font-medium truncate opacity-75 ml-[21px]"
+              style={{ color: theme.sidebarText, marginLeft: "21px", marginTop: "25px" }}
+            >
               {settings.companyName}
             </p>
+          )}
+          {activeCompany?.moduleRestrictionEnabled && (
+            <div className="ml-[21px] mt-1 inline-flex items-center gap-1">
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                🔒 Modül Kısıtlaması ({activeCompany.allowedModules?.length || 0})
+              </span>
+            </div>
           )}
         </div>
         {onCloseMobile && (
@@ -298,7 +323,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : isFinanceItem
             ? currentTab === "accounts"
             : isCompanyItem
-            ? ["company", "company_profile", "company_branches", "company_warehouses", "company_settings", "settings", "company_e_services"].includes(currentTab)
+            ? ["company", "company_profile", "company_companies", "company_mysoft", "company_branches", "company_warehouses", "company_settings", "settings", "company_e_services"].includes(currentTab)
             : isProductItem
             ? ["products", "products_list"].includes(currentTab)
             : currentTab === item.id;
@@ -335,7 +360,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }
                   } else if (isCompanyItem) {
                     setIsCompanyExpanded((prev) => !prev);
-                    if (!["company", "company_profile", "company_branches", "company_warehouses", "company_settings", "settings"].includes(currentTab)) {
+                    if (!["company", "company_profile", "company_companies", "company_mysoft", "company_branches", "company_warehouses", "company_settings", "settings"].includes(currentTab)) {
                       handleSelectTabWithMobileClose("company_profile");
                     }
                   } else if (isConstructionItem) {
@@ -620,7 +645,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Brand Header (Collapsed) */}
       <div
-        className="px-2 py-3.5 border-b flex flex-col items-center justify-center gap-1.5 min-h-[72px] md:h-[72px]"
+        className="px-2 py-3.5 border-b flex flex-col items-center justify-center gap-1.5 min-h-[72px] md:h-[123px]"
         style={{ borderColor: theme.sidebarBorder }}
       >
         <button
@@ -702,6 +727,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ? [
                 "company",
                 "company_profile",
+                "company_companies",
+                "company_mysoft",
                 "company_branches",
                 "company_warehouses",
                 "company_settings",

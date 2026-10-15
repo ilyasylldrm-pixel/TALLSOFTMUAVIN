@@ -16,7 +16,6 @@ import {
 } from "../types";
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
-import { InvoiceCreatePreviewPanel } from "./InvoiceCreatePreviewPanel";
 import { InvoiceTaxSettingsModal } from "./InvoiceTaxSettingsModal";
 import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerModal";
 import { ExportButtons } from "./ExportButtons";
@@ -45,6 +44,8 @@ import {
   sendMysoftOutgoingInvoice,
   checkRecipientTaxpayerStatus,
   RecipientTaxpayerStatus,
+  getMysoftMappingDefaults,
+  MysoftMappingDefaults,
   getNextMysoftInvoiceNumber,
   type MysoftNextInvoiceNumberResult,
   listMysoftTenants,
@@ -60,6 +61,7 @@ import {
   calculateNextInvoiceNumber,
   parseInvoiceDocNo,
 } from "../services/mysoftInvoiceNumber";
+import { getCompaniesList, updateCompanyItem } from "../utils/storage";
 import {
   FileText,
   FileSpreadsheet,
@@ -102,8 +104,14 @@ import {
   Percent,
   ShieldCheck,
   Scale,
+  UserPlus,
+  User,
+  Mail,
+  Phone,
+  Info,
   RefreshCw,
 } from "lucide-react";
+import { TURKEY_PROVINCES_DATA } from "../data/locationAndTaxData";
 
 const TURKISH_MONTHS = [
   { id: 1, name: "Ocak" },
@@ -165,6 +173,7 @@ interface InvoicesProps {
   initialContactIdForNewInvoice?: string | null;
   onCollectAllInvoices?: (targetAccountId?: string) => void;
   onSelectTab?: (tab: NavItem) => void;
+  onAddContact?: (contact: Contact) => void;
 }
 
 const INVOICE_TABLE_COLUMNS: ColumnDef[] = [
@@ -193,6 +202,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   initialContactIdForNewInvoice,
   onCollectAllInvoices,
   onSelectTab,
+  onAddContact,
 }) => {
   const { theme } = useTheme();
   const selection = useTableSelection();
@@ -269,6 +279,21 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [taxModalItem, setTaxModalItem] = useState<InvoiceItem | null>(null);
   const [taxModalInitialTab, setTaxModalInitialTab] = useState<"tevkifat" | "ozel_matrah" | "istisna" | "ek_vergiler" | undefined>(undefined);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState<string>("");
+
+  // Customer Mode: "registered" (Kayıtlı Cari Hesap) vs "manual" (Elle Müşteri Bilgisi Gir)
+  const [customerMode, setCustomerMode] = useState<"registered" | "manual">(
+    initialContactIdForNewInvoice ? "registered" : (contacts.length === 0 ? "manual" : "registered")
+  );
+  const [manualCustomerName, setManualCustomerName] = useState<string>("");
+  const [manualTaxNumber, setManualTaxNumber] = useState<string>("");
+  const [manualTaxOffice, setManualTaxOffice] = useState<string>("");
+  const [manualAddress, setManualAddress] = useState<string>("");
+  const [manualCity, setManualCity] = useState<string>("");
+  const [manualDistrict, setManualDistrict] = useState<string>("");
+  const [manualPhone, setManualPhone] = useState<string>("");
+  const [manualEmail, setManualEmail] = useState<string>("");
+  const [saveManualAsContact, setSaveManualAsContact] = useState<boolean>(false);
+
   const [contactId, setContactId] = useState<string>(
     initialContactIdForNewInvoice || contacts[0]?.id || ""
   );
@@ -289,6 +314,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === cleanVal
       );
       if (exactMatch) {
+        setCustomerMode("registered");
         setContactId(exactMatch.id);
         return;
       }
@@ -299,6 +325,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
           (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "").startsWith(cleanVal)
         );
         if (startsWithMatches.length === 1) {
+          setCustomerMode("registered");
           setContactId(startsWithMatches[0].id);
         }
       }
@@ -306,6 +333,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
   };
 
   const handleContactSelectChange = (newContactId: string) => {
+    if (newContactId === "__manual_entry__") {
+      setCustomerMode("manual");
+      if (vknSearchInput && !manualTaxNumber) {
+        setManualTaxNumber(vknSearchInput);
+      }
+      return;
+    }
+    setCustomerMode("registered");
     setContactId(newContactId);
     const found = contacts.find((c) => c.id === newContactId);
     if (found && found.taxNumber) {
@@ -356,6 +391,19 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [mysoftNumberInfo, setMysoftNumberInfo] = useState<MysoftNextInvoiceNumberResult | null>(null);
   const [recipientStatus, setRecipientStatus] = useState<RecipientTaxpayerStatus | null>(null);
   const [isCheckingRecipient, setIsCheckingRecipient] = useState<boolean>(false);
+  const [mysoftMappingDefaults, setMysoftMappingDefaults] = useState<MysoftMappingDefaults | null>(null);
+  const [selectedEFaturaPrefix, setSelectedEFaturaPrefix] = useState<string>(
+    () =>
+      (companySettings.eFaturaPrefix || companySettings.defaultInvoicePrefix || "GIB")
+        .trim()
+        .toUpperCase()
+        .slice(0, 3) || "GIB",
+  );
+  const [selectedEArsivPrefix, setSelectedEArsivPrefix] = useState<string>(
+    () => (companySettings.eArsivPrefix || "EAR").trim().toUpperCase().slice(0, 3) || "EAR",
+  );
+  const [isLoadingMysoftSeries, setIsLoadingMysoftSeries] = useState<boolean>(false);
+  const [isManualInvoiceNumber, setIsManualInvoiceNumber] = useState<boolean>(false);
 
   useEffect(() => {
     const fromSettings = normalizeMysoftTenantIdentifier(
@@ -374,6 +422,50 @@ export const Invoices: React.FC<InvoicesProps> = ({
     companySettings.mysoftCredentials?.tenantIdentifierNumber,
     mysoftTenantVkn,
   ]);
+
+  useEffect(() => {
+    if (companySettings.eFaturaPrefix) {
+      setSelectedEFaturaPrefix(companySettings.eFaturaPrefix.trim().toUpperCase().slice(0, 3));
+    }
+    if (companySettings.eArsivPrefix) {
+      setSelectedEArsivPrefix(companySettings.eArsivPrefix.trim().toUpperCase().slice(0, 3));
+    }
+  }, [companySettings.eFaturaPrefix, companySettings.eArsivPrefix]);
+
+  const refreshMysoftSerialNumbers = useCallback(
+    async (targetVkn?: string) => {
+      const vkn =
+        normalizeMysoftTenantIdentifier(targetVkn) ||
+        mysoftTenantVkn ||
+        normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber) ||
+        normalizeMysoftTenantIdentifier(
+          companySettings.vkn || companySettings.tckn || companySettings.taxNumber,
+        );
+      if (!vkn) return;
+      setIsLoadingMysoftSeries(true);
+      try {
+        const defaults = await getMysoftMappingDefaults(vkn);
+        setMysoftMappingDefaults(defaults);
+        if (defaults.eFaturaPrefix) {
+          setSelectedEFaturaPrefix(defaults.eFaturaPrefix.trim().toUpperCase().slice(0, 3));
+        }
+        if (defaults.eArsivPrefix) {
+          setSelectedEArsivPrefix(defaults.eArsivPrefix.trim().toUpperCase().slice(0, 3));
+        }
+      } catch {
+        // Keep current prefixes/settings
+      } finally {
+        setIsLoadingMysoftSeries(false);
+      }
+    },
+    [
+      mysoftTenantVkn,
+      companySettings.tenantIdentifierNumber,
+      companySettings.vkn,
+      companySettings.tckn,
+      companySettings.taxNumber,
+    ],
+  );
 
   const fetchAndApplyNextInvoiceNumber = useCallback(
     async (overrideTenant?: string, overrideDocType?: "e_fatura" | "e_arsiv") => {
@@ -451,18 +543,34 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setMysoftSaveError(null);
     if (vkn) {
       void fetchAndApplyNextInvoiceNumber(vkn);
+      void refreshMysoftSerialNumbers(vkn);
     }
-  }, [fetchAndApplyNextInvoiceNumber]);
+  }, [fetchAndApplyNextInvoiceNumber, refreshMysoftSerialNumbers]);
 
   const handleEDocTypeChange = useCallback((nextType: "e_fatura" | "e_arsiv") => {
     setMysoftEDocType(nextType);
+    if (nextType === "e_arsiv") {
+      setInvoiceScenario("EARSIVFATURA");
+    } else if (invoiceScenario === "EARSIVFATURA") {
+      setInvoiceScenario("TICARIFATURA");
+    }
+    setIsManualInvoiceNumber(false);
     void fetchAndApplyNextInvoiceNumber(undefined, nextType);
-  }, [fetchAndApplyNextInvoiceNumber]);
+  }, [fetchAndApplyNextInvoiceNumber, invoiceScenario]);
+
+  useEffect(() => {
+    refreshMysoftSerialNumbers();
+  }, [refreshMysoftSerialNumbers]);
 
   // Live e-Fatura vs e-Arşiv Recipient Taxpayer Auto-Detection
   useEffect(() => {
     const contact = contacts.find((c) => c.id === contactId);
-    const taxNum = (contact?.taxNumber || "").replace(/\D/g, "").trim();
+    const taxNum = (
+      customerMode === "manual"
+        ? (manualTaxNumber || vknSearchInput || "")
+        : (contact?.taxNumber || vknSearchInput || "")
+    ).replace(/\D/g, "").trim();
+
     if (!taxNum || (taxNum.length !== 10 && taxNum.length !== 11)) {
       setRecipientStatus(null);
       return;
@@ -476,6 +584,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
           setRecipientStatus(status);
           const nextType = status.isEFaturaUser ? "e_fatura" : "e_arsiv";
           setMysoftEDocType(nextType);
+          if (status.isEFaturaUser) {
+            setInvoiceScenario((prev) =>
+              prev === "EARSIVFATURA"
+                ? status.suggestedProfile === "TEMELFATURA"
+                  ? "TEMELFATURA"
+                  : "TICARIFATURA"
+                : prev,
+            );
+          } else {
+            setInvoiceScenario("EARSIVFATURA");
+          }
           void fetchAndApplyNextInvoiceNumber(undefined, nextType);
         }
       })
@@ -486,7 +605,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [contactId, contacts, fetchAndApplyNextInvoiceNumber]);
+  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, fetchAndApplyNextInvoiceNumber]);
 
   const handleQuickCreateContact = (e: React.FormEvent) => {
     e.preventDefault();
@@ -591,6 +710,129 @@ export const Invoices: React.FC<InvoicesProps> = ({
     },
   ]);
 
+  const computeMysoftSequentialNumber = useCallback(
+    (docType: "e_fatura" | "e_arsiv", customPrefix?: string): string => {
+      const isEArsiv = docType === "e_arsiv";
+      const rawPrefix =
+        customPrefix ||
+        (isEArsiv
+          ? selectedEArsivPrefix ||
+            mysoftMappingDefaults?.eArsivPrefix ||
+            companySettings.eArsivPrefix ||
+            "EAR"
+          : selectedEFaturaPrefix ||
+            mysoftMappingDefaults?.eFaturaPrefix ||
+            companySettings.eFaturaPrefix ||
+            companySettings.defaultInvoicePrefix ||
+            "GIB");
+      const prefix =
+        rawPrefix
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+          .slice(0, 3) || (isEArsiv ? "EAR" : "GIB");
+      const currentYear =
+        issueDate && /^\d{4}/.test(issueDate)
+          ? Number(issueDate.slice(0, 4))
+          : new Date().getFullYear();
+
+      let rowSeq = 0;
+      const prefixRow = mysoftMappingDefaults?.prefixes?.find(
+        (p) => String(p.prefix || "").trim().toUpperCase() === prefix,
+      );
+      if (prefixRow && prefixRow.currentNumber !== undefined) {
+        rowSeq = (Number(prefixRow.currentNumber) || 0) + 1;
+      }
+
+      let savedSeq = 0;
+      const savedNext = isEArsiv
+        ? mysoftMappingDefaults?.eArsivNextNumber || companySettings.eArsivNextNumber
+        : mysoftMappingDefaults?.eFaturaNextNumber || companySettings.eFaturaNextNumber;
+      if (savedNext) {
+        const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(savedNext.trim());
+        if (
+          match &&
+          match[1].toUpperCase() === prefix &&
+          Number(match[2]) === currentYear
+        ) {
+          savedSeq = parseInt(match[3], 10) || 0;
+        }
+      }
+
+      let maxInvoiceSeq = 0;
+      for (const inv of invoices) {
+        if (editingInvoiceId && inv.id === editingInvoiceId) continue;
+        const cleaned = String(inv.invoiceNumber || "")
+          .replace(/\s*\(TASLAK\)\s*$/i, "")
+          .trim();
+        if (cleaned.toUpperCase().startsWith(`${prefix}${currentYear}`)) {
+          const tail = cleaned.slice(prefix.length + 4);
+          const parsed = parseInt(tail, 10);
+          if (!isNaN(parsed) && parsed > maxInvoiceSeq) {
+            maxInvoiceSeq = parsed;
+          }
+        }
+      }
+
+      const nextSeq = Math.max(1, rowSeq, savedSeq, maxInvoiceSeq + 1);
+      return `${prefix}${currentYear}${String(nextSeq).padStart(9, "0")}`;
+    },
+    [
+      selectedEArsivPrefix,
+      selectedEFaturaPrefix,
+      mysoftMappingDefaults,
+      companySettings.eArsivPrefix,
+      companySettings.eFaturaPrefix,
+      companySettings.defaultInvoicePrefix,
+      companySettings.eArsivNextNumber,
+      companySettings.eFaturaNextNumber,
+      issueDate,
+      invoices,
+      editingInvoiceId,
+    ],
+  );
+
+  const isCurrentSalesEArsiv =
+    mysoftEDocType === "e_arsiv" || invoiceScenario === "EARSIVFATURA";
+  const activeEFaturaNextNo = computeMysoftSequentialNumber("e_fatura");
+  const activeEArsivNextNo = computeMysoftSequentialNumber("e_arsiv");
+  const activeMysoftSerialNumber = isCurrentSalesEArsiv
+    ? activeEArsivNextNo
+    : activeEFaturaNextNo;
+  const activeMysoftPrefix = (
+    isCurrentSalesEArsiv
+      ? selectedEArsivPrefix ||
+        mysoftMappingDefaults?.eArsivPrefix ||
+        companySettings.eArsivPrefix ||
+        "EAR"
+      : selectedEFaturaPrefix ||
+        mysoftMappingDefaults?.eFaturaPrefix ||
+        companySettings.eFaturaPrefix ||
+        companySettings.defaultInvoicePrefix ||
+        "GIB"
+  )
+    .trim()
+    .toUpperCase()
+    .slice(0, 3);
+
+  // Automatically sync Fatura Numarası input to Mysoft e-Fatura / e-Arşiv serial number when cutting a new sales invoice
+  useEffect(() => {
+    if (
+      !editingInvoiceId &&
+      invType === "sales" &&
+      formDocKind === "invoice" &&
+      !isManualInvoiceNumber
+    ) {
+      setInvoiceNumberInput(activeMysoftSerialNumber);
+    }
+  }, [
+    editingInvoiceId,
+    invType,
+    formDocKind,
+    isManualInvoiceNumber,
+    activeMysoftSerialNumber,
+  ]);
+
   const handleOpenNewInvoiceModal = (
     docKind: "invoice" | "receipt" = "invoice",
     type?: InvoiceType
@@ -598,18 +840,36 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setEditingInvoiceId(null);
     setEditingInvoiceNumber(null);
     setInvoiceScenario("TICARIFATURA");
+    setMysoftEDocType("e_fatura");
     setInvoiceProfileType("SATIS");
     setTaxModalItem(null);
     setTaxModalInitialTab(undefined);
     setFormDocKind(docKind);
     const targetType = type || forcedType || "sales";
     setInvType(targetType);
-    const nextSeq = String(invoices.length + 1).padStart(7, "0");
-    const prefix = targetType === "sales" ? "MUV2026" : "TED2026";
-    setInvoiceNumberInput(`${prefix}${nextSeq}`);
-    if (targetType === "sales" && sendToMysoft) {
-      void fetchAndApplyNextInvoiceNumber();
+    setIsManualInvoiceNumber(false);
+    if (targetType === "sales" && docKind === "invoice") {
+      setInvoiceNumberInput(computeMysoftSequentialNumber("e_fatura"));
+      refreshMysoftSerialNumbers();
+      if (sendToMysoft) {
+        void fetchAndApplyNextInvoiceNumber();
+      }
+    } else {
+      setInvoiceNumberInput("");
     }
+
+    // Reset manual customer fields
+    setCustomerMode(initialContactIdForNewInvoice ? "registered" : (contacts.length === 0 ? "manual" : "registered"));
+    setManualCustomerName("");
+    setManualTaxNumber("");
+    setManualTaxOffice("");
+    setManualAddress("");
+    setManualCity("");
+    setManualDistrict("");
+    setManualPhone("");
+    setManualEmail("");
+    setSaveManualAsContact(false);
+
     const targetContactId = initialContactIdForNewInvoice || contacts[0]?.id || "";
     setContactId(targetContactId);
     const targetContact = contacts.find((c) => c.id === targetContactId);
@@ -652,16 +912,48 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setTaxModalItem(null);
     setTaxModalInitialTab(undefined);
     setFormDocKind(inv.docKind || "invoice");
-    const editContactId = inv.contactId || contacts[0]?.id || "";
-    setContactId(editContactId);
-    const editContact = contacts.find((c) => c.id === editContactId);
-    setVknSearchInput(
-      editContact?.taxNumber
-        ? editContact.taxNumber.replace(/\D/g, "")
-        : inv.taxNumber
-        ? inv.taxNumber.replace(/\D/g, "")
-        : ""
+
+    const matchedContact = contacts.find((c) => c.id === inv.contactId);
+    const isManual = Boolean(
+      inv.isManualCustomer ||
+      (!matchedContact && (inv.contactId?.startsWith("manual_") || !inv.contactId))
     );
+
+    if (isManual) {
+      setCustomerMode("manual");
+      setManualCustomerName(inv.contactName || "");
+      setManualTaxNumber(inv.taxNumber || "");
+      setManualTaxOffice(inv.taxOffice || "");
+      setManualAddress(inv.customerAddress || "");
+      setManualCity(inv.customerCity || "");
+      setManualDistrict(inv.customerDistrict || "");
+      setManualPhone(inv.customerPhone || "");
+      setManualEmail(inv.customerEmail || "");
+      setSaveManualAsContact(false);
+      setContactId(inv.contactId || `manual_${Date.now()}`);
+      setVknSearchInput(inv.taxNumber ? inv.taxNumber.replace(/\D/g, "") : "");
+    } else {
+      setCustomerMode("registered");
+      const editContactId = inv.contactId || contacts[0]?.id || "";
+      setContactId(editContactId);
+      const editContact = contacts.find((c) => c.id === editContactId);
+      setVknSearchInput(
+        editContact?.taxNumber
+          ? editContact.taxNumber.replace(/\D/g, "")
+          : inv.taxNumber
+          ? inv.taxNumber.replace(/\D/g, "")
+          : ""
+      );
+      setManualCustomerName("");
+      setManualTaxNumber("");
+      setManualTaxOffice("");
+      setManualAddress("");
+      setManualCity("");
+      setManualDistrict("");
+      setManualPhone("");
+      setManualEmail("");
+      setSaveManualAsContact(false);
+    }
     setIssueDate(inv.issueDate || new Date().toISOString().split("T")[0]);
     setDueDate(inv.dueDate || new Date().toISOString().split("T")[0]);
 
@@ -845,10 +1137,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
       computedItems,
     } = calculateTotals();
     const isReceipt = formDocKind === "receipt";
-    const prefix = invType === "sales"
-      ? isReceipt ? "GLF2026" : "MUV2026"
-      : isReceipt ? "GDF2026" : "TED2026";
+    const currentYear = new Date().getFullYear();
     const nextSeq = String(invoices.length + 1).padStart(7, "0");
+    const defaultNumber =
+      invType === "sales"
+        ? isReceipt
+          ? `GLF${currentYear}${nextSeq}`
+          : activeMysoftSerialNumber
+        : isReceipt
+          ? `GDF${currentYear}${nextSeq}`
+          : `TED${currentYear}${nextSeq}`;
     const customNum = String(invoiceNumberInput || "").trim();
 
     let finalNotes = String(notes || "").trim();
@@ -873,15 +1171,26 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
 
     return {
-      invoiceNumber: customNum ? `${customNum} (TASLAK)` : `${prefix}${nextSeq} (TASLAK)`,
+      invoiceNumber: customNum ? `${customNum} (TASLAK)` : `${defaultNumber} (TASLAK)`,
       type: invType,
-      invoiceScenario,
+      invoiceScenario: isCurrentSalesEArsiv ? "EARSIVFATURA" : invoiceScenario,
       invoiceProfileType,
       docKind: forcedType ? formDocKind : "invoice",
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
-      contactId: contactId,
-      contactName: contact?.name || "Cari Seçilmedi",
-      taxNumber: contact?.taxNumber || "",
+      contactId: customerMode === "manual" ? "manual_draft" : contactId,
+      contactName: customerMode === "manual"
+        ? (manualCustomerName.trim() || "Münferit Müşteri")
+        : (contact?.name || "Cari Seçilmedi"),
+      taxNumber: customerMode === "manual"
+        ? (manualTaxNumber.trim() || vknSearchInput.trim() || "")
+        : (contact?.taxNumber || vknSearchInput.trim() || ""),
+      taxOffice: customerMode === "manual" ? manualTaxOffice.trim() : (contact?.taxOffice || ""),
+      customerAddress: customerMode === "manual" ? manualAddress.trim() : (contact?.address || ""),
+      customerCity: customerMode === "manual" ? manualCity.trim() : (contact?.city || ""),
+      customerDistrict: customerMode === "manual" ? manualDistrict.trim() : (contact?.district || ""),
+      customerPhone: customerMode === "manual" ? manualPhone.trim() : (contact?.phone || ""),
+      customerEmail: customerMode === "manual" ? manualEmail.trim() : (contact?.email || ""),
+      isManualCustomer: customerMode === "manual",
       issueDate,
       dueDate,
       items: computedItems,
@@ -904,8 +1213,29 @@ export const Invoices: React.FC<InvoicesProps> = ({
   };
 
   const buildMysoftPreviewPayload = useCallback((): Record<string, unknown> | null => {
+    const isManual = customerMode === "manual";
     const contact = contacts.find((c) => c.id === contactId);
-    if (!contact) return null;
+    if (!isManual && !contact) return null;
+    if (isManual && !manualCustomerName.trim()) return null;
+
+    const effectiveContact: Contact = isManual
+      ? {
+          id: "manual_preview",
+          name: manualCustomerName.trim(),
+          taxNumber: manualTaxNumber.trim() || vknSearchInput.trim() || undefined,
+          taxOffice: manualTaxOffice.trim() || undefined,
+          address: manualAddress.trim() || undefined,
+          city: manualCity.trim() || undefined,
+          district: manualDistrict.trim() || undefined,
+          phone: manualPhone.trim() || undefined,
+          email: manualEmail.trim() || undefined,
+          contactType: invType === "sales" ? "customer" : "vendor",
+          balance: 0,
+          balanceType: "balanced",
+          createdAt: new Date().toISOString().split("T")[0],
+        }
+      : contact!;
+
     const { subtotal, totalVat, grandTotal, computedItems } = calculateTotals();
     if (!computedItems.some((item) => String(item.description || "").trim())) {
       return null;
@@ -919,9 +1249,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
       issueDate,
       dueDate,
       items: computedItems,
-      contactId,
-      contactName: contact.name,
-      taxNumber: contact.taxNumber || "",
+      contactId: effectiveContact.id,
+      contactName: effectiveContact.name,
+      taxNumber: effectiveContact.taxNumber || "",
+      taxOffice: effectiveContact.taxOffice || "",
+      customerAddress: effectiveContact.address,
+      customerCity: effectiveContact.city,
+      customerDistrict: effectiveContact.district,
+      customerPhone: effectiveContact.phone,
+      customerEmail: effectiveContact.email,
+      isManualCustomer: isManual,
       subtotal,
       totalVat,
       grandTotal,
@@ -931,7 +1268,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
       remainingAmount: grandTotal,
       createdAt: new Date().toISOString().split("T")[0],
     } as Invoice;
-
     const effectiveTenant =
       mysoftTenantVkn ||
       readStoredMysoftTenantVkn() ||
@@ -942,9 +1278,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     return buildMysoftInvoiceOutboxPayload({
       invoice: invoiceForPayload,
-      contact,
+      contact: effectiveContact,
       company: companySettings,
-      eDocumentType: mysoftEDocType,
+      eDocumentType: isCurrentSalesEArsiv ? "e_arsiv" : "e_fatura",
+      profile: isCurrentSalesEArsiv ? "EARSIVFATURA" : invoiceScenario,
+      prefix: activeMysoftPrefix,
       docNo: invoiceNumberInput,
       isSaveAsDraft: true,
       tenantIdentifierNumber: effectiveTenant,
@@ -952,6 +1290,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
       gbAlias: recipientStatus?.gbAlias,
     });
   }, [
+    customerMode,
+    manualCustomerName,
+    manualTaxNumber,
+    manualTaxOffice,
+    manualAddress,
+    manualCity,
+    manualDistrict,
+    manualPhone,
+    manualEmail,
+    vknSearchInput,
     contactId,
     contacts,
     companySettings,
@@ -962,8 +1310,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
     formDocKind,
     invType,
     issueDate,
-    items,
+    calculateTotals,
+    getDraftInvoice,
     mysoftEDocType,
+    items,
     notes,
     hasDifferentDeliveryAddress,
     deliveryAddress,
@@ -1095,9 +1445,83 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   const handleSaveInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isManual = customerMode === "manual";
     const contact = contacts.find((c) => c.id === contactId);
-    if (!contact) return;
+
+    if (isManual) {
+      if (!manualCustomerName.trim()) {
+        alert("Lütfen müşteri adını veya ticari ünvanını giriniz.");
+        return;
+      }
+    } else {
+      if (!contact) {
+        alert("Lütfen bir cari hesap seçiniz veya 'Elle Müşteri Bilgisi Gir' seçeneğini kullanınız.");
+        return;
+      }
+    }
+
     if (isSavingMysoft) return;
+
+    let finalContactId = contactId;
+    const effectiveContactName = isManual ? manualCustomerName.trim() : contact!.name;
+    const effectiveTaxNumber = isManual
+      ? (manualTaxNumber.trim() || vknSearchInput.trim() || "")
+      : (contact!.taxNumber || vknSearchInput.trim() || "");
+    const effectiveTaxOffice = isManual ? manualTaxOffice.trim() : (contact!.taxOffice || "");
+    const effectiveAddress = isManual ? manualAddress.trim() : (contact!.address || "");
+    const effectiveCity = isManual ? manualCity.trim() : (contact!.city || "");
+    const effectiveDistrict = isManual ? manualDistrict.trim() : (contact!.district || "");
+    const effectivePhone = isManual ? manualPhone.trim() : (contact!.phone || "");
+    const effectiveEmail = isManual ? manualEmail.trim() : (contact!.email || "");
+
+    let effectiveContactObj: Contact;
+
+    if (isManual) {
+      if (saveManualAsContact) {
+        const newContact: Contact = {
+          id: "cnt_" + Date.now(),
+          name: effectiveContactName,
+          taxNumber: effectiveTaxNumber || undefined,
+          taxOffice: effectiveTaxOffice || undefined,
+          address: effectiveAddress || undefined,
+          city: effectiveCity || undefined,
+          district: effectiveDistrict || undefined,
+          phone: effectivePhone || undefined,
+          email: effectiveEmail || undefined,
+          contactType: invType === "sales" ? "customer" : "vendor",
+          balance: 0,
+          balanceType: "balanced",
+          createdAt: new Date().toISOString().split("T")[0],
+        };
+        if (onAddContact) {
+          onAddContact(newContact);
+        } else {
+          contacts.push(newContact);
+        }
+        finalContactId = newContact.id;
+        effectiveContactObj = newContact;
+      } else {
+        const existingInv = editingInvoiceId ? invoices.find((i) => i.id === editingInvoiceId) : null;
+        finalContactId = existingInv?.contactId?.startsWith("manual_") ? existingInv.contactId : `manual_${Date.now()}`;
+        effectiveContactObj = {
+          id: finalContactId,
+          name: effectiveContactName,
+          taxNumber: effectiveTaxNumber || undefined,
+          taxOffice: effectiveTaxOffice || undefined,
+          address: effectiveAddress || undefined,
+          city: effectiveCity || undefined,
+          district: effectiveDistrict || undefined,
+          phone: effectivePhone || undefined,
+          email: effectiveEmail || undefined,
+          contactType: invType === "sales" ? "customer" : "vendor",
+          balance: 0,
+          balanceType: "balanced",
+          createdAt: new Date().toISOString().split("T")[0],
+        };
+      }
+    } else {
+      effectiveContactObj = contact!;
+    }
 
     const {
       grossTotal,
@@ -1114,11 +1538,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
     } = calculateTotals();
 
     const isReceipt = formDocKind === "receipt";
-    const prefix = invType === "sales"
-      ? isReceipt ? "GLF2026" : "MUV2026"
-      : isReceipt ? "GDF2026" : "TED2026";
+    const currentYear = new Date().getFullYear();
     const nextSeq = String(invoices.length + 1).padStart(7, "0");
-    const effectiveInvoiceNumber = String(invoiceNumberInput || "").trim() || `${prefix}${nextSeq}`;
+    const defaultNumber =
+      invType === "sales"
+        ? isReceipt
+          ? `GLF${currentYear}${nextSeq}`
+          : activeMysoftSerialNumber
+        : isReceipt
+          ? `GDF${currentYear}${nextSeq}`
+          : `TED${currentYear}${nextSeq}`;
+    const effectiveInvoiceNumber = String(invoiceNumberInput || "").trim() || defaultNumber;
 
     let finalNotes = String(notes || "").trim();
     const safeDelivery = String(deliveryAddress || "").trim();
@@ -1163,15 +1593,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
       const updatedInvoice: Invoice = {
         id: editingInvoiceId,
-        invoiceNumber: String(invoiceNumberInput || "").trim() || existing?.invoiceNumber || `${prefix}${nextSeq}`,
+        invoiceNumber: String(invoiceNumberInput || "").trim() || existing?.invoiceNumber || defaultNumber,
         type: invType,
         invoiceScenario,
         invoiceProfileType,
         docKind: formDocKind,
         expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
-        contactId: contact.id,
-        contactName: contact.name,
-        taxNumber: contact.taxNumber,
+        contactId: finalContactId,
+        contactName: effectiveContactName,
+        taxNumber: effectiveTaxNumber || undefined,
+        taxOffice: effectiveTaxOffice || undefined,
+        customerAddress: effectiveAddress || undefined,
+        customerCity: effectiveCity || undefined,
+        customerDistrict: effectiveDistrict || undefined,
+        customerPhone: effectivePhone || undefined,
+        customerEmail: effectiveEmail || undefined,
+        isManualCustomer: isManual && !saveManualAsContact,
         issueDate,
         dueDate,
         items: computedItems,
@@ -1208,13 +1645,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
       id: "inv_" + Date.now(),
       invoiceNumber: effectiveInvoiceNumber,
       type: invType,
-      invoiceScenario,
+      invoiceScenario:
+        invType === "sales" && formDocKind === "invoice" && isCurrentSalesEArsiv
+          ? "EARSIVFATURA"
+          : invoiceScenario,
       invoiceProfileType,
       docKind: forcedType ? formDocKind : "invoice",
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
-      contactId: contact.id,
-      contactName: contact.name,
-      taxNumber: contact.taxNumber,
+      contactId: finalContactId,
+      contactName: effectiveContactName,
+      taxNumber: effectiveTaxNumber || undefined,
+      taxOffice: effectiveTaxOffice || undefined,
+      customerAddress: effectiveAddress || undefined,
+      customerCity: effectiveCity || undefined,
+      customerDistrict: effectiveDistrict || undefined,
+      customerPhone: effectivePhone || undefined,
+      customerEmail: effectiveEmail || undefined,
+      isManualCustomer: isManual && !saveManualAsContact,
       issueDate,
       dueDate,
       items: computedItems,
@@ -1234,7 +1681,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
       currency: "TRY",
       notes: finalNotes,
       createdAt: new Date().toISOString().split("T")[0],
-      eDocumentType: shouldSendMysoft ? mysoftEDocType : undefined,
+      eDocumentType:
+        invType === "sales" && formDocKind === "invoice"
+          ? isCurrentSalesEArsiv
+            ? "e_arsiv"
+            : "e_fatura"
+          : undefined,
     };
 
     if (shouldSendMysoft) {
@@ -1273,11 +1725,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
       }
       setIsSavingMysoft(true);
       try {
+        const effectiveEDocType = isCurrentSalesEArsiv ? "e_arsiv" : "e_fatura";
         const payload = buildMysoftInvoiceOutboxPayload({
           invoice: newInvoice,
-          contact,
+          contact: effectiveContactObj,
           company: companySettings,
-          eDocumentType: mysoftEDocType,
+          eDocumentType: effectiveEDocType,
+          profile: isCurrentSalesEArsiv ? "EARSIVFATURA" : invoiceScenario,
+          prefix: activeMysoftPrefix,
           docNo: newInvoice.invoiceNumber,
           isSaveAsDraft: false,
           tenantIdentifierNumber: effectiveTenant,
@@ -1291,7 +1746,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
             ...newInvoice,
             eDocumentEttn: outbox.invoiceETTN,
             invoiceNumber: outbox.docNo || newInvoice.invoiceNumber,
-            eDocumentType: mysoftEDocType,
+            eDocumentType: effectiveEDocType,
           };
         }
         setMysoftSaveNotice(
@@ -1309,6 +1764,87 @@ export const Invoices: React.FC<InvoicesProps> = ({
         return;
       } finally {
         setIsSavingMysoft(false);
+      }
+    }
+
+    // Advance Mysoft e-Fatura / e-Arşiv sequential invoice counter after cutting a sales invoice
+    if (invType === "sales" && formDocKind === "invoice") {
+      const issuedNo = String(newInvoice.invoiceNumber || "").trim();
+      const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(issuedNo);
+      if (match) {
+        const usedPrefix = match[1].toUpperCase();
+        const usedYear = Number(match[2]);
+        const usedSeq = parseInt(match[3], 10);
+        if (!isNaN(usedSeq)) {
+          const nextFormatted = `${usedPrefix}${usedYear}${String(usedSeq + 1).padStart(9, "0")}`;
+          setMysoftMappingDefaults((prev) => {
+            const base = prev || {
+              vknTckn: mysoftTenantVkn || companySettings.tenantIdentifierNumber || "",
+              eFaturaPrefix: selectedEFaturaPrefix || "GIB",
+              eFaturaNextNumber: activeEFaturaNextNo,
+              eFaturaSequence: 1,
+              eArsivPrefix: selectedEArsivPrefix || "EAR",
+              eArsivNextNumber: activeEArsivNextNo,
+              eArsivSequence: 1,
+              prefixes: [],
+            };
+            const updatedPrefixes = (base.prefixes || []).map((p) =>
+              String(p.prefix || "").toUpperCase() === usedPrefix
+                ? { ...p, currentNumber: usedSeq, nextNumber: nextFormatted }
+                : p,
+            );
+            return isCurrentSalesEArsiv
+              ? {
+                  ...base,
+                  eArsivPrefix: usedPrefix,
+                  eArsivNextNumber: nextFormatted,
+                  eArsivSequence: usedSeq + 1,
+                  prefixes: updatedPrefixes,
+                }
+              : {
+                  ...base,
+                  eFaturaPrefix: usedPrefix,
+                  eFaturaNextNumber: nextFormatted,
+                  eFaturaSequence: usedSeq + 1,
+                  prefixes: updatedPrefixes,
+                };
+          });
+
+          try {
+            const cleanVkn = (
+              mysoftTenantVkn ||
+              companySettings.tenantIdentifierNumber ||
+              companySettings.taxNumber ||
+              ""
+            ).replace(/\D/g, "");
+            const compList = getCompaniesList();
+            const matchedComp = compList.find(
+              (c) =>
+                c.id === companySettings.id ||
+                (cleanVkn &&
+                  ((c.tenantIdentifierNumber &&
+                    c.tenantIdentifierNumber.replace(/\D/g, "") === cleanVkn) ||
+                    (c.vkn && c.vkn.replace(/\D/g, "") === cleanVkn) ||
+                    (c.tckn && c.tckn.replace(/\D/g, "") === cleanVkn))),
+            );
+            if (matchedComp) {
+              updateCompanyItem(
+                isCurrentSalesEArsiv
+                  ? {
+                      ...matchedComp,
+                      eArsivPrefix: usedPrefix,
+                      eArsivNextNumber: nextFormatted,
+                    }
+                  : {
+                      ...matchedComp,
+                      eFaturaPrefix: usedPrefix,
+                      eFaturaNextNumber: nextFormatted,
+                      defaultInvoicePrefix: usedPrefix,
+                    },
+              );
+            }
+          } catch {}
+        }
       }
     }
 
@@ -2215,7 +2751,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </div>
                     <div className="text-right">
                       <div className="font-mono font-bold text-xs text-purple-700">
-                        ₺{invType === "purchase" ? p.buyPrice.toLocaleString("tr-TR") : p.sellPrice.toLocaleString("tr-TR")}
+                        ₺{invType === "purchase" ? p.buyPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                       <span className="text-[10px] text-slate-400 font-semibold">+%{p.vatRate ?? 20} KDV</span>
                     </div>
@@ -2262,10 +2798,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
           actions={detailPageActions}
           fullWidth={true}
         >
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-            {/* Sol Taraf: Form Alanları ve Kalemler Tablosu (8 Kolon) */}
-            <div className="xl:col-span-8 min-w-0 space-y-6">
-<form id="invoice-create-form" onSubmit={handleSaveInvoice} className="space-y-5 min-w-0">
+          <div className="w-full min-w-0 space-y-6">
+            <form id="invoice-create-form" onSubmit={handleSaveInvoice} className="space-y-5 min-w-0">
               {/* AI OCR Scanner Shortcut for Gider Faturaları */}
               {(forcedType === "purchase" || invType === "purchase") && (
                 <div
@@ -2303,223 +2837,566 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               )}
 
-              {/* Top Controls & Selected Cari Information */}
-              <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
-                  {/* 1. VKN / TCKN No ile Arama / Otomatik Getirme (Kompakt Genişlik) */}
-                  <div className="w-full md:w-36 lg:w-40 shrink-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                        <CreditCard className="w-3.5 h-3.5 text-purple-600" />
-                        <span>VKN / TCKN No</span>
-                      </label>
-                      {vknSearchInput && (
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                            contacts.some(
-                              (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
-                            )
-                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                              : vknSearchInput.length >= 10
-                              ? "bg-amber-100 text-amber-800 border border-amber-200"
-                              : "text-slate-400 font-semibold"
-                          }`}
-                        >
-                          {contacts.some(
-                            (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
-                          )
-                            ? "✓ Kayıtlı"
-                            : vknSearchInput.length >= 10
-                            ? "Yok"
-                            : `${vknSearchInput.length}/11`}
-                        </span>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        maxLength={11}
-                        placeholder="10 VKN / 11 TCKN..."
-                        value={vknSearchInput}
-                        onChange={(e) => handleVknInputChange(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 2. Cari Hesap Seçimi (Daraltılmış / Dengeli Alan) */}
-                  <div className="flex-1 min-w-[180px]">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-700">
-                        Cari Hesap *
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewContactTaxNo(vknSearchInput);
-                          setIsContactPickerOpen(true);
-                        }}
-                        className="text-[11px] font-bold text-purple-600 hover:text-purple-800 cursor-pointer flex items-center gap-0.5"
-                      >
-                        <Search className="w-3 h-3" />
-                        <span>Rehber</span>
-                      </button>
-                    </div>
-                    <select
-                      value={contactId}
-                      onChange={(e) => handleContactSelectChange(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 truncate shadow-2xs"
+              {/* Top Controls & Selected Cari / Müşteri Information */}
+              <div className="space-y-3.5 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                {/* 1. Müşteri Seçim Modu: Kayıtlı Cari vs Elle Giriş */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                  <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setCustomerMode("registered")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        customerMode === "registered"
+                          ? "bg-white text-purple-700 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
                     >
-                      {contacts.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          [{getContactAccountCode(c)}] {c.name} {c.taxNumber ? `(VKN: ${c.taxNumber})` : ""}
-                        </option>
-                      ))}
-                    </select>
+                      <Building2 className="w-3.5 h-3.5" />
+                      <span>Kayıtlı Cari Hesap Seç</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 font-mono text-slate-500">
+                        {contacts.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerMode("manual");
+                        if (!manualTaxNumber && vknSearchInput) {
+                          setManualTaxNumber(vknSearchInput);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        customerMode === "manual"
+                          ? "bg-white text-purple-700 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Elle Müşteri Bilgisi Gir</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold uppercase">
+                        Cari Hesapsız
+                      </span>
+                    </button>
                   </div>
 
-                  {/* 3. Fatura Numarası (Yeni Eklenen Bölüm) */}
-                  <div className="w-full md:w-56 lg:w-60 shrink-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                        <Hash className="w-3.5 h-3.5 text-purple-600" />
-                        <span>Fatura Numarası *</span>
-                      </label>
-                      {sendToMysoft && invType === "sales" && !editingInvoiceId && (
-                        <button
-                          type="button"
-                          onClick={() => void fetchAndApplyNextInvoiceNumber()}
-                          disabled={isFetchingNextDocNo}
-                          title="İlgili tenanttan son faturayı çek ve sıradaki numarayı otomatik ata"
-                          className="text-[10px] text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
-                        >
-                          <RefreshCw className={`w-3 h-3 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
-                          <span>{isFetchingNextDocNo ? "Çekiliyor..." : "Sıradaki No"}</span>
-                        </button>
-                      )}
+                  {customerMode === "manual" ? (
+                    <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/90 px-3 py-1 rounded-lg flex items-center gap-1.5 font-medium">
+                      <Info className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                      <span>Cari kartı açmaya gerek olmadan müşteri bilgileriyle doğrudan fatura düzenlenir.</span>
                     </div>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        required
-                        placeholder="Örn: ABC2026000000207"
-                        value={invoiceNumberInput}
-                        onChange={(e) => setInvoiceNumberInput(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2 pr-8 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                      />
-                      {sendToMysoft && invType === "sales" && !editingInvoiceId && (
-                        <button
-                          type="button"
-                          onClick={() => void fetchAndApplyNextInvoiceNumber()}
-                          disabled={isFetchingNextDocNo}
-                          title="Mysoft'tan Sıradaki Fatura Numarasını Çek (Örn: 206 -> 207)"
-                          className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
-                        </button>
-                      )}
+                  ) : (
+                    <div className="text-[11px] text-slate-500 hidden sm:flex items-center gap-1">
+                      <span>Kayıtlı cari listeden seçebilir veya "Elle Müşteri Bilgisi Gir" ile cari açmadan fatura kesebilirsiniz.</span>
                     </div>
-                    {sendToMysoft && invType === "sales" && !editingInvoiceId && mysoftNumberInfo && (
-                      <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                        <span>
-                          {mysoftNumberInfo.lastInvoiceNumber
-                            ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
-                            : `İlk Numara: ${invoiceNumberInput}`}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-
-                  {/* 4. Fatura Tarihi (Kompakt Tarih Alanı) */}
-                  <div className="w-full md:w-36 lg:w-38 shrink-0">
-                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-purple-600" />
-                      <span>Fatura Tarihi *</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={issueDate}
-                      onChange={(e) => setIssueDate(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                    />
-                  </div>
+                  )}
                 </div>
 
-                {/* Selected Cari Details Card */}
-                {(() => {
-                  const selectedContact = contacts.find((c) => c.id === contactId);
-                  if (!selectedContact) return null;
-
-                  return (
-                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs space-y-2 shadow-2xs">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="w-4 h-4 text-purple-600 shrink-0" />
-                          <span className="font-extrabold text-slate-900 text-sm">
-                            {selectedContact.name}
-                          </span>
-                          {selectedContact.contactType && (
-                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-100 uppercase">
-                              {selectedContact.contactType === "customer"
-                                ? "Müşteri"
-                                : selectedContact.contactType === "vendor"
-                                ? "Tedarikçi"
-                                : "Müşteri & Tedarikçi"}
+                {customerMode === "registered" ? (
+                  <>
+                    <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
+                      {/* 1. VKN / TCKN No ile Arama / Otomatik Getirme (Kompakt Genişlik) */}
+                      <div className="w-full md:w-36 lg:w-40 shrink-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <CreditCard className="w-3.5 h-3.5 text-purple-600" />
+                            <span>VKN / TCKN No</span>
+                          </label>
+                          {vknSearchInput && (
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                contacts.some(
+                                  (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
+                                )
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                  : vknSearchInput.length >= 10
+                                  ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                  : "text-slate-400 font-semibold"
+                              }`}
+                            >
+                              {contacts.some(
+                                (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
+                              )
+                                ? "✓ Kayıtlı"
+                                : vknSearchInput.length >= 10
+                                ? "Yok"
+                                : `${vknSearchInput.length}/11`}
                             </span>
                           )}
                         </div>
-                        {onSelectTab && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsCreateModalOpen(false);
-                              onSelectTab("contacts");
+                        <div className="relative">
+                          <input
+                            type="text"
+                            maxLength={11}
+                            placeholder="10 VKN / 11 TCKN..."
+                            value={vknSearchInput}
+                            onChange={(e) => handleVknInputChange(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2. Cari Hesap Seçimi (Daraltılmış / Dengeli Alan) */}
+                      <div className="flex-1 min-w-[180px]">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700">
+                            Cari Hesap *
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setCustomerMode("manual")}
+                              className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer flex items-center gap-0.5"
+                            >
+                              <UserPlus className="w-3 h-3" />
+                              <span>Elle Gir</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewContactTaxNo(vknSearchInput);
+                                setIsContactPickerOpen(true);
+                              }}
+                              className="text-[11px] font-bold text-purple-600 hover:text-purple-800 cursor-pointer flex items-center gap-0.5"
+                            >
+                              <Search className="w-3 h-3" />
+                              <span>Rehber</span>
+                            </button>
+                          </div>
+                        </div>
+                        <select
+                          value={contactId}
+                          onChange={(e) => handleContactSelectChange(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 truncate shadow-2xs"
+                        >
+                          <option value="__manual_entry__" className="font-bold text-purple-700 bg-purple-50">
+                            ✍️ [+ Cari Hesap Seçmeden Elle Müşteri Bilgisi Gir...]
+                          </option>
+                          {contacts.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              [{getContactAccountCode(c)}] {c.name} {c.taxNumber ? `(VKN: ${c.taxNumber})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 3. Fatura Numarası */}
+                      <div className="w-full md:w-44 lg:w-48 shrink-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Hash className="w-3.5 h-3.5 text-purple-600" />
+                            <span>Fatura Numarası</span>
+                          </label>
+                          {sendToMysoft && invType === "sales" && !editingInvoiceId ? (
+                            <button
+                              type="button"
+                              onClick={() => void fetchAndApplyNextInvoiceNumber()}
+                              disabled={isFetchingNextDocNo}
+                              title="İlgili tenanttan son faturayı çek ve sıradaki numarayı otomatik ata"
+                              className="text-[10px] text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
+                              <span>{isFetchingNextDocNo ? "Çekiliyor..." : "Sıradaki No"}</span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-medium">Otomatik</span>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Örn: ABC2026000000207"
+                            value={invoiceNumberInput}
+                            onChange={(e) => {
+                              const val = e.target.value.toUpperCase();
+                              setInvoiceNumberInput(val);
+                              setIsManualInvoiceNumber(
+                                val.trim().length > 0 && val.trim() !== activeMysoftSerialNumber,
+                              );
                             }}
-                            className="text-[11px] font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 cursor-pointer"
-                            title="Cari detaylarına git"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            <span>Cari Listesinde Aç</span>
-                          </button>
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 pr-8 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          />
+                          {sendToMysoft && invType === "sales" && !editingInvoiceId && (
+                            <button
+                              type="button"
+                              onClick={() => void fetchAndApplyNextInvoiceNumber()}
+                              disabled={isFetchingNextDocNo}
+                              title="Mysoft'tan Sıradaki Fatura Numarasını Çek (Örn: 206 -> 207)"
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition cursor-pointer"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
+                            </button>
+                          )}
+                        </div>
+                        {sendToMysoft && invType === "sales" && !editingInvoiceId && mysoftNumberInfo && (
+                          <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span>
+                              {mysoftNumberInfo.lastInvoiceNumber
+                                ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
+                                : `İlk Numara: ${invoiceNumberInput}`}
+                            </span>
+                          </p>
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-slate-700">
-                        <div>
-                          <span className="text-slate-400 font-semibold block text-[10px] uppercase">VKN / TCKN</span>
-                          <span className="font-extrabold text-slate-900">
-                            {selectedContact.taxNumber || "— (Belirtilmedi)"}
-                          </span>
+                      {/* 4. Fatura Tarihi */}
+                      <div className="w-full md:w-36 lg:w-38 shrink-0">
+                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Fatura Tarihi *</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={issueDate}
+                          onChange={(e) => setIssueDate(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Selected Cari Details Card */}
+                    {(() => {
+                      const selectedContact = contacts.find((c) => c.id === contactId);
+                      if (!selectedContact) return null;
+
+                      return (
+                        <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs space-y-2 shadow-2xs">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-4 h-4 text-purple-600 shrink-0" />
+                              <span className="font-extrabold text-slate-900 text-sm">
+                                {selectedContact.name}
+                              </span>
+                              {selectedContact.contactType && (
+                                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-100 uppercase">
+                                  {selectedContact.contactType === "customer"
+                                    ? "Müşteri"
+                                    : selectedContact.contactType === "vendor"
+                                    ? "Tedarikçi"
+                                    : "Müşteri & Tedarikçi"}
+                                </span>
+                              )}
+                            </div>
+                            {onSelectTab && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsCreateModalOpen(false);
+                                  onSelectTab("contacts");
+                                }}
+                                className="text-[11px] font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 cursor-pointer"
+                                title="Cari detaylarına git"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>Cari Listesinde Aç</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-slate-700">
+                            <div>
+                              <span className="text-slate-400 font-semibold block text-[10px] uppercase">VKN / TCKN</span>
+                              <span className="font-extrabold text-slate-900">
+                                {selectedContact.taxNumber || "— (Belirtilmedi)"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 font-semibold block text-[10px] uppercase">Vergi Dairesi</span>
+                              <span className="font-semibold text-slate-800">
+                                {selectedContact.taxOffice || "— (Belirtilmedi)"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 font-semibold block text-[10px] uppercase">Telefon / E-posta</span>
+                              <span className="font-medium text-slate-800">
+                                {[selectedContact.phone, selectedContact.email].filter(Boolean).join(" | ") || "— (Belirtilmedi)"}
+                              </span>
+                            </div>
+                          </div>
+
+                          {(selectedContact.address || selectedContact.district || selectedContact.city) && (
+                            <div className="pt-1.5 border-t border-slate-100 text-[11px] text-slate-600 flex items-start gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                              <span>
+                                {[selectedContact.address, selectedContact.neighborhood, selectedContact.street, selectedContact.district, selectedContact.city]
+                                  .filter(Boolean)
+                                  .join(" - ")}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <span className="text-slate-400 font-semibold block text-[10px] uppercase">Vergi Dairesi</span>
-                          <span className="font-semibold text-slate-800">
-                            {selectedContact.taxOffice || "— (Belirtilmedi)"}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-semibold block text-[10px] uppercase">Telefon / E-posta</span>
-                          <span className="font-medium text-slate-800">
-                            {[selectedContact.phone, selectedContact.email].filter(Boolean).join(" | ") || "— (Belirtilmedi)"}
-                          </span>
-                        </div>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  /* MANUEL MÜŞTERİ GİRİŞİ ALANLARI (Cari Hesapsız / Münferit) */
+                  <div className="space-y-3.5 bg-white p-4 rounded-xl border border-purple-200/80 shadow-2xs">
+                    {/* Üst Satır: Müşteri Adı, VKN/TCKN, Vergi Dairesi, Fatura No, Fatura Tarihi */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                      {/* Müşteri / Firma Adı / Ünvanı */}
+                      <div className="md:col-span-4">
+                        <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
+                          <User className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Müşteri Adı / Ticari Ünvanı *</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Örn: Ahmet Yılmaz veya ABC Ticaret Ltd. Şti."
+                          value={manualCustomerName}
+                          onChange={(e) => setManualCustomerName(e.target.value)}
+                          className="w-full bg-purple-50/20 border border-purple-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs"
+                        />
                       </div>
 
-                      {(selectedContact.address || selectedContact.district || selectedContact.city) && (
-                        <div className="pt-1.5 border-t border-slate-100 text-[11px] text-slate-600 flex items-start gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                          <span>
-                            {[selectedContact.address, selectedContact.neighborhood, selectedContact.street, selectedContact.district, selectedContact.city]
-                              .filter(Boolean)
-                              .join(" - ")}
-                          </span>
+                      {/* VKN / TCKN No */}
+                      <div className="md:col-span-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <CreditCard className="w-3.5 h-3.5 text-purple-600" />
+                            <span>VKN / TCKN</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManualTaxNumber("11111111111");
+                              setInvoiceScenario("EARSIVFATURA");
+                              setMysoftEDocType("e_arsiv");
+                            }}
+                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100"
+                            title="e-Arşiv Nihai Tüketici için 11111111111 doldur"
+                          >
+                            11111111111 (Nihai)
+                          </button>
                         </div>
-                      )}
+                        <input
+                          type="text"
+                          maxLength={11}
+                          placeholder="10 VKN veya 11 TCKN..."
+                          value={manualTaxNumber}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "").slice(0, 11);
+                            setManualTaxNumber(val);
+                            if (val === "11111111111") {
+                              setInvoiceScenario("EARSIVFATURA");
+                              setMysoftEDocType("e_arsiv");
+                            }
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+
+                      {/* Vergi Dairesi */}
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Vergi Dairesi
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Örn: Kadıköy V.D."
+                          value={manualTaxOffice}
+                          onChange={(e) => setManualTaxOffice(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+
+                      {/* Fatura Numarası */}
+                      <div className="md:col-span-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Hash className="w-3.5 h-3.5 text-purple-600" />
+                            <span>Fatura Numarası</span>
+                          </label>
+                          {invType === "sales" && formDocKind === "invoice" && !editingInvoiceId ? (
+                            isManualInvoiceNumber ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsManualInvoiceNumber(false);
+                                  setInvoiceNumberInput(activeMysoftSerialNumber);
+                                }}
+                                className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 cursor-pointer"
+                              >
+                                ↺ Mysoft Sıradaki No
+                              </button>
+                            ) : (
+                              <span
+                                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                                  isCurrentSalesEArsiv
+                                    ? "bg-sky-50 text-sky-800 border-sky-200"
+                                    : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                }`}
+                              >
+                                {isCurrentSalesEArsiv ? `e-Arşiv Serisi (${activeMysoftPrefix})` : `e-Fatura Serisi (${activeMysoftPrefix})`}
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-[10px] text-purple-700 font-semibold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                              İsteğe Bağlı (Otomatik)
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Boş bırakılırsa otomatik üretilir"
+                          value={invoiceNumberInput}
+                          onChange={(e) => {
+                            const val = e.target.value.toUpperCase();
+                            setInvoiceNumberInput(val);
+                            setIsManualInvoiceNumber(
+                              val.trim().length > 0 && val.trim() !== activeMysoftSerialNumber,
+                            );
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
                     </div>
-                  );
-                })()}
+
+                    {/* İkinci Satır: Fatura Tarihi, İl, İlçe, Telefon, E-posta */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 items-end">
+                      {/* Fatura Tarihi */}
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Fatura Tarihi *</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={issueDate}
+                          onChange={(e) => setIssueDate(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+
+                      {/* İl (Şehir) */}
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          İl (Şehir)
+                        </label>
+                        <select
+                          value={manualCity}
+                          onChange={(e) => {
+                            setManualCity(e.target.value);
+                            const prov = TURKEY_PROVINCES_DATA.find((p) => p.name === e.target.value);
+                            if (prov && prov.taxOffices?.length > 0 && !manualTaxOffice) {
+                              setManualTaxOffice(prov.taxOffices[0]);
+                            }
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        >
+                          <option value="">İl Seçin...</option>
+                          {TURKEY_PROVINCES_DATA.map((p) => (
+                            <option key={p.code} value={p.name}>
+                              {p.code} - {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* İlçe */}
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          İlçe
+                        </label>
+                        {(() => {
+                          const prov = TURKEY_PROVINCES_DATA.find((p) => p.name === manualCity);
+                          if (prov && prov.districts?.length > 0) {
+                            return (
+                              <select
+                                value={manualDistrict}
+                                onChange={(e) => setManualDistrict(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                              >
+                                <option value="">İlçe Seçin...</option>
+                                {prov.districts.map((d) => (
+                                  <option key={d.name} value={d.name}>
+                                    {d.name}
+                                  </option>
+                                ))}
+                              </select>
+                            );
+                          }
+                          return (
+                            <input
+                              type="text"
+                              placeholder="Örn: Kadıköy"
+                              value={manualDistrict}
+                              onChange={(e) => setManualDistrict(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                            />
+                          );
+                        })()}
+                      </div>
+
+                      {/* Telefon No */}
+                      <div className="md:col-span-3">
+                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                          <Phone className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Telefon No</span>
+                        </label>
+                        <input
+                          type="tel"
+                          placeholder="05XX XXX XX XX"
+                          value={manualPhone}
+                          onChange={(e) => setManualPhone(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+
+                      {/* E-Posta */}
+                      <div className="md:col-span-3">
+                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                          <Mail className="w-3.5 h-3.5 text-purple-600" />
+                          <span>E-posta (e-Arşiv İçin)</span>
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="musteri@ornek.com"
+                          value={manualEmail}
+                          onChange={(e) => setManualEmail(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Açık Adres Satırı */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Müşteri Açık Adresi</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Örn: Barbaros Mah. Çiğdem Sk. No: 14 D: 6"
+                        value={manualAddress}
+                        onChange={(e) => setManualAddress(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Cari Hesaba Kaydetme Seçeneği */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-purple-50/60 border border-purple-200/70 rounded-xl text-xs">
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={saveManualAsContact}
+                          onChange={(e) => setSaveManualAsContact(e.target.checked)}
+                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300 cursor-pointer"
+                        />
+                        <span className="font-bold text-purple-950">
+                          Bu müşteriyi aynı zamanda <strong>Cari Hesaplar</strong> rehberine kalıcı olarak kaydet
+                        </span>
+                      </label>
+                      <span className="text-[11px] text-purple-700 font-medium">
+                        {saveManualAsContact
+                          ? "✓ Fatura kesildiğinde yeni cari kart da oluşturulur"
+                          : "İşaretsiz: Cari hesap açılmadan doğrudan münferit fatura olarak kaydedilir"}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Fatura Senaryosu ve Fatura Türü (Aynı Satırda - Teslimat / Sevkiyat Adresi Bölümünün Üstünde) */}
                 <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
@@ -2537,7 +3414,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                       <select
                         value={invoiceScenario}
-                        onChange={(e) => setInvoiceScenario(e.target.value as InvoiceScenario)}
+                        onChange={(e) => {
+                          const val = e.target.value as InvoiceScenario;
+                          setInvoiceScenario(val);
+                          if (val === "EARSIVFATURA") {
+                            setMysoftEDocType("e_arsiv");
+                          } else {
+                            setMysoftEDocType("e_fatura");
+                          }
+                        }}
                         className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
                       >
                         <option value="TICARIFATURA">TICARIFATURA - Ticari Fatura (7 Gün İtiraz/Kabul Süreli)</option>
@@ -3202,7 +4087,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           Resmi e-fatura / e-arşiv olarak kes (Mysoft)
                         </span>
                         <span className="block text-[11px] text-purple-800/80 mt-0.5">
-                          Sağdaki Mysoft sekmesinde portal şablonunuzla taslak önizleme alınır.
+                          Faturanız resmi e-Fatura veya e-Arşiv şablonuyla Mysoft portalına iletilir.
                         </span>
                       </span>
                     </label>
@@ -3269,12 +4154,21 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             type="button"
                             onClick={() => handleEDocTypeChange("e_fatura")}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                              mysoftEDocType === "e_fatura"
+                              !isCurrentSalesEArsiv
                                 ? "bg-purple-600 text-white border-purple-600 shadow-xs"
                                 : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                             }`}
                           >
                             <span>e-Fatura</span>
+                            <span
+                              className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                                !isCurrentSalesEArsiv
+                                  ? "bg-purple-800/60 text-purple-100"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {selectedEFaturaPrefix}
+                            </span>
                             {recipientStatus?.isEFaturaUser && (
                               <span className="text-[9px] bg-emerald-400 text-emerald-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
                             )}
@@ -3283,16 +4177,179 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             type="button"
                             onClick={() => handleEDocTypeChange("e_arsiv")}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                              mysoftEDocType === "e_arsiv"
+                              isCurrentSalesEArsiv
                                 ? "bg-purple-600 text-white border-purple-600 shadow-xs"
                                 : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                             }`}
                           >
                             <span>e-Arşiv</span>
+                            <span
+                              className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                                isCurrentSalesEArsiv
+                                  ? "bg-purple-800/60 text-purple-100"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {selectedEArsivPrefix}
+                            </span>
                             {recipientStatus && !recipientStatus.isEFaturaUser && (
                               <span className="text-[9px] bg-sky-300 text-sky-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
                             )}
                           </button>
+                        </div>
+
+                        {/* Mysoft e-Fatura ve e-Arşiv Seri / Ardışık Fatura Numarası Kartı */}
+                        <div className="bg-white/95 border border-purple-200/80 rounded-xl p-3 space-y-2.5 shadow-2xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Hash className="w-3.5 h-3.5 text-purple-600" />
+                              <span className="text-xs font-extrabold text-slate-800">
+                                Mysoft e-Fatura & e-Arşiv Seri ve Ardışık Fatura Numaraları
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsManualInvoiceNumber(false);
+                                refreshMysoftSerialNumbers(mysoftTenantVkn);
+                              }}
+                              disabled={isLoadingMysoftSeries}
+                              className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50"
+                              title="Mysoft portalından tanımlı e-Fatura ve e-Arşiv seri numaralarını yeniden sorgula"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${isLoadingMysoftSeries ? "animate-spin" : ""}`} />
+                              <span>{isLoadingMysoftSeries ? "Sorgulanıyor..." : "Mysoft'tan Seri/No Al"}</span>
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {/* e-Fatura Seri & Ardışık No */}
+                            <div
+                              onClick={() => {
+                                setMysoftEDocType("e_fatura");
+                                if (invoiceScenario === "EARSIVFATURA") {
+                                  setInvoiceScenario("TICARIFATURA");
+                                }
+                                setIsManualInvoiceNumber(false);
+                              }}
+                              className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                !isCurrentSalesEArsiv
+                                  ? "bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-300"
+                                  : "bg-slate-50/70 border-slate-200 hover:border-slate-300"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${!isCurrentSalesEArsiv ? "bg-emerald-500" : "bg-slate-400"}`} />
+                                  <span>e-Fatura Serisi</span>
+                                </span>
+                                {!isCurrentSalesEArsiv && (
+                                  <span className="text-[9px] font-extrabold bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded">
+                                    Aktif Seri
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  maxLength={3}
+                                  value={selectedEFaturaPrefix}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    const p = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                                    setSelectedEFaturaPrefix(p);
+                                    setIsManualInvoiceNumber(false);
+                                  }}
+                                  className="w-14 bg-white border border-slate-200 rounded-md px-1.5 py-1 text-xs font-mono font-extrabold text-center text-slate-900 uppercase"
+                                  title="Mysoft e-Fatura 3 harfli ön ek (seri)"
+                                />
+                                <div className="flex-1 bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-mono font-bold text-slate-900 truncate">
+                                  {activeEFaturaNextNo}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* e-Arşiv Seri & Ardışık No */}
+                            <div
+                              onClick={() => {
+                                setMysoftEDocType("e_arsiv");
+                                setInvoiceScenario("EARSIVFATURA");
+                                setIsManualInvoiceNumber(false);
+                              }}
+                              className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isCurrentSalesEArsiv
+                                  ? "bg-sky-50/70 border-sky-300 ring-1 ring-sky-300"
+                                  : "bg-slate-50/70 border-slate-200 hover:border-slate-300"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${isCurrentSalesEArsiv ? "bg-sky-500" : "bg-slate-400"}`} />
+                                  <span>e-Arşiv Serisi</span>
+                                </span>
+                                {isCurrentSalesEArsiv && (
+                                  <span className="text-[9px] font-extrabold bg-sky-200 text-sky-900 px-1.5 py-0.2 rounded">
+                                    Aktif Seri
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  maxLength={3}
+                                  value={selectedEArsivPrefix}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    const p = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                                    setSelectedEArsivPrefix(p);
+                                    setIsManualInvoiceNumber(false);
+                                  }}
+                                  className="w-14 bg-white border border-slate-200 rounded-md px-1.5 py-1 text-xs font-mono font-extrabold text-center text-slate-900 uppercase"
+                                  title="Mysoft e-Arşiv 3 harfli ön ek (seri)"
+                                />
+                                <div className="flex-1 bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-mono font-bold text-slate-900 truncate">
+                                  {activeEArsivNextNo}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {mysoftMappingDefaults?.prefixes && mysoftMappingDefaults.prefixes.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                              <span className="text-[10px] font-semibold text-slate-500">
+                                Mysoft Tanımlı Ön Ekler:
+                              </span>
+                              {mysoftMappingDefaults.prefixes.map((p, idx) => {
+                                const pfx = String(p.prefix || "").toUpperCase();
+                                const isEArs =
+                                  Number(p.edocumentType) === 2 ||
+                                  String(p.edocumentType || "").toUpperCase().includes("ARSIV");
+                                return (
+                                  <button
+                                    key={`${pfx}_${idx}`}
+                                    type="button"
+                                    onClick={() => {
+                                      if (isEArs) {
+                                        setSelectedEArsivPrefix(pfx);
+                                        setMysoftEDocType("e_arsiv");
+                                        setInvoiceScenario("EARSIVFATURA");
+                                      } else {
+                                        setSelectedEFaturaPrefix(pfx);
+                                        setMysoftEDocType("e_fatura");
+                                        if (invoiceScenario === "EARSIVFATURA") {
+                                          setInvoiceScenario("TICARIFATURA");
+                                        }
+                                      }
+                                      setIsManualInvoiceNumber(false);
+                                    }}
+                                    className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-900 border border-slate-200 cursor-pointer transition-colors"
+                                  >
+                                    {pfx} ({isEArs ? "e-Arşiv" : "e-Fatura"})
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -3360,160 +4417,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               </div>
             </form>
-            </div>
-
-            {/* Sağ Taraf: Canlı Hesaplama Özeti ve Belge Önizleme (4 Kolon) */}
-            <div className="xl:col-span-4 min-w-0 space-y-6 xl:sticky xl:top-20">
-              {/* Canlı Hesaplama Özeti Kartı */}
-              {(() => {
-                const totals = calculateTotals();
-                return (
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-purple-600" />
-                        <span>Fatura Hesaplama Özeti</span>
-                      </h3>
-                      <span className="text-[11px] font-bold text-slate-500 font-mono">
-                        {items.length} Kalem
-                      </span>
-                    </div>
-
-                    <div className="space-y-2.5 text-xs">
-                      <div className="flex justify-between text-slate-600">
-                        <span>Ara Toplam (KDV Hariç):</span>
-                        <span className="font-mono font-bold text-slate-900">
-                          ₺{totals.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-
-                      {totals.effectiveTaxableAmount !== totals.subtotal && (
-                        <div className="flex justify-between text-amber-700 bg-amber-50 p-2 rounded-xl border border-amber-200 font-medium">
-                          <span>Özel KDV Matrahı:</span>
-                          <span className="font-mono font-bold">
-                            ₺{totals.effectiveTaxableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="flex justify-between text-slate-600">
-                        <span>Toplam Hesaplanan KDV:</span>
-                        <span className="font-mono font-bold text-slate-900">
-                          ₺{totals.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-
-                      {totals.totalWithholding > 0 && (
-                        <div className="flex justify-between text-purple-700 font-medium bg-purple-50 p-2 rounded-xl border border-purple-100">
-                          <span className="font-bold">(-) Tevkif Edilen KDV:</span>
-                          <span className="font-mono font-black">
-                            -₺{totals.totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      )}
-
-                      {totals.totalWithholding > 0 && (
-                        <div className="flex justify-between text-slate-700 text-xs">
-                          <span>Beyan Edilecek KDV:</span>
-                          <span className="font-mono font-bold">
-                            ₺{totals.payableVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="pt-3 border-t border-slate-200">
-                        <div className="flex justify-between items-baseline bg-gradient-to-r from-purple-50 via-fuchsia-50/50 to-purple-50 p-3.5 rounded-xl border border-purple-200">
-                          <div>
-                            <span className="block text-xs font-black text-purple-950 uppercase tracking-tight">Ödenecek Tutar:</span>
-                            <span className="text-[10px] text-purple-700 font-medium">Genel Toplam (KDV Dahil)</span>
-                          </div>
-                          <span className="text-xl font-black font-mono text-purple-950">
-                            ₺{totals.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Canlı Belge Önizlemesi Kartı */}
-              {showCreatePreviewPanel && (
-                <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-                      <Eye className="w-3.5 h-3.5 text-purple-600" />
-                      <span>GİB / Mysoft Canlı Belge Şablonu</span>
-                    </div>
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700">
-                      {mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
-                    </span>
-                  </div>
-                  <InvoiceCreatePreviewPanel
-                    invoice={getDraftInvoice()}
-                    companySettings={companySettings}
-                    contact={contacts.find((c) => c.id === contactId)}
-                    mysoftEnabled={sendToMysoft && !editingInvoiceId}
-                    eDocumentLabel={mysoftEDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"}
-                    buildMysoftPayload={buildMysoftPreviewPayload}
-                  />
-                </div>
-              )}
-
-              {/* Sağ Yan Hızlı İşlem Kartı */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
-                <button
-                  type="submit"
-                  form="invoice-create-form"
-                  disabled={isSavingMysoft}
-                  className={`w-full py-3 rounded-xl text-xs font-black text-white shadow-2xs cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 transition-all active:scale-95 ${
-                    forcedType === "purchase" || invType === "purchase"
-                      ? formDocKind === "receipt"
-                        ? "bg-orange-600 hover:bg-orange-700"
-                        : "bg-amber-600 hover:bg-amber-700"
-                      : formDocKind === "receipt"
-                      ? "bg-indigo-600 hover:bg-indigo-700"
-                      : "bg-purple-600 hover:bg-purple-700"
-                  }`}
-                >
-                  {isSavingMysoft && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>
-                    {editingInvoiceId
-                      ? "Değişiklikleri Güncelle & Kaydet"
-                      : forcedType === "sales" || invType === "sales"
-                      ? formDocKind === "receipt"
-                        ? "Gelir Fişini Kaydet"
-                        : sendToMysoft
-                        ? isSavingMysoft
-                          ? "Mysoft'a Gönderiliyor..."
-                          : "Kaydet & Mysoft'a Kes"
-                        : "Gelir Faturasını Kaydet & Kes"
-                      : forcedType === "purchase" || invType === "purchase"
-                      ? formDocKind === "receipt"
-                        ? "Gider Fişini Kaydet"
-                        : "Gider Faturasını Kaydet"
-                      : "Faturayı Kaydet ve Oluştur"}
-                  </span>
-                </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsDraftPreviewOpen(true)}
-                    className="py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    <Eye className="w-4 h-4 text-indigo-600" />
-                    <span>{formDocKind === "receipt" ? "Fişi Önizle" : "Önizle"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCloseDetail}
-                    className="py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer text-center"
-                  >
-                    Vazgeç / İptal
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         </DetailPageLayout>
 
@@ -3612,7 +4515,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name} (Mevcut: ₺{a.balance.toLocaleString("tr-TR")})
+                    {a.name} (Mevcut: ₺{a.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                   </option>
                 ))}
               </select>
@@ -3727,7 +4630,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     >
                       {accounts.map((acc) => (
                         <option key={acc.id} value={acc.id}>
-                          {acc.name} ({acc.type === "cash" ? "Kasa" : "Banka"}) - ₺{acc.balance.toLocaleString("tr-TR")}
+                          {acc.name} ({acc.type === "cash" ? "Kasa" : "Banka"}) - ₺{acc.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </option>
                       ))}
                     </select>
@@ -3903,7 +4806,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   : "Genel Fatura Hacmi"}
               </p>
               <p className="text-2xl font-bold font-mono tracking-tight text-slate-900 mt-2">
-                ₺{kpiStats.totalAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+                ₺{kpiStats.totalAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center shrink-0">
@@ -3927,7 +4830,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 {forcedType === "purchase" ? "Ödenen Gider Tutarı" : "Tahsil Edilen Tutar"}
               </p>
               <p className="text-2xl font-bold font-mono tracking-tight text-emerald-600 mt-2">
-                ₺{kpiStats.paidAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+                ₺{kpiStats.paidAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
@@ -3951,7 +4854,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 {forcedType === "purchase" ? "Ödenecek Borç Bakiye" : "Açık / Bekleyen Alacak"}
               </p>
               <p className="text-2xl font-bold font-mono tracking-tight text-blue-600 mt-2">
-                ₺{kpiStats.remainingAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+                ₺{kpiStats.remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
@@ -3973,7 +4876,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
             <div>
               <p className="text-xs font-medium text-slate-400">Vadesi Geçen Tutar</p>
               <p className="text-2xl font-bold font-mono tracking-tight text-rose-600 mt-2">
-                ₺{kpiStats.overdueAmount.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}
+                ₺{kpiStats.overdueAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
@@ -4169,6 +5072,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
               </span>
             )}
           </button>
+          <ExportButtons getExportData={getInvoicesExportData} size="sm" />
           <ColumnManagementDropdown
             columns={invoiceColumns}
             columnVisibility={invoiceColVisibility}
@@ -4177,7 +5081,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
             onResetToDefaults={resetInvoiceCols}
             hiddenCount={hiddenInvoiceColsCount}
           />
-          <ExportButtons getExportData={getInvoicesExportData} size="sm" />
         </div>
       </div>
 
@@ -4429,24 +5332,38 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         {isInvoiceColVisible("contact") && (
                           <td className="py-3.5 px-4">
                             <div className="min-w-0">
-                              {onSelectTab ? (
-                                <button
-                                  type="button"
-                                  onClick={() => onSelectTab("contacts")}
-                                  className="text-left font-bold text-slate-900 hover:text-purple-600 transition-colors truncate block text-xs cursor-pointer"
-                                  title="Cari detayı"
-                                >
-                                  {inv.contactName}
-                                </button>
-                              ) : (
-                                <div className="font-bold text-slate-900 truncate text-xs">
-                                  {inv.contactName}
-                                </div>
-                              )}
+                              {(() => {
+                                const isManual = inv.isManualCustomer || !contacts.some((c) => c.id === inv.contactId);
+                                return (
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {onSelectTab && !isManual ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => onSelectTab("contacts")}
+                                        className="text-left font-bold text-slate-900 hover:text-purple-600 transition-colors truncate block text-xs cursor-pointer"
+                                        title="Cari detayı"
+                                      >
+                                        {inv.contactName}
+                                      </button>
+                                    ) : (
+                                      <div className="font-bold text-slate-900 truncate text-xs">
+                                        {inv.contactName}
+                                      </div>
+                                    )}
+                                    {isManual && (
+                                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200" title="Cari kart açılmadan doğrudan müşteri bilgisiyle kesildi">
+                                        Münferit
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
 
                               <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                                {inv.taxNumber && <span>VKN: {inv.taxNumber}</span>}
-                                {inv.items?.[0] && (
+                                {inv.taxNumber && <span>VKN/TC: {inv.taxNumber}</span>}
+                                {inv.taxOffice && <span>({inv.taxOffice})</span>}
+                                {inv.customerCity && <span>• {inv.customerCity}</span>}
+                                {inv.items?.[0] && !inv.customerCity && (
                                   <span className="truncate max-w-[140px] text-slate-400">
                                     • {inv.items[0].description}
                                   </span>

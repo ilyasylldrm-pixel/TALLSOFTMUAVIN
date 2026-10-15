@@ -26,7 +26,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import { FoodRecipe, Product, FoodCategory } from "../../../types";
-import { formatCurrency, exportToExcel } from "../../../utils/exportUtils";
+import { formatCurrency, exportToExcel, exportToPDF, ExportData } from "../../../utils/exportUtils";
 import { findMatchingProduct, normalizeName } from "../../../utils/foodKitchenOrderHelper";
 
 interface ProductCostAndMrpControlViewProps {
@@ -291,9 +291,9 @@ export const ProductCostAndMrpControlView: React.FC<ProductCostAndMrpControlView
     setTimeout(() => setCopiedSuccess(false), 3000);
   };
 
-  // Export to Excel
-  const handleExportExcel = () => {
-    if (!activeRecipe) return;
+  // Export to Excel & PDF
+  const getMrpExportData = (): ExportData | null => {
+    if (!activeRecipe) return null;
 
     const rows = mrpAnalysisData.ingredients.map((item, idx) => [
       idx + 1,
@@ -303,15 +303,16 @@ export const ProductCostAndMrpControlView: React.FC<ProductCostAndMrpControlView
       `${item.totalNeeded} ${item.unit}`,
       `${item.currentStock} ${item.unit}`,
       item.isShortage ? `Eksik: ${item.shortageAmount} ${item.unit}` : `Yeterli (Kalan: ${item.remainingAfter} ${item.unit})`,
-      item.unitCost,
-      item.portionCost,
-      item.totalItemCost,
-      item.shortageCost,
+      formatCurrency(item.unitCost, "TRY"),
+      formatCurrency(item.portionCost, "TRY"),
+      formatCurrency(item.totalItemCost, "TRY"),
+      formatCurrency(item.shortageCost, "TRY"),
     ]);
 
-    exportToExcel({
-      filename: `MRP_Maliyet_${activeRecipe.name.replace(/\s+/g, "_")}_${portionCount}porsiyon`,
-      title: `Hammadde Maliyet Analizi & MRP Kontrol Raporu`,
+    return {
+      filename: `MRP_Maliyet_${activeRecipe.name.replace(/\s+/g, "_")}_${portionCount}porsiyon_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "MRP ve Stok Maliyeti",
+      title: "HAMMADDE MALİYET ANALİZİ & MRP KONTROL RAPORU",
       subtitle: `${activeRecipe.name} (${activeRecipe.recipeCode || ""}) - ${portionCount} Porsiyon Üretim Partisi`,
       headers: [
         "Sıra",
@@ -321,13 +322,23 @@ export const ProductCostAndMrpControlView: React.FC<ProductCostAndMrpControlView
         "Gereken Miktar",
         "Mevcut Depo Stoğu",
         "Stok Durumu",
-        "Birim Maliyet (TL)",
-        "Porsiyon Maliyeti (TL)",
-        "Toplam Parti Maliyeti (TL)",
-        "Eksik Satın Alma Tutarı (TL)",
+        "Birim Maliyet",
+        "Porsiyon Maliyeti",
+        "Toplam Parti Maliyeti",
+        "Eksik Satın Alma Tutarı",
       ],
       rows,
-    });
+    };
+  };
+
+  const handleExportExcel = () => {
+    const data = getMrpExportData();
+    if (data) exportToExcel(data);
+  };
+
+  const handleExportPDF = () => {
+    const data = getMrpExportData();
+    if (data) exportToPDF(data);
   };
 
   return (
@@ -381,10 +392,21 @@ export const ProductCostAndMrpControlView: React.FC<ProductCostAndMrpControlView
             <button
               type="button"
               onClick={handleExportExcel}
-              className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+              className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer active:scale-95"
+              title="MRP ve stok raporunu Excel (.xlsx) olarak indir"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
               <span>Excel Raporu</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportPDF}
+              className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer active:scale-95"
+              title="MRP ve stok raporunu aynı formatta PDF (.pdf) olarak indir"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-rose-600" />
+              <span>PDF Raporu</span>
             </button>
 
             <button

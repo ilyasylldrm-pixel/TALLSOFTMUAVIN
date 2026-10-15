@@ -272,7 +272,6 @@ export const ConstructionCostingModule: React.FC<ConstructionCostingModuleProps>
     if (selectedProjectId === projectId) {
       if (updated.length > 0) {
         handleSelectProjectId(updated[0].id);
-        setActiveTab("area_planning");
       } else {
         handleSelectProjectId("");
         setIsAddingNewProject(true);

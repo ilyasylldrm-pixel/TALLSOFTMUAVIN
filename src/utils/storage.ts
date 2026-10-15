@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, ApplianceServiceRecord, IndustrySector, FoodRecipe, FoodMenuPlan, FoodProductionOrder, FoodDispatchDelivery, FoodWitnessSample, ConstructionProject, getContactAccountCode, FixedAsset, AssetMaintenanceRecord, AssetDisposalRecord } from "../types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, CompanyItem, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, ApplianceServiceRecord, IndustrySector, FoodRecipe, FoodMenuPlan, FoodProductionOrder, FoodDispatchDelivery, FoodWitnessSample, ConstructionProject, getContactAccountCode, FixedAsset, AssetMaintenanceRecord, AssetDisposalRecord } from "../types";
 import {
   initialCompanySettings,
   initialContacts,
@@ -83,7 +83,369 @@ const STORAGE_KEYS = {
   FIXED_ASSETS: "muavin_fixed_assets",
   ASSET_MAINTENANCES: "muavin_asset_maintenances",
   ASSET_DISPOSALS: "muavin_asset_disposals",
+  PAYROLL_CUSTOMIZATIONS: "muavin_payroll_customizations",
+  COMPANIES_LIST: "muavin_companies_list",
+  ACTIVE_COMPANY_ID: "muavin_active_company_id",
 };
+
+export const DEFAULT_COMPANY: CompanyItem = {
+  id: "comp_default",
+  companyName: "MUAVİN BİLİŞİM TEKN.DAN.A.Ş. (TEST)",
+  companyTitle: "MUAVİN BİLİŞİM TEKNOLOJİLERİ VE DANIŞMANLIK A.Ş.",
+  taxOffice: "Mecidiyeköy",
+  taxNumber: "6220542314",
+  vkn: "6220542314",
+  tckn: "",
+  mysoftMatchedType: "vkn",
+  tenantIdentifierNumber: "6220542314",
+  mysoftStatus: "verified",
+  eFaturaPrefix: "GIB",
+  eFaturaNextNumber: "GIB2026000000001",
+  eArsivPrefix: "EAR",
+  eArsivNextNumber: "EAR2026000000001",
+  companyType: "anonim",
+  loginUsername: "muavin_test",
+  loginPasswordPlain: "Muavin2026!",
+  loginEmail: "test@muavin.com",
+  loginFullName: "Muavin Test Yöneticisi",
+  loginRole: "Firma Yöneticisi",
+  isDefault: true,
+  createdAt: "2024-01-01T00:00:00.000Z",
+};
+
+export const DEFAULT_CORPORATE_COMPANY: CompanyItem = {
+  id: "comp_sirket",
+  companyName: "ANADOLU KURUMSAL TİCARET LTD. ŞTİ.",
+  companyTitle: "ANADOLU KURUMSAL İÇ VE DIŞ TİCARET LİMİTED ŞİRKETİ",
+  taxOffice: "Kadıköy",
+  taxNumber: "1450892310",
+  vkn: "1450892310",
+  tckn: "",
+  mysoftMatchedType: "vkn",
+  tenantIdentifierNumber: "1450892310",
+  mysoftStatus: "verified",
+  eFaturaPrefix: "AKT",
+  eFaturaNextNumber: "AKT2026000000001",
+  eArsivPrefix: "AKE",
+  eArsivNextNumber: "AKE2026000000001",
+  companyType: "limited",
+  city: "İstanbul",
+  district: "Kadıköy",
+  loginUsername: "anadolu_kurumsal",
+  loginPasswordPlain: "Anadolu2026!",
+  loginEmail: "yonetici@anadolukurumsal.com",
+  loginFullName: "Anadolu Kurumsal Yöneticisi",
+  loginRole: "Firma Yöneticisi",
+  createdAt: "2025-01-10T00:00:00.000Z",
+};
+
+export const DEFAULT_INDIVIDUAL_COMPANY: CompanyItem = {
+  id: "comp_sahis",
+  companyName: "AHMET YILMAZ TİCARETHANESİ (ŞAHIS)",
+  companyTitle: "AHMET YILMAZ - YILMAZ TİCARET VE MÜHENDİSLİK ŞAHIS İŞLETMESİ",
+  taxOffice: "Çankaya",
+  taxNumber: "28491038472",
+  vkn: "",
+  tckn: "28491038472",
+  mysoftMatchedType: "tckn",
+  tenantIdentifierNumber: "28491038472",
+  mysoftStatus: "verified",
+  eFaturaPrefix: "AYT",
+  eFaturaNextNumber: "AYT2026000000001",
+  eArsivPrefix: "AYE",
+  eArsivNextNumber: "AYE2026000000001",
+  companyType: "sahis",
+  city: "Ankara",
+  district: "Çankaya",
+  loginUsername: "ahmet_yilmaz",
+  loginPasswordPlain: "Yilmaz2026!",
+  loginEmail: "ahmet@yilmazticaret.com",
+  loginFullName: "Ahmet Yılmaz",
+  loginRole: "İşletme Sahibi",
+  createdAt: "2025-01-15T00:00:00.000Z",
+};
+
+function ensureCompanyCredentials(comp: CompanyItem): { comp: CompanyItem; changed: boolean } {
+  let changed = false;
+  const copy = { ...comp };
+
+  if (copy.id === DEFAULT_COMPANY.id) {
+    if (!copy.loginUsername) { copy.loginUsername = DEFAULT_COMPANY.loginUsername; changed = true; }
+    if (!copy.loginPasswordPlain) { copy.loginPasswordPlain = DEFAULT_COMPANY.loginPasswordPlain; changed = true; }
+    if (!copy.loginEmail) { copy.loginEmail = DEFAULT_COMPANY.loginEmail; changed = true; }
+    if (!copy.loginFullName) { copy.loginFullName = DEFAULT_COMPANY.loginFullName; changed = true; }
+    if (!copy.loginRole) { copy.loginRole = DEFAULT_COMPANY.loginRole; changed = true; }
+  } else if (copy.id === DEFAULT_CORPORATE_COMPANY.id) {
+    if (!copy.loginUsername) { copy.loginUsername = DEFAULT_CORPORATE_COMPANY.loginUsername; changed = true; }
+    if (!copy.loginPasswordPlain) { copy.loginPasswordPlain = DEFAULT_CORPORATE_COMPANY.loginPasswordPlain; changed = true; }
+    if (!copy.loginEmail) { copy.loginEmail = DEFAULT_CORPORATE_COMPANY.loginEmail; changed = true; }
+    if (!copy.loginFullName) { copy.loginFullName = DEFAULT_CORPORATE_COMPANY.loginFullName; changed = true; }
+    if (!copy.loginRole) { copy.loginRole = DEFAULT_CORPORATE_COMPANY.loginRole; changed = true; }
+  } else if (copy.id === DEFAULT_INDIVIDUAL_COMPANY.id) {
+    if (!copy.loginUsername) { copy.loginUsername = DEFAULT_INDIVIDUAL_COMPANY.loginUsername; changed = true; }
+    if (!copy.loginPasswordPlain) { copy.loginPasswordPlain = DEFAULT_INDIVIDUAL_COMPANY.loginPasswordPlain; changed = true; }
+    if (!copy.loginEmail) { copy.loginEmail = DEFAULT_INDIVIDUAL_COMPANY.loginEmail; changed = true; }
+    if (!copy.loginFullName) { copy.loginFullName = DEFAULT_INDIVIDUAL_COMPANY.loginFullName; changed = true; }
+    if (!copy.loginRole) { copy.loginRole = DEFAULT_INDIVIDUAL_COMPANY.loginRole; changed = true; }
+  } else {
+    if (!copy.loginUsername) {
+      const trMap: Record<string, string> = {
+        ç: "c", Ç: "c", ğ: "g", Ğ: "g", ı: "i", İ: "i",
+        ö: "o", Ö: "o", ş: "s", Ş: "s", ü: "u", Ü: "u",
+      };
+      const slug = (copy.companyName || "sirket")
+        .split("")
+        .map((ch) => trMap[ch] || ch)
+        .join("")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, 20);
+      copy.loginUsername = `${slug || "firma"}_yonetici`;
+      changed = true;
+    }
+    if (!copy.loginPasswordPlain) {
+      copy.loginPasswordPlain = "Muavin2026!";
+      changed = true;
+    }
+    if (!copy.loginEmail) {
+      copy.loginEmail = copy.email || `${copy.loginUsername}@muavin.com`;
+      changed = true;
+    }
+    if (!copy.loginFullName) {
+      copy.loginFullName = `${copy.companyName} Yöneticisi`;
+      changed = true;
+    }
+    if (!copy.loginRole) {
+      copy.loginRole = "Firma Yöneticisi";
+      changed = true;
+    }
+  }
+  return { comp: copy, changed };
+}
+
+export function getCompaniesList(): CompanyItem[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.COMPANIES_LIST);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        let updated = false;
+        let list = [...parsed];
+        if (!list.some((c) => c.id === DEFAULT_COMPANY.id)) {
+          list.unshift(DEFAULT_COMPANY);
+          updated = true;
+        }
+        if (!list.some((c) => c.id === DEFAULT_CORPORATE_COMPANY.id || (c.id !== DEFAULT_COMPANY.id && (c.companyType === "limited" || c.companyType === "anonim")))) {
+          list.push(DEFAULT_CORPORATE_COMPANY);
+          updated = true;
+        }
+        if (!list.some((c) => c.id === DEFAULT_INDIVIDUAL_COMPANY.id || c.companyType === "sahis")) {
+          list.push(DEFAULT_INDIVIDUAL_COMPANY);
+          updated = true;
+        }
+        list = list.map((item) => {
+          const res = ensureCompanyCredentials(item);
+          if (res.changed) updated = true;
+          return res.comp;
+        });
+        if (updated) {
+          safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(list));
+        }
+        return list;
+      }
+    }
+  } catch (e) {
+    console.error("Error reading companies list", e);
+  }
+  const defaultList = [DEFAULT_COMPANY, DEFAULT_CORPORATE_COMPANY, DEFAULT_INDIVIDUAL_COMPANY];
+  safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(defaultList));
+  return defaultList;
+}
+
+export function saveCompaniesList(list: CompanyItem[]): void {
+  safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(list));
+}
+
+export function getActiveCompanyId(): string {
+  try {
+    const active = localStorage.getItem(STORAGE_KEYS.ACTIVE_COMPANY_ID);
+    if (active) return active;
+  } catch (e) {
+    // fallback
+  }
+  return DEFAULT_COMPANY.id;
+}
+
+export function setActiveCompanyId(id: string): void {
+  safeSetStorageItem(STORAGE_KEYS.ACTIVE_COMPANY_ID, id);
+}
+
+export function addCompanyItem(comp: CompanyItem): CompanyItem[] {
+  const current = getCompaniesList();
+  const exists = current.some((c) => c.id === comp.id);
+  const updated = exists ? current.map((c) => (c.id === comp.id ? comp : c)) : [...current, comp];
+  saveCompaniesList(updated);
+  return updated;
+}
+
+export function updateCompanyItem(comp: CompanyItem): CompanyItem[] {
+  const current = getCompaniesList();
+  const updated = current.map((c) => (c.id === comp.id ? comp : c));
+  saveCompaniesList(updated);
+  return updated;
+}
+
+export function deleteCompanyItem(id: string): CompanyItem[] {
+  if (id === DEFAULT_COMPANY.id) return getCompaniesList();
+  const current = getCompaniesList();
+  const updated = current.filter((c) => c.id !== id);
+  saveCompaniesList(updated);
+  if (getActiveCompanyId() === id) {
+    setActiveCompanyId(DEFAULT_COMPANY.id);
+  }
+  return updated;
+}
+
+export function pruneDayPuantajDetail(day: any): any {
+  if (!day) return { code: "N" };
+  if (typeof day === "string") return { code: day };
+  const pruned: any = { code: day.code || "N" };
+  if (day.overtimeHours && Number(day.overtimeHours) > 0) {
+    pruned.overtimeHours = Number(day.overtimeHours);
+  }
+  if (day.isHolidayOvertime) {
+    pruned.isHolidayOvertime = true;
+  }
+  if (day.leaveReason && typeof day.leaveReason === "string" && day.leaveReason.trim()) {
+    pruned.leaveReason = day.leaveReason.trim();
+  }
+  if (day.leaveType && typeof day.leaveType === "string" && day.leaveType.trim()) {
+    pruned.leaveType = day.leaveType.trim();
+  }
+  return pruned;
+}
+
+export function pruneAdjustmentForStorage(adj: any): any {
+  if (!adj || typeof adj !== "object") return {};
+  const pruned: any = {};
+
+  const scalarKeys = [
+    "month", "salaryType", "baseSalary", "bonusAmount", "allowanceAmount",
+    "unpaidLeaveDays", "advanceDeduction", "icraDeduction", "alimonyDeduction",
+    "otherDeductions", "isRetired", "isCustomized", "notes",
+    "alimonyReason", "otherReason", "deductionReason", "customPaymentsTotal"
+  ];
+  scalarKeys.forEach((k) => {
+    if (adj[k] !== undefined && adj[k] !== null && adj[k] !== "") {
+      pruned[k] = adj[k];
+    }
+  });
+
+  if (Array.isArray(adj.customPayments) && adj.customPayments.length > 0) {
+    pruned.customPayments = adj.customPayments;
+  }
+
+  if (adj.puantajDays && typeof adj.puantajDays === "object") {
+    const prunedDays: Record<number, any> = {};
+    let hasEntries = false;
+    Object.entries(adj.puantajDays).forEach(([dStr, dayVal]: [string, any]) => {
+      const dNum = Number(dStr);
+      if (!dNum || isNaN(dNum)) return;
+      const dayPruned = pruneDayPuantajDetail(dayVal);
+      prunedDays[dNum] = dayPruned;
+      hasEntries = true;
+    });
+    if (hasEntries) {
+      pruned.puantajDays = prunedDays;
+    }
+  }
+
+  return pruned;
+}
+
+export function sanitizePayrollCustomizations(data: any): Record<string, any> {
+  if (!data || typeof data !== "object") return {};
+  const cleaned: Record<string, any> = {};
+
+  const isMonthKey = (k: string) => /^\d{4}-\d{2}$/.test(k);
+  const isMonthEmpKey = (k: string) => /^\d{4}-\d{2}_.+/.test(k);
+
+  // 1. First process month maps: e.g. "2026-07": { "emp_1": {...} }
+  Object.entries(data).forEach(([key, val]) => {
+    if (isMonthKey(key)) {
+      if (val && typeof val === "object" && !Array.isArray(val)) {
+        const monthGroup: Record<string, any> = {};
+        Object.entries(val).forEach(([subKey, subVal]) => {
+          // Prevent recursive nesting of month keys
+          if (isMonthKey(subKey) || subKey.includes("_")) return;
+          if (subVal && typeof subVal === "object") {
+            monthGroup[subKey] = pruneAdjustmentForStorage(subVal);
+          }
+        });
+        cleaned[key] = monthGroup;
+      }
+    }
+  });
+
+  // 2. Process `${month}_${empId}` keys and root `empId` keys
+  Object.entries(data).forEach(([key, val]) => {
+    if (isMonthKey(key)) return;
+    if (isMonthEmpKey(key)) {
+      if (val && typeof val === "object") {
+        cleaned[key] = pruneAdjustmentForStorage(val);
+      }
+    } else if (val && typeof val === "object" && (val as any).isCustomized) {
+      // Direct employee ID
+      cleaned[key] = pruneAdjustmentForStorage(val);
+    }
+  });
+
+  return cleaned;
+}
+
+export function savePayrollCustomizationsStorage(data: Record<string, any>): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const sanitized = sanitizePayrollCustomizations(data);
+    const jsonStr = JSON.stringify(sanitized);
+
+    const success = safeSetStorageItem("muavin_payroll_customizations", jsonStr);
+    if (!success) {
+      // If quota issue persists, retain only the 3 most recent months and retry
+      const isMonthKey = (k: string) => /^\d{4}-\d{2}$/.test(k);
+      const monthKeys = Object.keys(sanitized).filter(isMonthKey).sort().reverse().slice(0, 3);
+      const minimal: Record<string, any> = {};
+      monthKeys.forEach((m) => {
+        minimal[m] = sanitized[m];
+      });
+      Object.entries(sanitized).forEach(([k, v]) => {
+        if (monthKeys.some((m) => k.startsWith(m))) {
+          minimal[k] = v;
+        }
+      });
+      return safeSetStorageItem("muavin_payroll_customizations", JSON.stringify(minimal), false);
+    }
+    return true;
+  } catch (err) {
+    console.warn("Could not save payroll customizations to storage:", err);
+    return false;
+  }
+}
+
+export function loadPayrollCustomizationsStorage(): Record<string, any> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = safeGetStorageItem("muavin_payroll_customizations");
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return sanitizePayrollCustomizations(parsed);
+  } catch (err) {
+    console.warn("Could not load payroll customizations:", err);
+    return {};
+  }
+}
 
 export function cleanupOversizedStorage(aggressive = false) {
   if (typeof window === "undefined") return;
@@ -108,6 +470,17 @@ export function cleanupOversizedStorage(aggressive = false) {
           const branding = window.localStorage.getItem("muavin_cloud_branding");
           if (branding && branding.length > 50000) {
             keysToRemove.push(key);
+          }
+        } catch (_) {}
+      }
+      // 3.1. Compact oversized payroll customizations if bloated
+      else if (key === "muavin_payroll_customizations") {
+        try {
+          const raw = window.localStorage.getItem("muavin_payroll_customizations");
+          if (raw && (raw.length > 80000 || aggressive)) {
+            const parsed = JSON.parse(raw);
+            const sanitized = sanitizePayrollCustomizations(parsed);
+            window.localStorage.setItem("muavin_payroll_customizations", JSON.stringify(sanitized));
           }
         } catch (_) {}
       }
@@ -206,8 +579,11 @@ const safeSet = (key: string, val: any) => {
   safeSetStorageItem(key, JSON.stringify(val));
 };
 
-export function getStoredData() {
+export function getStoredData(targetCompanyId?: string) {
   cleanupOversizedStorage();
+  const activeCompId = targetCompanyId || getActiveCompanyId();
+  const isDefault = activeCompId === DEFAULT_COMPANY.id;
+
   const get = <T>(key: string, fallback: T): T => {
     try {
       const item = localStorage.getItem(key) || sessionStorage.getItem(key);
@@ -218,12 +594,20 @@ export function getStoredData() {
     }
   };
 
-  const storedInvoices = get<Invoice[]>(STORAGE_KEYS.INVOICES, initialInvoices);
-  const storedProducts = get<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
-  const storedCheques = get<Cheque[]>(STORAGE_KEYS.CHEQUES, initialCheques);
-  const storedNotes = get<PromissoryNote[]>(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes);
-  const loadedContacts = get<Contact[]>(STORAGE_KEYS.CONTACTS, initialContacts);
-  const loadedTransactions = get<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions);
+  const getCompanyScoped = <T>(baseKey: string, fallbackDefault: T, fallbackNew: T): T => {
+    if (isDefault) {
+      return get<T>(baseKey, fallbackDefault);
+    }
+    const scopedKey = `${baseKey}_${activeCompId}`;
+    return get<T>(scopedKey, fallbackNew);
+  };
+
+  const storedInvoices = getCompanyScoped<Invoice[]>(STORAGE_KEYS.INVOICES, initialInvoices, []);
+  const storedProducts = getCompanyScoped<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts, []);
+  const storedCheques = getCompanyScoped<Cheque[]>(STORAGE_KEYS.CHEQUES, initialCheques, []);
+  const storedNotes = getCompanyScoped<PromissoryNote[]>(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes, []);
+  const loadedContacts = getCompanyScoped<Contact[]>(STORAGE_KEYS.CONTACTS, initialContacts, []);
+  const loadedTransactions = getCompanyScoped<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions, []);
 
   const normalizedContacts = syncContactBalances(
     loadedContacts,
@@ -233,78 +617,218 @@ export function getStoredData() {
     storedNotes
   );
 
+  let loadedSettings: CompanySettings;
+  const compMeta = getCompaniesList().find((c) => c.id === activeCompId) || DEFAULT_COMPANY;
+  if (isDefault) {
+    loadedSettings = get<CompanySettings>(STORAGE_KEYS.SETTINGS, initialCompanySettings);
+    if (
+      loadedSettings &&
+      (loadedSettings.companyTitle?.includes("Muavin Bilişim Teknolojileri") ||
+       loadedSettings.companyName?.includes("Muavin Bilişim"))
+    ) {
+      if (loadedSettings.companyName !== "MUAVİN BİLİŞİM TEKN.DAN.A.Ş.") {
+        loadedSettings.companyName = "MUAVİN BİLİŞİM TEKN.DAN.A.Ş.";
+        safeSet(STORAGE_KEYS.SETTINGS, loadedSettings);
+      }
+    }
+  } else {
+    const initialForNewCompany: CompanySettings = {
+      ...initialCompanySettings,
+      id: compMeta.id,
+      companyName: compMeta.companyName || "Yeni Şirket",
+      name: compMeta.companyName || "Yeni Şirket",
+      companyTitle: compMeta.companyTitle || compMeta.companyName || "Yeni Şirket",
+      title: compMeta.companyTitle || compMeta.companyName || "Yeni Şirket",
+      taxOffice: compMeta.taxOffice || "Merkez",
+      taxNumber: compMeta.taxNumber || compMeta.vkn || compMeta.tckn || "",
+      vknTckn: compMeta.taxNumber || compMeta.vkn || compMeta.tckn || "",
+      vkn: compMeta.vkn || "",
+      tckn: compMeta.tckn || "",
+      mysoftMatchedType: compMeta.mysoftMatchedType || "vkn",
+      tenantIdentifierNumber: compMeta.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
+      mysoftStatus: compMeta.mysoftStatus || "unmatched",
+      eFaturaPrefix: compMeta.eFaturaPrefix || "GIB",
+      eFaturaNextNumber: compMeta.eFaturaNextNumber || undefined,
+      eArsivPrefix: compMeta.eArsivPrefix || "EAR",
+      eArsivNextNumber: compMeta.eArsivNextNumber || undefined,
+      defaultInvoicePrefix: compMeta.eFaturaPrefix || "GIB",
+      phone: compMeta.phone || "",
+      email: compMeta.email || "",
+      website: compMeta.website || "",
+      address: compMeta.address || "",
+      city: compMeta.city || "İstanbul",
+      district: compMeta.district || "",
+      logoUrl: "",
+      mysoftCredentials: {
+        tenantIdentifierNumber: compMeta.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
+      },
+    };
+    loadedSettings = get<CompanySettings>(`${STORAGE_KEYS.SETTINGS}_${activeCompId}`, initialForNewCompany);
+  }
+
+  if (compMeta) {
+    loadedSettings = {
+      ...loadedSettings,
+      tenantIdentifierNumber:
+        compMeta.tenantIdentifierNumber || loadedSettings.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
+      mysoftStatus: compMeta.mysoftStatus || loadedSettings.mysoftStatus,
+      eFaturaPrefix: compMeta.eFaturaPrefix || loadedSettings.eFaturaPrefix || "GIB",
+      eFaturaNextNumber: compMeta.eFaturaNextNumber || loadedSettings.eFaturaNextNumber,
+      eArsivPrefix: compMeta.eArsivPrefix || loadedSettings.eArsivPrefix || "EAR",
+      eArsivNextNumber: compMeta.eArsivNextNumber || loadedSettings.eArsivNextNumber,
+      defaultInvoicePrefix:
+        compMeta.eFaturaPrefix || loadedSettings.eFaturaPrefix || loadedSettings.defaultInvoicePrefix || "GIB",
+    };
+  }
+
   return {
-    settings: get<CompanySettings>(STORAGE_KEYS.SETTINGS, initialCompanySettings),
+    settings: loadedSettings,
     contacts: normalizedContacts,
-    accounts: get<Account[]>(STORAGE_KEYS.ACCOUNTS, initialAccounts),
+    accounts: getCompanyScoped<Account[]>(STORAGE_KEYS.ACCOUNTS, initialAccounts, []),
     invoices: storedInvoices,
     transactions: loadedTransactions,
     products: storedProducts,
-    quotes: get<Quote[]>(STORAGE_KEYS.QUOTES, initialQuotes),
-    orders: get<Order[]>(STORAGE_KEYS.ORDERS, initialOrders),
-    waybills: get<Waybill[]>(STORAGE_KEYS.WAYBILLS, initialWaybills),
+    quotes: getCompanyScoped<Quote[]>(STORAGE_KEYS.QUOTES, initialQuotes, []),
+    orders: getCompanyScoped<Order[]>(STORAGE_KEYS.ORDERS, initialOrders, []),
+    waybills: getCompanyScoped<Waybill[]>(STORAGE_KEYS.WAYBILLS, initialWaybills, []),
     cheques: storedCheques,
     promissoryNotes: storedNotes,
-    branches: get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches),
-    warehouses: get<Warehouse[]>(STORAGE_KEYS.WAREHOUSES, initialWarehouses),
-    employees: get<Employee[]>(STORAGE_KEYS.EMPLOYEES, initialEmployees),
-    leaveRequests: get<LeaveRequest[]>(STORAGE_KEYS.LEAVE_REQUESTS, initialLeaveRequests),
-    advanceRequests: get<AdvanceRequest[]>(STORAGE_KEYS.ADVANCE_REQUESTS, initialAdvanceRequests),
-    legalDeductions: get<LegalDeduction[]>(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions),
-    costProjects: (() => {
-      const stored = get<CostProject[]>(STORAGE_KEYS.COST_PROJECTS, initialCostProjects);
-      const cleaned = (stored || initialCostProjects || []).map((p) => ({
-        ...p,
-        costItems: [],
-      }));
-      safeSet(STORAGE_KEYS.COST_PROJECTS, cleaned);
-      return cleaned;
-    })(),
-    assetCustodies: get<AssetCustody[]>(STORAGE_KEYS.ASSET_CUSTODIES, initialAssetCustodies),
-    boms: get<BillOfMaterials[]>(STORAGE_KEYS.BOMS, initialBillOfMaterials),
-    workstations: get<Workstation[]>(STORAGE_KEYS.WORKSTATIONS, initialWorkstations),
-    routings: get<Routing[]>(STORAGE_KEYS.ROUTINGS, initialRoutings),
-    workOrders: get<WorkOrder[]>(STORAGE_KEYS.WORK_ORDERS, initialWorkOrders),
-    subcontractOrders: get<SubcontractOrder[]>(STORAGE_KEYS.SUBCONTRACT_ORDERS, initialSubcontractOrders),
-    autoServices: get<AutoServiceRecord[]>(STORAGE_KEYS.AUTO_SERVICES, initialAutoServices),
-    itServices: get<ItServiceRecord[]>(STORAGE_KEYS.IT_SERVICES, initialItServices),
-    applianceServices: get<ApplianceServiceRecord[]>(STORAGE_KEYS.APPLIANCE_SERVICES, initialApplianceServices),
-    constructionProjects: get<ConstructionProject[]>(STORAGE_KEYS.CONSTRUCTION_PROJECTS, initialConstructionProjects),
-    sectors: get<IndustrySector[]>(STORAGE_KEYS.SECTORS, initialSectors),
-    activeSectorId: get<string>(STORAGE_KEYS.ACTIVE_SECTOR, "catering"),
-    foodRecipes: (() => {
-      const stored = get<FoodRecipe[]>(STORAGE_KEYS.FOOD_RECIPES, initialFoodRecipes);
-      const isMissingAnyInitial = Array.isArray(stored) && initialFoodRecipes.some(init => !stored.some(s => s.id === init.id));
-      if (!Array.isArray(stored) || stored.length < initialFoodRecipes.length || isMissingAnyInitial || !stored.some(r => r.laborCostPerPortion !== undefined)) {
-        const storedMap = new Map((stored || []).map((r) => [r.id, r]));
-        const merged = initialFoodRecipes.map((initR) => {
-          const userR = storedMap.get(initR.id);
-          if (!userR) return initR;
-          return {
-            ...initR,
-            ...userR,
-            laborCostPerPortion: userR.laborCostPerPortion ?? initR.laborCostPerPortion,
-            gasEnergyCostPerPortion: userR.gasEnergyCostPerPortion ?? initR.gasEnergyCostPerPortion,
-            overheadCostPerPortion: userR.overheadCostPerPortion ?? initR.overheadCostPerPortion,
-          };
-        });
-        (stored || []).forEach((r) => {
-          if (!initialFoodRecipes.some((init) => init.id === r.id)) {
-            merged.push(r);
-          }
-        });
-        safeSet(STORAGE_KEYS.FOOD_RECIPES, merged);
-        return merged;
+    branches: (() => {
+      if (isDefault) {
+        const stored = get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches);
+        return Array.isArray(stored) && stored.length > 0 ? stored : initialBranches;
       }
-      return stored;
+      const scopedKey = `${STORAGE_KEYS.BRANCHES}_${activeCompId}`;
+      const existingRaw = safeGetStorageItem(scopedKey);
+      if (existingRaw) {
+        try {
+          const parsed = JSON.parse(existingRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (_) {}
+      }
+      const defaultBranchForComp: Branch[] = [
+        {
+          id: `br_main_${activeCompId}`,
+          code: "SUB-001",
+          name: `${compMeta.companyName || "İşletme"} - Merkez Şube`,
+          isMain: true,
+          managerName: compMeta.companyType === "sahis" ? (compMeta.companyName?.split("-")[0]?.trim() || "İşletme Sahibi") : "Şube Müdürü",
+          phone: compMeta.phone || "+90 (212) 000 00 00",
+          email: compMeta.email || "",
+          status: "active",
+          address: {
+            country: "Türkiye",
+            city: compMeta.city || "İstanbul",
+            district: compMeta.district || "Merkez",
+            fullAddress: compMeta.address || `${compMeta.district || "Merkez"} / ${compMeta.city || "İstanbul"}`,
+          },
+          createdAt: new Date().toISOString().split("T")[0],
+        },
+      ];
+      safeSet(scopedKey, defaultBranchForComp);
+      return defaultBranchForComp;
     })(),
-    foodMenus: get<FoodMenuPlan[]>(STORAGE_KEYS.FOOD_MENUS, initialFoodMenus),
-    foodProductionOrders: get<FoodProductionOrder[]>(STORAGE_KEYS.FOOD_PRODUCTION_ORDERS, initialFoodProductionOrders),
-    foodDispatches: get<FoodDispatchDelivery[]>(STORAGE_KEYS.FOOD_DISPATCHES, initialFoodDispatches),
-    foodWitnessSamples: get<FoodWitnessSample[]>(STORAGE_KEYS.FOOD_SAMPLES, initialFoodWitnessSamples),
-    fixedAssets: get<FixedAsset[]>(STORAGE_KEYS.FIXED_ASSETS, INITIAL_FIXED_ASSETS),
-    assetMaintenances: get<AssetMaintenanceRecord[]>(STORAGE_KEYS.ASSET_MAINTENANCES, INITIAL_ASSET_MAINTENANCES),
-    assetDisposals: get<AssetDisposalRecord[]>(STORAGE_KEYS.ASSET_DISPOSALS, INITIAL_ASSET_DISPOSALS),
+    warehouses: (() => {
+      if (isDefault) {
+        const stored = get<Warehouse[]>(STORAGE_KEYS.WAREHOUSES, initialWarehouses);
+        return Array.isArray(stored) && stored.length > 0 ? stored : initialWarehouses;
+      }
+      const scopedKey = `${STORAGE_KEYS.WAREHOUSES}_${activeCompId}`;
+      const existingRaw = safeGetStorageItem(scopedKey);
+      if (existingRaw) {
+        try {
+          const parsed = JSON.parse(existingRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (_) {}
+      }
+      const defaultWhForComp: Warehouse[] = [
+        {
+          id: `wh_main_${activeCompId}`,
+          code: "DEP-001",
+          name: `${compMeta.companyType === "sahis" ? "Şahıs İşletmesi" : "Şirket"} Merkez Ana Depo`,
+          type: "main",
+          capacityM2: compMeta.companyType === "sahis" ? 400 : 1500,
+          managerName: compMeta.companyType === "sahis" ? "İşletme Yetkilisi" : "Depo Sorumlusu",
+          phone: compMeta.phone || "+90 (212) 000 00 00",
+          branchId: `br_main_${activeCompId}`,
+          branchName: `${compMeta.companyName || "İşletme"} - Merkez Şube`,
+          isDefault: true,
+          status: "active",
+          address: {
+            country: "Türkiye",
+            city: compMeta.city || "İstanbul",
+            district: compMeta.district || "Merkez",
+            fullAddress: compMeta.address || `${compMeta.district || "Merkez"} / ${compMeta.city || "İstanbul"}`,
+          },
+          createdAt: new Date().toISOString().split("T")[0],
+        },
+      ];
+      safeSet(scopedKey, defaultWhForComp);
+      return defaultWhForComp;
+    })(),
+    employees: getCompanyScoped<Employee[]>(STORAGE_KEYS.EMPLOYEES, initialEmployees, []),
+    leaveRequests: getCompanyScoped<LeaveRequest[]>(STORAGE_KEYS.LEAVE_REQUESTS, initialLeaveRequests, []),
+    advanceRequests: getCompanyScoped<AdvanceRequest[]>(STORAGE_KEYS.ADVANCE_REQUESTS, initialAdvanceRequests, []),
+    legalDeductions: getCompanyScoped<LegalDeduction[]>(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions, []),
+    costProjects: (() => {
+      if (isDefault) {
+        const stored = get<CostProject[]>(STORAGE_KEYS.COST_PROJECTS, initialCostProjects);
+        const cleaned = (stored || initialCostProjects || []).map((p) => ({
+          ...p,
+          costItems: [],
+        }));
+        safeSet(STORAGE_KEYS.COST_PROJECTS, cleaned);
+        return cleaned;
+      }
+      return getCompanyScoped<CostProject[]>(STORAGE_KEYS.COST_PROJECTS, [], []);
+    })(),
+    assetCustodies: getCompanyScoped<AssetCustody[]>(STORAGE_KEYS.ASSET_CUSTODIES, initialAssetCustodies, []),
+    boms: getCompanyScoped<BillOfMaterials[]>(STORAGE_KEYS.BOMS, initialBillOfMaterials, []),
+    workstations: getCompanyScoped<Workstation[]>(STORAGE_KEYS.WORKSTATIONS, initialWorkstations, []),
+    routings: getCompanyScoped<Routing[]>(STORAGE_KEYS.ROUTINGS, initialRoutings, []),
+    workOrders: getCompanyScoped<WorkOrder[]>(STORAGE_KEYS.WORK_ORDERS, initialWorkOrders, []),
+    subcontractOrders: getCompanyScoped<SubcontractOrder[]>(STORAGE_KEYS.SUBCONTRACT_ORDERS, initialSubcontractOrders, []),
+    autoServices: getCompanyScoped<AutoServiceRecord[]>(STORAGE_KEYS.AUTO_SERVICES, initialAutoServices, []),
+    itServices: getCompanyScoped<ItServiceRecord[]>(STORAGE_KEYS.IT_SERVICES, initialItServices, []),
+    applianceServices: getCompanyScoped<ApplianceServiceRecord[]>(STORAGE_KEYS.APPLIANCE_SERVICES, initialApplianceServices, []),
+    constructionProjects: getCompanyScoped<ConstructionProject[]>(STORAGE_KEYS.CONSTRUCTION_PROJECTS, initialConstructionProjects, []),
+    sectors: isDefault ? get<IndustrySector[]>(STORAGE_KEYS.SECTORS, initialSectors) : [],
+    activeSectorId: isDefault ? get<string>(STORAGE_KEYS.ACTIVE_SECTOR, "catering") : "catering",
+    foodRecipes: isDefault
+      ? (() => {
+          const stored = get<FoodRecipe[]>(STORAGE_KEYS.FOOD_RECIPES, initialFoodRecipes);
+          const isMissingAnyInitial = Array.isArray(stored) && initialFoodRecipes.some(init => !stored.some(s => s.id === init.id));
+          if (!Array.isArray(stored) || stored.length < initialFoodRecipes.length || isMissingAnyInitial || !stored.some(r => r.laborCostPerPortion !== undefined)) {
+            const storedMap = new Map((stored || []).map((r) => [r.id, r]));
+            const merged = initialFoodRecipes.map((initR) => {
+              const userR = storedMap.get(initR.id);
+              if (!userR) return initR;
+              return {
+                ...initR,
+                ...userR,
+                laborCostPerPortion: userR.laborCostPerPortion ?? initR.laborCostPerPortion,
+                gasEnergyCostPerPortion: userR.gasEnergyCostPerPortion ?? initR.gasEnergyCostPerPortion,
+                overheadCostPerPortion: userR.overheadCostPerPortion ?? initR.overheadCostPerPortion,
+              };
+            });
+            (stored || []).forEach((r) => {
+              if (!initialFoodRecipes.some((init) => init.id === r.id)) {
+                merged.push(r);
+              }
+            });
+            safeSet(STORAGE_KEYS.FOOD_RECIPES, merged);
+            return merged;
+          }
+          return stored;
+        })()
+      : getCompanyScoped<FoodRecipe[]>(STORAGE_KEYS.FOOD_RECIPES, [], []),
+    foodMenus: getCompanyScoped<FoodMenuPlan[]>(STORAGE_KEYS.FOOD_MENUS, initialFoodMenus, []),
+    foodProductionOrders: getCompanyScoped<FoodProductionOrder[]>(STORAGE_KEYS.FOOD_PRODUCTION_ORDERS, initialFoodProductionOrders, []),
+    foodDispatches: getCompanyScoped<FoodDispatchDelivery[]>(STORAGE_KEYS.FOOD_DISPATCHES, initialFoodDispatches, []),
+    foodWitnessSamples: getCompanyScoped<FoodWitnessSample[]>(STORAGE_KEYS.FOOD_SAMPLES, initialFoodWitnessSamples, []),
+    fixedAssets: getCompanyScoped<FixedAsset[]>(STORAGE_KEYS.FIXED_ASSETS, INITIAL_FIXED_ASSETS, []),
+    assetMaintenances: getCompanyScoped<AssetMaintenanceRecord[]>(STORAGE_KEYS.ASSET_MAINTENANCES, INITIAL_ASSET_MAINTENANCES, []),
+    assetDisposals: getCompanyScoped<AssetDisposalRecord[]>(STORAGE_KEYS.ASSET_DISPOSALS, INITIAL_ASSET_DISPOSALS, []),
   };
 }
 
@@ -372,8 +896,11 @@ export function syncContactBalances(
   });
 }
 
-export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any) {
-  safeSetStorageItem(STORAGE_KEYS[key], JSON.stringify(data));
+export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any, targetCompanyId?: string) {
+  const activeCompId = targetCompanyId || getActiveCompanyId();
+  const isDefault = activeCompId === DEFAULT_COMPANY.id;
+  const storageKey = isDefault ? STORAGE_KEYS[key] : `${STORAGE_KEYS[key]}_${activeCompId}`;
+  safeSetStorageItem(storageKey, JSON.stringify(data));
 }
 
 export function resetToDemoData() {

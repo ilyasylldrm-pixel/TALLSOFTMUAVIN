@@ -126,6 +126,46 @@ export const Orders: React.FC<OrdersProps> = ({
     }
   };
 
+  const handleDownloadOrderExcel = () => {
+    if (!selectedOrderForView) return;
+    const ord = selectedOrderForView;
+    const headers = [
+      "Kalem No",
+      "Ürün / Hizmet Adı",
+      "Miktar",
+      "Birim",
+      "Birim Fiyat",
+      "KDV Oranı (%)",
+      "KDV Tutarı",
+      "Toplam Tutar",
+    ];
+
+    const rows: (string | number)[][] = ord.items.map((it, idx) => [
+      idx + 1,
+      it.productName,
+      it.quantity,
+      it.unit,
+      (it.unitPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }),
+      `%${it.vatRate || 0}`,
+      (it.vatAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }),
+      (it.total || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }),
+    ]);
+
+    rows.push([]);
+    rows.push(["", "", "", "", "", "Ara Toplam:", (ord.subtotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }), ord.currency || "TRY"]);
+    rows.push(["", "", "", "", "", "Hesaplanan KDV:", (ord.totalVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }), ord.currency || "TRY"]);
+    rows.push(["", "", "", "", "", "Genel Toplam:", (ord.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }), ord.currency || "TRY"]);
+
+    exportToExcel({
+      filename: `${ord.orderNumber}_Siparis_Detayi_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Sipariş Detayı",
+      title: `${companySettings?.companyName || "FİRMA"} - SİPARİŞ BELGESİ VE KALEM LİSTESİ`,
+      subtitle: `Sipariş No: ${ord.orderNumber} | Tür: ${ord.type === "sales" ? "Satış" : "Alış"} | Cari: ${ord.contactName} | Tarih: ${formatDate(ord.orderDate)} | Teslimat: ${formatDate(ord.deliveryDate)}`,
+      headers,
+      rows,
+    });
+  };
+
   // New Order Form State
   const [orderType, setOrderType] = useState<OrderType>("sales");
   const [orderNumber, setOrderNumber] = useState("");
@@ -654,7 +694,7 @@ export const Orders: React.FC<OrdersProps> = ({
                                 <option value="">-- Listeden Ürün/Hizmet Seçiniz --</option>
                                 {products.map((p) => (
                                   <option key={p.id} value={p.id}>
-                                    [{p.code}] {p.name} - Stok: {p.stockQuantity} {p.unit} (Satış: ₺{p.sellPrice})
+                                    [{p.code}] {p.name} - Stok: {p.stockQuantity} {p.unit} (Satış: ₺{p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                                   </option>
                                 ))}
                               </select>
@@ -848,6 +888,16 @@ export const Orders: React.FC<OrdersProps> = ({
 
               <button
                 type="button"
+                onClick={handleDownloadOrderExcel}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+                title="Sipariş Detaylarını ve Kalemlerini Excel (.xlsx) Olarak İndir"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>Excel İndir</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleDownloadOrderPDF}
                 disabled={isDownloadingOrderPDF}
                 style={{ backgroundColor: theme.primaryColor }}
@@ -1007,8 +1057,11 @@ export const Orders: React.FC<OrdersProps> = ({
                         ₺{selectedOrderForView.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-300">
-                      <span>GENEL TOPLAM:</span>
+                    <div
+                      style={{ backgroundColor: "#83b8ff", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+                      className="flex justify-between items-center text-sm font-black text-slate-950 p-2 rounded-lg border border-[#60a5fa] mt-1 print:bg-[#83b8ff]"
+                    >
+                      <span className="text-xs uppercase">İŞLEM TUTARI / GENEL TOPLAM:</span>
                       <span>₺{selectedOrderForView.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
                     </div>
                   </div>

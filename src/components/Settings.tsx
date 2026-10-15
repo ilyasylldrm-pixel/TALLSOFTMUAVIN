@@ -30,6 +30,12 @@ import {
   ExternalLink,
   RefreshCw,
   UploadCloud,
+  Utensils,
+  Bus,
+  Users,
+  Info,
+  Gift,
+  CheckCircle2,
 } from "lucide-react";
 import { GitHubSyncPanel } from "./GitHubSyncPanel";
 
@@ -40,6 +46,7 @@ interface SettingsProps {
   onImportBackup?: (jsonStr: string) => boolean;
   onResetDemoData?: () => void;
   embedded?: boolean;
+  initialTab?: "theme" | "system" | "backup" | "cloud" | "github";
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -49,9 +56,16 @@ export const Settings: React.FC<SettingsProps> = ({
   onImportBackup,
   onResetDemoData,
   embedded = false,
+  initialTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<"theme" | "system" | "backup" | "cloud" | "github">("theme");
+  const [activeTab, setActiveTab] = useState<"theme" | "system" | "backup" | "cloud" | "github">(
+    initialTab || (embedded ? "system" : "theme")
+  );
   const [formData, setFormData] = useState<CompanySettings>(settings);
+
+  React.useEffect(() => {
+    setFormData(settings);
+  }, [settings]);
   const [isSaved, setIsSaved] = useState(false);
   const [cloudTelemetry, setCloudTelemetry] = useState<any>(null);
   const [pingLatency, setPingLatency] = useState<number | null>(null);
@@ -172,7 +186,7 @@ export const Settings: React.FC<SettingsProps> = ({
           style={activeTab === "system" ? { backgroundColor: theme.primaryColor } : {}}
         >
           <Sliders className="w-4 h-4" />
-          <span>Ticari Parametreler</span>
+          <span>Ticari Parametreler (Yol & Yemek Yardımı)</span>
         </button>
 
         <button
@@ -555,9 +569,54 @@ export const Settings: React.FC<SettingsProps> = ({
         </div>
       )}
 
-      {/* ─── TAB 2: SYSTEM PARAMETERS ─── */}
+      {/* ─── TAB 2: SYSTEM PARAMETERS (TİCARİ PARAMETRELER) ─── */}
       {activeTab === "system" && (
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Ticari Parametreler Üst Bilgi Banner */}
+          <div className="bg-linear-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-5 rounded-2xl border border-purple-800 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300 shrink-0">
+                <Sliders className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-purple-800/80 text-purple-200 border border-purple-700">
+                    Firma Bilgileri & Sistem Ayarları
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-800/80 text-emerald-200 border border-emerald-700">
+                    Tüm Personeller İçin Otomatik
+                  </span>
+                </div>
+                <h2 className="text-base font-bold mt-1">Ticari Parametreler: Yol ve Yemek Yardımı Standartları</h2>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Burada tanımlanan yol ve yemek yardımı tutarları, şirket politikası olarak tüm personellerin aylık bordro, puantaj ve kıdem hesaplamalarında doğrudan kullanılır.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    defaultFoodAllowance: 5500,
+                    defaultRoadAllowance: 2500,
+                    dailyFoodAllowanceRate: 300,
+                    dailyRoadAllowanceRate: 115,
+                    applyAllowancesToAllEmployees: true,
+                    foodAllowanceCalculationType: "monthly",
+                    roadAllowanceCalculationType: "monthly",
+                  }));
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition-all cursor-pointer flex items-center gap-1.5"
+                title="2026 yılı standart yasal/kurumsal ödenek tutarlarını yükler"
+              >
+                <span>⚡ 2026 Standart Paketini Yükle</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 1. FATURA & BELGE FORMAT PARAMETRELERİ */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5 text-xs">
             <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2 flex items-center justify-between">
               <span className="flex items-center gap-2">
@@ -591,7 +650,8 @@ export const Settings: React.FC<SettingsProps> = ({
                 <input
                   type="text"
                   placeholder="ör: MUV2026"
-                  defaultValue="MUV2026"
+                  value={formData.defaultInvoicePrefix || "MUV2026"}
+                  onChange={(e) => setFormData({ ...formData, defaultInvoicePrefix: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold"
                 />
               </div>
@@ -601,7 +661,8 @@ export const Settings: React.FC<SettingsProps> = ({
                   Varsayılan KDV Oranı (%)
                 </label>
                 <select
-                  defaultValue="20"
+                  value={formData.defaultVatRate !== undefined ? String(formData.defaultVatRate) : "20"}
+                  onChange={(e) => setFormData({ ...formData, defaultVatRate: Number(e.target.value) })}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-bold cursor-pointer"
                 >
                   <option value="20">%20 (Genel Oran)</option>
@@ -613,25 +674,316 @@ export const Settings: React.FC<SettingsProps> = ({
             </div>
           </div>
 
+          {/* 2. PERSONEL YAN HAKLARI & TİCARİ ÖDENEK PARAMETRELERİ (YOL & YEMEK YARDIMI) */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6 text-xs">
+            {/* Bilgilendirme: İK Modülüne Aktarıldı */}
+            <div className="p-3.5 rounded-xl bg-purple-50 border border-purple-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0">
+                  <Gift className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-purple-950 text-xs flex items-center gap-1.5">
+                    <span>Bu Bölüm İnsan Kaynakları Modülüne Aktarılmıştır</span>
+                    <span className="text-[10px] bg-purple-200 text-purple-900 px-2 py-0.5 rounded-full font-bold">Entegre Edildi</span>
+                  </div>
+                  <p className="text-[11px] text-purple-800/80 mt-0.5">
+                    Personel yan hakları ve yol/yemek ödenek parametreleri artık <strong>İnsan Kaynakları &gt; Yan Haklar &amp; Ödenekler</strong> sekmesinden tüm kadro etki dökümüyle birlikte yönetilmektedir.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-200">
+                    <Utensils className="w-4 h-4" />
+                  </span>
+                  <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200">
+                    <Bus className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Personel Yan Hakları & Ticari Ödenek Parametreleri (Yol & Yemek Yardımı)
+                  </h3>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Şirket personellerinin bordro ve puantaj hesaplamalarında standart olarak kullanılacak yol ve yemek yardımı tutarları.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 shrink-0">
+                <Users className="w-3.5 h-3.5 text-purple-600" />
+                Tüm Personellere Entegre
+              </span>
+            </div>
+
+            {/* Global Entegrasyon Anahtarı */}
+            <div className="p-4 rounded-xl bg-linear-to-r from-purple-50/80 via-indigo-50/50 to-blue-50/80 border border-purple-200/80 flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="apply-allowances-all"
+                checked={formData.applyAllowancesToAllEmployees ?? true}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    applyAllowancesToAllEmployees: e.target.checked,
+                  })
+                }
+                className="mt-1 w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+              />
+              <div className="flex-1">
+                <label
+                  htmlFor="apply-allowances-all"
+                  className="font-bold text-slate-900 text-xs cursor-pointer flex items-center gap-2"
+                >
+                  <span>Tüm Personeller İçin Yol ve Yemek Yardımını Buradan Al (Şirket Politikası)</span>
+                  {(formData.applyAllowancesToAllEmployees ?? true) && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      Aktif - Otomatik Uygulanıyor
+                    </span>
+                  )}
+                </label>
+                <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                  Bu seçenek açık olduğunda, İnsan Kaynakları & Bordro modülündeki tüm personellerin aylık bordro ve puantaj hesaplamalarında doğrudan buradaki ticari yol ve yemek yardımı parametreleri baz alınır.
+                </p>
+              </div>
+            </div>
+
+            {/* Yol ve Yemek İki Kolon Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* YEMEK YARDIMI KARTI */}
+              <div className="p-5 rounded-2xl bg-amber-50/40 border border-amber-200/80 space-y-4">
+                <div className="flex items-center justify-between border-b border-amber-200/60 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                      <Utensils className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-xs">Yemek Yardımı Parametreleri</h4>
+                      <p className="text-[10px] text-slate-500">Nakit / Kart yemek ödeneği standartları</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                    2026 İstisna: 300 ₺/Gün
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Varsayılan Aylık Yemek Yardımı (₺ / Ay)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        value={formData.defaultFoodAllowance !== undefined ? formData.defaultFoodAllowance : 5500}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            defaultFoodAllowance: Math.max(0, Number(e.target.value)),
+                          })
+                        }
+                        className="w-full bg-white border border-amber-300/80 text-slate-900 rounded-xl p-2.5 pl-8 font-bold text-sm focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                      />
+                      <span className="absolute left-3 top-2.5 font-bold text-amber-700">₺</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Şirketteki her çalışanın aylık bordrosuna standart olarak eklenecek tutar.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Günlük İstisna / Birim Tutarı
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="10"
+                          value={formData.dailyFoodAllowanceRate !== undefined ? formData.dailyFoodAllowanceRate : 300}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              dailyFoodAllowanceRate: Math.max(0, Number(e.target.value)),
+                            })
+                          }
+                          className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl p-2 pl-7 font-bold text-xs"
+                        />
+                        <span className="absolute left-2.5 top-2 text-slate-500 font-bold">₺</span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mt-0.5">2026 SGK Nakit İstisnası: 300 ₺</p>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Hesaplama Esası
+                      </label>
+                      <select
+                        value={formData.foodAllowanceCalculationType || "monthly"}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            foodAllowanceCalculationType: e.target.value as "monthly" | "daily",
+                          })
+                        }
+                        className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl p-2 font-bold text-xs cursor-pointer"
+                      >
+                        <option value="monthly">Aylık Sabit Tutar</option>
+                        <option value="daily">Puantaja Göre (Fiili Gün x Günlük)</option>
+                      </select>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Bordroya yansıtılma şekli</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* YOL / ULAŞIM YARDIMI KARTI */}
+              <div className="p-5 rounded-2xl bg-blue-50/40 border border-blue-200/80 space-y-4">
+                <div className="flex items-center justify-between border-b border-blue-200/60 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                      <Bus className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-xs">Yol / Ulaşım Yardımı Parametreleri</h4>
+                      <p className="text-[10px] text-slate-500">Personel yol ve ulaşım desteği standartları</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-300">
+                    Ulaşım Desteği
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Varsayılan Aylık Yol Yardımı (₺ / Ay)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        value={formData.defaultRoadAllowance !== undefined ? formData.defaultRoadAllowance : 2500}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            defaultRoadAllowance: Math.max(0, Number(e.target.value)),
+                          })
+                        }
+                        className="w-full bg-white border border-blue-300/80 text-slate-900 rounded-xl p-2.5 pl-8 font-bold text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      />
+                      <span className="absolute left-3 top-2.5 font-bold text-blue-700">₺</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Şirketteki her çalışanın aylık bordrosuna eklenecek yol/ulaşım tutarı.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Günlük Yol Birim Tutarı
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="5"
+                          value={formData.dailyRoadAllowanceRate !== undefined ? formData.dailyRoadAllowanceRate : 115}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              dailyRoadAllowanceRate: Math.max(0, Number(e.target.value)),
+                            })
+                          }
+                          className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl p-2 pl-7 font-bold text-xs"
+                        />
+                        <span className="absolute left-2.5 top-2 text-slate-500 font-bold">₺</span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Toplu taşıma / bilet emsali</p>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Hesaplama Esası
+                      </label>
+                      <select
+                        value={formData.roadAllowanceCalculationType || "monthly"}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            roadAllowanceCalculationType: e.target.value as "monthly" | "daily",
+                          })
+                        }
+                        className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl p-2 font-bold text-xs cursor-pointer"
+                      >
+                        <option value="monthly">Aylık Sabit Tutar</option>
+                        <option value="daily">Puantaja Göre (Fiili Gün x Günlük)</option>
+                      </select>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Bordroya yansıtılma şekli</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Yan Haklar Hızlı Bilgi & Özet Kutusu */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                  <Gift className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900 text-xs">
+                    Personel Başına Standart Aylık Yan Hak Paketi
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                    <span>
+                      Yemek: <strong className="text-amber-700">₺{(formData.defaultFoodAllowance ?? 5500).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Yol: <strong className="text-blue-700">₺{(formData.defaultRoadAllowance ?? 2500).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-2xs text-right shrink-0">
+                <span className="text-[10px] text-slate-500 font-semibold block uppercase">
+                  Toplam Aylık Ödenek
+                </span>
+                <span className="text-sm font-black text-purple-900 font-mono">
+                  ₺{((formData.defaultFoodAllowance ?? 5500) + (formData.defaultRoadAllowance ?? 2500)).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Action Button */}
           <div className="flex items-center justify-between bg-purple-50/60 p-4 rounded-2xl border border-purple-200/60">
             {isSaved ? (
               <span className="text-xs font-extrabold text-emerald-600 flex items-center gap-1.5">
                 <Check className="w-4 h-4" />
-                Sistem ayarları başarıyla kaydedildi!
+                Ticari parametreler ve personel ödenek ayarları başarıyla kaydedildi!
               </span>
             ) : (
               <span className="text-xs text-purple-900/80 font-medium">
-                Sistem parametrelerini güncellemek için kaydedin.
+                Değişiklikleri tüm şirket personellerine yansıtmak için kaydedin.
               </span>
             )}
 
             <button
               type="submit"
-              className="bg-[#8252F6] hover:bg-[#703EE5] text-white font-bold px-6 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-2"
+              className="bg-[#0f6bae] hover:bg-[#005289] text-white font-bold px-6 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-2"
             >
               <Save className="w-4 h-4 text-white" />
-              <span>Sistem Ayarlarını Kaydet</span>
+              <span>Ticari Parametreleri & Personel Ödeneklerini Kaydet</span>
             </button>
           </div>
         </form>

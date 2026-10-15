@@ -15,17 +15,26 @@ export function getGitHubRouter(): Router {
     }
   });
 
-  // Trigger publish / sync to GitHub
+  // Trigger publish / sync to GitHub (Pull + Commit + Push)
   router.post("/publish", async (req, res) => {
     try {
-      const { commitMessage, token, repoUrl } = req.body || {};
+      const { commitMessage, token, repoUrl, pullFirst } = req.body || {};
       const result = await gitHubSyncService.publishOrSync({
         commitMessage,
         token,
         repoUrl,
+        pullFirst: pullFirst !== false,
       });
       res.json(result);
     } catch (error: any) {
+      if (error?.message?.includes("GitHub Personal Access Token")) {
+        console.warn("[GitHubRoute] Uyarı: GitHub Personal Access Token girilmemiş veya eksik.");
+        return res.status(400).json({
+          success: false,
+          code: "MISSING_TOKEN",
+          error: error.message,
+        });
+      }
       console.error("[GitHubRoute] Error publishing to GitHub:", error);
       res.status(500).json({
         success: false,
@@ -34,7 +43,25 @@ export function getGitHubRouter(): Router {
     }
   });
 
-  // Alias for sync
+  // Pull / Fetch from GitHub
+  router.post("/pull", async (req, res) => {
+    try {
+      const { token, repoUrl } = req.body || {};
+      const result = await gitHubSyncService.pullFromGitHub({
+        token,
+        repoUrl,
+      });
+      res.json(result);
+    } catch (error: any) {
+      console.error("[GitHubRoute] Error pulling from GitHub:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message || "GitHub'dan değişiklikler alınamadı",
+      });
+    }
+  });
+
+  // Bidirectional sync (Pull + Commit + Push)
   router.post("/sync", async (req, res) => {
     try {
       const { commitMessage, token, repoUrl } = req.body || {};
@@ -42,9 +69,18 @@ export function getGitHubRouter(): Router {
         commitMessage,
         token,
         repoUrl,
+        pullFirst: true,
       });
       res.json(result);
     } catch (error: any) {
+      if (error?.message?.includes("GitHub Personal Access Token")) {
+        console.warn("[GitHubRoute] Uyarı: GitHub Personal Access Token girilmemiş veya eksik.");
+        return res.status(400).json({
+          success: false,
+          code: "MISSING_TOKEN",
+          error: error.message,
+        });
+      }
       console.error("[GitHubRoute] Error syncing with GitHub:", error);
       res.status(500).json({
         success: false,

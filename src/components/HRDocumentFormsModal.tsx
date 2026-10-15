@@ -23,8 +23,9 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Employee, CompanySettings, LeaveRequest, AdvanceRequest } from "../types";
-import { exportElementToPDF } from "../utils/exportUtils";
+import { exportElementToPDF, printHtmlElement } from "../utils/exportUtils";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import { getHrCompanyTitle } from "../utils/puantajUtils";
 
 export type HRFormType = "annual_leave" | "unpaid_leave" | "absence_report" | "paternity_leave" | "advance_request" | "expense_request";
 
@@ -48,6 +49,7 @@ interface HRDocumentFormsModalProps {
   initialAdvanceRequest?: AdvanceRequest;
   advanceRequest?: AdvanceRequest;
   advanceRequests?: AdvanceRequest[];
+  autoPrint?: boolean;
 }
 
 export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
@@ -62,6 +64,7 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
   initialAdvanceRequest,
   advanceRequest,
   advanceRequests = [],
+  autoPrint = false,
 }) => {
   const activeLeaveReq = leaveRequest || initialLeaveRequest;
   const activeAdvReq = advanceRequest || initialAdvanceRequest;
@@ -149,7 +152,7 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
   };
 
   // Company default strings
-  const defaultCompanyName = companySettings?.companyName || companySettings?.name || "ŞİRKET ÜNVANI";
+  const defaultCompanyName = getHrCompanyTitle(companySettings) || companySettings?.companyName || companySettings?.name || "ŞİRKET ÜNVANI";
   const defaultTaxNo = companySettings?.taxNumber || companySettings?.vknTckn || "1234567890";
   const defaultAddress = (typeof companySettings?.address === "string" ? companySettings.address : companySettings?.addressDetails?.fullAddress) || 
     (companySettings?.city ? `${companySettings.district || ""} / ${companySettings.city}` : "Şirket Merkez Adresi");
@@ -428,11 +431,25 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
 
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
 
-  if (!isOpen) return null;
-
   const handlePrint = () => {
-    window.print();
+    try {
+      window.focus();
+      window.print();
+    } catch (err) {
+      console.warn("İK Formu yazdırma hatası:", err);
+    }
   };
+
+  useEffect(() => {
+    if (isOpen && autoPrint) {
+      const timer = setTimeout(() => {
+        handlePrint();
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, autoPrint]);
+
+  if (!isOpen) return null;
 
   const handleDownloadPDF = async () => {
     setIsDownloadingPDF(true);
@@ -1992,12 +2009,20 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
                         <div className="col-span-7 sm:col-span-8 font-medium text-slate-950">{formData.advanceReason || "Acil nakit ihtiyacı ve kişisel harcamalar"}</div>
                       </div>
 
-                      <div className="grid grid-cols-12 gap-1 items-baseline bg-amber-50/70 p-2 rounded border border-amber-200">
-                        <div className="col-span-4 sm:col-span-3 font-black text-amber-950">TALEP EDİLEN TUTAR</div>
-                        <div className="col-span-1 text-center font-black text-amber-950">:</div>
-                        <div className="col-span-7 sm:col-span-8 font-black text-amber-950 text-sm">
+                      <div
+                        style={{
+                          backgroundColor: "#83b8ff",
+                          borderColor: "#60a5fa",
+                          WebkitPrintColorAdjust: "exact",
+                          printColorAdjust: "exact",
+                        }}
+                        className="grid grid-cols-12 gap-1 items-baseline p-2.5 rounded-lg border text-slate-950 print:bg-[#83b8ff]"
+                      >
+                        <div className="col-span-4 sm:col-span-3 font-black text-slate-950">İŞLEM TUTARI / TALEP EDİLEN</div>
+                        <div className="col-span-1 text-center font-black text-slate-950">:</div>
+                        <div className="col-span-7 sm:col-span-8 font-black text-slate-950 text-sm font-mono">
                           {formatTRY(formData.advanceRequestedAmount)}{" "}
-                          <span className="font-normal text-xs text-amber-800">
+                          <span className="font-bold text-xs text-slate-900">
                             ({numberToTurkishWords(formData.advanceRequestedAmount)})
                           </span>
                         </div>
@@ -2161,11 +2186,18 @@ export const HRDocumentFormsModal: React.FC<HRDocumentFormsModalProps> = ({
                                 -{formatTRY(expenseAdvanceAmount)}
                               </td>
                             </tr>
-                            <tr className="bg-slate-200 font-black border-t-2 border-slate-800 text-xs text-slate-950">
+                            <tr
+                              style={{
+                                backgroundColor: "#83b8ff",
+                                WebkitPrintColorAdjust: "exact",
+                                printColorAdjust: "exact",
+                              }}
+                              className="font-black border-t-2 border-slate-800 text-xs text-slate-950 print:bg-[#83b8ff]"
+                            >
                               <td colSpan={4} className="border-r border-slate-800 py-1.5 px-3 text-right uppercase">
-                                {netExpenseBalance >= 0 ? "MAHSUP SONRASI PERSONELE ÖDENECEK KALAN TUTAR :" : "ŞİRKETE İADE EDİLECEK FAZLA AVANS BAKİYESİ :"}
+                                {netExpenseBalance >= 0 ? "MAHSUP SONRASI İŞLEM TUTARI / PERSONELE ÖDENECEK KALAN TUTAR :" : "ŞİRKETE İADE EDİLECEK FAZLA AVANS BAKİYESİ :"}
                               </td>
-                              <td className={`py-1.5 px-2 text-right font-mono font-black ${netExpenseBalance >= 0 ? "text-emerald-950" : "text-amber-950"}`}>
+                              <td className="py-1.5 px-2 text-right font-mono font-black text-slate-950">
                                 {formatTRY(Math.abs(netExpenseBalance))}
                               </td>
                             </tr>

@@ -29,9 +29,10 @@ import { exportAssetCustodyToPDF } from "../utils/assetCustodyPdf";
 import { formatCustodyWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
-import { Zap, MessageCircle } from "lucide-react";
+import { Zap, MessageCircle, FileSpreadsheet } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { Logo } from "./Logo";
+import { exportToExcel } from "../utils/exportUtils";
 
 interface AssetCustodyPrintModalProps {
   isOpen: boolean;
@@ -151,6 +152,36 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
   const empStartDate = employee?.startDate ? formatTRDate(employee.startDate) : "-";
   const empBranch = asset.branchName || employee?.branchName || "Genel Merkez";
 
+  const handleExportExcel = () => {
+    if (!asset) return;
+    const headers = ["Bilgi / Alan", "Değer"];
+    const rows: (string | number)[][] = [
+      ["Belge Türü", isReturn ? "Zimmet İade Tutanağı" : "Zimmet Teslim Tutanağı"],
+      ["Personel Adı", empName],
+      ["T.C. Kimlik No", empTckn],
+      ["Departman", empDept],
+      ["Şube / Lokasyon", empBranch],
+      ["Demirbaş Adı", asset.assetName],
+      ["Demirbaş Kodu", asset.assetCode || "-"],
+      ["Kategori", asset.category || "-"],
+      ["Marka / Model", `${asset.brand || ""} ${asset.model || ""}`.trim() || "-"],
+      ["Seri No / Plaka", asset.serialNumber || "-"],
+      ["Teslim Tarihi", formatTRDate(asset.deliveryDate)],
+      ["İade Tarihi", asset.returnDate ? formatTRDate(asset.returnDate) : "-"],
+      ["Fiziksel Durum", asset.condition || "İyi"],
+      ["Özel Notlar", asset.notes || "-"],
+    ];
+
+    exportToExcel({
+      filename: `Zimmet_${isReturn ? "Iade" : "Teslim"}_${(asset.assetCode || "Tutanak").replace(/[^a-zA-Z0-9_-]/g, "_")}_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Zimmet Tutanağı",
+      title: `${companySettings.companyName || "FİRMA"} - ${isReturn ? "ZİMMET İADE TUTANAĞI" : "ZİMMET TESLİM TUTANAĞI"}`,
+      subtitle: `Demirbaş: ${asset.assetName} | Personel: ${empName} | Tarih: ${formatTRDate(asset.deliveryDate)}`,
+      headers,
+      rows,
+    });
+  };
+
   return (
     <DetailPageLayout
       title={isReturn ? "Zimmet İade ve Teslim Alma Tutanağı" : "Zimmet Teslim ve Tesellüm Tutanağı"}
@@ -186,6 +217,16 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
       headerIcon={<FileCheck2 className="w-5 h-5 text-blue-600" />}
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            className="inline-flex items-center px-4 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 rounded-xl shadow-xs transition-all cursor-pointer gap-1.5 active:scale-95"
+            title="Zimmet Tutanağını Excel (.xlsx) Olarak İndir"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+            <span>Excel İndir</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setIsWhatsAppOpen(true)}
@@ -542,7 +583,6 @@ export const AssetCustodyPrintModal: React.FC<AssetCustodyPrintModalProps> = ({
         documentFileName={`${asset.assetCode}_${isReturn ? "Iade" : "Zimmet"}_Tutanagi.pdf`}
         companySettings={companySettings}
         onGeneratePdf={async () => {
-          const { exportAssetCustodyToPDF } = await import("../utils/assetCustodyPdf");
           await exportAssetCustodyToPDF(asset, employee, companySettings, {
             isReturnProtocol: isReturn,
           });

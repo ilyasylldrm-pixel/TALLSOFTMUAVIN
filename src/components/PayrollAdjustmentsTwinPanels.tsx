@@ -11,10 +11,12 @@ import {
   Trash2,
   Clock,
 } from "lucide-react";
-import { Employee, AdditionalPaymentItem } from "../types";
+import { Employee, AdditionalPaymentItem, CompanySettings } from "../types";
 
 export interface OvertimeLaborLawStats {
   overtimeNormalHours: number;
+  overtimeExtensionHours?: number;
+  overtimeWeekendDays?: number;
   overtimeWeekendHours: number;
   overtimeHolidayHours: number;
   overtimeHolidayDays: number;
@@ -22,9 +24,13 @@ export interface OvertimeLaborLawStats {
   hourlyGross: number;
   dailyGross: number;
   normalOvertimePay: number;
+  extensionOvertimePay?: number;
   weekendOvertimePay: number;
+  weekendDaysOvertimePay?: number;
+  weekendHoursOvertimePay?: number;
   holidayHoursOvertimePay: number;
   holidayDaysOvertimePay: number;
+  holidayOvertimePay?: number;
   calculatedOvertimePay: number;
 }
 
@@ -36,6 +42,8 @@ export interface PayrollAdjustmentsTwinPanelsProps {
     bonusAmount?: number;
     overtimePay?: number;
     overtimeNormalHours?: number;
+    overtimeExtensionHours?: number;
+    overtimeWeekendDays?: number;
     overtimeWeekendHours?: number;
     overtimeHolidayDays?: number;
     overtimeHolidayHours?: number;
@@ -76,6 +84,7 @@ export interface PayrollAdjustmentsTwinPanelsProps {
     reasonsSummary: string;
   };
   otStats?: OvertimeLaborLawStats;
+  companySettings?: CompanySettings;
 }
 
 export const PayrollAdjustmentsTwinPanels: React.FC<PayrollAdjustmentsTwinPanelsProps> = ({
@@ -89,6 +98,7 @@ export const PayrollAdjustmentsTwinPanels: React.FC<PayrollAdjustmentsTwinPanels
   getAutoLeaves,
   getAutoLegalDeductions,
   otStats,
+  companySettings,
 }) => {
   // Sol Panel (Ek Ödemeler) Seçim State'leri
   const [selectedAddition, setSelectedAddition] = useState<
@@ -183,12 +193,20 @@ export const PayrollAdjustmentsTwinPanels: React.FC<PayrollAdjustmentsTwinPanels
               <button
                 type="button"
                 onClick={() => {
-                  const calcFood = employee.foodAllowance
-                    ? employee.foodAllowance
-                    : actualWorkDays * 170;
-                  const calcRoad = employee.roadAllowance
-                    ? employee.roadAllowance
-                    : actualWorkDays * 75;
+                  const applyAll = companySettings?.applyAllowancesToAllEmployees !== false;
+                  const defaultFoodMonthly = companySettings?.defaultFoodAllowance ?? 5500;
+                  const defaultRoadMonthly = companySettings?.defaultRoadAllowance ?? 2500;
+                  const dailyFoodRate = companySettings?.dailyFoodAllowanceRate ?? 300;
+                  const dailyRoadRate = companySettings?.dailyRoadAllowanceRate ?? 115;
+
+                  const calcFood = companySettings?.foodAllowanceCalculationType === "daily"
+                    ? actualWorkDays * dailyFoodRate
+                    : (applyAll ? defaultFoodMonthly : (employee.foodAllowance || defaultFoodMonthly));
+
+                  const calcRoad = companySettings?.roadAllowanceCalculationType === "daily"
+                    ? actualWorkDays * dailyRoadRate
+                    : (applyAll ? defaultRoadMonthly : (employee.roadAllowance || defaultRoadMonthly));
+
                   const calcOt = otStats?.calculatedOvertimePay || 0;
 
                   onChangeForm((prev) => ({
@@ -210,7 +228,7 @@ export const PayrollAdjustmentsTwinPanels: React.FC<PayrollAdjustmentsTwinPanels
                       calcRoad
                     )})${
                       calcOt > 0 ? ` ve Mesai (${formatTRY(calcOt)})` : ""
-                    } puantaja göre hesaplandı.`
+                    } ticari parametrelere göre aktarıldı.`
                   );
                 }}
                 className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200 transition-colors cursor-pointer flex items-center gap-1"
@@ -370,14 +388,15 @@ export const PayrollAdjustmentsTwinPanels: React.FC<PayrollAdjustmentsTwinPanels
                   <button
                     type="button"
                     onClick={() => {
+                      const dailyRate = companySettings?.dailyFoodAllowanceRate ?? 300;
                       onChangeForm((prev) => ({
                         ...prev,
-                        foodAllowance: actualWorkDays * 170,
+                        foodAllowance: actualWorkDays * dailyRate,
                       }));
                     }}
                     className="text-emerald-700 font-bold hover:underline cursor-pointer"
                   >
-                    Günlük 170₺ Uygula ({formatTRY(actualWorkDays * 170)})
+                    Günlük {companySettings?.dailyFoodAllowanceRate ?? 300}₺ Uygula ({formatTRY(actualWorkDays * (companySettings?.dailyFoodAllowanceRate ?? 300))})
                   </button>
                 </div>
               </div>
@@ -415,14 +434,15 @@ export const PayrollAdjustmentsTwinPanels: React.FC<PayrollAdjustmentsTwinPanels
                   <button
                     type="button"
                     onClick={() => {
+                      const dailyRate = companySettings?.dailyRoadAllowanceRate ?? 115;
                       onChangeForm((prev) => ({
                         ...prev,
-                        roadAllowance: actualWorkDays * 75,
+                        roadAllowance: actualWorkDays * dailyRate,
                       }));
                     }}
                     className="text-blue-700 font-bold hover:underline cursor-pointer"
                   >
-                    Günlük 75₺ Uygula ({formatTRY(actualWorkDays * 75)})
+                    Günlük {companySettings?.dailyRoadAllowanceRate ?? 115}₺ Uygula ({formatTRY(actualWorkDays * (companySettings?.dailyRoadAllowanceRate ?? 115))})
                   </button>
                 </div>
               </div>
@@ -490,7 +510,7 @@ export const PayrollAdjustmentsTwinPanels: React.FC<PayrollAdjustmentsTwinPanels
                     />
                   </div>
                   <p className="text-[10px] text-slate-500">
-                    T.C. İş Kanunu Esasları: Saatlik Brüt = Brüt/225 · Günlük Yevmiye = Brüt/30 · Hafta İçi %50 Zamlı · Hafta Tatili/Resmi Tatil %100 Zamlı
+                    T.C. İş Kanunu Esasları: Saatlik Brüt = Brüt/225 · Günlük Yevmiye = Brüt/30 · Fazla Çalışma %50 Zamlı (1,5 Kat) · Fazla Sürelerle Çalışma %25 Zamlı (1,25 Kat) · Hafta Tatili Toplam 2,5 Yevmiye · Genel/Bayram Tatili Toplam 2 Yevmiye
                   </p>
                 </div>
 
@@ -499,71 +519,79 @@ export const PayrollAdjustmentsTwinPanels: React.FC<PayrollAdjustmentsTwinPanels
                   <div className="space-y-2 pt-2 border-t border-emerald-100">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black uppercase text-purple-950">
-                        Yasal Mesai Dağılımı (Puantaj)
+                        Yasal Mesai Dağılımı ve Zam Oranları
                       </span>
                       <span className="text-[9.5px] font-bold text-purple-800 bg-purple-50 px-1.5 py-0.5 rounded">
-                        Toplam: {otStats.totalOvertimeHours} Saat + {otStats.overtimeHolidayDays} Gün
+                        Toplam: {otStats.totalOvertimeHours} Saat + {(otStats.overtimeHolidayDays || 0) + (otStats.overtimeWeekendDays || 0)} Gün
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {/* 1. Hafta İçi Mesai */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {/* 1. Fazla Çalışma (%50 Zamlı) */}
                       <div className="bg-white p-2 rounded-xl border border-emerald-200 shadow-2xs space-y-1">
                         <div className="flex items-center justify-between text-[10px] font-bold text-emerald-800 uppercase">
-                          <span>Hafta İçi Mesai</span>
-                          <span className="bg-emerald-100 text-emerald-900 px-1 py-0.2 rounded text-[8px]">%50 Zamlı</span>
+                          <span>Fazla Çalışma</span>
+                          <span className="bg-emerald-100 text-emerald-900 px-1 py-0.2 rounded text-[8px] font-black">%50 Zamlı (1,5 Kat)</span>
                         </div>
                         <div className="flex items-baseline justify-between">
                           <span className="text-sm font-black text-emerald-950">{otStats.overtimeNormalHours} Saat</span>
                           <span className="text-[11px] font-black text-emerald-700">{formatTRY(otStats.normalOvertimePay)}</span>
                         </div>
-                        <div className="text-[8.5px] text-slate-500 font-medium truncate">
-                          Saat Başı: {formatTRY(otStats.hourlyGross * 1.5)}
+                        <div className="text-[8.5px] text-slate-500 font-medium">
+                          Haftalık 45 saati aşan çalışma · Saat Başı: {formatTRY(otStats.hourlyGross * 1.5)}
                         </div>
                       </div>
 
-                      {/* 2. Hafta Tatili Mesai */}
+                      {/* 2. Fazla Sürelerle Çalışma (%25 Zamlı) */}
+                      <div className="bg-white p-2 rounded-xl border border-teal-200 shadow-2xs space-y-1">
+                        <div className="flex items-center justify-between text-[10px] font-bold text-teal-800 uppercase">
+                          <span>Fazla Sürelerle Çalışma</span>
+                          <span className="bg-teal-100 text-teal-900 px-1 py-0.2 rounded text-[8px] font-black">%25 Zamlı (1,25 Kat)</span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-sm font-black text-teal-950">{otStats.overtimeExtensionHours || 0} Saat</span>
+                          <span className="text-[11px] font-black text-teal-700">{formatTRY(otStats.extensionOvertimePay || 0)}</span>
+                        </div>
+                        <div className="text-[8.5px] text-slate-500 font-medium">
+                          40-45 saat arası sözleşme aşımı · Saat Başı: {formatTRY(otStats.hourlyGross * 1.25)}
+                        </div>
+                      </div>
+
+                      {/* 3. Hafta Tatili Çalışması (Toplam 2,5 Yevmiye) */}
                       <div className="bg-white p-2 rounded-xl border border-purple-200 shadow-2xs space-y-1">
                         <div className="flex items-center justify-between text-[10px] font-bold text-purple-800 uppercase">
-                          <span>Hafta Tatili Mesai</span>
-                          <span className="bg-purple-100 text-purple-900 px-1 py-0.2 rounded text-[8px]">%100 Zamlı</span>
+                          <span>Hafta Tatili Çalışması</span>
+                          <span className="bg-purple-100 text-purple-900 px-1 py-0.2 rounded text-[8px] font-black">Toplam 2,5 Yevmiye (+1,5 Ek)</span>
                         </div>
                         <div className="flex items-baseline justify-between">
-                          <span className="text-sm font-black text-purple-950">{otStats.overtimeWeekendHours} Saat</span>
+                          <span className="text-sm font-black text-purple-950">
+                            {otStats.overtimeWeekendDays ? `${otStats.overtimeWeekendDays} Gün ` : ""}
+                            {otStats.overtimeWeekendHours ? `${otStats.overtimeWeekendHours} Saat` : (!otStats.overtimeWeekendDays ? "0 Saat" : "")}
+                          </span>
                           <span className="text-[11px] font-black text-purple-700">{formatTRY(otStats.weekendOvertimePay)}</span>
                         </div>
-                        <div className="text-[8.5px] text-slate-500 font-medium truncate">
-                          Saat Başı: {formatTRY(otStats.hourlyGross * 2.0)}
+                        <div className="text-[8.5px] text-slate-500 font-medium">
+                          Maaştaki 1 yevmiyeye ilave +1,5 yevmiye ödenir (Yevmiye: {formatTRY(otStats.dailyGross * 1.5)})
                         </div>
                       </div>
 
-                      {/* 3. Resmi Tatil (Saat) */}
+                      {/* 4. Genel Tatil / Bayram Çalışması (%100 Zamlı / Toplam 2 Yevmiye) */}
                       <div className="bg-white p-2 rounded-xl border border-amber-200 shadow-2xs space-y-1">
                         <div className="flex items-center justify-between text-[10px] font-bold text-amber-800 uppercase">
-                          <span>Resmi Tatil (Saat)</span>
-                          <span className="bg-amber-100 text-amber-900 px-1 py-0.2 rounded text-[8px]">%100 Zamlı</span>
+                          <span>Genel Tatil / Bayram (UBGT)</span>
+                          <span className="bg-amber-100 text-amber-900 px-1 py-0.2 rounded text-[8px] font-black">%100 Zamlı (Toplam 2 Yevmiye)</span>
                         </div>
                         <div className="flex items-baseline justify-between">
-                          <span className="text-sm font-black text-amber-950">{otStats.overtimeHolidayHours} Saat</span>
-                          <span className="text-[11px] font-black text-amber-700">{formatTRY(otStats.holidayHoursOvertimePay)}</span>
+                          <span className="text-sm font-black text-amber-950">
+                            {otStats.overtimeHolidayDays ? `${otStats.overtimeHolidayDays} Gün ` : ""}
+                            {otStats.overtimeHolidayHours ? `${otStats.overtimeHolidayHours} Saat` : (!otStats.overtimeHolidayDays ? "0 Gün" : "")}
+                          </span>
+                          <span className="text-[11px] font-black text-amber-700">
+                            {formatTRY(otStats.holidayOvertimePay !== undefined ? otStats.holidayOvertimePay : (otStats.holidayDaysOvertimePay + otStats.holidayHoursOvertimePay))}
+                          </span>
                         </div>
-                        <div className="text-[8.5px] text-slate-500 font-medium truncate">
-                          Saat Başı: {formatTRY(otStats.hourlyGross * 2.0)}
-                        </div>
-                      </div>
-
-                      {/* 4. Resmi Tatil (Gün) */}
-                      <div className="bg-white p-2 rounded-xl border border-red-200 shadow-2xs space-y-1">
-                        <div className="flex items-center justify-between text-[10px] font-bold text-red-800 uppercase">
-                          <span>Resmi Tatil (Gün)</span>
-                          <span className="bg-red-100 text-red-900 px-1 py-0.2 rounded text-[8px]">1 Yevmiye</span>
-                        </div>
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-sm font-black text-red-950">{otStats.overtimeHolidayDays} Gün</span>
-                          <span className="text-[11px] font-black text-red-700">{formatTRY(otStats.holidayDaysOvertimePay)}</span>
-                        </div>
-                        <div className="text-[8.5px] text-slate-500 font-medium truncate">
-                          Günlük Yevmiye: {formatTRY(otStats.dailyGross)}
+                        <div className="text-[8.5px] text-slate-500 font-medium">
+                          Normal ücrete ilave +1 tam yevmiye ödenir (Yevmiye: {formatTRY(otStats.dailyGross)})
                         </div>
                       </div>
                     </div>
@@ -582,6 +610,8 @@ export const PayrollAdjustmentsTwinPanels: React.FC<PayrollAdjustmentsTwinPanels
                             ...prev,
                             overtimePay: otStats.calculatedOvertimePay,
                             overtimeNormalHours: otStats.overtimeNormalHours,
+                            overtimeExtensionHours: otStats.overtimeExtensionHours || 0,
+                            overtimeWeekendDays: otStats.overtimeWeekendDays || 0,
                             overtimeWeekendHours: otStats.overtimeWeekendHours,
                             overtimeHolidayDays: otStats.overtimeHolidayDays,
                             overtimeHolidayHours: otStats.overtimeHolidayHours,

@@ -136,7 +136,7 @@ export async function saveCentralPayrollParameters(
     await logSystemAction({
       action: `${payload.year} Yılı Bordro ve SGK Parametreleri Güncellendi`,
       category: "Bordro & SGK",
-      details: `Asgari Ücret: ${payload.grossMinWage?.toLocaleString("tr-TR")} ₺, SGK Tavan: ${payload.sgkBaseCeiling?.toLocaleString("tr-TR")} ₺, İşveren Payı: %${((payload.sgkEmployerStandardRate || 0) * 100).toFixed(2)}`,
+      details: `Asgari Ücret: ${payload.grossMinWage?.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺, SGK Tavan: ${payload.sgkBaseCeiling?.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺, İşveren Payı: %${((payload.sgkEmployerStandardRate || 0) * 100).toFixed(2)}`,
       performedBy: updaterName,
       timestamp: nowIso
     });

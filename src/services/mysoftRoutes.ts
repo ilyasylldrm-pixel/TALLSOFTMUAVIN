@@ -1,9 +1,9 @@
-import { Router, Request, Response } from "express";
+import { Router, type Request, type Response } from "express";
 import {
   MysoftApiError,
   MysoftConfigurationError,
   MysoftEdocumentClient,
-  MysoftListRequest,
+  type MysoftListRequest,
   MYSOFT_DOCUMENT_OPERATIONS,
   canonicalMysoftDocumentFamily,
   getMysoftConfig,
@@ -351,6 +351,16 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
         eDocumentType,
         isInternetSales,
       });
+    }),
+  );
+
+  /** Portal document number series and consecutive sequential numbers for e-Fatura & e-Arşiv. */
+  router.get(
+    "/tenants/:identifierNumber/document-numbers",
+    run((req) => {
+      const identifierNumber = textParam(req.params.identifierNumber);
+      if (!identifierNumber) throw new InvalidMysoftRequestError("identifierNumber is required");
+      return client.getTenantDocumentNumbersWithSequence(identifierNumber);
     }),
   );
 

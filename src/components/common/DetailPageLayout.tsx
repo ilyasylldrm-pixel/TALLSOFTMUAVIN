@@ -40,12 +40,12 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
 
   return (
     <div
-      className={`min-h-screen w-full max-w-full overflow-x-hidden min-w-0 flex flex-col animate-fadeIn transition-colors ${className}`}
+      className={`min-h-screen w-full max-w-full overflow-x-hidden min-w-0 flex flex-col animate-fadeIn transition-colors print:min-h-0 print:overflow-visible print:bg-white print:animate-none ${className}`}
       style={{ backgroundColor: theme.pageBg, color: theme.pageText }}
     >
       {/* Top Sticky Header Bar adhering to Haze Layout & Spacing */}
       <header
-        className="sticky top-0 z-30 border-b backdrop-blur-md shadow-2xs transition-colors"
+        className="sticky top-0 z-30 border-b backdrop-blur-md shadow-2xs transition-colors print:hidden"
         style={{ backgroundColor: `${theme.cardBg}fa`, borderColor: theme.cardBorder }}
       >
         <div className={`${fullWidth ? "px-2.5 sm:px-6 lg:px-8" : "max-w-7xl mx-auto px-2.5 sm:px-6"} py-2.5 sm:py-3`}>

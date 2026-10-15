@@ -11,6 +11,7 @@ import {
   ArrowUpDown,
   UserCheck,
   FileSpreadsheet,
+  FileText,
   LayoutGrid,
   List,
   Building,
@@ -22,6 +23,7 @@ import {
 import { FixedAsset } from "../../types";
 import { formatTRY, getCategoryBadgeColor, getStatusBadgeInfo } from "../../data/fixedAssetsData";
 import { useTheme } from "../../context/ThemeContext";
+import { ExportData, formatCurrency, formatDate, exportToExcel, exportToPDF } from "../../utils/exportUtils";
 
 interface FixedAssetListProps {
   assets: FixedAsset[];
@@ -97,27 +99,25 @@ export const FixedAssetList: React.FC<FixedAssetListProps> = ({
   );
   const filteredNet = filteredAssets.reduce((sum, a) => sum + (a.netBookValue || 0), 0);
 
-  const handleExportExcel = () => {
+  const getFixedAssetsExportData = (): ExportData => {
     const headers = [
       "Demirbaş Kodu",
       "Demirbaş Adı",
       "Kategori",
-      "Marka",
-      "Model",
-      "Seri No / Plaka",
+      "Marka / Model",
+      "Seri / Plaka No",
       "Alış Tarihi",
       "Aktif Giriş Tarihi",
       "Fatura No",
       "Tedarikçi",
-      "Alış Bedeli (TL)",
+      "Alış Bedeli (Matrah)",
       "KDV Oranı (%)",
       "Toplam Bedel (TL)",
       "Amortisman Yöntemi",
       "Faydalı Ömür (Yıl)",
-      "Amortisman Oranı (%)",
-      "Kıst Dönem",
-      "Birikmiş Amortisman (TL)",
-      "Net Defter Değeri (TL)",
+      "Amortisman Oranı",
+      "Birikmiş Amortisman",
+      "Net Defter Değeri",
       "Lokasyon / Şube",
       "Zimmetli Personel",
       "Durum",
@@ -125,47 +125,44 @@ export const FixedAssetList: React.FC<FixedAssetListProps> = ({
 
     const rows = filteredAssets.map((a) => [
       a.code,
-      `"${a.name.replace(/"/g, '""')}"`,
-      `"${a.categoryLabel || a.category}"`,
-      `"${a.brand || ""}"`,
-      `"${a.model || ""}"`,
-      a.plateNumber || a.serialNumber || "",
-      a.acquisitionDate,
-      a.activatedDate || a.acquisitionDate,
-      a.invoiceNo || "",
-      `"${a.vendorName || ""}"`,
-      a.purchaseCost.toFixed(2),
-      a.vatRate,
-      a.totalCost.toFixed(2),
+      a.name,
+      a.categoryLabel || a.category,
+      `${a.brand || ""} ${a.model || ""}`.trim() || "-",
+      a.plateNumber || a.serialNumber || "-",
+      formatDate(a.acquisitionDate),
+      formatDate(a.activatedDate || a.acquisitionDate),
+      a.invoiceNo || "-",
+      a.vendorName || "-",
+      formatCurrency(a.purchaseCost || 0, "TRY"),
+      a.vatRate || 0,
+      formatCurrency(a.totalCost || 0, "TRY"),
       a.depreciationMethod === "normal"
         ? "Normal"
         : a.depreciationMethod === "declining_balance"
         ? "Azalan Bakiyeler"
         : "Muaf",
-      a.usefulLifeYears,
-      `%${a.depreciationRate}`,
-      a.isPartialYear ? "Evet (Kıst)" : "Hayır",
-      a.accumulatedDepreciation.toFixed(2),
-      a.netBookValue.toFixed(2),
-      `"${a.location || a.branchName || ""}"`,
-      `"${a.custodyEmployeeName || ""}"`,
-      a.status,
+      a.usefulLifeYears || 0,
+      `%${a.depreciationRate || 0}`,
+      formatCurrency(a.accumulatedDepreciation || 0, "TRY"),
+      formatCurrency(a.netBookValue || 0, "TRY"),
+      a.location || a.branchName || "-",
+      a.custodyEmployeeName || "-",
+      a.status === "active" ? "Aktif" : a.status === "maintenance" ? "Bakımda" : "Hurda / Çıkış",
     ]);
 
-    const csvContent =
-      "data:text/csv;charset=utf-8,\uFEFF" +
-      [headers.join(";"), ...rows.map((e) => e.join(";"))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `Demirbas_Envanter_Listesi_${new Date().toISOString().slice(0, 10)}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const dateStr = new Date().toLocaleDateString("tr-TR");
+    return {
+      filename: `Demirbas_Envanter_Listesi_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Demirbaş Envanteri",
+      title: "SABİT KIYMET VE DEMİRBAŞ ENVANTER LİSTESİ",
+      subtitle: `Toplam ${filteredAssets.length} Adet Sabit Kıymet Kaydı - Tarih: ${dateStr}`,
+      headers,
+      rows,
+    };
   };
+
+  const handleExportExcel = () => exportToExcel(getFixedAssetsExportData());
+  const handleExportPDF = () => exportToPDF(getFixedAssetsExportData());
 
   return (
     <div className="space-y-4">
@@ -245,15 +242,24 @@ export const FixedAssetList: React.FC<FixedAssetListProps> = ({
             </button>
           </div>
 
-          {/* Export to Excel */}
+          {/* Export to Excel & PDF */}
           <button
             type="button"
             onClick={handleExportExcel}
-            className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700 active:scale-[0.98]"
+            className="px-3 py-2 text-xs font-semibold rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 active:scale-95"
             title="Excel Formatında Envanter Listesi İndir"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Excel İndir</span>
+            <span className="hidden sm:inline">Excel İndir</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPDF}
+            className="px-3 py-2 text-xs font-semibold rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 active:scale-95"
+            title="Aynı formatta PDF Envanter Listesi İndir"
+          >
+            <FileText className="w-3.5 h-3.5 text-rose-600" />
+            <span className="hidden sm:inline">PDF İndir</span>
           </button>
 
           {/* New Asset Button */}

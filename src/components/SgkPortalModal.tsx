@@ -220,10 +220,10 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
             href={portalInfo.url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-xl transition-all cursor-pointer ml-0 sm:ml-auto"
+            className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-xl transition-all cursor-pointer ml-0 sm:ml-auto w-full sm:w-auto shadow-2xs"
           >
             <span>Doğrudan {portalInfo.shortName}&apos;na Git</span>
-            <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+            <ExternalLink className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
           </a>
         </div>
 

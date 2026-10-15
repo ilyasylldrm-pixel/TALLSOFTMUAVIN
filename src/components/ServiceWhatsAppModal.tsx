@@ -434,7 +434,7 @@ export const ServiceWhatsAppModal: React.FC<ServiceWhatsAppModalProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleInsertVariable(`₺${(serviceRecord.grandTotal || 0).toLocaleString("tr-TR")}`)}
+                  onClick={() => handleInsertVariable(`₺${(serviceRecord.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
                   className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-[10px] font-bold cursor-pointer"
                 >
                   +Tutar

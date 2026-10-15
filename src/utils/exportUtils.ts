@@ -107,7 +107,7 @@ export async function exportToPDF(data: ExportData) {
 export async function exportElementToPDF(
   elementId: string,
   filename: string = "belge.pdf",
-  options: { orientation?: "p" | "l"; margin?: number; scale?: number } = {}
+  options: import("./pdfService").ExportElementToPDFOptions = {}
 ): Promise<void> {
   const { exportElementToPDFWithPrintStyling } = await import("./pdfService");
   const result = await exportElementToPDFWithPrintStyling(elementId, filename, options);
@@ -116,6 +116,7 @@ export async function exportElementToPDF(
   }
 }
 
+export * from "./printEngine";
 export * from "./pdfService";
 export { exportAssetCustodyToPDF, generateAssetCustodyHTML } from "./assetCustodyPdf";
 

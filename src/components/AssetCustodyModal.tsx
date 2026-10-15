@@ -439,7 +439,7 @@ export const AssetCustodyModal: React.FC<AssetCustodyModalProps> = ({
               <Sparkles className="w-4 h-4 text-amber-500" />
               <span>Hızlı Şablonlar:</span>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={() => handleQuickPreset("vehicle_megane")}

@@ -785,12 +785,12 @@ Arka planda muhasebe, cari, fatura ve nakit akışınızı sürekli analiz ediyo
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Net Tutar (+ %{action.data?.vatRate || 20} KDV):</span>
-                                <strong className="text-slate-900">₺{Number(action.data?.amount || 0).toLocaleString("tr-TR")}</strong>
+                                <strong className="text-slate-900">₺{Number(action.data?.amount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Genel Toplam:</span>
                                 <strong className="text-emerald-700 font-bold">
-                                  ₺{(Number(action.data?.amount || 0) * (1 + (action.data?.vatRate || 20) / 100)).toLocaleString("tr-TR")}
+                                  ₺{(Number(action.data?.amount || 0) * (1 + (action.data?.vatRate || 20) / 100)).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </strong>
                               </div>
                               {action.data?.description && (
@@ -809,7 +809,7 @@ Arka planda muhasebe, cari, fatura ve nakit akışınızı sürekli analiz ediyo
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Tutar:</span>
-                                <strong className="text-slate-900">₺{Number(action.data?.amount || 0).toLocaleString("tr-TR")}</strong>
+                                <strong className="text-slate-900">₺{Number(action.data?.amount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                               </div>
                               {action.data?.description && (
                                 <p className="text-[10px] text-slate-500 italic mt-1">{action.data.description}</p>
@@ -1056,13 +1056,13 @@ Arka planda muhasebe, cari, fatura ve nakit akışınızı sürekli analiz ediyo
                     <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
                       <div className="text-[11px] text-slate-500">Tahmini 30 Gün Net Nakit</div>
                       <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">
-                        ₺{Number(sparkData.financialPulse.predictedNetCashflow30Days || 0).toLocaleString("tr-TR")}
+                        ₺{Number(sparkData.financialPulse.predictedNetCashflow30Days || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                     <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
                       <div className="text-[11px] text-slate-500">Günlük Yakım / Harcama Hızı</div>
                       <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">
-                        ₺{Number(sparkData.financialPulse.dailyRunRate || 0).toLocaleString("tr-TR")} <span className="text-[10px] font-normal text-slate-500">/gün</span>
+                        ₺{Number(sparkData.financialPulse.dailyRunRate || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] font-normal text-slate-500">/gün</span>
                       </div>
                     </div>
                     <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
@@ -1104,7 +1104,7 @@ Arka planda muhasebe, cari, fatura ve nakit akışınızı sürekli analiz ediyo
                       <div className="text-right">
                         <div className="text-[10px] text-slate-400 font-semibold uppercase">Toplam Risk Tutarı</div>
                         <div className="text-sm font-bold text-rose-600 font-mono">
-                          ₺{Number(sparkData.overdueIntelligence.totalOverdueAmount || 0).toLocaleString("tr-TR")}
+                          ₺{Number(sparkData.overdueIntelligence.totalOverdueAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                       </div>
                     </div>
@@ -1120,7 +1120,7 @@ Arka planda muhasebe, cari, fatura ve nakit akışınızı sürekli analiz ediyo
                               <div className="flex items-center justify-between">
                                 <span className="font-bold text-slate-800">{item.cari}</span>
                                 <span className="font-bold text-rose-600 font-mono">
-                                  ₺{Number(item.amount || 0).toLocaleString("tr-TR")}
+                                  ₺{Number(item.amount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                               </div>
                               <div className="text-[11px] text-slate-500 flex justify-between">
@@ -1166,7 +1166,7 @@ Arka planda muhasebe, cari, fatura ve nakit akışınızı sürekli analiz ediyo
                             <div className="flex justify-between text-[11px] text-slate-500">
                               <span>Mevcut: {stockItem.stock} / Asgari: {stockItem.minStock}</span>
                               {stockItem.estimatedCost && (
-                                <span className="font-mono text-slate-700">Maliyet: ₺{Number(stockItem.estimatedCost).toLocaleString("tr-TR")}</span>
+                                <span className="font-mono text-slate-700">Maliyet: ₺{Number(stockItem.estimatedCost).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                               )}
                             </div>
                           </div>
@@ -1184,7 +1184,7 @@ Arka planda muhasebe, cari, fatura ve nakit akışınızı sürekli analiz ediyo
                         <h4 className="text-xs font-bold text-slate-900">Akıllı KDV & Vergi Projeksiyonu</h4>
                       </div>
                       <span className="text-xs font-bold text-slate-900 font-mono">
-                        Tahmini: ₺{Number(sparkData.taxForecast.vatPayableEstimated || 0).toLocaleString("tr-TR")}
+                        Tahmini: ₺{Number(sparkData.taxForecast.vatPayableEstimated || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
 
@@ -1248,7 +1248,7 @@ Arka planda muhasebe, cari, fatura ve nakit akışınızı sürekli analiz ediyo
                                 <span className="font-bold text-slate-900 text-sm">{actionItem.title}</span>
                                 {actionItem.amount && (
                                   <span className="font-bold text-emerald-700 font-mono text-sm">
-                                    ₺{Number(actionItem.amount).toLocaleString("tr-TR")}
+                                    ₺{Number(actionItem.amount).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </span>
                                 )}
                               </div>
@@ -1541,7 +1541,7 @@ Arka planda muhasebe, cari, fatura ve nakit akışınızı sürekli analiz ediyo
                               </span>
                               {draft.amount && (
                                 <span className="font-mono font-bold text-rose-600">
-                                  ₺{Number(draft.amount).toLocaleString("tr-TR")}
+                                  ₺{Number(draft.amount).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                               )}
                             </div>

@@ -141,6 +141,9 @@ export interface InvoiceItem {
   totalWithoutVat: number;
   vatAmount: number;
   totalWithVat: number;
+  productName?: string;
+  subtotal?: number;
+  total?: number;
 }
 
 export type InvoiceProfileType =
@@ -238,6 +241,118 @@ export interface ManagedCompany {
   isPassive?: boolean;
 }
 
+export interface AvailableCompanyModule {
+  id: string;
+  name: string;
+  description: string;
+  category: "core" | "commercial" | "financial" | "operations" | "integrations";
+  badge?: string;
+  parentId?: string;
+  isSubModule?: boolean;
+}
+
+export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
+  // Ana Modül: Ana Sayfa
+  { id: "dashboard", name: "Ana Sayfa & Özet Paneli", description: "Finansal özet, hızlı göstergeler ve nakit akışı", category: "core" },
+
+  // Ana Modül: Firma Bilgileri & Alt Modülleri
+  { id: "company", name: "Firma Bilgileri & Kurumsal Yönetim", description: "Şirket profili, şubeler, depolar ve ayarlar ana modülü", category: "core" },
+  { id: "company_profile", name: "↳ Firma Profili & Adres", description: "Resmi ticari unvan, vergi dairesi, merkez adres ve logo", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+  { id: "company_companies", name: "↳ Şirketler & Çoklu Şirket", description: "Çoklu şirket tanımlama ve şirketler arası geçiş", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+  { id: "company_mysoft", name: "↳ Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef VKN/TCKN ve seri eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+  { id: "company_branches", name: "↳ Şubeler Yönetimi", description: "Şirket şubeleri açılış ve adres tanımlama", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+  { id: "company_warehouses", name: "↳ Depolar Yönetimi", description: "Merkez ve şube depoları tanımlama ve kapasite takibi", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+  { id: "company_settings", name: "↳ Firma Sistem Ayarları", description: "Firma bazlı sistem, yedekleme ve şablon tercihleri", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+
+  // Ana Modül: E-İşlemler
+  { id: "e_services", name: "E-İşlemler (GİB / Portal)", description: "GİB portalı, e-Arşiv, SGK ve e-Devlet sorgulama", category: "commercial", badge: "Resmi" },
+
+  // Ana Modül: E-Belgeler & Alt Modülleri
+  { id: "invoices", name: "E-Belgeler & Faturalar", description: "Satış/alış faturaları, e-fatura, e-arşiv, irsaliyeler ana modülü", category: "commercial" },
+  { id: "invoices_sales", name: "↳ Gelir (Satış) Faturaları", description: "Satış faturası oluşturma ve tahsilat takibi", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
+  { id: "invoices_purchase", name: "↳ Gider (Alış) Faturaları", description: "Alış faturası ve masraf belgeleri kaydı", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
+  { id: "e_documents_incoming", name: "↳ Gelen e-Faturalar", description: "Mysoft entegrasyonu ile gelen e-Faturalar kutusu", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
+  { id: "e_documents_outgoing", name: "↳ Giden e-Faturalar", description: "GİB / Mysoft üzerinden gönderilen e-Fatura ve e-Arşivler", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
+  { id: "waybills_receipt", name: "↳ Gelen e-İrsaliyeler", description: "Tedarikçilerden gelen e-İrsaliye belgeleri", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
+  { id: "waybills_dispatch", name: "↳ Giden e-İrsaliyeler", description: "Müşterilere düzenlenen giden e-İrsaliyeler", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
+  { id: "waybills", name: "↳ İrsaliye Oluştur (Yerel)", description: "Sevk ve tesellüm irsaliyesi oluşturma ve faturaya aktarma", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
+
+  // Ana Modül: Sipariş & Proforma & Alt Modülleri
+  { id: "orders_module", name: "Sipariş & Proforma Fatura", description: "Alınan/verilen siparişler ve proforma teklifler ana modülü", category: "commercial" },
+  { id: "orders", name: "↳ Siparişler & Sipariş Oluştur", description: "Satış ve satınalma siparişleri yönetimi", category: "commercial", parentId: "orders_module", isSubModule: true, badge: "Alt Modül" },
+  { id: "quotes", name: "↳ Proforma Faturalar & Teklifler", description: "Proforma fatura hazırlama ve siparişe/faturaya dönüştürme", category: "commercial", parentId: "orders_module", isSubModule: true, badge: "Alt Modül" },
+
+  // Ana Modül: Cari Hesaplar
+  { id: "contacts", name: "Cari Hesaplar (Müşteri & Tedarikçi)", description: "Müşteri ve satıcı kartları, ekstreler, bakiye takibi", category: "commercial" },
+
+  // Ana Modül: Finans Yönetimi & Alt Modülleri
+  { id: "accounts", name: "Finans Yönetimi (Kasa & Banka)", description: "Kasa, banka hesapları, çek, senet ve virman işlemleri ana modülü", category: "financial" },
+  { id: "finance_kasa", name: "↳ Kasa (Nakit) Yönetimi", description: "Nakit tahsilat, tediye ve kasa bakiye takibi", category: "financial", parentId: "accounts", isSubModule: true, badge: "Alt Modül" },
+  { id: "finance_banka", name: "↳ Banka Hesapları", description: "Banka hesapları, IBAN, dekont ve ekstre işlemleri", category: "financial", parentId: "accounts", isSubModule: true, badge: "Alt Modül" },
+  { id: "finance_cek", name: "↳ Çek Yönetimi", description: "Alınan/verilen çek bordroları, ciro ve tahsilat takibi", category: "financial", parentId: "accounts", isSubModule: true, badge: "Alt Modül" },
+  { id: "finance_senet", name: "↳ Senet Yönetimi", description: "Müşteri ve borç senetleri vade ve protesto takibi", category: "financial", parentId: "accounts", isSubModule: true, badge: "Alt Modül" },
+  { id: "finance_virman", name: "↳ Hesaplar Arası Virman", description: "Kasa ve banka hesapları arası para transferi", category: "financial", parentId: "accounts", isSubModule: true, badge: "Alt Modül" },
+  { id: "transactions", name: "↳ Gelir & Gider Fişleri", description: "Hızlı gelir/gider fişleri ve masraf hareketleri", category: "financial", parentId: "accounts", isSubModule: true, badge: "Alt Modül" },
+
+  // Ana Modül: Stoklar & Alt Modülleri
+  { id: "products", name: "Stoklar & Envanter", description: "Ürün/hizmet kartları, stok seviyeleri ve hareketleri", category: "operations" },
+  { id: "products_list", name: "↳ Ürün & Stok Kartları", description: "Stok ekleme, barkod, alış/satış fiyatı ve KDV tanımlama", category: "operations", parentId: "products", isSubModule: true, badge: "Alt Modül" },
+  { id: "products_warehouses", name: "↳ Depo Stok & Transfer", description: "Depolar arası stok dağılımı ve depo ekleme", category: "operations", parentId: "products", isSubModule: true, badge: "Alt Modül" },
+
+  // Diğer Operasyonel & Sektörel Modüller
+  { id: "fixed_assets", name: "Demirbaşlar & Amortisman", description: "VUK mevzuatına uygun sabit kıymet ve amortisman listesi", category: "operations", badge: "VUK" },
+  { id: "production", name: "Üretim & Reçete Yönetimi", description: "Reçeteler, hammadde tüketimi ve üretim maliyetleri", category: "operations", badge: "Üretim" },
+  { id: "sectors", name: "Sektörel Çözümler & Mimari", description: "Farklı sektörlere özel iş akışları ve şablonlar", category: "operations" },
+  { id: "auto_service", name: "Oto Servis & Araç Bakım", description: "İş emirleri, araç kabul, parça ve servis takip", category: "operations", badge: "Oto" },
+  { id: "it_service", name: "Bilişim & BT Servis", description: "Cihaz servis kayıtları, arıza takibi, parça değişimi", category: "operations", badge: "BT" },
+  { id: "appliance_service", name: "Ev Aletleri & Klima Servisi", description: "Teknik servis fişleri, montaj ve bakım randevuları", category: "operations", badge: "Klima" },
+  { id: "construction_costing", name: "İnşaat Maliyetlendirme & Hakediş", description: "Şantiye projeleri, birim fiyatlar ve maliyet analizi", category: "operations", badge: "İnşaat" },
+  { id: "hr", name: "İnsan Kaynakları & Personel", description: "Personel kartları, avans, bordro ve izin yönetimi", category: "operations" },
+  { id: "files", name: "Bulut Dosya Deposu", description: "Şirket sözleşmeleri, evraklar ve dijital arşiv", category: "operations" },
+  { id: "reports", name: "Vergilendirme & Mali Raporlar", description: "KDV beyanname simülasyonu, gelir/gider tabloları", category: "financial" },
+  { id: "whatsapp", name: "WhatsApp İletişim Merkezi", description: "Müşterilere e-fatura ve bakiye bildirimi gönderme", category: "integrations", badge: "Canlı" },
+  { id: "settings", name: "Sistem Ayarları & Yedekleme", description: "Genel uygulama ayarları ve veri yedekleme", category: "core" },
+];
+
+export interface CompanyItem {
+  id: string;
+  companyName: string;
+  name?: string;
+  companyTitle: string;
+  title?: string;
+  taxOffice: string;
+  taxNumber: string; // VKN or TCKN
+  vkn?: string; // 10 haneli VKN
+  tckn?: string; // 11 haneli TCKN
+  mysoftMatchedType?: "vkn" | "tckn"; // Admin selection
+  tenantIdentifierNumber?: string; // Active Mysoft e-belge tenant identifier
+  mysoftStatus?: "verified" | "pending" | "unmatched";
+  mysoftTenantName?: string;
+  companyType?: "limited" | "anonim" | "sahis" | "diger";
+  phone?: string;
+  email?: string;
+  website?: string;
+  address?: string;
+  city?: string;
+  district?: string;
+  isDefault?: boolean;
+  isPassive?: boolean;
+  allowedModules?: string[]; // Seçili modüller listesi
+  moduleRestrictionEnabled?: boolean; // Şirket bazlı modül kısıtlaması aktif mi?
+  // Uygulamaya Giriş Kimlik Bilgileri
+  loginUsername?: string;
+  loginPasswordPlain?: string;
+  loginEmail?: string;
+  loginFullName?: string;
+  loginRole?: string;
+  // Mysoft e-Belge Ön Ekleri ve Ardışık Devam Eden Fatura Numaraları
+  eFaturaPrefix?: string;
+  eFaturaNextNumber?: string;
+  eArsivPrefix?: string;
+  eArsivNextNumber?: string;
+  createdAt: string;
+}
+
 export interface MysoftCredentials {
   tenantIdentifierNumber?: string;
 }
@@ -255,6 +370,13 @@ export interface Invoice {
   contactId: string;
   contactName: string;
   taxNumber?: string;
+  taxOffice?: string;
+  customerAddress?: string;
+  customerCity?: string;
+  customerDistrict?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  isManualCustomer?: boolean;
   issueDate: string; // Fatura Tarihi
   dueDate: string; // Son Ödeme Tarihi
   items: InvoiceItem[];
@@ -365,6 +487,7 @@ export interface Transaction {
   items?: InvoiceItem[];
   subtotal?: number;
   totalVat?: number;
+  notes?: string;
 }
 
 export interface Product {
@@ -593,6 +716,7 @@ export interface ETebligatItem {
 }
 
 export interface CompanySettings {
+  id?: string;
   companyName: string;
   name?: string; // Alias for companyName
   companyTitle: string;
@@ -600,6 +724,11 @@ export interface CompanySettings {
   taxOffice: string;
   taxNumber: string;
   vknTckn?: string; // Alias for taxNumber
+  vkn?: string; // 10 haneli VKN
+  tckn?: string; // 11 haneli TCKN
+  mysoftMatchedType?: "vkn" | "tckn";
+  mysoftStatus?: "verified" | "pending" | "unmatched";
+  mysoftTenantName?: string;
   taxpayerType?: TaxpayerType | string;
   tradeRegisterNo?: string;
   mersisNo?: string;
@@ -621,6 +750,21 @@ export interface CompanySettings {
   iban?: string; // Alias for defaultBankIban
   defaultBankName?: string;
   currency: string;
+  // Ticari Parametreler: Fatura & Belge Ayarları
+  defaultInvoicePrefix?: string;
+  eFaturaPrefix?: string;
+  eFaturaNextNumber?: string;
+  eArsivPrefix?: string;
+  eArsivNextNumber?: string;
+  defaultVatRate?: number;
+  // Ticari Parametreler: Personel Yan Hakları & Ödenekler (Yol & Yemek Yardımı)
+  defaultFoodAllowance?: number; // Varsayılan Aylık Yemek Yardımı (₺/Ay)
+  defaultRoadAllowance?: number; // Varsayılan Aylık Yol Yardımı (₺/Ay)
+  dailyFoodAllowanceRate?: number; // Günlük Yemek Yardımı Birim Tutarı (₺/Gün)
+  dailyRoadAllowanceRate?: number; // Günlük Yol Yardımı Birim Tutarı (₺/Gün)
+  foodAllowanceCalculationType?: "monthly" | "daily"; // "monthly" (Aylık Sabit) | "daily" (Fiili Çalışma Günü)
+  roadAllowanceCalculationType?: "monthly" | "daily"; // "monthly" (Aylık Sabit) | "daily" (Fiili Çalışma Günü)
+  applyAllowancesToAllEmployees?: boolean; // Tüm personel için yol ve yemek yardımını şirket parametrelerinden al
   taxCredentials?: TaxOfficeCredentials;
   sgkCredentials?: SgkCredentials;
   eDevletCredentials?: EDevletCredentials;
@@ -706,10 +850,13 @@ export interface PayrollRecord {
   salaryType: "net" | "gross";
   bonusAmount?: number;
   overtimePay?: number;
-  overtimeNormalHours?: number; // Hafta içi %50 zamlı mesai saati
-  overtimeWeekendHours?: number; // Hafta tatili %100 zamlı mesai saati
-  overtimeHolidayDays?: number; // Resmi tatil 1 günlük ek ücretli mesai günü
-  overtimeHolidayHours?: number; // Resmi tatil saatlik mesai saati
+  overtimeHours?: number; // Toplam fazla mesai saati
+  overtimeNormalHours?: number; // Fazla Çalışma (%50 Zamlı) - Haftalık 45 saati aşan çalışmalar için saatlik ücret 1,5 katı
+  overtimeExtensionHours?: number; // Fazla Sürelerle Çalışma (%25 Zamlı) - Haftalık 40-45 saat arası çalışmalar için saatlik ücret 1,25 katı
+  overtimeWeekendDays?: number; // Hafta Tatili Çalışması (Gün bazlı) - Hak edilen 1 ücrete ek +1,5 yevmiye verilerek toplam 2,5 yevmiye
+  overtimeWeekendHours?: number; // Hafta Tatili saatlik mesai (1,5 katı ilave ücret)
+  overtimeHolidayDays?: number; // Genel Tatil / Bayram Çalışması (Gün bazlı) - Normal ücrete ilave +1 tam yevmiye (toplam 2 yevmiye)
+  overtimeHolidayHours?: number; // Genel Tatil / Bayram saatlik mesai (%100 zamlı - ilave saat ücreti)
   foodAllowance?: number;
   roadAllowance?: number;
   customPayments?: AdditionalPaymentItem[];
@@ -720,6 +867,7 @@ export interface PayrollRecord {
   besDeduction?: number;
   executionDeduction?: number;
   alimonyDeduction?: number;
+  legalDeductionsAmount?: number;
   otherDeductions?: number;
   advanceReason?: string; // Avans mahsup gerekçesi / talep açıklaması
   deductionReason?: string; // Yasal ve özel kesinti gerekçesi / icra nafaka detayı
@@ -752,6 +900,7 @@ export type PuantajCode = "N" | "HT" | "RT" | "Yİ" | "Üİ" | "Dİ" | "R" | "M"
 export interface DayPuantajDetail {
   code: PuantajCode;
   overtimeHours?: number; // Günlük yapılan fazla mesai saati (örn: 2.5 saat)
+  overtimeType?: "normal_50" | "extension_25"; // Mesai Türü (%50 Fazla Çalışma veya %25 Fazla Sürelerle Çalışma)
   isHolidayOvertime?: boolean; // Resmi tatil veya Hafta tatili günü tam gün çalışma
   leaveReason?: string; // İzin nedeni / talep açıklaması
   leaveType?: string; // İzin türü (örn: Yıllık İzin, Ücretsiz İzin, Babalık İzni vb.)
@@ -772,10 +921,12 @@ export type CustomPayrollAdjustment = {
   baseSalary?: number;
   bonusAmount?: number;
   overtimePay?: number;
-  overtimeNormalHours?: number;
-  overtimeWeekendHours?: number;
-  overtimeHolidayDays?: number;
-  overtimeHolidayHours?: number;
+  overtimeNormalHours?: number; // %50 Zamlı (1,5 kat)
+  overtimeExtensionHours?: number; // %25 Zamlı (1,25 kat)
+  overtimeWeekendDays?: number; // Hafta Tatili tam gün (+1,5 yevmiye, toplam 2,5 yevmiye)
+  overtimeWeekendHours?: number; // Hafta Tatili saatlik (1,5 kat)
+  overtimeHolidayDays?: number; // Genel Tatil / Bayram tam gün (+1 tam yevmiye, toplam 2 yevmiye)
+  overtimeHolidayHours?: number; // Genel Tatil saatlik (%100 zamlı)
   foodAllowance?: number;
   roadAllowance?: number;
   customPayments?: AdditionalPaymentItem[];
@@ -968,30 +1119,61 @@ export interface ExtractedDocumentData {
   isTransferredToAccounting?: boolean; // Ön muhasebeye aktarıldı mı?
 }
 
-// Modül Yetkilendirme ve İzin Tanımları
+// Modül ve Alt Modül Yetkilendirme ve İzin Tanımları (Sadece Admin ve Sistem Yöneticisi Tarafından Yetkilendirilir)
 export type AppModuleKey =
   | "dashboard"
   | "company"
-  | "auto_service"
-  | "construction_costing"
-  | "it_service"
-  | "appliance_service"
+  | "company_profile"
+  | "company_companies"
+  | "company_mysoft"
+  | "company_branches"
+  | "company_warehouses"
+  | "company_settings"
   | "e_services"
   | "invoices"
+  | "invoices_sales"
+  | "invoices_purchase"
+  | "e_documents_incoming"
+  | "e_documents_outgoing"
+  | "waybills_receipt"
+  | "waybills_dispatch"
+  | "waybills"
   | "orders_module"
+  | "orders"
+  | "quotes"
+  | "production"
+  | "sectors"
+  | "auto_service"
+  | "it_service"
+  | "appliance_service"
+  | "construction_costing"
   | "contacts"
   | "accounts"
+  | "finance_kasa"
+  | "finance_banka"
+  | "finance_cek"
+  | "finance_senet"
+  | "finance_virman"
+  | "transactions"
   | "products"
+  | "products_list"
+  | "products_warehouses"
+  | "fixed_assets"
   | "hr"
   | "files"
   | "reports"
-  | "settings";
+  | "whatsapp"
+  | "settings"
+  | string;
 
 export interface AppModuleDefinition {
   key: AppModuleKey;
   label: string;
   description: string;
-  category: "Genel" | "Ticari" | "Finans" | "Yönetim";
+  category: "Genel" | "Ticari" | "Finans" | "Yönetim" | "Operasyon";
+  parentKey?: AppModuleKey;
+  isSubModule?: boolean;
+  isCustom?: boolean;
 }
 
 export type AssetCategory =
@@ -1566,23 +1748,240 @@ export interface MesTerminalLog {
 }
 
 export const ALL_APP_MODULES: AppModuleDefinition[] = [
+  // Ana Sayfa
   { key: "dashboard", label: "Ana Sayfa / Özet", description: "Genel finansal durum ve grafikler", category: "Genel" },
-  { key: "auto_service", label: "Oto Servis & Araç Bakım", description: "Araç kabul, iş emri, arıza teşhisi ve AI asistanları", category: "Ticari" },
-  { key: "construction_costing", label: "İnşaat Maliyetlendirme", description: "Şantiye, metraj, keşif, kaba/ince maliyet ve hakediş yönetimi", category: "Ticari" },
-  { key: "it_service", label: "Bilişim & BT Teknik Servis", description: "Cihaz kabul, parça/yazılım onarım ve AI destek rehberleri", category: "Ticari" },
-  { key: "appliance_service", label: "Ev Aletleri ve Klima", description: "Beyaz eşya, iklimlendirme ve küçük ev aletleri teknik servisi", category: "Ticari" },
-  { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi", category: "Yönetim" },
+
+  // Firma Bilgileri & Alt Modülleri
+  { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi (Ana Modül)", category: "Yönetim" },
+  { key: "company_profile", label: "↳ Firma Profili & Adres", description: "Resmi şirket kimlik bilgileri, adres ve logo ayarları", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_companies", label: "↳ Şirketler & Çoklu Şirket", description: "Kurumsal şirket, şahıs işletmesi ve test şirketleri yönetimi", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_mysoft", label: "↳ Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef ve ön ek (prefix) eşleştirme", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_branches", label: "↳ Şubeler", description: "Şirket şubeleri tanımlama ve yönetim", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_warehouses", label: "↳ Depolar", description: "Şirket ve şahıs işletmesi depoları tanımlama", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_settings", label: "↳ Firma Sistem Ayarları", description: "Firma bazlı parametreler ve yedekleme", category: "Yönetim", parentKey: "company", isSubModule: true },
+
+  // E-İşlemler
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
-  { key: "invoices", label: "E-Belgeler & Faturalar", description: "Satış/Alış faturaları, e-Arşiv ve irsaliyeler", category: "Ticari" },
-  { key: "orders_module", label: "Sipariş & Proforma", description: "Müşteri siparişleri ve proforma teklifler", category: "Ticari" },
+
+  // E-Belgeler & Alt Modülleri
+  { key: "invoices", label: "E-Belgeler & Faturalar", description: "Satış/Alış faturaları, e-Arşiv ve irsaliyeler (Ana Modül)", category: "Ticari" },
+  { key: "invoices_sales", label: "↳ Gelir Faturaları", description: "Satış faturası düzenleme ve tahsilat", category: "Ticari", parentKey: "invoices", isSubModule: true },
+  { key: "invoices_purchase", label: "↳ Gider Faturaları", description: "Alış faturası ve gider kaydı", category: "Ticari", parentKey: "invoices", isSubModule: true },
+  { key: "e_documents_incoming", label: "↳ Gelen e-Faturalar", description: "Gelen e-Fatura kutusu ve içe aktarma", category: "Ticari", parentKey: "invoices", isSubModule: true },
+  { key: "e_documents_outgoing", label: "↳ Giden e-Faturalar", description: "Giden e-Fatura ve e-Arşiv listesi", category: "Ticari", parentKey: "invoices", isSubModule: true },
+  { key: "waybills_receipt", label: "↳ Gelen e-İrsaliyeler", description: "Gelen e-İrsaliye belgeleri", category: "Ticari", parentKey: "invoices", isSubModule: true },
+  { key: "waybills_dispatch", label: "↳ Giden e-İrsaliyeler", description: "Giden e-İrsaliye belgeleri", category: "Ticari", parentKey: "invoices", isSubModule: true },
+  { key: "waybills", label: "↳ İrsaliye Oluştur", description: "Sevk irsaliyesi oluşturma ve faturaya dönüştürme", category: "Ticari", parentKey: "invoices", isSubModule: true },
+
+  // Sipariş & Proforma & Alt Modülleri
+  { key: "orders_module", label: "Sipariş & Proforma", description: "Müşteri siparişleri ve proforma teklifler (Ana Modül)", category: "Ticari" },
+  { key: "orders", label: "↳ Siparişler & Sipariş Oluştur", description: "Alınan ve verilen siparişlerin takibi", category: "Ticari", parentKey: "orders_module", isSubModule: true },
+  { key: "quotes", label: "↳ Proforma Faturalar", description: "Fiyat teklifi ve proforma fatura yönetimi", category: "Ticari", parentKey: "orders_module", isSubModule: true },
+
+  // Üretim & Sektörler
+  { key: "production", label: "Üretim & Reçete Yönetimi", description: "Yemek/İmalat reçeteleri, üretim emirleri ve sevkiyat", category: "Operasyon" },
+  { key: "sectors", label: "Sektörler & Sektörel Mimari", description: "Sektörel iş akışları ve üretim özelleştirme", category: "Operasyon" },
+
+  // Teknik Servis & İnşaat Modülleri
+  { key: "auto_service", label: "Oto Servis & Araç Bakım", description: "Araç kabul, iş emri, arıza teşhisi ve servis takibi", category: "Ticari" },
+  { key: "it_service", label: "Bilişim & BT Teknik Servis", description: "Cihaz kabul, parça/yazılım onarım ve servis takibi", category: "Ticari" },
+  { key: "appliance_service", label: "Ev Aletleri ve Klima", description: "Beyaz eşya, iklimlendirme ve küçük ev aletleri teknik servisi", category: "Ticari" },
+  { key: "construction_costing", label: "İnşaat Maliyetlendirme", description: "Şantiye, metraj, keşif, kaba/ince maliyet ve hakediş yönetimi", category: "Ticari" },
+
+  // Cari Hesaplar
   { key: "contacts", label: "Cari Hesaplar", description: "Müşteri ve tedarikçi cari kartları, ekstreler", category: "Ticari" },
-  { key: "accounts", label: "Finans Yönetimi", description: "Kasa, banka, çek, senet ve virman işlemleri", category: "Finans" },
-  { key: "products", label: "Stok & Ürünler", description: "Ürün kartları, barkod ve stok hareketleri", category: "Ticari" },
-  { key: "hr", label: "İnsan Kaynakları & Zimmet", description: "Personel kartları, bordro, izin, avans ve araç/cihaz zimmet takibi", category: "Yönetim" },
+
+  // Finans Yönetimi & Alt Modülleri
+  { key: "accounts", label: "Finans Yönetimi", description: "Kasa, banka, çek, senet ve virman işlemleri (Ana Modül)", category: "Finans" },
+  { key: "finance_kasa", label: "↳ Kasa (Nakit)", description: "Nakit kasa tahsilat ve ödeme işlemleri", category: "Finans", parentKey: "accounts", isSubModule: true },
+  { key: "finance_banka", label: "↳ Banka Hesapları", description: "Banka hesapları ve ekstre yönetimi", category: "Finans", parentKey: "accounts", isSubModule: true },
+  { key: "finance_cek", label: "↳ Çek Yönetimi", description: "Çek giriş/çıkış, ciro ve tahsilat işlemleri", category: "Finans", parentKey: "accounts", isSubModule: true },
+  { key: "finance_senet", label: "↳ Senet Yönetimi", description: "Senet portföyü ve vade takibi", category: "Finans", parentKey: "accounts", isSubModule: true },
+  { key: "finance_virman", label: "↳ Hesaplar Arası Virman", description: "Kasa ve bankalar arası virman transferi", category: "Finans", parentKey: "accounts", isSubModule: true },
+  { key: "transactions", label: "↳ Gelir & Gider Fişleri", description: "Cari dışı gelir ve gider hareketleri", category: "Finans", parentKey: "accounts", isSubModule: true },
+
+  // Stoklar & Alt Modülleri
+  { key: "products", label: "Stoklar & Envanter", description: "Ürün kartları, barkod ve stok hareketleri (Ana Modül)", category: "Ticari" },
+  { key: "products_list", label: "↳ Ürün & Stok Kartları", description: "Stok kartı ekleme ve fiyat/miktar güncelleme", category: "Ticari", parentKey: "products", isSubModule: true },
+  { key: "products_warehouses", label: "↳ Depo Stok & Transfer", description: "Depo bazlı stok dağılımı ve depo ekleme", category: "Ticari", parentKey: "products", isSubModule: true },
+
+  // Demirbaşlar, İK, Dosya, Raporlar, WhatsApp, Ayarlar
+  { key: "fixed_assets", label: "Demirbaşlar & Amortisman", description: "VUK uyumlu sabit kıymet ve amortisman yönetimi", category: "Operasyon" },
+  { key: "hr", label: "İnsan Kaynakları & Zimmet", description: "Personel kartları, bordro, izin, avans ve zimmet takibi", category: "Yönetim" },
   { key: "files", label: "Bulut Dosya Deposu", description: "Kullanıcı ve firma evrak arşivi", category: "Genel" },
   { key: "reports", label: "Vergilendirme & Raporlar", description: "KDV, Muhtasar, Geçici Vergi ve mizan raporları", category: "Finans" },
+  { key: "whatsapp", label: "WhatsApp Merkezi", description: "Müşteri bildirimleri ve canlı WhatsApp iletişimi", category: "Genel" },
   { key: "settings", label: "Sistem Ayarları", description: "Uygulama ayarları, yedekleme ve genel tercihler", category: "Yönetim" },
 ];
+
+export const CUSTOM_MODULES_STORAGE_KEY = "muavin_custom_app_modules_v1";
+
+/**
+ * Admin ve Sistem Yöneticisi tarafından tanımlanan ek modül/alt modülleri de dahil ederek tüm modül listesini döndürür.
+ */
+export function getAllAppModulesWithCustom(): AppModuleDefinition[] {
+  if (typeof window === "undefined") return ALL_APP_MODULES;
+  try {
+    const raw = localStorage.getItem(CUSTOM_MODULES_STORAGE_KEY);
+    if (!raw) return ALL_APP_MODULES;
+    const customList: AppModuleDefinition[] = JSON.parse(raw);
+    if (!Array.isArray(customList) || customList.length === 0) return ALL_APP_MODULES;
+    const existingKeys = new Set(ALL_APP_MODULES.map((m) => m.key));
+    const merged = [...ALL_APP_MODULES];
+    for (const c of customList) {
+      if (c && c.key && !existingKeys.has(c.key)) {
+        merged.push(c);
+        existingKeys.add(c.key);
+      }
+    }
+    return merged;
+  } catch {
+    return ALL_APP_MODULES;
+  }
+}
+
+/**
+ * Kullanıcının "Admin" veya "Sistem Yöneticisi" yetkisine sahip olup olmadığını kontrol eder.
+ * Uygulamadaki tüm modüllerin ve alt modüllerin tanımlanması ve yetkilendirilmesi
+ * SADECE bu fonksiyonun true döndürdüğü kullanıcılar tarafından yapılabilir.
+ */
+export function isAdminOrSysAdmin(
+  user?: { id?: string; email?: string; role?: string; username?: string } | null
+): boolean {
+  if (!user) return false;
+  const email = (user.email || "").toLowerCase().trim();
+  const role = (user.role || "").toLowerCase().trim();
+  const username = (user.username || "").toLowerCase().trim();
+  return (
+    user.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" ||
+    user.id === "usr_admin_001" ||
+    role.includes("admin") ||
+    role.includes("sistem yöneticisi") ||
+    role.includes("sistem yoneticisi") ||
+    role === "yönetici (admin)" ||
+    role === "süper admin" ||
+    email === "ilyasyildirim@outlook.com.tr" ||
+    email === "ilyasylldrm@gmail.com" ||
+    email.includes("admin") ||
+    username === "admin" ||
+    username === "sistem_yoneticisi"
+  );
+}
+
+/**
+ * Bir ana modülün altındaki tüm alt modül anahtarlarını döndürür.
+ */
+export function getSubModuleKeysOf(parentKey: string): string[] {
+  return getAllAppModulesWithCustom()
+    .filter((m) => m.parentKey === parentKey)
+    .map((m) => m.key);
+}
+
+/**
+ * Belirli bir modül veya alt modülün verilen listede (allowedModules) açık olup olmadığını kontrol eder.
+ */
+export function isKeyAllowedInList(
+  key: string,
+  parentKey: string | undefined,
+  allowedList: string[]
+): boolean {
+  if (!Array.isArray(allowedList)) return true;
+  if (allowedList.includes(key)) return true;
+
+  // Eğer bu bir ana modülse ve kendisi listede yoksa, alt modüllerinden herhangi biri listede var mı bak
+  if (!parentKey) {
+    const subKeys = getSubModuleKeysOf(key);
+    if (subKeys.length > 0 && subKeys.some((sk) => allowedList.includes(sk))) {
+      return true;
+    }
+    return false;
+  }
+
+  // Eğer bu bir alt modülse:
+  if (!allowedList.includes(parentKey)) {
+    return false;
+  }
+  const siblingSubKeys = getSubModuleKeysOf(parentKey);
+  const hasExplicitSubModuleSelection = siblingSubKeys.some((sk) => allowedList.includes(sk));
+  if (!hasExplicitSubModuleSelection) {
+    return true;
+  }
+  return allowedList.includes(key);
+}
+
+/**
+ * Hem Şirket hem Kullanıcı düzeyinde modül ve alt modül erişim yetkisini kontrol eder.
+ * Admin ve Sistem Yöneticisi her zaman tam yetkilidir.
+ */
+export function isModuleOrSubModuleAllowed(
+  moduleKey: string,
+  parentKey: string | undefined,
+  currentUser?: { id?: string; email?: string; role?: string; username?: string; allowedModules?: string[] } | null,
+  activeCompany?: { moduleRestrictionEnabled?: boolean; allowedModules?: string[] } | null
+): boolean {
+  if (isAdminOrSysAdmin(currentUser)) return true;
+  if (moduleKey === "admin") return false;
+
+  // 1. Şirket bazlı modül ve alt modül kısıtlaması
+  if (activeCompany?.moduleRestrictionEnabled && Array.isArray(activeCompany.allowedModules)) {
+    if (!isKeyAllowedInList(moduleKey, parentKey, activeCompany.allowedModules)) {
+      return false;
+    }
+  }
+
+  // 2. Kullanıcı bazlı modül ve alt modül kısıtlaması
+  if (currentUser && Array.isArray(currentUser.allowedModules) && currentUser.allowedModules.length > 0) {
+    if (!isKeyAllowedInList(moduleKey, parentKey, currentUser.allowedModules)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Admin veya Sistem Yöneticisi bir ana modülü veya alt modülü işaretlediğinde/kaldırdığında
+ * yeni allowedModules dizisini hesaplar.
+ */
+export function toggleModuleSelectionWithSubModules(
+  currentAllowed: string[],
+  targetKey: string,
+  parentKey?: string
+): string[] {
+  const set = new Set(currentAllowed);
+
+  if (!parentKey) {
+    const subKeys = getSubModuleKeysOf(targetKey);
+    const isCurrentlyActive = set.has(targetKey) || (subKeys.length > 0 && subKeys.some((sk) => set.has(sk)));
+    if (isCurrentlyActive) {
+      set.delete(targetKey);
+      subKeys.forEach((sk) => set.delete(sk));
+    } else {
+      set.add(targetKey);
+      subKeys.forEach((sk) => set.add(sk));
+    }
+  } else {
+    const siblingSubKeys = getSubModuleKeysOf(parentKey);
+    const hasAnySiblingExplicit = siblingSubKeys.some((sk) => set.has(sk));
+
+    if (set.has(parentKey) && !hasAnySiblingExplicit) {
+      siblingSubKeys.forEach((sk) => set.add(sk));
+    }
+
+    if (set.has(targetKey)) {
+      set.delete(targetKey);
+      const remainingSiblings = siblingSubKeys.filter((sk) => set.has(sk));
+      if (remainingSiblings.length === 0) {
+        set.delete(parentKey);
+      }
+    } else {
+      set.add(targetKey);
+      set.add(parentKey);
+    }
+  }
+
+  return Array.from(set);
+}
 
 // ==========================================
 // 🚗 OTOMOTİV & ARAÇ BAKIM SERVİS MODÜLÜ TİPLERİ

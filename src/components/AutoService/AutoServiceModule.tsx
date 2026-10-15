@@ -32,6 +32,8 @@ import {
   MessageCircle,
   Package,
   ChevronRight,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { AutoServiceRecord, AutoPartItem, AutoLaborItem, Contact, AutoServiceStatus, Invoice, CompanySettings } from "../../types";
 import { ServiceInvoicingModal } from "../ServiceInvoicingModal";
@@ -41,6 +43,9 @@ import { DetailPageLayout } from "../common/DetailPageLayout";
 import { useDetailNavigation } from "../../hooks/useDetailNavigation";
 import { useTheme } from "../../context/ThemeContext";
 import { triggerFormErrorNotification } from "../../context/FormErrorContext";
+import { exportElementToPDFWithPrintStyling } from "../../utils/pdfService";
+import { ExportButtons } from "../ExportButtons";
+import { ExportData, formatCurrency } from "../../utils/exportUtils";
 
 interface AutoServiceModuleProps {
   autoServices: AutoServiceRecord[];
@@ -69,6 +74,37 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [printDocType, setPrintDocType] = useState<"reception" | "work_order" | "quote" | "delivery">("reception");
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (!selectedRecord) return;
+    setIsExportingPDF(true);
+    try {
+      const docTypeNames: Record<string, string> = {
+        reception: "Arac_Kabul_Tutanagi",
+        work_order: "Atolye_Is_Emri_Formu",
+        quote: "Fiyat_Ve_Parca_Teklifi",
+        delivery: "Arac_Teslim_Tutanagi",
+      };
+      const cleanPlate = (selectedRecord.plateNumber || "Plaka").replace(/[^a-zA-Z0-9]/g, "_");
+      const cleanNo = (selectedRecord.serviceNo || "Servis").replace(/[^a-zA-Z0-9]/g, "_");
+      const fileName = `${docTypeNames[printDocType] || "Servis_Belgesi"}_${cleanPlate}_${cleanNo}.pdf`;
+      const res = await exportElementToPDFWithPrintStyling("printable-auto-service-slip", fileName, {
+        orientation: "p",
+        margin: 6,
+        scale: 2,
+        fitToSinglePage: true,
+      });
+      if (res?.pdf) {
+        res.pdf.save(res.fileName);
+      }
+    } catch (err) {
+      console.error("Auto Service PDF download error:", err);
+      triggerFormErrorNotification("PDF oluşturulurken bir hata oluştu.", "İndirme Hatası");
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
 
   const nav = useDetailNavigation<AutoServiceRecord>({ moduleKey: "auto-service" });
 
@@ -693,7 +729,7 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
                     Kullanılacak Yedek Parçalar
                   </h4>
                   <span className="font-mono font-bold text-purple-900">
-                    Parça Toplamı: ₺{(formData.parts || []).reduce((acc, p) => acc + p.total, 0).toFixed(2)}
+                    Parça Toplamı: ₺{((formData.parts || []).reduce((acc, p) => acc + (Number(p.total) || 0), 0) || 0).toFixed(2)}
                   </span>
                 </div>
 
@@ -756,8 +792,8 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
                             <td className="p-2 font-semibold text-slate-900">{p.partName}</td>
                             <td className="p-2 text-slate-500 capitalize">{p.partType}</td>
                             <td className="p-2 text-center font-mono">{p.quantity}</td>
-                            <td className="p-2 text-right font-mono">₺{p.unitPrice.toFixed(2)}</td>
-                            <td className="p-2 text-right font-bold font-mono">₺{p.total.toFixed(2)}</td>
+                            <td className="p-2 text-right font-mono">₺{(Number(p.unitPrice) || 0).toFixed(2)}</td>
+                            <td className="p-2 text-right font-bold font-mono">₺{(Number(p.total ?? (p as any).totalPrice) || 0).toFixed(2)}</td>
                             <td className="p-2 text-center">
                               <button
                                 type="button"
@@ -783,7 +819,7 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
                     Ustalık & İşçilik Kalemleri
                   </h4>
                   <span className="font-mono font-bold text-purple-900">
-                    İşçilik Toplamı: ₺{(formData.labors || []).reduce((acc, l) => acc + l.total, 0).toFixed(2)}
+                    İşçilik Toplamı: ₺{((formData.labors || []).reduce((acc, l) => acc + (Number(l.total) || 0), 0) || 0).toFixed(2)}
                   </span>
                 </div>
 
@@ -835,8 +871,8 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
                           <tr key={l.id}>
                             <td className="p-2 font-semibold text-slate-900">{l.operationName}</td>
                             <td className="p-2 text-center font-mono">{l.hours} Saat</td>
-                            <td className="p-2 text-right font-mono">₺{l.hourlyRate.toFixed(2)}</td>
-                            <td className="p-2 text-right font-bold font-mono">₺{l.total.toFixed(2)}</td>
+                            <td className="p-2 text-right font-mono">₺{(Number(l.hourlyRate) || 0).toFixed(2)}</td>
+                            <td className="p-2 text-right font-bold font-mono">₺{(Number(l.total ?? (l as any).totalPrice) || 0).toFixed(2)}</td>
                             <td className="p-2 text-center">
                               <button
                                 type="button"
@@ -1226,7 +1262,54 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
               </select>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+              <ExportButtons
+                getExportData={() => {
+                  const headers = [
+                    "Servis No",
+                    "Plaka",
+                    "Araç Bilgisi",
+                    "Müşteri Adı",
+                    "Telefon",
+                    "Giriş Tarihi",
+                    "Mevcut KM",
+                    "Müşteri Şikayeti",
+                    "Teşhis & Notlar",
+                    "Yedek Parça Tutarı",
+                    "İşçilik Tutarı",
+                    "KDV Tutarı",
+                    "Genel Toplam",
+                    "Müşteri Onayı",
+                    "Durum",
+                  ];
+                  const rows = filteredServices.map((r) => [
+                    r.serviceNo,
+                    r.plateNumber,
+                    `${r.vehicleBrand} ${r.vehicleModel} (${r.modelYear || "-"})`,
+                    r.customerName,
+                    r.customerPhone || "-",
+                    formatTRDate(r.entryDate),
+                    r.currentKm ? `${r.currentKm.toLocaleString("tr-TR")} KM` : "-",
+                    r.customerComplaint || "-",
+                    r.diagnosisNotes || "-",
+                    formatCurrency(r.partsTotal || 0, "TRY"),
+                    formatCurrency(r.laborTotal || 0, "TRY"),
+                    formatCurrency(r.taxTotal || 0, "TRY"),
+                    formatCurrency(r.grandTotal || 0, "TRY"),
+                    r.isApprovedByCustomer ? "Onaylandı" : "Onay Bekliyor",
+                    statusLabels[r.status]?.label || r.status,
+                  ]);
+                  return {
+                    filename: `Oto_Servis_Is_Emirleri_${new Date().toISOString().split("T")[0]}`,
+                    sheetName: "Oto Servis",
+                    title: "OTO SERVİS VE ARAÇ BAKIM İŞ EMİRLERİ LİSTESİ",
+                    subtitle: `Toplam ${filteredServices.length} Servis Kaydı | Rapor Tarihi: ${new Date().toLocaleDateString("tr-TR")}`,
+                    headers,
+                    rows,
+                  };
+                }}
+                size="sm"
+              />
               <button
                 onClick={handleOpenCreateModal}
                 style={{ backgroundColor: theme.primaryColor }}
@@ -1540,7 +1623,7 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
                                                 {p.partCode && <span className="text-[10px] text-slate-400 ml-1.5 font-mono">({p.partCode})</span>}
                                               </div>
                                               <div className="text-right">
-                                                <span className="text-slate-500 mr-2">{p.quantity} adet x ₺{p.unitPrice.toLocaleString("tr-TR")}</span>
+                                                <span className="text-slate-500 mr-2">{p.quantity} adet x ₺{p.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                 <span className="font-bold text-slate-800 font-mono">₺{p.totalPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
                                               </div>
                                             </div>
@@ -2336,90 +2419,185 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
               </select>
 
               <button
+                type="button"
                 onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-300 transition-all cursor-pointer shadow-xs active:scale-95"
+                title="Tarayıcı Yazdırma Diyaloğu"
               >
-                <Printer className="w-4 h-4" />
-                Yazdır / PDF
+                <Printer className="w-4 h-4 text-slate-700" />
+                <span>Yazdır</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                disabled={isExportingPDF || !selectedRecord}
+                className="flex items-center gap-1.5 px-4 py-2 bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
+                title="A4 Formatında PDF Olarak İndir"
+              >
+                {isExportingPDF ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>{isExportingPDF ? "PDF Hazırlanıyor..." : "A4 PDF İndir"}</span>
               </button>
             </div>
           </div>
 
-          {/* Printable Document Box */}
+          {/* Printable Document Box - A4 Standard Format */}
           {selectedRecord ? (
-            <div className="bg-white p-8 rounded-3xl border border-purple-200 shadow-lg max-w-4xl mx-auto printable-content">
-              {/* Top Header */}
-              <div className="flex items-center justify-between border-b-2 border-slate-900 pb-4 mb-6">
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">OTO TEKNİK SERVİS & BAKIM HİZMETLERİ</h2>
-                  <p className="text-xs font-bold text-slate-600 mt-1">
-                    Yetkili Seviye Özel Servis Hizmetleri • Tel: 0850 300 00 00 • E-posta: servis@muavinservis.com
+            <div
+              id="printable-auto-service-slip"
+              className="printable-a4-document a4-sheet printable-content bg-white p-8 sm:p-10 rounded-2xl border border-slate-300 shadow-xl max-w-[210mm] w-full mx-auto text-slate-900 leading-normal"
+            >
+              {/* Top Corporate Header */}
+              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-5 mb-5">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-xl bg-purple-900 text-white flex items-center justify-center font-black text-lg">
+                      <Car className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none uppercase">
+                        {companySettings?.name || "OTO TEKNİK SERVİS & BAKIM HİZMETLERİ"}
+                      </h2>
+                      <p className="text-[11px] font-bold text-purple-900 mt-0.5">
+                        Yetkili Seviye Özel Servis, Diyagnostik Teşhis & Ekspertiz Merkezi
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-600">
+                    {companySettings?.address || "Sanayi Mah. Otomotiv Cad. No:44 / İstanbul"} • Tel: {companySettings?.phone || "0850 300 00 00"} • E-posta: {companySettings?.email || "servis@muavinservis.com"}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Vergi Dairesi: {companySettings?.taxOffice || "Marmara"} • VKN: {companySettings?.taxNumber || "9870123456"} • Mersis: 0987012345600001
                   </p>
                 </div>
-                <div className="text-right">
-                  <div className="text-lg font-mono font-black text-purple-900">{selectedRecord.serviceNo}</div>
-                  <div className="text-xs font-bold text-slate-500">Tarih: {selectedRecord.entryDate} {selectedRecord.entryTime}</div>
+
+                {/* Right Barcode & Service Identity */}
+                <div className="text-right space-y-1.5">
+                  {/* Visual SVG Code 128 barcode simulation */}
+                  <div className="inline-flex flex-col items-end">
+                    <svg className="w-36 h-7" viewBox="0 0 144 28" fill="currentColor">
+                      <rect x="0" y="0" width="3" height="28" />
+                      <rect x="5" y="0" width="1.5" height="28" />
+                      <rect x="9" y="0" width="4" height="28" />
+                      <rect x="15" y="0" width="2" height="28" />
+                      <rect x="19" y="0" width="1.5" height="28" />
+                      <rect x="23" y="0" width="3.5" height="28" />
+                      <rect x="29" y="0" width="2" height="28" />
+                      <rect x="33" y="0" width="4.5" height="28" />
+                      <rect x="40" y="0" width="1.5" height="28" />
+                      <rect x="44" y="0" width="3" height="28" />
+                      <rect x="49" y="0" width="2.5" height="28" />
+                      <rect x="54" y="0" width="1.5" height="28" />
+                      <rect x="58" y="0" width="4" height="28" />
+                      <rect x="64" y="0" width="2" height="28" />
+                      <rect x="68" y="0" width="3" height="28" />
+                      <rect x="73" y="0" width="1.5" height="28" />
+                      <rect x="77" y="0" width="4" height="28" />
+                      <rect x="83" y="0" width="2.5" height="28" />
+                      <rect x="88" y="0" width="1.5" height="28" />
+                      <rect x="92" y="0" width="3" height="28" />
+                      <rect x="97" y="0" width="4" height="28" />
+                      <rect x="103" y="0" width="2" height="28" />
+                      <rect x="107" y="0" width="1.5" height="28" />
+                      <rect x="111" y="0" width="3.5" height="28" />
+                      <rect x="117" y="0" width="2" height="28" />
+                      <rect x="121" y="0" width="4" height="28" />
+                      <rect x="127" y="0" width="1.5" height="28" />
+                      <rect x="131" y="0" width="3" height="28" />
+                      <rect x="136" y="0" width="2.5" height="28" />
+                      <rect x="141" y="0" width="3" height="28" />
+                    </svg>
+                    <span className="font-mono text-[11px] font-black tracking-wider text-purple-950 block">
+                      {selectedRecord.serviceNo}
+                    </span>
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-600">
+                    Tarih: <span className="font-semibold text-slate-900">{selectedRecord.entryDate}</span> {selectedRecord.entryTime && `• Saat: ${selectedRecord.entryTime}`}
+                  </div>
+                  <div className="inline-block bg-purple-100 text-purple-950 font-mono font-black text-xs px-2.5 py-0.5 rounded-md border border-purple-200">
+                    PLAKA: {selectedRecord.plateNumber}
+                  </div>
                 </div>
               </div>
 
-              {/* Title */}
-              <div className="bg-slate-100 py-2 px-4 rounded-xl font-extrabold text-slate-900 text-center uppercase tracking-wider text-sm mb-6 border border-slate-200">
+              {/* Document Title Banner */}
+              <div
+                className={`py-2 px-4 rounded-xl font-black text-center uppercase tracking-wider text-sm mb-5 border ${
+                  printDocType === "reception"
+                    ? "bg-purple-900 text-white border-purple-950"
+                    : printDocType === "work_order"
+                    ? "bg-slate-900 text-white border-slate-950"
+                    : printDocType === "quote"
+                    ? "bg-amber-600 text-white border-amber-700"
+                    : "bg-emerald-800 text-white border-emerald-900"
+                }`}
+              >
                 {printDocType === "reception" && "ARAÇ KABUL VE TESLİM ALMA TUTANAĞI"}
                 {printDocType === "work_order" && "ATÖLYE İŞ EMRİ VE PARÇA DEĞİŞİM FORMU"}
-                {printDocType === "quote" && "PARÇA, İŞÇİLİK VE FİYAT TEKLİFİ"}
+                {printDocType === "quote" && "PARÇA, İŞÇİLİK VE RESMİ FİYAT TEKLİFİ"}
                 {printDocType === "delivery" && "ARAÇ VE HİZMET TESLİM / İŞ BİTİM TUTANAĞI"}
               </div>
 
               {/* Vehicle & Customer Info Grid */}
-              <div className="grid grid-cols-2 gap-6 mb-6">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
-                  <h4 className="text-xs font-extrabold text-purple-900 uppercase border-b pb-1">Araç Bilgileri</h4>
-                  <div className="text-xs grid grid-cols-2 gap-y-1.5 font-medium">
-                    <span className="text-slate-500">Plaka:</span>
-                    <span className="font-bold text-slate-900 font-mono text-sm">{selectedRecord.plateNumber}</span>
-                    <span className="text-slate-500">Marka / Model:</span>
+              <div className="grid grid-cols-2 gap-4 mb-5">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5 text-xs">
+                  <h4 className="font-black text-purple-950 uppercase border-b border-slate-200 pb-1 text-[11px] flex items-center justify-between">
+                    <span>ARAÇ BİLGİLERİ</span>
+                    <span className="font-mono text-purple-800">{selectedRecord.plateNumber}</span>
+                  </h4>
+                  <div className="grid grid-cols-2 gap-y-1 text-[11px]">
+                    <span className="text-slate-500 font-medium">Marka / Model:</span>
                     <span className="font-bold text-slate-900">{selectedRecord.brand} {selectedRecord.model} ({selectedRecord.modelYear})</span>
-                    <span className="text-slate-500">Şasi No (VIN):</span>
-                    <span className="font-mono text-slate-800">{selectedRecord.chassisNumber || "Belirtilmedi"}</span>
-                    <span className="text-slate-500">Giriş Kilometresi:</span>
-                    <span className="font-bold text-purple-900">{selectedRecord.currentKm.toLocaleString("tr-TR")} KM</span>
-                    <span className="text-slate-500">Yakıt / Seviye:</span>
-                    <span className="text-slate-800">{selectedRecord.fuelType} / {selectedRecord.fuelLevel}</span>
+                    <span className="text-slate-500 font-medium">Şasi No (VIN):</span>
+                    <span className="font-mono text-slate-800 font-bold">{selectedRecord.chassisNumber || "Belirtilmedi"}</span>
+                    <span className="text-slate-500 font-medium">Motor / Tip:</span>
+                    <span className="text-slate-800">{selectedRecord.fuelType || "Benzin/Dizel"}</span>
+                    <span className="text-slate-500 font-medium">Giriş Kilometresi:</span>
+                    <span className="font-bold text-purple-950 font-mono">{(Number(selectedRecord.currentKm) || 0).toLocaleString("tr-TR")} KM</span>
+                    <span className="text-slate-500 font-medium">Yakıt Seviyesi:</span>
+                    <span className="text-slate-800 font-semibold">{selectedRecord.fuelLevel || "%50"}</span>
                   </div>
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
-                  <h4 className="text-xs font-extrabold text-purple-900 uppercase border-b pb-1">Müşteri & Danışman Bilgileri</h4>
-                  <div className="text-xs grid grid-cols-2 gap-y-1.5 font-medium">
-                    <span className="text-slate-500">Müşteri / Cari:</span>
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5 text-xs">
+                  <h4 className="font-black text-purple-950 uppercase border-b border-slate-200 pb-1 text-[11px] flex items-center justify-between">
+                    <span>MÜŞTERİ & DANIŞMAN BİLGİLERİ</span>
+                    <span className="text-[10px] font-bold text-slate-500">CARİ KART</span>
+                  </h4>
+                  <div className="grid grid-cols-2 gap-y-1 text-[11px]">
+                    <span className="text-slate-500 font-medium">Müşteri / Cari:</span>
                     <span className="font-bold text-slate-900">{selectedRecord.contactName}</span>
-                    <span className="text-slate-500">Telefon:</span>
-                    <span className="font-bold text-slate-900">{selectedRecord.contactPhone}</span>
-                    <span className="text-slate-500">E-Posta:</span>
+                    <span className="text-slate-500 font-medium">İletişim Telefonu:</span>
+                    <span className="font-bold text-slate-900 font-mono">{selectedRecord.contactPhone}</span>
+                    <span className="text-slate-500 font-medium">E-Posta:</span>
                     <span className="text-slate-800">{selectedRecord.contactEmail || "-"}</span>
-                    <span className="text-slate-500">Sorumlu Teknisyen:</span>
-                    <span className="font-bold text-slate-900">{selectedRecord.assignedTechnician}</span>
-                    <span className="text-slate-500">Araçtaki Eşyalar:</span>
-                    <span className="text-slate-800">{selectedRecord.valuableItemsInCar || "Yok"}</span>
+                    <span className="text-slate-500 font-medium">Servis Danışmanı:</span>
+                    <span className="font-bold text-purple-950">{selectedRecord.assignedTechnician}</span>
+                    <span className="text-slate-500 font-medium">Teslim Edilen Eşya:</span>
+                    <span className="text-slate-800 font-semibold">{selectedRecord.valuableItemsInCar || "Yok"}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Beraberinde Getirilen Eşyalar ve Fiziksel Kusur / Deformasyon Durumu */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-purple-50/50 p-3 rounded-2xl border border-purple-200/80 text-xs space-y-1">
+              {/* Accessories & Physical Damage Panels */}
+              <div className="grid grid-cols-2 gap-3 mb-4 text-xs">
+                <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200/90 space-y-1">
                   <span className="text-[10px] font-black text-purple-950 uppercase block">
-                    Beraberinde Teslim Alınanlar (Aksesuarlar / Donanımlar):
+                    Beraberinde Teslim Alınanlar (Aksesuar & Donanım):
                   </span>
-                  <p className="font-semibold text-slate-900 mt-0.5">
+                  <p className="text-[11px] font-semibold text-slate-900">
                     {selectedRecord.accessoriesReceived || selectedRecord.valuableItemsInCar || "Harici parça / aksesuar teslim alınmadı."}
                   </p>
                 </div>
-                <div className="bg-amber-50/50 p-3 rounded-2xl border border-amber-200/80 text-xs space-y-1">
+                <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/90 space-y-1">
                   <span className="text-[10px] font-black text-amber-950 uppercase block">
                     Araç Fiziksel Durumu (Çizik, Göçük & Deformasyon):
                   </span>
-                  <p className="font-semibold text-slate-900 mt-0.5">
+                  <p className="text-[11px] font-semibold text-slate-900">
                     {selectedRecord.damagePhysicalCondition ? (
                       <span className="text-amber-950 font-bold">{selectedRecord.damagePhysicalCondition}</span>
                     ) : (
@@ -2429,94 +2607,161 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
                 </div>
               </div>
 
-              {/* Complaint & Diagnosis */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 mb-6">
+              {/* Complaint & Workshop Diagnosis */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mb-4 text-xs">
                 <div>
-                  <span className="text-[11px] font-extrabold text-slate-500 uppercase">Müşteri Şikayeti & Giriş Sebebi:</span>
-                  <p className="text-xs font-semibold text-slate-900 mt-0.5">{selectedRecord.customerComplaint || "Periyodik bakım ve kontrol"}</p>
+                  <span className="text-[10px] font-black text-slate-600 uppercase block">Müşteri Şikayeti & Giriş Talebi:</span>
+                  <p className="text-[11px] font-semibold text-slate-900 mt-0.5">
+                    {selectedRecord.customerComplaint || "Periyodik bakım ve genel kontroller"}
+                  </p>
                 </div>
                 {selectedRecord.workshopDiagnosis && (
-                  <div>
-                    <span className="text-[11px] font-extrabold text-purple-900 uppercase">Atölye Ön Teşhis & Tespit Raporu:</span>
-                    <p className="text-xs font-semibold text-slate-900 mt-0.5">{selectedRecord.workshopDiagnosis}</p>
+                  <div className="pt-1.5 border-t border-slate-200">
+                    <span className="text-[10px] font-black text-purple-950 uppercase block">Atölye Ön Teşhis & Tespit Raporu:</span>
+                    <p className="text-[11px] font-semibold text-slate-900 mt-0.5">
+                      {selectedRecord.workshopDiagnosis}
+                    </p>
                   </div>
                 )}
               </div>
 
               {/* Parts & Labors Table */}
-              <div className="border border-slate-200 rounded-2xl overflow-hidden mb-6">
-                <table className="w-full text-left text-xs border-collapse">
+              <div className="border border-slate-300 rounded-xl overflow-hidden mb-4">
+                <div className="bg-slate-100 py-1.5 px-3 border-b border-slate-300 font-black text-slate-800 text-[11px] uppercase tracking-wide">
+                  UYGULANAN İŞÇİLİKLER VE DEĞİŞEN YEDEK PARÇALAR
+                </div>
+                <table className="w-full text-left text-[11px] border-collapse">
                   <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-extrabold">
-                      <th className="py-2.5 px-3">Kalem Açıklaması / Parça</th>
-                      <th className="py-2.5 px-3">Tür</th>
-                      <th className="py-2.5 px-3 text-right">Miktar/Saat</th>
-                      <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
-                      <th className="py-2.5 px-3 text-right">KDV %</th>
-                      <th className="py-2.5 px-3 text-right">Toplam</th>
+                    <tr className="bg-slate-50 border-b border-slate-300 text-slate-700 font-bold">
+                      <th className="py-2 px-3">Kalem Açıklaması / Parça Tanımı</th>
+                      <th className="py-2 px-2">Kalem Türü</th>
+                      <th className="py-2 px-2 text-center">Miktar/Saat</th>
+                      <th className="py-2 px-3 text-right">Birim Fiyat</th>
+                      <th className="py-2 px-2 text-center">KDV %</th>
+                      <th className="py-2 px-3 text-right">Toplam (₺)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedRecord.parts.map((p) => (
+                  <tbody className="divide-y divide-slate-200">
+                    {(selectedRecord.parts || []).map((p) => (
                       <tr key={p.id}>
-                        <td className="py-2 px-3 font-semibold text-slate-900">{p.partName}</td>
-                        <td className="py-2 px-3 text-slate-500 capitalize">{p.partType}</td>
-                        <td className="py-2 px-3 text-right font-mono">{p.quantity} {p.unit}</td>
-                        <td className="py-2 px-3 text-right font-mono">₺{p.unitPrice.toFixed(2)}</td>
-                        <td className="py-2 px-3 text-right font-mono">%{p.vatRate}</td>
-                        <td className="py-2 px-3 text-right font-bold text-slate-900 font-mono">₺{p.total.toFixed(2)}</td>
+                        <td className="py-1.5 px-3 font-semibold text-slate-900">{p.partName}</td>
+                        <td className="py-1.5 px-2 text-slate-500 capitalize">{p.partType || "Yedek Parça"}</td>
+                        <td className="py-1.5 px-2 text-center font-mono">{p.quantity} {p.unit || "Adet"}</td>
+                        <td className="py-1.5 px-3 text-right font-mono">₺{(Number(p.unitPrice) || 0).toFixed(2)}</td>
+                        <td className="py-1.5 px-2 text-center font-mono">%{p.vatRate ?? 20}</td>
+                        <td className="py-1.5 px-3 text-right font-bold text-slate-900 font-mono">
+                          ₺{(Number(p.total ?? (p as any).totalPrice) || 0).toFixed(2)}
+                        </td>
                       </tr>
                     ))}
-                    {selectedRecord.labors.map((l) => (
+                    {(selectedRecord.labors || []).map((l) => (
                       <tr key={l.id}>
-                        <td className="py-2 px-3 font-semibold text-purple-900">İşçilik: {l.operationName}</td>
-                        <td className="py-2 px-3 text-slate-500">Usta İşçilik</td>
-                        <td className="py-2 px-3 text-right font-mono">{l.hours} Saat</td>
-                        <td className="py-2 px-3 text-right font-mono">₺{l.hourlyRate.toFixed(2)}</td>
-                        <td className="py-2 px-3 text-right font-mono">%{l.vatRate}</td>
-                        <td className="py-2 px-3 text-right font-bold text-slate-900 font-mono">₺{l.total.toFixed(2)}</td>
+                        <td className="py-1.5 px-3 font-semibold text-purple-900">İşçilik: {l.operationName}</td>
+                        <td className="py-1.5 px-2 text-slate-500">Usta İşçilik</td>
+                        <td className="py-1.5 px-2 text-center font-mono">{l.hours} Saat</td>
+                        <td className="py-1.5 px-3 text-right font-mono">₺{(Number(l.hourlyRate) || 0).toFixed(2)}</td>
+                        <td className="py-1.5 px-2 text-center font-mono">%{l.vatRate ?? 20}</td>
+                        <td className="py-1.5 px-3 text-right font-bold text-slate-900 font-mono">
+                          ₺{(Number(l.total ?? (l as any).totalPrice) || 0).toFixed(2)}
+                        </td>
                       </tr>
                     ))}
+                    {(!selectedRecord.parts || selectedRecord.parts.length === 0) && (!selectedRecord.labors || selectedRecord.labors.length === 0) && (
+                      <tr>
+                        <td colSpan={6} className="py-3 px-3 text-center text-slate-400 italic">
+                          Kayıtlı yedek parça ve işçilik kalemi bulunmamaktadır (Yalnız Kontrol / Kabul).
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
 
-              {/* Totals */}
-              <div className="flex justify-end mb-8">
-                <div className="w-64 space-y-1 text-xs">
-                  <div className="flex justify-between font-semibold text-slate-600">
+              {/* Financial Totals Box */}
+              <div className="flex justify-end mb-5">
+                <div className="w-72 bg-slate-50 p-3 rounded-xl border border-slate-300 space-y-1 text-xs">
+                  <div className="flex justify-between text-slate-600">
                     <span>Yedek Parça Toplamı:</span>
-                    <span className="font-mono">₺{selectedRecord.partsTotal.toFixed(2)}</span>
+                    <span className="font-mono font-bold">₺{(Number(selectedRecord.partsTotal) || 0).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between font-semibold text-slate-600">
-                    <span>İşçilik Toplamı:</span>
-                    <span className="font-mono">₺{selectedRecord.laborTotal.toFixed(2)}</span>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Ustalık & İşçilik Toplamı:</span>
+                    <span className="font-mono font-bold">₺{(Number(selectedRecord.laborTotal) || 0).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between font-semibold text-slate-600">
+                  <div className="flex justify-between text-slate-600">
                     <span>Hesaplanan KDV (%20):</span>
-                    <span className="font-mono">₺{selectedRecord.totalVat.toFixed(2)}</span>
+                    <span className="font-mono font-bold">₺{(Number(selectedRecord.totalVat) || 0).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between font-black text-sm text-purple-950 pt-2 border-t border-slate-300">
-                    <span>GENEL TOPLAM:</span>
-                    <span className="font-mono">₺{selectedRecord.grandTotal.toFixed(2)}</span>
+                  <div
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="flex justify-between items-center font-black text-sm text-slate-950 p-2.5 rounded-lg border mt-1 print:bg-[#83b8ff]"
+                  >
+                    <span className="text-[11px] font-black uppercase tracking-wide text-slate-900">İŞLEM TUTARI / BAKİYE:</span>
+                    <span className="font-mono text-base font-black text-slate-950">₺{(Number(selectedRecord.grandTotal) || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
 
+              {/* Terms & Legal Notice */}
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[9.5px] text-slate-500 space-y-0.5 mb-6">
+                <p className="font-bold text-slate-700 uppercase">Yasal Şartlar, Garanti ve Teslimat Koşulları:</p>
+                {printDocType === "reception" && (
+                  <>
+                    <p>1. Servise teslim edilen aracın içindeki kıymetli eşya ve evraklardan servis sorumlu değildir.</p>
+                    <p>2. Teslim alma tarihinden itibaren 90 gün içerisinde alınmayan araçlar için otopark ücreti tahakkuk ettirilir.</p>
+                    <p>3. Müşteri onayı alınmadan ilave parça değişimi ve onarım başlatılmaz.</p>
+                  </>
+                )}
+                {printDocType === "work_order" && (
+                  <>
+                    <p>1. Bu form atölye teknik personeli için yetkili çalışma ve montaj emridir.</p>
+                    <p>2. Sökülen eski parçalar müşteri aksini beyan etmediği takdirde atölye bertaraf prosedürüne tabi tutulur.</p>
+                  </>
+                )}
+                {printDocType === "quote" && (
+                  <>
+                    <p>1. İşbu fiyat ve parça teklifi düzenlenme tarihinden itibaren 7 iş günü geçerlidir.</p>
+                    <p>2. Teklif edilen parçalar üretici onaylı olup fiyatlara yasal KDV dahildir.</p>
+                  </>
+                )}
+                {printDocType === "delivery" && (
+                  <>
+                    <p>1. Araç yukarıda dökümü yapılan tüm işlemler eksiksiz yapılarak ve test sürüşüyle sağlam teslim edilmiştir.</p>
+                    <p>2. Değişen orijinal yedek parçalar 1 yıl, yapılan mekanik işçilikler 6 ay / 10.000 KM servis garantimiz altındadır.</p>
+                  </>
+                )}
+              </div>
+
               {/* Signatures */}
-              <div className="grid grid-cols-2 gap-12 pt-8 border-t border-slate-200 text-xs">
-                <div className="text-center">
-                  <p className="font-bold text-slate-700">Teslim Eden (Müşteri)</p>
-                  <p className="text-slate-500 mt-1">{selectedRecord.contactName}</p>
-                  <div className="mt-12 border-b border-slate-300 w-48 mx-auto" />
-                  <span className="text-[10px] text-slate-400">İmza</span>
+              <div className="grid grid-cols-2 gap-8 pt-4 border-t-2 border-slate-300 text-xs avoid-break">
+                <div className="text-center space-y-1">
+                  <p className="font-black text-slate-800">Teslim Eden (Müşteri / Araç Sahibi)</p>
+                  <p className="text-[11px] text-slate-600 font-semibold">{selectedRecord.contactName}</p>
+                  <div className="h-14 flex items-end justify-center">
+                    <div className="border-b border-dashed border-slate-400 w-44 mx-auto" />
+                  </div>
+                  <span className="text-[10px] text-slate-400 block">İmza</span>
                 </div>
-                <div className="text-center">
-                  <p className="font-bold text-slate-700">Teslim Alan (Servis Danışmanı / Usta)</p>
-                  <p className="text-slate-500 mt-1">{selectedRecord.assignedTechnician}</p>
-                  <div className="mt-12 border-b border-slate-300 w-48 mx-auto" />
-                  <span className="text-[10px] text-slate-400">İmza & Kaşe</span>
+                <div className="text-center space-y-1">
+                  <p className="font-black text-slate-800">Teslim Alan (Servis Danışmanı / Usta)</p>
+                  <p className="text-[11px] text-slate-600 font-semibold">{selectedRecord.assignedTechnician}</p>
+                  <div className="h-14 flex items-end justify-center">
+                    <div className="border-b border-dashed border-slate-400 w-44 mx-auto" />
+                  </div>
+                  <span className="text-[10px] text-slate-400 block">İmza & Kaşe</span>
                 </div>
+              </div>
+
+              {/* Bottom A4 Standard Sheet Footer */}
+              <div className="mt-6 pt-3 border-t border-slate-200 flex justify-between items-center text-[9px] text-slate-400">
+                <span>Muavin ERP • Oto Servis & Bakım Yönetim Sistemi</span>
+                <span>Belge Doğrulama Kodu: {selectedRecord.serviceNo}-{selectedRecord.plateNumber}</span>
+                <span>A4 Standart Formatı • Sayfa 1 / 1</span>
               </div>
             </div>
           ) : (

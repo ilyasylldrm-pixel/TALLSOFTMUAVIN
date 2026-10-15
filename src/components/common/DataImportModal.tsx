@@ -1081,7 +1081,7 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
                                     .join(" / ") || "-"}
                                 </td>
                                 <td className="p-2.5 text-right font-mono font-bold text-slate-900">
-                                  ₺{Number((r.data as Partial<Contact>).balance || 0).toLocaleString("tr-TR")}
+                                  ₺{Number((r.data as Partial<Contact>).balance || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                               </>
                             ) : (
@@ -1098,10 +1098,10 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
                                   {(r.data as Partial<Product>).unit || "-"}
                                 </td>
                                 <td className="p-2.5 text-right font-mono text-slate-700">
-                                  ₺{Number((r.data as Partial<Product>).buyPrice || 0).toLocaleString("tr-TR")}
+                                  ₺{Number((r.data as Partial<Product>).buyPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                                 <td className="p-2.5 text-right font-mono font-bold text-slate-900">
-                                  ₺{Number((r.data as Partial<Product>).sellPrice || 0).toLocaleString("tr-TR")}
+                                  ₺{Number((r.data as Partial<Product>).sellPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                                 <td className="p-2.5 text-right font-mono text-slate-600">
                                   %{(r.data as Partial<Product>).vatRate ?? 20}

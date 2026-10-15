@@ -14,8 +14,10 @@ import {
   Sparkles,
   Settings,
   X,
+  Lock,
 } from "lucide-react";
-import { IndustrySector } from "../../types";
+import { IndustrySector, isAdminOrSysAdmin } from "../../types";
+import { UserProfile } from "../AuthModal";
 import { saveStoredData } from "../../utils/storage";
 import { useTheme } from "../../context/ThemeContext";
 
@@ -25,6 +27,7 @@ interface SectorsModuleProps {
   onSelectActiveSector: (sectorId: string) => void;
   onNavigateToProduction: () => void;
   onUpdateSectors: (sectors: IndustrySector[], activeId: string) => void;
+  currentUser?: UserProfile | null;
 }
 
 export const SectorsModule: React.FC<SectorsModuleProps> = ({
@@ -33,8 +36,10 @@ export const SectorsModule: React.FC<SectorsModuleProps> = ({
   onSelectActiveSector,
   onNavigateToProduction,
   onUpdateSectors,
+  currentUser,
 }) => {
   const { theme } = useTheme();
+  const canDefineSectorModule = isAdminOrSysAdmin(currentUser);
   const [sectors, setSectors] = useState<IndustrySector[]>(initialSectors);
   const [activeSectorId, setActiveSectorId] = useState<string>(initialActiveId || "catering");
   const [isNewSectorModalOpen, setIsNewSectorModalOpen] = useState(false);
@@ -73,6 +78,10 @@ export const SectorsModule: React.FC<SectorsModuleProps> = ({
 
   const handleCreateSector = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canDefineSectorModule) {
+      alert("Yeni sektör / alt modül tanımlama yetkisi sadece Admin ve Sistem Yöneticisine aittir.");
+      return;
+    }
     if (!newSectorName.trim()) return;
 
     const stages = newSectorStages.split(",").map((s) => s.trim()).filter(Boolean);
@@ -123,15 +132,22 @@ export const SectorsModule: React.FC<SectorsModuleProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsNewSectorModalOpen(true)}
-              style={{ backgroundColor: theme.primaryColor }}
-              className="text-white font-semibold px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 hover:opacity-90"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Yeni Sektör Tanımla</span>
-            </button>
+            {canDefineSectorModule ? (
+              <button
+                type="button"
+                onClick={() => setIsNewSectorModalOpen(true)}
+                style={{ backgroundColor: theme.primaryColor }}
+                className="text-white font-semibold px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 hover:opacity-90"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Yeni Sektör Tanımla</span>
+              </button>
+            ) : (
+              <div className="bg-amber-500/15 border border-amber-400/30 text-amber-200 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5" />
+                <span>Yeni Sektör Tanımlama: Sadece Admin & Sistem Yöneticisi</span>
+              </div>
+            )}
             <button
               type="button"
               onClick={onNavigateToProduction}

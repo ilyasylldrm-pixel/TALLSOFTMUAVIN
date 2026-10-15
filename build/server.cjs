@@ -314,6 +314,11 @@ function digitsOnly(value) {
   return String(value ?? "").replace(/\D/g, "");
 }
 function normalizeMysoftTenantIdentifier(value) {
+  if (value && typeof value === "object") {
+    const rec = value;
+    const candidate = rec.tenantIdentifierNumber ?? rec.taxNumber ?? rec.vknTckn ?? rec.vkn ?? rec.tckn;
+    if (candidate) return normalizeMysoftTenantIdentifier(candidate);
+  }
   const digits = digitsOnly(value);
   return VKN_TCKN.test(digits) ? digits : void 0;
 }
@@ -321,6 +326,72 @@ function isMysoftTenantScopeError(error) {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   const details = error && typeof error === "object" && "details" in error ? JSON.stringify(error.details || "") : "";
   return /00164|firma kaydı bulunamadı/i.test(`${message} ${details}`);
+}
+
+// src/services/mysoftInvoiceNumber.ts
+function parseInvoiceDocNo(docNo) {
+  if (!docNo || typeof docNo !== "string") return null;
+  const clean = docNo.trim().toUpperCase();
+  const gibMatch = clean.match(/^([A-Z0-9]{3})(20\d{2})(\d{9})$/);
+  if (gibMatch) {
+    return {
+      prefix: gibMatch[1],
+      year: parseInt(gibMatch[2], 10),
+      sequence: parseInt(gibMatch[3], 10),
+      padLength: 9,
+      raw: clean
+    };
+  }
+  const tolerantMatch = clean.match(/^([A-Z0-9]{2,5})(20\d{2})(\d+)$/);
+  if (tolerantMatch) {
+    return {
+      prefix: tolerantMatch[1],
+      year: parseInt(tolerantMatch[2], 10),
+      sequence: parseInt(tolerantMatch[3], 10),
+      padLength: Math.max(9, tolerantMatch[3].length),
+      raw: clean
+    };
+  }
+  return null;
+}
+function formatInvoiceDocNo(prefix, year, sequence, padLength = 9) {
+  const cleanPrefix = (prefix || "GIB").trim().toUpperCase().slice(0, 3);
+  const cleanYear = Number.isInteger(year) && year >= 2e3 ? year : (/* @__PURE__ */ new Date()).getFullYear();
+  const cleanSeq = Math.max(1, Math.trunc(sequence));
+  const paddedSeq = String(cleanSeq).padStart(padLength, "0");
+  return `${cleanPrefix}${cleanYear}${paddedSeq}`;
+}
+function calculateNextInvoiceNumber(options) {
+  const year = Number.isInteger(options.targetYear) && options.targetYear >= 2e3 ? options.targetYear : (/* @__PURE__ */ new Date()).getFullYear();
+  const parsedList = options.existingDocNos.map((doc) => parseInvoiceDocNo(doc)).filter((item) => item !== null);
+  let prefix = (options.targetPrefix || "").trim().toUpperCase();
+  if (!prefix && parsedList.length > 0) {
+    prefix = parsedList[0].prefix;
+  }
+  if (!prefix) {
+    prefix = (options.fallbackPrefix || "GIB").trim().toUpperCase();
+  }
+  const matching = parsedList.filter(
+    (item) => item.prefix === prefix && item.year === year
+  );
+  let maxSequence = 0;
+  let lastMatchingDocNo = void 0;
+  for (const item of matching) {
+    if (item.sequence > maxSequence) {
+      maxSequence = item.sequence;
+      lastMatchingDocNo = item.raw;
+    }
+  }
+  const nextSequence = maxSequence + 1;
+  const nextDocNo = formatInvoiceDocNo(prefix, year, nextSequence);
+  return {
+    prefix,
+    year,
+    lastDocNo: lastMatchingDocNo,
+    lastSequence: maxSequence,
+    nextSequence,
+    nextDocNo
+  };
 }
 
 // src/services/mysoftEdocument.ts
@@ -674,7 +745,7 @@ function asObjectArray(value) {
 function stringOrEmpty(value) {
   return typeof value === "string" ? value.trim() : "";
 }
-function positiveInt(value) {
+function positiveInt2(value) {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : void 0;
 }
@@ -690,8 +761,8 @@ function parseTokenIdentity(accessToken) {
     return {
       defaultTenantId: Number.isInteger(defaultTenantId) ? defaultTenantId : void 0,
       hasDefaultTenant: Number.isInteger(defaultTenantId) && defaultTenantId > 0,
-      businessPartnerId: positiveInt(raw.BusinessPartnerId),
-      applicationAccessId: positiveInt(raw.ApplicationAccessId)
+      businessPartnerId: positiveInt2(raw.BusinessPartnerId),
+      applicationAccessId: positiveInt2(raw.ApplicationAccessId)
     };
   } catch {
     return void 0;
@@ -938,6 +1009,23 @@ var MysoftEdocumentClient = class {
    * Only a 10/11-digit VKN/TCKN is forwarded; portal tenant ids are dropped. */
   effectiveTenant(value) {
     return normalizeMysoftTenantIdentifier(value) || normalizeMysoftTenantIdentifier(this.config.tenantIdentifierNumber);
+  }
+  /**
+   * Resolve effective tenant VKN/TCKN asynchronously. If explicit value and
+   * MYSOFT_TENANT_IDENTIFIER_NUMBER are missing, auto-resolves from the API's linked tenant list.
+   */
+  async resolveEffectiveTenant(value) {
+    const direct = this.effectiveTenant(value);
+    if (direct) return direct;
+    try {
+      const tenantsPayload = await this.listTenants({ limit: 5 });
+      const unwrapped = unwrapMysoftData(tenantsPayload);
+      const rows = asObjectArray(unwrapped);
+      const firstTax = rows.map((r) => normalizeMysoftTenantIdentifier(r.taxNumber || r.vknTckn || r.identifierNumber)).find(Boolean);
+      if (firstTax) return firstTax;
+    } catch {
+    }
+    return void 0;
   }
   /** Execute one of the explicitly published non-invoice operations. */
   requestDocumentOperation(operation, options = {}) {
@@ -1207,6 +1295,179 @@ var MysoftEdocumentClient = class {
     };
   }
   /**
+   * Fetch all document prefixes and sequential consecutive invoice numbers for a tenant VKN/TCKN.
+   * Returns e-Fatura & e-Arşiv series, default prefixes, and computed next consecutive invoice numbers.
+   */
+  async getTenantDocumentNumbersWithSequence(vknTckn) {
+    const vkn = normalizeMysoftTenantIdentifier(vknTckn) || String(vknTckn || "").trim();
+    const [numSettled, setSettled, outboxSettled] = await Promise.allSettled([
+      this.getDocumentNumberList(vkn),
+      this.getNumeratorSetList(vkn),
+      this.listOutgoing({ tenantIdentifierNumber: vkn, limit: 50 })
+    ]);
+    const prefixes = numSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(numSettled.value)) : [];
+    const numeratorSets = setSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(setSettled.value)) : [];
+    const outboxDocs = outboxSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(outboxSettled.value)) : [];
+    const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+    const maxOutboxSeqByPrefix = {};
+    let latestOutboxEFaturaPrefix = "";
+    let latestOutboxEArsivPrefix = "";
+    for (const doc of outboxDocs) {
+      const rawDocNo = String(doc.docNo ?? doc.documentNo ?? doc.invoiceNumber ?? "").trim();
+      const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(rawDocNo);
+      if (match) {
+        const pfx = match[1].toUpperCase();
+        const yr = Number(match[2]);
+        const seq = parseInt(match[3], 10);
+        if (yr === currentYear && !isNaN(seq)) {
+          if (!maxOutboxSeqByPrefix[pfx] || seq > maxOutboxSeqByPrefix[pfx]) {
+            maxOutboxSeqByPrefix[pfx] = seq;
+          }
+        }
+        const docTypeStr = String(
+          doc.eDocumentType ?? doc.edocumentType ?? doc.profile ?? doc.documentType ?? ""
+        ).toUpperCase();
+        const isEArsivDoc = docTypeStr.includes("ARSIV") || docTypeStr === "2";
+        if (isEArsivDoc) {
+          if (!latestOutboxEArsivPrefix) latestOutboxEArsivPrefix = pfx;
+        } else {
+          if (!latestOutboxEFaturaPrefix) latestOutboxEFaturaPrefix = pfx;
+        }
+      }
+    }
+    const isEArsivRow = (p) => {
+      const typeVal = String(p.edocumentType ?? p.eDocumentType ?? p.documentType ?? "").toUpperCase();
+      return typeVal === "2" || typeVal.includes("ARSIV");
+    };
+    const isEFaturaRow = (p) => {
+      const typeVal = String(p.edocumentType ?? p.eDocumentType ?? p.documentType ?? "").toUpperCase();
+      if (!typeVal) return true;
+      return typeVal === "1" || typeVal === "0" || typeVal.includes("FATURA") && !typeVal.includes("ARSIV");
+    };
+    const eFaturaRows = prefixes.filter(isEFaturaRow);
+    const defaultEFatura = eFaturaRows.find((r) => r.isDefault === true && r.isPassive !== true) || eFaturaRows.find((r) => r.isPassive !== true) || eFaturaRows[0] || numeratorSets.find((r) => isEFaturaRow(r) && typeof r.prefix === "string" && r.prefix.trim());
+    const eFaturaPrefix = (typeof defaultEFatura?.prefix === "string" && defaultEFatura.prefix.trim() || latestOutboxEFaturaPrefix || "GIB").toUpperCase().slice(0, 3);
+    const apiEFatCurNum = Number(
+      defaultEFatura?.currentNumber ?? defaultEFatura?.lastNumber ?? defaultEFatura?.sequenceNumber ?? 0
+    ) || 0;
+    const eFaturaCurNum = Math.max(apiEFatCurNum, maxOutboxSeqByPrefix[eFaturaPrefix] || 0);
+    const eFaturaSequence = eFaturaCurNum + 1;
+    const eFaturaNextNumber = `${eFaturaPrefix}${currentYear}${String(eFaturaSequence).padStart(9, "0")}`;
+    const eArsivRows = prefixes.filter(isEArsivRow);
+    const defaultEArsiv = eArsivRows.find((r) => r.isDefault === true && r.isPassive !== true) || eArsivRows.find((r) => r.isPassive !== true) || eArsivRows[0] || numeratorSets.find((r) => isEArsivRow(r) && typeof r.prefix === "string" && r.prefix.trim());
+    const eArsivPrefix = (typeof defaultEArsiv?.prefix === "string" && defaultEArsiv.prefix.trim() || latestOutboxEArsivPrefix || "EAR").toUpperCase().slice(0, 3);
+    const apiEArsCurNum = Number(
+      defaultEArsiv?.currentNumber ?? defaultEArsiv?.lastNumber ?? defaultEArsiv?.sequenceNumber ?? 0
+    ) || 0;
+    const eArsivCurNum = Math.max(apiEArsCurNum, maxOutboxSeqByPrefix[eArsivPrefix] || 0);
+    const eArsivSequence = eArsivCurNum + 1;
+    const eArsivNextNumber = `${eArsivPrefix}${currentYear}${String(eArsivSequence).padStart(9, "0")}`;
+    const enrichedPrefixes = prefixes.map((p) => {
+      const pfx = typeof p.prefix === "string" ? p.prefix.trim().toUpperCase().slice(0, 3) : "";
+      const rowCur = Math.max(
+        Number(p.currentNumber ?? p.lastNumber ?? p.sequenceNumber ?? 0) || 0,
+        pfx ? maxOutboxSeqByPrefix[pfx] || 0 : 0
+      );
+      return {
+        ...p,
+        prefix: pfx || p.prefix,
+        currentNumber: rowCur,
+        nextNumber: pfx ? `${pfx}${currentYear}${String(rowCur + 1).padStart(9, "0")}` : void 0
+      };
+    });
+    return {
+      vknTckn: vkn,
+      eFaturaPrefix,
+      eFaturaNextNumber,
+      eFaturaSequence,
+      eArsivPrefix,
+      eArsivNextNumber,
+      eArsivSequence,
+      prefixes: enrichedPrefixes
+    };
+  }
+  /**
+   * Belirtilen mükellef (tenant) için Mysoft giden faturalarını ve portal numaratörlerini
+   * kontrol ederek bir sonraki fatura numarasını hesaplar.
+   * Örn: Son fatura ABC2026000000206 ise sıradaki ABC2026000000207 olur.
+   */
+  async getNextInvoiceNumber(options = {}) {
+    const tenant = await this.resolveEffectiveTenant(options.tenantIdentifierNumber) || "";
+    const rawType = String(options.eDocumentType || "EFATURA").toUpperCase().replace(/[ _-]/g, "");
+    const isEarsiv = rawType.includes("ARSIV");
+    const canonicalEDocType = isEarsiv ? "EARSIVFATURA" : "EFATURA";
+    const edocumentTypeCode = isEarsiv ? 2 : 1;
+    const year = Number.isInteger(options.year) && options.year >= 2e3 ? options.year : (/* @__PURE__ */ new Date()).getFullYear();
+    let resolvedPrefix = typeof options.prefix === "string" ? options.prefix.trim().toUpperCase() : "";
+    if (!resolvedPrefix && tenant) {
+      try {
+        const numRes = await this.getDocumentNumberList(tenant);
+        const prefixes = asObjectArray(unwrapMysoftData(numRes));
+        const typeCodeStr = String(edocumentTypeCode);
+        const matching = prefixes.filter((row) => {
+          const rowType = String(row.edocumentType ?? "");
+          return !rowType || rowType === typeCodeStr;
+        });
+        const defaultRow = matching.find((row) => row.isDefault === true && row.isPassive !== true) || matching.find((row) => row.isPassive !== true) || matching[0];
+        if (typeof defaultRow?.prefix === "string" && defaultRow.prefix.trim()) {
+          resolvedPrefix = defaultRow.prefix.trim().toUpperCase();
+        }
+      } catch {
+      }
+    }
+    let outboxList = [];
+    if (tenant) {
+      try {
+        const outboxRes = await this.listOutgoing({
+          tenantIdentifierNumber: tenant,
+          limit: 100,
+          eDocumentType: canonicalEDocType
+        });
+        outboxList = asObjectArray(unwrapMysoftData(outboxRes));
+      } catch {
+        try {
+          const outboxRes = await this.listOutgoing({
+            tenantIdentifierNumber: tenant,
+            limit: 100
+          });
+          outboxList = asObjectArray(unwrapMysoftData(outboxRes));
+        } catch {
+        }
+      }
+    }
+    if (!resolvedPrefix && outboxList.length > 0) {
+      for (const item of outboxList) {
+        const docNo = typeof item.docNo === "string" ? item.docNo.trim().toUpperCase() : "";
+        const parsed = parseInvoiceDocNo(docNo);
+        if (parsed?.prefix) {
+          resolvedPrefix = parsed.prefix;
+          break;
+        }
+      }
+    }
+    if (!resolvedPrefix) {
+      resolvedPrefix = isEarsiv ? "EAR" : "GIB";
+    }
+    const existingDocNos = outboxList.map((item) => typeof item.docNo === "string" ? item.docNo : void 0).filter((doc) => typeof doc === "string" && doc.trim().length > 0);
+    const calcResult = calculateNextInvoiceNumber({
+      existingDocNos,
+      targetPrefix: resolvedPrefix,
+      targetYear: year,
+      fallbackPrefix: isEarsiv ? "EAR" : "GIB"
+    });
+    return {
+      tenantIdentifierNumber: tenant || void 0,
+      prefix: calcResult.prefix,
+      year: calcResult.year,
+      lastInvoiceNumber: calcResult.lastDocNo,
+      lastSequence: calcResult.lastSequence,
+      nextSequence: calcResult.nextSequence,
+      nextInvoiceNumber: calcResult.nextDocNo,
+      eDocumentType: canonicalEDocType,
+      totalOutgoingChecked: outboxList.length
+    };
+  }
+  /**
    * Check if a recipient VKN/TCKN is a registered GİB e-Fatura taxpayer.
    * Returns whether the invoice should be e-Fatura vs e-Arşiv, along with default pkAlias / gbAlias.
    */
@@ -1430,10 +1691,19 @@ var MysoftEdocumentClient = class {
   async enrichInvoiceOutboxDefaults(payload) {
     if (!isObject(payload) || Array.isArray(payload)) return payload;
     const body = { ...payload };
-    const tenant = typeof body.tenantIdentifierNumber === "string" ? normalizeMysoftTenantIdentifier(body.tenantIdentifierNumber) || body.tenantIdentifierNumber.trim() : "";
+    let tenant = typeof body.tenantIdentifierNumber === "string" ? normalizeMysoftTenantIdentifier(body.tenantIdentifierNumber) || body.tenantIdentifierNumber.trim() : "";
+    if (!tenant) {
+      const resolved = await this.resolveEffectiveTenant();
+      if (resolved) {
+        tenant = resolved;
+        body.tenantIdentifierNumber = resolved;
+      }
+    }
     if (!tenant) return body;
     const needsXslt = !stringOrEmpty(body.xsltName) && !stringOrEmpty(body.xsltSetCode);
-    const needsPrefix = !stringOrEmpty(body.prefix) && !stringOrEmpty(body.numeratorSetCode) && !stringOrEmpty(body.docNo);
+    const currentPrefix = stringOrEmpty(body.prefix).toUpperCase();
+    const isGenericFallbackPrefix = currentPrefix === "GIB" || currentPrefix === "EAR";
+    const needsPrefix = (!currentPrefix || isGenericFallbackPrefix) && !stringOrEmpty(body.numeratorSetCode) && !stringOrEmpty(body.docNo);
     if (!needsXslt && !needsPrefix) return body;
     try {
       const defaults = await this.resolveInvoiceDesignDefaults({
@@ -1448,7 +1718,7 @@ var MysoftEdocumentClient = class {
         }
       }
       if (needsPrefix) {
-        if (defaults.numeratorSetCode) {
+        if (!currentPrefix && defaults.numeratorSetCode) {
           body.numeratorSetCode = defaults.numeratorSetCode;
         } else if (defaults.prefix) {
           body.prefix = defaults.prefix;
@@ -1885,7 +2155,7 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
     return result;
   };
   const tenantFrom = (req) => normalizeMysoftTenantIdentifier(
-    queryText(req, "tenantIdentifierNumber") || textParam(req.body?.tenantIdentifierNumber)
+    req.headers["x-tenant-identifier"] || req.headers["x-mysoft-tenant"] || queryText(req, "tenantIdentifierNumber") || queryText(req, "vkn") || queryText(req, "vknTckn") || textParam(req.body?.tenantIdentifierNumber) || textParam(req.body?.vkn) || textParam(req.body?.vknTckn)
   );
   const familyFrom = (req) => canonicalMysoftDocumentFamily(
     queryText(req, "family") || queryText(req, "documentFamily") || textParam(req.body?.family)
@@ -1972,6 +2242,14 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
         eDocumentType,
         isInternetSales
       });
+    })
+  );
+  router.get(
+    "/tenants/:identifierNumber/document-numbers",
+    run((req) => {
+      const identifierNumber = textParam(req.params.identifierNumber);
+      if (!identifierNumber) throw new InvalidMysoftRequestError("identifierNumber is required");
+      return client.getTenantDocumentNumbersWithSequence(identifierNumber);
     })
   );
   router.get(
@@ -2144,6 +2422,51 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
     runBinary(async (req) => {
       const format = (queryText(req, "format") || "html").toLowerCase() === "pdf" ? "pdf" : "html";
       return client.getInvoiceOutboxDraftPreview(req.body, format);
+    })
+  );
+  router.get(
+    "/next-invoice-number",
+    run((req) => {
+      const tenant = tenantFrom(req);
+      const eDocumentType = queryText(req, "eDocumentType") || queryText(req, "docType");
+      const prefix = queryText(req, "prefix");
+      const year = positiveInt(queryText(req, "year"));
+      return client.getNextInvoiceNumber({
+        tenantIdentifierNumber: tenant,
+        eDocumentType,
+        prefix,
+        year
+      });
+    })
+  );
+  router.get(
+    "/e-documents/next-invoice-number",
+    run((req) => {
+      const tenant = tenantFrom(req);
+      const eDocumentType = queryText(req, "eDocumentType") || queryText(req, "docType");
+      const prefix = queryText(req, "prefix");
+      const year = positiveInt(queryText(req, "year"));
+      return client.getNextInvoiceNumber({
+        tenantIdentifierNumber: tenant,
+        eDocumentType,
+        prefix,
+        year
+      });
+    })
+  );
+  router.get(
+    "/tenant/:vkn/next-invoice-number",
+    run((req) => {
+      const tenant = normalizeMysoftTenantIdentifier(req.params.vkn) || tenantFrom(req);
+      const eDocumentType = queryText(req, "eDocumentType") || queryText(req, "docType");
+      const prefix = queryText(req, "prefix");
+      const year = positiveInt(queryText(req, "year"));
+      return client.getNextInvoiceNumber({
+        tenantIdentifierNumber: tenant,
+        eDocumentType,
+        prefix,
+        year
+      });
     })
   );
   router.get(
@@ -3187,6 +3510,10 @@ function maskToken(token) {
 var GitHubSyncService = class {
   constructor() {
     this.configCache = null;
+    const cfg = this.getConfig();
+    this.ensureGitInitialized(cfg.repoUrl, cfg.branch || "main").catch((err) => {
+      console.warn("[GitHubSync] Background git init warning:", err?.message || err);
+    });
   }
   getConfig() {
     try {
@@ -3232,16 +3559,51 @@ var GitHubSyncService = class {
     }
     return updated;
   }
+  async ensureGitInitialized(repoUrl, branch = "main") {
+    const cwd = process.cwd();
+    try {
+      await execPromise("git rev-parse --is-inside-work-tree", { cwd });
+    } catch {
+      await execPromise("git init", { cwd });
+      await execPromise('git config user.name "Muavin"', { cwd });
+      await execPromise('git config user.email "ilyasylldrm@gmail.com"', { cwd });
+      await execPromise(`git branch -M ${branch}`, { cwd });
+    }
+    try {
+      await execPromise("git remote get-url origin", { cwd });
+    } catch {
+      await execPromise(`git remote add origin "${repoUrl}"`, { cwd });
+    }
+    try {
+      await execPromise("git rev-parse --verify HEAD", { cwd });
+    } catch {
+      try {
+        await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+        await execPromise(`git reset --mixed origin/${branch}`, { cwd });
+        await execPromise(`git branch -M ${branch}`, { cwd });
+        await execPromise(`git branch --set-upstream-to=origin/${branch} ${branch}`, { cwd }).catch(() => {
+        });
+      } catch (e) {
+        console.warn("[GitHubSync] Initial origin fetch/reset warning:", e);
+      }
+    }
+  }
   async getStatus() {
     const config = this.getConfig();
+    const owner = config.owner || "ilyasylldrm-pixel";
+    const repo = config.repo || "TALLSOFTMUAVIN";
+    const repoUrl = config.repoUrl || `https://github.com/${owner}/${repo}.git`;
     let isClean = true;
     let uncommittedCount = 0;
     const uncommittedFiles = [];
     let currentBranch = config.branch || "main";
     let lastCommit = void 0;
+    let remoteCommit = void 0;
+    let aheadCount = 0;
+    let behindCount = 0;
     let gitInitialized = false;
     try {
-      await execPromise("git rev-parse --is-inside-work-tree", { cwd: process.cwd() });
+      await this.ensureGitInitialized(repoUrl, currentBranch);
       gitInitialized = true;
       try {
         const { stdout: branchOut } = await execPromise("git rev-parse --abbrev-ref HEAD", { cwd: process.cwd() });
@@ -3253,7 +3615,7 @@ var GitHubSyncService = class {
         const lines = statusOut.split("\n").filter((l) => l.trim().length > 0);
         uncommittedCount = lines.length;
         isClean = uncommittedCount === 0;
-        uncommittedFiles.push(...lines.slice(0, 10).map((l) => l.trim()));
+        uncommittedFiles.push(...lines.slice(0, 15).map((l) => l.trim()));
       } catch {
       }
       try {
@@ -3273,15 +3635,39 @@ var GitHubSyncService = class {
         }
       } catch {
       }
+      try {
+        const { stdout: remoteLogOut } = await execPromise(
+          `git log origin/${currentBranch} -1 --pretty=format:"%H|%h|%s|%an|%ad" --date=iso`,
+          { cwd: process.cwd() }
+        );
+        const rParts = remoteLogOut.split("|");
+        if (rParts.length >= 5) {
+          remoteCommit = {
+            sha: rParts[0],
+            shortSha: rParts[1],
+            message: rParts[2],
+            author: rParts[3],
+            date: rParts[4]
+          };
+        }
+        const { stdout: revListOut } = await execPromise(
+          `git rev-list --left-right --count HEAD...origin/${currentBranch}`,
+          { cwd: process.cwd() }
+        );
+        const counts = revListOut.trim().split(/\s+/);
+        if (counts.length === 2) {
+          aheadCount = parseInt(counts[0], 10) || 0;
+          behindCount = parseInt(counts[1], 10) || 0;
+        }
+      } catch {
+      }
     } catch {
       gitInitialized = false;
     }
-    const owner = config.owner || "ilyasylldrm-pixel";
-    const repo = config.repo || "TALLSOFTMUAVIN";
     return {
       initialized: gitInitialized,
       branch: currentBranch,
-      repoUrl: config.repoUrl || `https://github.com/${owner}/${repo}.git`,
+      repoUrl,
       owner,
       repo,
       hasToken: Boolean(config.token && config.token.length > 5),
@@ -3289,40 +3675,121 @@ var GitHubSyncService = class {
       isClean,
       uncommittedCount,
       uncommittedFiles,
+      aheadCount,
+      behindCount,
       lastCommit,
+      remoteCommit,
       lastSyncedAt: config.lastSyncedAt,
       actionsUrl: `https://github.com/${owner}/${repo}/actions`,
       repoWebUrl: `https://github.com/${owner}/${repo}`,
       deployUrl: "https://tallsoft.org"
     };
   }
-  async publishOrSync(params) {
+  async pullFromGitHub(params) {
     const config = this.getConfig();
     const token = params?.token?.trim() || config.token;
     const repoUrl = params?.repoUrl?.trim() || config.repoUrl;
-    const commitMsg = params?.commitMessage?.trim() || `feat: Yay\u0131nlama ve senkronizasyon (${(/* @__PURE__ */ new Date()).toLocaleString("tr-TR")})`;
-    if (!token) {
-      throw new Error(
-        "GitHub Personal Access Token (PAT) bulunamad\u0131. L\xFCtfen Ayarlar veya Yay\u0131nla panelinden GitHub Token bilginizi kaydedin."
-      );
-    }
-    let owner = config.owner;
-    let repo = config.repo;
+    const branch = config.branch || "main";
+    let owner = config.owner || "ilyasylldrm-pixel";
+    let repo = config.repo || "TALLSOFTMUAVIN";
     const match = repoUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/);
     if (match) {
       owner = match[1];
       repo = match[2];
     }
     const cwd = process.cwd();
+    const cleanUrl = `https://github.com/${owner}/${repo}.git`;
+    const remoteUrl = token ? `https://${owner}:${token}@github.com/${owner}/${repo}.git` : cleanUrl;
+    await this.ensureGitInitialized(cleanUrl, branch);
     try {
-      await execPromise("git rev-parse --is-inside-work-tree", { cwd });
-    } catch {
-      await execPromise("git init", { cwd });
-      await execPromise('git config user.name "Muavin"', { cwd });
-      await execPromise('git config user.email "ilyasylldrm@gmail.com"', { cwd });
+      await execPromise(`git remote set-url origin "${remoteUrl}"`, { cwd });
+      await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+      let hasHead = false;
+      try {
+        await execPromise("git rev-parse --verify HEAD", { cwd });
+        hasHead = true;
+      } catch {
+        hasHead = false;
+      }
+      if (!hasHead) {
+        await execPromise(`git reset --mixed origin/${branch}`, { cwd });
+        await execPromise(`git branch -M ${branch}`, { cwd });
+        await execPromise(`git branch --set-upstream-to=origin/${branch} ${branch}`, { cwd }).catch(() => {
+        });
+      }
+      const { stdout: statusOut } = await execPromise("git status --porcelain", { cwd });
+      if (statusOut.trim().length > 0) {
+        await execPromise("git add -A", { cwd });
+        await execPromise(
+          `git commit -m "chore: Yerel de\u011Fi\u015Fiklikler senkronizasyon \xF6ncesi kaydedildi"`,
+          { cwd }
+        ).catch(() => {
+        });
+      }
+      await execPromise(
+        `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
+        { cwd }
+      ).catch(async () => {
+        await execPromise("git merge --abort", { cwd }).catch(() => {
+        });
+      });
+    } finally {
+      await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {
+      });
     }
-    await execPromise("git branch -M main", { cwd });
-    await execPromise("git add .", { cwd });
+    let sha = "";
+    let lastMsg = "";
+    try {
+      const { stdout: shaOut } = await execPromise("git rev-parse HEAD", { cwd });
+      sha = shaOut.trim();
+      const { stdout: msgOut } = await execPromise('git log -1 --pretty=format:"%s"', { cwd });
+      lastMsg = msgOut.trim();
+    } catch {
+    }
+    const syncedAt = (/* @__PURE__ */ new Date()).toISOString();
+    this.saveConfig({
+      repoUrl: cleanUrl,
+      owner,
+      repo,
+      token: token || config.token,
+      lastSyncedAt: syncedAt
+    });
+    return {
+      success: true,
+      message: `GitHub (${owner}/${repo}) deposundan en g\xFCncel de\u011Fi\u015Fiklikler ba\u015Far\u0131yla al\u0131nd\u0131 ve yerel \xE7al\u0131\u015Fma alan\u0131yla e\u015Fitlendi.`,
+      commitSha: sha,
+      commitMessage: lastMsg,
+      syncedAt
+    };
+  }
+  async publishOrSync(params) {
+    const config = this.getConfig();
+    const token = params?.token?.trim() || config.token;
+    const repoUrl = params?.repoUrl?.trim() || config.repoUrl;
+    const branch = config.branch || "main";
+    const commitMsg = params?.commitMessage?.trim() || `feat: Admin paneli kimlik bilgileri, mod\xFCl yetkilendirme ve gelir faturas\u0131 aray\xFCz g\xFCncellemeleri (${(/* @__PURE__ */ new Date()).toLocaleString("tr-TR")})`;
+    let owner = config.owner || "ilyasylldrm-pixel";
+    let repo = config.repo || "TALLSOFTMUAVIN";
+    const match = repoUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/);
+    if (match) {
+      owner = match[1];
+      repo = match[2];
+    }
+    const cwd = process.cwd();
+    const cleanUrl = `https://github.com/${owner}/${repo}.git`;
+    await this.ensureGitInitialized(cleanUrl, branch);
+    await execPromise(`git branch -M ${branch}`, { cwd });
+    if (params?.pullFirst !== false) {
+      try {
+        const fetchUrl = token ? `https://${owner}:${token}@github.com/${owner}/${repo}.git` : cleanUrl;
+        await execPromise(`git remote set-url origin "${fetchUrl}"`, { cwd });
+        await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+        await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd });
+      } catch (e) {
+        console.warn("[GitHubSync] Remote fetch warning:", e);
+      }
+    }
+    await execPromise("git add -A", { cwd });
     let committed = false;
     try {
       const { stdout: statusOut } = await execPromise("git status --porcelain", { cwd });
@@ -3334,21 +3801,15 @@ var GitHubSyncService = class {
     } catch (e) {
       console.warn("[GitHubSync] Commit step warning:", e);
     }
-    const authUrl = `https://${owner}:${token}@github.com/${owner}/${repo}.git`;
-    try {
-      await execPromise(`git remote set-url origin "${authUrl}"`, { cwd });
-    } catch {
-      await execPromise(`git remote add origin "${authUrl}"`, { cwd });
-    }
-    try {
-      await execPromise("git push -u origin main --force", { cwd });
-    } finally {
+    if (params?.pullFirst !== false) {
       try {
         await execPromise(
-          `git remote set-url origin "https://github.com/${owner}/${repo}.git"`,
+          `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
           { cwd }
         );
       } catch {
+        await execPromise("git merge --abort", { cwd }).catch(() => {
+        });
       }
     }
     let sha = "";
@@ -3357,9 +3818,41 @@ var GitHubSyncService = class {
       sha = shaOut.trim();
     } catch {
     }
+    if (!token) {
+      throw new Error(
+        `T\xFCm de\u011Fi\u015Fiklikler yerel Git deposuna commit edildi (${sha.substring(0, 7)}) ve GitHub'dan g\xFCncel dal (origin/${branch}) al\u0131nd\u0131. GitHub'a push (g\xF6nderim) ve tallsoft.org yay\u0131n\u0131 i\xE7in GitHub Personal Access Token (PAT) gereklidir.`
+      );
+    }
+    const authUrl = `https://${owner}:${token}@github.com/${owner}/${repo}.git`;
+    try {
+      await execPromise(`git remote set-url origin "${authUrl}"`, { cwd });
+    } catch {
+      await execPromise(`git remote add origin "${authUrl}"`, { cwd });
+    }
+    try {
+      await execPromise(`git push -u origin ${branch} --force`, { cwd });
+    } finally {
+      try {
+        await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd });
+      } catch {
+      }
+    }
+    try {
+      await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/deploy.yml/dispatches`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+          "User-Agent": "Muavin-ERP-Sync"
+        },
+        body: JSON.stringify({ ref: branch })
+      });
+    } catch {
+    }
     const syncedAt = (/* @__PURE__ */ new Date()).toISOString();
     this.saveConfig({
-      repoUrl,
+      repoUrl: cleanUrl,
       owner,
       repo,
       token,
@@ -3367,7 +3860,7 @@ var GitHubSyncService = class {
     });
     return {
       success: true,
-      message: committed ? `T\xFCm de\u011Fi\u015Fiklikler ba\u015Far\u0131yla commit edildi ve GitHub'a aktar\u0131ld\u0131. GitHub Actions (tallsoft.org da\u011F\u0131t\u0131m\u0131) tetiklendi.` : `GitHub deposu g\xFCncellendi. Yeni bir de\u011Fi\u015Fiklik olmad\u0131\u011F\u0131 i\xE7in mevcut commit senkronize edildi.`,
+      message: committed ? `T\xFCm de\u011Fi\u015Fiklikler ba\u015Far\u0131yla al\u0131nd\u0131, commit edildi, GitHub (${owner}/${repo}) ile e\u015Fitlendi ve tallsoft.org canl\u0131 yay\u0131n\u0131 tetiklendi.` : `GitHub deposu g\xFCncellendi (Al, G\xF6nder & Yay\u0131nla tamamland\u0131). Mevcut commit (${sha.substring(0, 7)}) GitHub'a g\xF6nderildi ve tallsoft.org yay\u0131n\u0131 tetiklendi.`,
       commitSha: sha,
       commitMessage: commitMsg,
       syncedAt,
@@ -3392,18 +3885,43 @@ function getGitHubRouter() {
   });
   router.post("/publish", async (req, res) => {
     try {
-      const { commitMessage, token, repoUrl } = req.body || {};
+      const { commitMessage, token, repoUrl, pullFirst } = req.body || {};
       const result = await gitHubSyncService.publishOrSync({
         commitMessage,
+        token,
+        repoUrl,
+        pullFirst: pullFirst !== false
+      });
+      res.json(result);
+    } catch (error) {
+      if (error?.message?.includes("GitHub Personal Access Token")) {
+        console.warn("[GitHubRoute] Uyar\u0131: GitHub Personal Access Token girilmemi\u015F veya eksik.");
+        return res.status(400).json({
+          success: false,
+          code: "MISSING_TOKEN",
+          error: error.message
+        });
+      }
+      console.error("[GitHubRoute] Error publishing to GitHub:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message || "GitHub senkronizasyonu ba\u015Far\u0131s\u0131z oldu"
+      });
+    }
+  });
+  router.post("/pull", async (req, res) => {
+    try {
+      const { token, repoUrl } = req.body || {};
+      const result = await gitHubSyncService.pullFromGitHub({
         token,
         repoUrl
       });
       res.json(result);
     } catch (error) {
-      console.error("[GitHubRoute] Error publishing to GitHub:", error);
+      console.error("[GitHubRoute] Error pulling from GitHub:", error);
       res.status(500).json({
         success: false,
-        error: error.message || "GitHub senkronizasyonu ba\u015Far\u0131s\u0131z oldu"
+        error: error.message || "GitHub'dan de\u011Fi\u015Fiklikler al\u0131namad\u0131"
       });
     }
   });
@@ -3413,10 +3931,19 @@ function getGitHubRouter() {
       const result = await gitHubSyncService.publishOrSync({
         commitMessage,
         token,
-        repoUrl
+        repoUrl,
+        pullFirst: true
       });
       res.json(result);
     } catch (error) {
+      if (error?.message?.includes("GitHub Personal Access Token")) {
+        console.warn("[GitHubRoute] Uyar\u0131: GitHub Personal Access Token girilmemi\u015F veya eksik.");
+        return res.status(400).json({
+          success: false,
+          code: "MISSING_TOKEN",
+          error: error.message
+        });
+      }
       console.error("[GitHubRoute] Error syncing with GitHub:", error);
       res.status(500).json({
         success: false,
@@ -3511,7 +4038,7 @@ function loadServerEnv() {
 }
 loadServerEnv();
 var app = (0, import_express6.default)();
-var PORT = Number(process.env.PORT) || 3e3;
+var PORT = process.env.NODE_ENV === "production" ? Number(process.env.PORT) || 8080 : 3e3;
 app.use(
   (0, import_compression.default)({
     level: 6,
@@ -3727,9 +4254,10 @@ async function generateContentWithFallback(aiClient, params) {
   const preferred = params.preferredModel || process.env.GEMINI_MODEL;
   const modelsToTry = [
     preferred,
-    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-3.8-flash",
     "gemini-flash-latest",
-    "gemini-3.8-flash"
+    "gemini-3.1-flash-lite"
   ].filter(Boolean);
   const uniqueModels = Array.from(new Set(modelsToTry));
   let lastError = null;
@@ -3750,7 +4278,7 @@ async function generateContentWithFallback(aiClient, params) {
         config
       });
       const timeoutPromise = new Promise(
-        (_, reject) => setTimeout(() => reject(new Error("AI generation timeout (6s)")), 6e3)
+        (_, reject) => setTimeout(() => reject(new Error("AI generation timeout (15s)")), 15e3)
       );
       const response = await Promise.race([generatePromise, timeoutPromise]);
       return { response, modelUsed: model };
@@ -3818,7 +4346,7 @@ Tespit Edilen Ekstra \u0130htiya\xE7lar: ${extraIssues || ""}`;
     }
     try {
       const { response } = await generateContentWithFallback(aiClient, {
-        preferredModel: "gemini-3.7-flash",
+        preferredModel: "gemini-3.1-pro-preview",
         contents: [{ text: promptContent }],
         systemInstruction,
         temperature: 0.3,
@@ -3937,7 +4465,7 @@ Teknik Rapor: ${techReport || ""}`;
     }
     try {
       const { response } = await generateContentWithFallback(aiClient, {
-        preferredModel: "gemini-3.7-flash",
+        preferredModel: "gemini-3.1-pro-preview",
         contents: [{ text: promptContent }],
         systemInstruction,
         temperature: 0.3,
@@ -4051,7 +4579,7 @@ Uygulanan \u0130\u015Flemler: ${operationsAndCost || "Genel bak\u0131m ve onar\u
     }
     try {
       const { response } = await generateContentWithFallback(aiClient, {
-        preferredModel: "gemini-3.7-flash",
+        preferredModel: "gemini-3.1-pro-preview",
         contents: [{ text: promptContent }],
         systemInstruction,
         temperature: 0.3,
@@ -4145,7 +4673,7 @@ Schema:
     }
     try {
       const { response } = await generateContentWithFallback(aiClient, {
-        preferredModel: "gemini-3.7-flash",
+        preferredModel: "gemini-3.1-pro-preview",
         contents: [
           {
             text: `Kullan\u0131c\u0131 \u0130letisi / Komutu: ${prompt}
@@ -4386,7 +4914,7 @@ ${textContent ? `Belge Metni: ${textContent}` : ""}`
     let parsedData = {};
     try {
       const { response } = await generateContentWithFallback(aiClient, {
-        preferredModel: "gemini-3.7-flash",
+        preferredModel: "gemini-3.1-pro-preview",
         contents,
         systemInstruction,
         temperature: 0.1,
@@ -5136,7 +5664,10 @@ async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false
+      },
       appType: "custom"
     });
     app.use(vite.middlewares);
@@ -5152,7 +5683,12 @@ async function startServer() {
         const templatePath = import_path4.default.join(process.cwd(), "index.html");
         let template = import_fs4.default.readFileSync(templatePath, "utf-8");
         template = await vite.transformIndexHtml(req.originalUrl, template);
-        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+        res.status(200).set({
+          "Content-Type": "text/html",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0"
+        }).end(template);
       } catch (e) {
         vite.ssrFixStacktrace(e);
         next(e);
@@ -5184,6 +5720,9 @@ async function startServer() {
     });
   }
   const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`  VITE v6.2.3  ready in 200 ms`);
+    console.log(`  \u279C  Local:   http://localhost:${PORT}/`);
+    console.log(`  \u279C  Network: http://0.0.0.0:${PORT}/`);
     console.log(`Muavin Muhasebe sunucusu \xE7al\u0131\u015F\u0131yor: http://0.0.0.0:${PORT}`);
     try {
       const sessionPath = import_path4.default.join(process.cwd(), "data", "whatsapp_sessions", "creds.json");
@@ -5197,6 +5736,28 @@ async function startServer() {
       console.warn("WhatsApp servisi ba\u015Flatma kontrol\xFC pas ge\xE7ildi:", waErr);
     }
   });
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`[HATA] Port ${PORT} zaten ba\u015Fka bir s\xFCre\xE7 taraf\u0131ndan kullan\u0131l\u0131yor (EADDRINUSE).`);
+      process.exit(1);
+    } else {
+      console.error("[HATA] Sunucu dinleme hatas\u0131:", err);
+      process.exit(1);
+    }
+  });
+  const gracefulShutdown = (signal) => {
+    console.log(`[INFO] ${signal} sinyali al\u0131nd\u0131, sunucu kapat\u0131l\u0131yor...`);
+    server.close(() => {
+      console.log("[INFO] HTTP sunucusu ba\u015Far\u0131yla kapat\u0131ld\u0131.");
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.warn("[UYARI] Zaman a\u015F\u0131m\u0131, zorla kapat\u0131l\u0131yor.");
+      process.exit(0);
+    }, 2e3);
+  };
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
   server.keepAliveTimeout = 65e3;
   server.headersTimeout = 66e3;
 }
@@ -5204,4 +5765,3 @@ startServer().catch((error) => {
   console.error("Sunucu ba\u015Flat\u0131lamad\u0131:", error);
   process.exit(1);
 });
-//# sourceMappingURL=server.cjs.map

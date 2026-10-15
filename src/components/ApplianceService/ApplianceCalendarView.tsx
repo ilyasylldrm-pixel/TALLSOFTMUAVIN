@@ -832,7 +832,7 @@ export const ApplianceCalendarView: React.FC<ApplianceCalendarViewProps> = ({
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center justify-between pt-1 border-t border-slate-200/60">
                           <span className="truncate">{job.assignedTechnician?.split(" ")[0] || "Atanmadı"}</span>
-                          <span className="font-bold text-slate-700">{job.grandTotal.toLocaleString("tr-TR")} ₺</span>
+                          <span className="font-bold text-slate-700">{job.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺</span>
                         </div>
                       </div>
                     );
@@ -974,7 +974,7 @@ export const ApplianceCalendarView: React.FC<ApplianceCalendarViewProps> = ({
                     <div className="flex flex-col sm:flex-row md:flex-col items-end justify-between gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-200">
                       <div className="text-right">
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Tutar</span>
-                        <span className="text-lg font-black text-slate-800">{service.grandTotal.toLocaleString("tr-TR")} ₺</span>
+                        <span className="text-lg font-black text-slate-800">{service.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺</span>
                       </div>
 
                       <div className="flex items-center gap-1.5 flex-wrap">

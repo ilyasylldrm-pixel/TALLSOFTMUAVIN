@@ -7,6 +7,7 @@ import {
   Search,
   Calendar,
   Eye,
+  EyeOff,
   Download,
   Trash2,
   X,
@@ -19,6 +20,7 @@ import {
   FileSpreadsheet,
   File,
   UserPlus,
+  UserMinus,
   Sliders,
   Check,
   KeyRound,
@@ -44,9 +46,22 @@ import {
   ExternalLink,
   Calculator,
   Radio,
+  Globe,
+  ArrowRight,
+  Edit2,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import { UserProfile, BRAND_LOGOS } from "./AuthModal";
+import { CompanyModal } from "./CompanyModal";
+import {
+  getCompaniesList,
+  getActiveCompanyId,
+  addCompanyItem,
+  updateCompanyItem,
+  deleteCompanyItem,
+  setActiveCompanyId,
+} from "../utils/storage";
+import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import {
   getAllUsersProfiles,
   getAllFilesForAdmin,
@@ -57,7 +72,17 @@ import {
   UserProfileData,
   UserFileMetadata,
 } from "../lib/firebase";
-import { ALL_APP_MODULES, AppModuleKey } from "../types";
+import {
+  CompanyItem,
+  ALL_APP_MODULES,
+  AppModuleKey,
+  AppModuleDefinition,
+  getAllAppModulesWithCustom,
+  isAdminOrSysAdmin,
+  isKeyAllowedInList,
+  toggleModuleSelectionWithSubModules,
+  CUSTOM_MODULES_STORAGE_KEY,
+} from "../types";
 import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
 import { PayrollParametersPanel } from "./PayrollParametersPanel";
 import { AdminOverviewPanel } from "./AdminOverviewPanel";
@@ -69,6 +94,12 @@ import { triggerFormErrorNotification } from "../context/FormErrorContext";
 
 interface AdminDashboardProps {
   currentUser: UserProfile;
+  companies?: CompanyItem[];
+  activeCompanyId?: string;
+  onSelectCompany?: (id: string) => void;
+  onAddCompany?: (comp: CompanyItem, makeActiveImmediately?: boolean) => void;
+  onUpdateCompany?: (comp: CompanyItem) => void;
+  onDeleteCompany?: (id: string) => void;
 }
 
 export interface RolePreset {
@@ -151,22 +182,137 @@ export const STAFF_ROLE_PRESETS: RolePreset[] = [
   },
 ];
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  currentUser,
+  companies,
+  activeCompanyId,
+  onSelectCompany,
+  onAddCompany,
+  onUpdateCompany,
+  onDeleteCompany,
+}) => {
   const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState<"overview" | "matrix" | "users" | "files" | "payroll" | "broadcast" | "audit">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "credentials" | "matrix" | "users" | "companies" | "files" | "payroll" | "broadcast" | "audit">("overview");
   const [users, setUsers] = useState<UserProfileData[]>([]);
   const [allFiles, setAllFiles] = useState<UserFileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPasswords, setShowPasswords] = useState(true);
+  const [credentialSearch, setCredentialSearch] = useState("");
+
+  // Companies Management State
+  const [localCompanies, setLocalCompanies] = useState<CompanyItem[]>(() => companies || getCompaniesList());
+  const [localActiveCompId, setLocalActiveCompId] = useState<string>(() => activeCompanyId || getActiveCompanyId());
+
+  useEffect(() => {
+    if (companies) setLocalCompanies(companies);
+  }, [companies]);
+
+  useEffect(() => {
+    if (activeCompanyId) setLocalActiveCompId(activeCompanyId);
+  }, [activeCompanyId]);
+
+  const adminCompanies = companies || localCompanies;
+  const adminActiveCompId = activeCompanyId || localActiveCompId;
+
+  const [isCompModalOpen, setIsCompModalOpen] = useState(false);
+  const [compModalMode, setCompModalMode] = useState<"create" | "edit" | "mysoft_match">("create");
+  const [compToEdit, setCompToEdit] = useState<CompanyItem | null>(null);
+  const [companySearchTerm, setCompanySearchTerm] = useState("");
+
+  const handleOpenAddCompany = () => {
+    setCompToEdit(null);
+    setCompModalMode("create");
+    setIsCompModalOpen(true);
+  };
+
+  const handleOpenEditCompany = (comp: CompanyItem) => {
+    setCompToEdit(comp);
+    setCompModalMode("edit");
+    setIsCompModalOpen(true);
+  };
+
+  const handleOpenMysoftMatch = (comp: CompanyItem) => {
+    setCompToEdit(comp);
+    setCompModalMode("mysoft_match");
+    setIsCompModalOpen(true);
+  };
+
+  const handleSaveCompany = (savedComp: CompanyItem, makeActiveImmediately = true) => {
+    if (compToEdit) {
+      if (onUpdateCompany) {
+        onUpdateCompany(savedComp);
+      } else {
+        const updated = updateCompanyItem(savedComp);
+        setLocalCompanies(updated);
+      }
+      setLocalCompanies(getCompaniesList());
+    } else {
+      if (onAddCompany) {
+        onAddCompany(savedComp, makeActiveImmediately);
+        setLocalCompanies(getCompaniesList());
+        if (makeActiveImmediately) {
+          setActiveCompanyId(savedComp.id);
+          setLocalActiveCompId(savedComp.id);
+        }
+      } else {
+        const updated = addCompanyItem(savedComp);
+        setLocalCompanies(updated);
+        if (makeActiveImmediately) {
+          setActiveCompanyId(savedComp.id);
+          setLocalActiveCompId(savedComp.id);
+        }
+      }
+      if (makeActiveImmediately && onSelectCompany) {
+        onSelectCompany(savedComp.id);
+      }
+    }
+    fetchData();
+  };
+
+  const handleDeleteCompany = (id: string) => {
+    if (id === "comp_default") {
+      alert("Varsayılan ana şirket silinemez.");
+      return;
+    }
+    if (confirm("Bu şirketi silmek istediğinize emin misiniz?")) {
+      if (onDeleteCompany) {
+        onDeleteCompany(id);
+      } else {
+        const updated = deleteCompanyItem(id);
+        setLocalCompanies(updated);
+        setLocalActiveCompId(getActiveCompanyId());
+      }
+      fetchData();
+    }
+  };
+
+  const handleSwitchCompany = (id: string) => {
+    if (onSelectCompany) {
+      onSelectCompany(id);
+    } else {
+      setActiveCompanyId(id);
+      setLocalActiveCompId(id);
+    }
+  };
   const [selectedUser, setSelectedUser] = useState<UserProfileData | null>(null);
   const [previewFile, setPreviewFile] = useState<UserFileMetadata | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, key: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   // User Deletion Modal & State
   const [userToDelete, setUserToDelete] = useState<UserProfileData | null>(null);
   const [deleteUserFilesToo, setDeleteUserFilesToo] = useState(true);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [deleteUserSuccessMessage, setDeleteUserSuccessMessage] = useState<string | null>(null);
+  const [isQuickDeleteUserModalOpen, setIsQuickDeleteUserModalOpen] = useState(false);
+  const [quickDeleteSearchTerm, setQuickDeleteSearchTerm] = useState("");
 
   // Draft permissions state: changes staged before committing to Firebase
   const [draftPermissions, setDraftPermissions] = useState<Record<string, AppModuleKey[]>>({});
@@ -177,14 +323,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
   const [confirmBatchSaveModalOpen, setConfirmBatchSaveModalOpen] = useState(false);
   const [isBatchSaving, setIsBatchSaving] = useState(false);
 
-  // Edit Permissions Detailed Modal
+  // Edit Permissions & Credentials Detailed Modal
   const [editingPermissionsUser, setEditingPermissionsUser] = useState<UserProfileData | null>(null);
   const [selectedModulesToEdit, setSelectedModulesToEdit] = useState<AppModuleKey[]>([]);
+  const [editUsername, setEditUsername] = useState("");
+  const [editPasswordPlain, setEditPasswordPlain] = useState("");
   const [savingPermissions, setSavingPermissions] = useState(false);
+
+  // Dynamic list of all modules & sub-modules (including Admin-defined custom modules)
+  const [allAppModules, setAllAppModules] = useState<AppModuleDefinition[]>(() =>
+    getAllAppModulesWithCustom()
+  );
+  const [matrixLevelFilter, setMatrixLevelFilter] = useState<"all" | "main" | "sub">("all");
+  const [matrixCategoryFilter, setMatrixCategoryFilter] = useState<string>("Tümü");
+  const [showDefineModuleModal, setShowDefineModuleModal] = useState(false);
+  const [newModuleForm, setNewModuleForm] = useState<{
+    key: string;
+    label: string;
+    description: string;
+    category: "Temel" | "Ticari & Finans" | "Operasyon" | "Sektörel" | "Rapor & Analiz" | "Sistem";
+    isSubModule: boolean;
+    parentKey: string;
+  }>({
+    key: "",
+    label: "",
+    description: "",
+    category: "Operasyon",
+    isSubModule: false,
+    parentKey: "companies",
+  });
 
   // Add User Modal State
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [newUserName, setNewUserName] = useState("");
+  const [newUserUsername, setNewUserUsername] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserCompany, setNewUserCompany] = useState("");
@@ -192,11 +364,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
   const [newUserTaxNumber, setNewUserTaxNumber] = useState("");
   const [newUserRole, setNewUserRole] = useState("Ön Muhasebe Görevlisi");
   const [newUserAllowedModules, setNewUserAllowedModules] = useState<AppModuleKey[]>(
-    ALL_APP_MODULES.map((m) => m.key)
+    () => getAllAppModulesWithCustom().map((m) => m.key)
   );
   const [creatingUser, setCreatingUser] = useState(false);
   const [createUserError, setCreateUserError] = useState("");
   const [createdSuccessInfo, setCreatedSuccessInfo] = useState<any | null>(null);
+
+  const handleCreateCustomModule = () => {
+    if (!isAdminOrSysAdmin(currentUser)) {
+      triggerFormErrorNotification(
+        "Modül ve alt modül tanımlama yetkisi sadece Admin ve Sistem Yöneticisine aittir.",
+        "Yetkisiz İşlem"
+      );
+      return;
+    }
+    const cleanLabel = newModuleForm.label.trim();
+    if (!cleanLabel) {
+      triggerFormErrorNotification("Lütfen modül veya alt modül adını giriniz.", "Eksik Bilgi");
+      return;
+    }
+    const slug = (newModuleForm.key.trim() || cleanLabel)
+      .toLowerCase()
+      .replace(/ğ/g, "g")
+      .replace(/ü/g, "u")
+      .replace(/ş/g, "s")
+      .replace(/ı/g, "i")
+      .replace(/ö/g, "o")
+      .replace(/ç/g, "c")
+      .replace(/[^a-z0-9_]/g, "_");
+    const finalKey = (
+      newModuleForm.isSubModule
+        ? `${newModuleForm.parentKey}_sub_${slug}`
+        : `custom_mod_${slug}`
+    ) as AppModuleKey;
+
+    if (allAppModules.some((m) => m.key === finalKey)) {
+      triggerFormErrorNotification("Bu anahtara sahip bir modül/alt modül zaten tanımlı.", "Mükerrer Kayıt");
+      return;
+    }
+
+    const createdModule: AppModuleDefinition = {
+      key: finalKey,
+      label: cleanLabel,
+      description:
+        newModuleForm.description.trim() ||
+        (newModuleForm.isSubModule
+          ? `${cleanLabel} alt modül yetkisi`
+          : `${cleanLabel} ana modül yetkisi`),
+      category: newModuleForm.category,
+      isSubModule: newModuleForm.isSubModule,
+      parentKey: newModuleForm.isSubModule
+        ? (newModuleForm.parentKey as AppModuleKey)
+        : undefined,
+    };
+
+    try {
+      const raw = localStorage.getItem(CUSTOM_MODULES_STORAGE_KEY);
+      const existing: AppModuleDefinition[] = raw ? JSON.parse(raw) : [];
+      const updatedCustom = [...existing, createdModule];
+      localStorage.setItem(CUSTOM_MODULES_STORAGE_KEY, JSON.stringify(updatedCustom));
+      setAllAppModules(getAllAppModulesWithCustom());
+      setNewModuleForm({
+        key: "",
+        label: "",
+        description: "",
+        category: "Operasyon",
+        isSubModule: false,
+        parentKey: "companies",
+      });
+      setShowDefineModuleModal(false);
+    } catch (e) {
+      console.error("Modül kaydedilemedi:", e);
+    }
+  };
+
+  const handleDeleteCustomModule = (moduleKey: AppModuleKey) => {
+    if (!isAdminOrSysAdmin(currentUser)) return;
+    try {
+      const raw = localStorage.getItem(CUSTOM_MODULES_STORAGE_KEY);
+      const existing: AppModuleDefinition[] = raw ? JSON.parse(raw) : [];
+      const updated = existing.filter((m) => m.key !== moduleKey && m.parentKey !== moduleKey);
+      localStorage.setItem(CUSTOM_MODULES_STORAGE_KEY, JSON.stringify(updated));
+      setAllAppModules(getAllAppModulesWithCustom());
+    } catch (e) {
+      console.error("Özel modül silinemedi:", e);
+    }
+  };
 
   // Fetch initial data
   const fetchData = async () => {
@@ -240,14 +493,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     if (user.allowedModules && Array.isArray(user.allowedModules)) {
       return user.allowedModules;
     }
-    return ALL_APP_MODULES.map((m) => m.key);
+    return allAppModules.map((m) => m.key);
   };
 
   const getUserOriginalModules = (user: UserProfileData): AppModuleKey[] => {
     if (user.allowedModules && Array.isArray(user.allowedModules)) {
       return user.allowedModules;
     }
-    return ALL_APP_MODULES.map((m) => m.key);
+    return allAppModules.map((m) => m.key);
   };
 
   const hasUserPendingChanges = (userId: string): boolean => {
@@ -263,14 +516,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
   const pendingUsersList = users.filter((u) => hasUserPendingChanges(u.userId));
   const pendingChangesCount = pendingUsersList.length;
 
-  // Toggle module in draft
+  // Toggle module or sub-module in draft (Admin & System Administrator only)
   const handleToggleModuleInDraft = (userId: string, moduleKey: AppModuleKey) => {
+    if (!isAdminOrSysAdmin(currentUser)) return;
     const user = users.find((u) => u.userId === userId);
     if (!user) return;
     const currentList = getUserEffectiveModules(user);
-    const updated = currentList.includes(moduleKey)
-      ? currentList.filter((k) => k !== moduleKey)
-      : [...currentList, moduleKey];
+    const updated = toggleModuleSelectionWithSubModules(moduleKey, currentList) as AppModuleKey[];
 
     setDraftPermissions((prev) => ({
       ...prev,
@@ -280,21 +532,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
 
   // Apply Role Preset to User Draft
   const handleApplyPresetToUser = (userId: string, preset: RolePreset) => {
+    if (!isAdminOrSysAdmin(currentUser)) return;
+    // Include all sub-modules of preset's main modules automatically
+    const subKeys = allAppModules
+      .filter((m) => m.isSubModule && m.parentKey && preset.modules.includes(m.parentKey))
+      .map((m) => m.key);
     setDraftPermissions((prev) => ({
       ...prev,
-      [userId]: [...preset.modules],
+      [userId]: Array.from(new Set([...preset.modules, ...subKeys])),
     }));
   };
 
   // Grant / Revoke all for a user
   const handleGrantAllToUser = (userId: string) => {
+    if (!isAdminOrSysAdmin(currentUser)) return;
     setDraftPermissions((prev) => ({
       ...prev,
-      [userId]: ALL_APP_MODULES.map((m) => m.key),
+      [userId]: allAppModules.map((m) => m.key),
     }));
   };
 
   const handleRevokeAllFromUser = (userId: string) => {
+    if (!isAdminOrSysAdmin(currentUser)) return;
     setDraftPermissions((prev) => ({
       ...prev,
       [userId]: ["dashboard"],
@@ -420,8 +679,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
   const canDeleteUser = (user: UserProfileData) => {
     if (!user) return false;
     // Kendi aktif oturum hesabını silmeyi engelle
-    if (user.userId === currentUser.id) return false;
-    if (currentUser.email && user.email?.toLowerCase().trim() === currentUser.email?.toLowerCase().trim()) return false;
+    const currentId = currentUser?.id || (currentUser as any)?.userId;
+    const currentEmail = currentUser?.email?.toLowerCase().trim();
+    if (currentId && (user.userId === currentId || (user as any).id === currentId)) return false;
+    if (currentEmail && user.email?.toLowerCase().trim() === currentEmail) return false;
     return true;
   };
 
@@ -510,6 +771,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
 
   const handleOpenAddUser = () => {
     setNewUserName("");
+    setNewUserUsername("");
     setNewUserEmail("");
     setNewUserPassword(generateRandomPassword());
     setNewUserCompany(currentUser.companyName || "Muavin Finans & ERP");
@@ -534,10 +796,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     setCreatingUser(true);
     try {
       const generatedUserId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const cleanEmail = newUserEmail.trim().toLowerCase();
+      const finalUsername = (newUserUsername.trim() || cleanEmail.split("@")[0] || "kullanici").toLowerCase();
       const newUserProfile: UserProfileData = {
         userId: generatedUserId,
         name: newUserName.trim(),
-        email: newUserEmail.trim().toLowerCase(),
+        username: finalUsername,
+        email: cleanEmail,
         companyName: newUserCompany.trim() || "Muavin Bilişim A.Ş.",
         phone: newUserPhone.trim(),
         taxNumber: newUserTaxNumber.trim(),
@@ -555,6 +820,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
       setUsers((prev) => [newUserProfile, ...prev]);
       setCreatedSuccessInfo({
         name: newUserProfile.name,
+        username: finalUsername,
         email: newUserProfile.email,
         passwordPlain: newUserPassword,
         allowedModulesCount: newUserAllowedModules.length,
@@ -570,6 +836,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
   const handleOpenEditPermissions = (user: UserProfileData) => {
     setEditingPermissionsUser(user);
     setSelectedModulesToEdit(getUserEffectiveModules(user));
+    setEditUsername(user.username || user.email?.split("@")[0] || "");
+    setEditPasswordPlain(user.passwordPlain || "");
   };
 
   const handleSaveEditedPermissions = async () => {
@@ -578,14 +846,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     try {
       const updatedUser: UserProfileData = {
         ...editingPermissionsUser,
+        username: editUsername.trim() || editingPermissionsUser.username || editingPermissionsUser.email?.split("@")[0],
+        passwordPlain: editPasswordPlain.trim() || editingPermissionsUser.passwordPlain,
         allowedModules: selectedModulesToEdit,
         updatedAt: new Date().toISOString(),
       };
       await saveUserProfile(updatedUser);
+
+      // Eğer bu kullanıcı bir şirketin ana giriş hesabıysa, şirketin giriş bilgilerini de senkronize et
+      if (editingPermissionsUser.companyId || editingPermissionsUser.userId.startsWith("usr_comp_")) {
+        const targetCompId = editingPermissionsUser.companyId || editingPermissionsUser.userId.replace("usr_comp_", "");
+        const matchedComp = adminCompanies.find((c) => c.id === targetCompId);
+        if (matchedComp) {
+          const updatedComp: CompanyItem = {
+            ...matchedComp,
+            loginUsername: updatedUser.username || matchedComp.loginUsername,
+            loginPasswordPlain: updatedUser.passwordPlain || matchedComp.loginPasswordPlain,
+          };
+          if (onUpdateCompany) {
+            onUpdateCompany(updatedComp);
+          } else {
+            updateCompanyItem(updatedComp);
+          }
+          setLocalCompanies(getCompaniesList());
+        }
+      }
+
       saveLocalDbSyncReport({
         lastUpdatedAt: new Date().toISOString(),
         lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-        lastActionSummary: `Personel Yetkileri Güncellendi: ${editingPermissionsUser.name}`,
+        lastActionSummary: `Personel Yetki & Şifre Bilgileri Güncellendi: ${editingPermissionsUser.name}`,
         totalUsersCount: users.length,
         syncedUsersCount: users.length,
       });
@@ -607,6 +897,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     const q = searchTerm.toLowerCase();
     return (
       (u.name && u.name.toLowerCase().includes(q)) ||
+      (u.username && u.username.toLowerCase().includes(q)) ||
       (u.email && u.email.toLowerCase().includes(q)) ||
       (u.companyName && u.companyName.toLowerCase().includes(q)) ||
       (u.role && u.role.toLowerCase().includes(q))
@@ -635,16 +926,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
       <ModuleEntranceHeader
         icon={ShieldAlert}
         title="Sistem Yönetici & Yetkilendirme Paneli"
-        description="Personel rol sınırlandırmaları, modül bazlı erişim matrisi, kullanıcı profilleri ve evrak denetimi."
+        description="Personel rol sınırlandırmaları, tanımlanan şirket ve kullanıcıların giriş şifreleri, modül bazlı erişim matrisi ve evrak denetimi."
         badge="Yönetim & Yetkilendirme"
         actions={
           <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => setActiveTab("credentials")}
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
+              title="Tanımlanan Şirket ve Kullanıcıların Kullanıcı Adı ve Şifreleri"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>Şirket & Kullanıcı Şifreleri</span>
+            </button>
+            <button
+              onClick={handleOpenAddCompany}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
+              title="Yeni Şirket Ekleme Modülü"
+            >
+              <Building2 className="w-4 h-4" />
+              <span>Yeni Şirket Ekle</span>
+            </button>
             <button
               onClick={handleOpenAddUser}
               className="bg-[#0f6bae] hover:bg-[#005289] text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
             >
               <UserPlus className="w-4 h-4" />
               <span>Yeni Kullanıcı Ekle</span>
+            </button>
+            <button
+              onClick={() => setIsQuickDeleteUserModalOpen(true)}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
+              title="Kullanıcı Silme Paneli"
+            >
+              <UserMinus className="w-4 h-4" />
+              <span>Kullanıcı Sil</span>
             </button>
             <button
               onClick={fetchData}
@@ -670,6 +985,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
             <span>Tüm Eklenenler & Sistem Özeti</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("credentials")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "credentials"
+                ? "bg-white text-slate-900 shadow-2xs border border-white"
+                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+            }`}
+          >
+            <KeyRound className="w-4 h-4 text-amber-300" />
+            <span>Şirket & Kullanıcı Şifreleri ({adminCompanies.length + users.length})</span>
           </button>
 
           <button
@@ -699,6 +1026,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
           >
             <Users className="w-4 h-4" />
             <span>Kullanıcı & Personel Listesi ({users.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("companies")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "companies"
+                ? "bg-white text-slate-900 shadow-2xs border border-white"
+                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-sky-300" />
+            <span>Şirketler & Mysoft Eşleştirme ({adminCompanies.length})</span>
           </button>
 
           <button
@@ -817,49 +1156,507 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
         <AdminOverviewPanel
           users={users}
           files={allFiles}
+          companies={adminCompanies}
           onNavigateTab={(tab) => setActiveTab(tab)}
           onOpenAddUserModal={() => setIsAddUserModalOpen(true)}
           onPreviewFile={(file) => setPreviewFile(file)}
           onDeleteUser={handleOpenDeleteUserModal}
+          onEditCompany={handleOpenEditCompany}
+          onSwitchCompany={handleSwitchCompany}
           currentUser={currentUser}
         />
       )}
 
       {/* ========================================================================= */}
-      {/* 🔐 TAB 1: MODÜL YETKİLENDİRME MATRİSİ */}
+      {/* 🔑 TAB 0.5: TANIMLANAN ŞİRKETLERİN VE KULLANICILARIN KULLANICI İSİMLERİ & ŞİFRELERİ */}
+      {/* ========================================================================= */}
+      {activeTab === "credentials" && (
+        <div className="space-y-6">
+          {/* Header & Filter Bar */}
+          <div className="card-elevation-2 bg-white p-5 rounded-2xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-[#131b2e] text-amber-300 flex items-center justify-center shrink-0 border border-[#222a3d] shadow-xs">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900">
+                    Tanımlanan Şirketlerin ve Kullanıcıların Giriş Bilgileri (Kullanıcı Adı & Şifre)
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Yönetici Özel Görünüm
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Sistemde tanımlı tüm şirketlerin ({adminCompanies.length}) ve kullanıcıların ({users.length}) kullanıcı isimlerini ve şifrelerini görüntüleyin, kopyalayın veya düzenleyin.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={credentialSearch}
+                  onChange={(e) => setCredentialSearch(e.target.value)}
+                  placeholder="Şirket, personel veya kullanıcı adı ara..."
+                  className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-[#0f6bae] focus:outline-none"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasswords((prev) => !prev)}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl border border-slate-200 flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                {showPasswords ? (
+                  <>
+                    <EyeOff className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Şifreleri Gizle</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-3.5 h-3.5 text-[#0f6bae]" />
+                    <span>Şifreleri Göster</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenAddCompany}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>+ Şirket Ekle</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenAddUser}
+                className="px-3.5 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>+ Kullanıcı Ekle</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 🏢 1. TANIMLANAN ŞİRKETLERİN KULLANICI İSİMLERİ VE ŞİFRELERİ */}
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-[#0f6bae]" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Tanımlanan Şirketlerin Kullanıcı İsimleri ve Şifreleri ({adminCompanies.length} Şirket)
+                </h4>
+              </div>
+              <span className="text-[11px] text-slate-500 font-medium">
+                Şirket düzenleme ekranından kullanıcı adı ve şifreyi güncelleyebilirsiniz
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/70 text-slate-600 border-b border-slate-200 font-bold text-[10px] uppercase tracking-wider">
+                    <th className="py-3 px-4">Şirket / İşletme Adı</th>
+                    <th className="py-3 px-4">Mükellef VKN / TCKN</th>
+                    <th className="py-3 px-4">Yetkili / Rol</th>
+                    <th className="py-3 px-4">Kullanıcı Adı (Giriş)</th>
+                    <th className="py-3 px-4">Şifre</th>
+                    <th className="py-3 px-4">Giriş E-Posta</th>
+                    <th className="py-3 px-4 text-right">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {adminCompanies
+                    .filter((c) => {
+                      if (!credentialSearch.trim()) return true;
+                      const q = credentialSearch.toLowerCase();
+                      return (
+                        c.companyName?.toLowerCase().includes(q) ||
+                        c.companyTitle?.toLowerCase().includes(q) ||
+                        c.loginUsername?.toLowerCase().includes(q) ||
+                        c.loginEmail?.toLowerCase().includes(q) ||
+                        c.vkn?.includes(q) ||
+                        c.tckn?.includes(q)
+                      );
+                    })
+                    .map((comp) => {
+                      const compUser = comp.loginUsername || (comp.id === "comp_default" ? "test" : comp.id === "comp_kurumsal_default" ? "sirket" : comp.id === "comp_sahis_default" ? "sahis" : comp.vkn || comp.tckn || "kullanici");
+                      const compPass = comp.loginPasswordPlain || "123456";
+                      const compEmail = comp.loginEmail || comp.email || `${compUser}@muavin.com`;
+                      const isActive = comp.id === adminActiveCompId;
+
+                      return (
+                        <tr key={comp.id} className={`hover:bg-slate-50/80 transition-colors ${isActive ? "bg-sky-50/40" : ""}`}>
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold shrink-0 ${
+                                isActive ? "bg-[#0f6bae] text-white" : "bg-slate-100 text-slate-700"
+                              }`}>
+                                <Building2 className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                  <span>{comp.companyName}</span>
+                                  {isActive && (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                      Aktif
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-500 truncate max-w-[240px]">
+                                  {comp.companyTitle}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[11px] font-semibold text-slate-700">
+                            {comp.vkn ? `VKN: ${comp.vkn}` : comp.tckn ? `TCKN: ${comp.tckn}` : comp.taxNumber}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="font-semibold text-slate-800 text-[11px]">
+                              {comp.loginFullName || comp.companyName}
+                            </div>
+                            <span className="text-[10px] text-slate-500">
+                              {comp.loginRole || "Şirket Yöneticisi"}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="inline-flex items-center gap-1.5 bg-blue-50 text-[#0f6bae] border border-blue-200 px-2.5 py-1 rounded-lg font-mono font-bold text-xs">
+                              <span>{compUser}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(compUser, `cred_c_u_${comp.id}`)}
+                                className="text-blue-400 hover:text-[#0f6bae] cursor-pointer"
+                                title="Kullanıcı Adını Kopyala"
+                              >
+                                {copiedKey === `cred_c_u_${comp.id}` ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-lg font-mono font-bold text-xs">
+                              <span>{showPasswords ? compPass : "••••••••"}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(compPass, `cred_c_p_${comp.id}`)}
+                                className="text-amber-500 hover:text-amber-800 cursor-pointer"
+                                title="Şifreyi Kopyala"
+                              >
+                                {copiedKey === `cred_c_p_${comp.id}` ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600">
+                            {compEmail}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopyText(
+                                    `Şirket: ${comp.companyName}\nKullanıcı Adı: ${compUser}\nE-Posta: ${compEmail}\nŞifre: ${compPass}`,
+                                    `cred_c_all_${comp.id}`
+                                  )
+                                }
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-200 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              >
+                                {copiedKey === `cred_c_all_${comp.id}` ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                    <span className="text-emerald-700">Kopyalandı</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Kopyala</span>
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditCompany(comp)}
+                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] rounded-lg border border-indigo-200 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                <span>Şifre/Bilgi Düzenle</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 👥 2. TANIMLANAN KULLANICILARIN VE PERSONELLERİN KULLANICI İSİMLERİ VE ŞİFRELERİ */}
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Tanımlanan Kullanıcıların Kullanıcı İsimleri ve Şifreleri ({users.length} Kullanıcı)
+                </h4>
+              </div>
+              <span className="text-[11px] text-slate-500 font-medium">
+                Kullanıcı satırındaki "Şifre & Yetki Düzenle" butonu ile şifreyi değiştirebilirsiniz
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/70 text-slate-600 border-b border-slate-200 font-bold text-[10px] uppercase tracking-wider">
+                    <th className="py-3 px-4">Ad Soyad / Kullanıcı</th>
+                    <th className="py-3 px-4">Şirket / İşletme</th>
+                    <th className="py-3 px-4">Görev / Rol</th>
+                    <th className="py-3 px-4">Kullanıcı Adı (Giriş)</th>
+                    <th className="py-3 px-4">Şifre</th>
+                    <th className="py-3 px-4">E-Posta Adresi</th>
+                    <th className="py-3 px-4 text-right">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {users
+                    .filter((u) => {
+                      if (!credentialSearch.trim()) return true;
+                      const q = credentialSearch.toLowerCase();
+                      return (
+                        u.name?.toLowerCase().includes(q) ||
+                        u.username?.toLowerCase().includes(q) ||
+                        u.email?.toLowerCase().includes(q) ||
+                        u.companyName?.toLowerCase().includes(q) ||
+                        u.role?.toLowerCase().includes(q)
+                      );
+                    })
+                    .map((u) => {
+                      const uname = u.username || u.email?.split("@")[0] || u.userId;
+                      const upass = u.passwordPlain || "123456";
+                      const isSysAdmin = isUserSysAdmin(u);
+
+                      return (
+                        <tr key={u.userId} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-lg bg-[#131b2e] text-white font-bold flex items-center justify-center text-xs shrink-0">
+                                {u.name ? u.name.charAt(0).toUpperCase() : "U"}
+                              </div>
+                              <div>
+                                <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                  <span>{u.name}</span>
+                                  {isSysAdmin && (
+                                    <span className="bg-[#131b2e] text-[#c6cdff] text-[9px] font-bold px-1.5 py-0.5 rounded">
+                                      Admin
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  ID: {u.userId}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-slate-700 text-[11px]">
+                            {u.companyName || "Muavin Finans & ERP"}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[#0f6bae] border border-blue-200 font-bold text-[10px]">
+                              {u.role || "Ön Muhasebe"}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="inline-flex items-center gap-1.5 bg-blue-50 text-[#0f6bae] border border-blue-200 px-2.5 py-1 rounded-lg font-mono font-bold text-xs">
+                              <span>{uname}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(uname, `cred_u_u_${u.userId}`)}
+                                className="text-blue-400 hover:text-[#0f6bae] cursor-pointer"
+                                title="Kullanıcı Adını Kopyala"
+                              >
+                                {copiedKey === `cred_u_u_${u.userId}` ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-lg font-mono font-bold text-xs">
+                              <span>{showPasswords ? upass : "••••••••"}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(upass, `cred_u_p_${u.userId}`)}
+                                className="text-amber-500 hover:text-amber-800 cursor-pointer"
+                                title="Şifreyi Kopyala"
+                              >
+                                {copiedKey === `cred_u_p_${u.userId}` ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600">
+                            {u.email}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopyText(
+                                    `Ad Soyad: ${u.name}\nKullanıcı Adı: ${uname}\nE-Posta: ${u.email}\nŞifre: ${upass}`,
+                                    `cred_u_all_${u.userId}`
+                                  )
+                                }
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-200 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              >
+                                {copiedKey === `cred_u_all_${u.userId}` ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                    <span className="text-emerald-700">Kopyalandı</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Kopyala</span>
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditPermissions(u)}
+                                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0f6bae] font-bold text-[11px] rounded-lg border border-blue-200 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              >
+                                <Sliders className="w-3 h-3" />
+                                <span>Şifre & Yetki Düzenle</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🔐 TAB 1: MODÜL & ALT MODÜL TANIMLAMA VE YETKİLENDİRME MATRİSİ */}
       {/* ========================================================================= */}
       {activeTab === "matrix" && (
         <div className="space-y-4">
           {/* Controls Bar */}
           <div className="card-elevation-1 bg-white p-4 rounded-2xl border border-slate-200/80 space-y-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              {/* Quick Role Preset Bar */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider label-caps flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-[#0f6bae]" />
-                  Hazır Personel Rol Şablonları:
-                </span>
-                {STAFF_ROLE_PRESETS.map((preset) => (
-                  <span
-                    key={preset.id}
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border cursor-help transition-all ${preset.color}`}
-                    title={`${preset.name}: ${preset.description}`}
-                  >
-                    {preset.name}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-[#0f6bae]" />
+                    Merkezi Ana Modül & Alt Modül Tanımlama ve Yetkilendirme Matrisi
                   </span>
+                  <span className="px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-800 rounded-full text-[10px] font-bold flex items-center gap-1">
+                    <Lock className="w-3 h-3" />
+                    Sadece Admin & Sistem Yöneticisi Yetkilendirebilir
+                  </span>
+                  <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-[10px] font-bold">
+                    {allAppModules.filter((m) => !m.isSubModule).length} Ana Modül •{" "}
+                    {allAppModules.filter((m) => m.isSubModule).length} Alt Modül
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Uygulamadaki tüm modüllerin ve alt modüllerin tanımlanması ve yetkilendirilmesi sadece <strong>Admin</strong> ve <strong>Sistem Yöneticisi</strong> tarafından yapılabilir. Ana modül kapatıldığında alt modülleri otomatik kapanır.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                {isAdminOrSysAdmin(currentUser) && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDefineModuleModal(true)}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>+ Yeni Modül / Alt Modül Tanımla</span>
+                  </button>
+                )}
+
+                {/* Search Box */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Personel veya e-posta ara..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-4 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:border-[#0f6bae] focus:ring-2 focus:ring-[#0f6bae] focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Category & Level Filters */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                {[
+                  "Tümü",
+                  "Temel",
+                  "Ticari & Finans",
+                  "Operasyon",
+                  "Sektörel",
+                  "Rapor & Analiz",
+                  "Sistem",
+                ].map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setMatrixCategoryFilter(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer ${
+                      matrixCategoryFilter === cat
+                        ? "bg-[#0f6bae] text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {cat}
+                  </button>
                 ))}
               </div>
 
-              {/* Search Box */}
-              <div className="relative w-full md:w-72">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Personel veya e-posta ara..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:border-[#0f6bae] focus:ring-2 focus:ring-[#0f6bae] focus:outline-none"
-                />
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+                {[
+                  { id: "all", label: "Tüm Modül & Alt Modüller" },
+                  { id: "main", label: "Ana Modüller" },
+                  { id: "sub", label: "Alt Modüller" },
+                ].map((lvl) => (
+                  <button
+                    key={lvl.id}
+                    type="button"
+                    onClick={() => setMatrixLevelFilter(lvl.id as "all" | "main" | "sub")}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      matrixLevelFilter === lvl.id
+                        ? "bg-white text-[#0f6bae] shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {lvl.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -876,16 +1673,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                     <th className="p-3 font-semibold text-center w-36 bg-white text-slate-800">
                       Hızlı Şablon
                     </th>
-                    {ALL_APP_MODULES.map((mod) => (
-                      <th
-                        key={mod.key}
-                        className="p-3 font-semibold text-center min-w-[90px] max-w-[120px] bg-white text-slate-800"
-                      >
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-[10px] font-semibold leading-tight text-slate-800">{mod.label}</span>
-                        </div>
-                      </th>
-                    ))}
+                    {allAppModules
+                      .filter(
+                        (m) =>
+                          (matrixCategoryFilter === "Tümü" ||
+                            m.category === matrixCategoryFilter) &&
+                          (matrixLevelFilter === "all" ||
+                            (matrixLevelFilter === "main" && !m.isSubModule) ||
+                            (matrixLevelFilter === "sub" && m.isSubModule))
+                      )
+                      .map((mod) => {
+                        const parentMod = mod.parentKey
+                          ? allAppModules.find((p) => p.key === mod.parentKey)
+                          : null;
+                        const isCustomMod =
+                          String(mod.key).startsWith("custom_mod_") ||
+                          String(mod.key).includes("_sub_");
+                        return (
+                          <th
+                            key={mod.key}
+                            className={`p-3 font-semibold text-center min-w-[105px] max-w-[135px] text-slate-800 ${
+                              mod.isSubModule ? "bg-purple-50/40" : "bg-white"
+                            }`}
+                            title={mod.description}
+                          >
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="flex items-center gap-1">
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold ${
+                                    mod.isSubModule
+                                      ? "bg-purple-100 text-purple-800"
+                                      : "bg-blue-100 text-[#0f6bae]"
+                                  }`}
+                                >
+                                  {mod.isSubModule ? "ALT MODÜL" : "ANA MODÜL"}
+                                </span>
+                                {isCustomMod && isAdminOrSysAdmin(currentUser) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCustomModule(mod.key)}
+                                    className="text-rose-500 hover:text-rose-700 p-0.5"
+                                    title="Özel tanımlı modülü sil"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                              {parentMod && (
+                                <span className="text-[9px] text-purple-700 font-medium truncate max-w-[115px]">
+                                  ↳ {parentMod.label}
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold leading-tight text-slate-900">
+                                {mod.label}
+                              </span>
+                            </div>
+                          </th>
+                        );
+                      })}
                     <th className="p-3 font-semibold text-center w-32 sticky right-0 bg-white z-20 text-slate-900 border-l border-slate-200">
                       İşlem & Kayıt
                     </th>
@@ -897,6 +1742,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                     const isSysAdmin = isUserSysAdmin(user);
                     const effectiveModules = getUserEffectiveModules(user);
                     const isPending = hasUserPendingChanges(user.userId);
+                    const userUsername = user.username || user.email?.split("@")[0] || user.userId;
+                    const userPassword = user.passwordPlain || "123456";
+                    const visibleMods = allAppModules.filter(
+                      (m) =>
+                        (matrixCategoryFilter === "Tümü" ||
+                          m.category === matrixCategoryFilter) &&
+                        (matrixLevelFilter === "all" ||
+                          (matrixLevelFilter === "main" && !m.isSubModule) ||
+                          (matrixLevelFilter === "sub" && m.isSubModule))
+                    );
 
                     return (
                       <tr
@@ -921,8 +1776,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                                 )}
                               </div>
                               <div className="text-[10px] text-slate-500 font-mono truncate">{user.email}</div>
-                              <div className="text-[10px] text-[#0f6bae] font-semibold truncate mt-0.5">
-                                Rol: {user.role || "Standart Personel"}
+                              <div className="flex flex-wrap items-center gap-1 mt-1">
+                                <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-[#0f6bae] border border-blue-200">
+                                  K.Adı: {userUsername}
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200">
+                                  Şifre: {showPasswords ? userPassword : "••••••"}
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -970,12 +1830,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                           )}
                         </td>
 
-                        {/* Module Checkbox Columns */}
-                        {ALL_APP_MODULES.map((mod) => {
-                          const isEnabled = effectiveModules.includes(mod.key);
+                        {/* Module & Sub-Module Checkbox Columns */}
+                        {visibleMods.map((mod) => {
+                          const isEnabled = isKeyAllowedInList(
+                            mod.key,
+                            mod.parentKey,
+                            effectiveModules
+                          );
 
                           return (
-                            <td key={mod.key} className="p-3 text-center border-r border-slate-200">
+                            <td
+                              key={mod.key}
+                              className={`p-3 text-center border-r border-slate-200 ${
+                                mod.isSubModule ? "bg-purple-50/20" : ""
+                              }`}
+                            >
                               {isSysAdmin ? (
                                 <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 mx-auto flex items-center justify-center border border-emerald-200">
                                   <Check className="w-3.5 h-3.5 stroke-[3]" />
@@ -983,13 +1852,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                               ) : (
                                 <button
                                   type="button"
+                                  disabled={!isAdminOrSysAdmin(currentUser)}
                                   onClick={() => handleToggleModuleInDraft(user.userId, mod.key)}
                                   className={`w-6 h-6 rounded-lg mx-auto flex items-center justify-center transition-all cursor-pointer ${
                                     isEnabled
-                                      ? "bg-[#0f6bae] hover:bg-[#005289] text-white shadow-2xs"
+                                      ? mod.isSubModule
+                                        ? "bg-purple-600 hover:bg-purple-700 text-white shadow-2xs"
+                                        : "bg-[#0f6bae] hover:bg-[#005289] text-white shadow-2xs"
                                       : "bg-slate-50 hover:bg-slate-100 border border-slate-200 text-transparent"
                                   }`}
-                                  title={`${user.name} için ${mod.label} erişimini aç/kapat`}
+                                  title={`${user.name} için ${mod.label} (${
+                                    mod.isSubModule ? "Alt Modül" : "Ana Modül"
+                                  }) erişimini aç/kapat`}
                                 >
                                   {isEnabled ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : null}
                                 </button>
@@ -1021,25 +1895,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                             </div>
                           ) : (
                             <div className="flex items-center justify-center gap-1.5">
-                              {!isSysAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditPermissions(user)}
-                                  className="px-2.5 py-1 text-[10px] font-bold text-[#0f6bae] hover:bg-blue-50 rounded-lg border border-slate-200 hover:border-blue-200 transition-all cursor-pointer"
-                                  title="Modül Yetkilerini Düzenle"
-                                >
-                                  Yetkileri Düzenle
-                                </button>
-                              )}
-                              {canDeleteUser(user) && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditPermissions(user)}
+                                className="px-2 py-1 text-[10px] font-bold text-[#0f6bae] hover:bg-blue-50 rounded-lg border border-slate-200 hover:border-blue-200 transition-all cursor-pointer"
+                                title="Kullanıcı Adı, Şifre ve Modül Yetkilerini Düzenle"
+                              >
+                                Şifre & Yetki
+                              </button>
+                              {canDeleteUser(user) ? (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenDeleteUserModal(user)}
-                                  className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition-all cursor-pointer"
-                                  title="Kullanıcıyı Sil"
+                                  className="px-2 py-1 text-[10px] font-bold text-rose-700 hover:text-white bg-rose-50 hover:bg-rose-600 rounded-lg border border-rose-200 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                                  title="Kullanıcıyı Kalıcı Olarak Sil"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Sil</span>
                                 </button>
+                              ) : (
+                                <span
+                                  className="px-1.5 py-1 text-[9px] font-medium text-slate-400 bg-slate-100 rounded border border-slate-200 cursor-not-allowed"
+                                  title="Kendi aktif oturum hesabınızı silemezsiniz"
+                                >
+                                  Aktif
+                                </span>
                               )}
                             </div>
                           )}
@@ -1064,20 +1944,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Kullanıcı, e-posta veya şirket ara..."
+                placeholder="Kullanıcı adı, ad soyad, e-posta veya şirket ara..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:border-[#0f6bae] focus:ring-2 focus:ring-[#0f6bae] focus:outline-none"
               />
             </div>
 
-            <button
-              onClick={handleOpenAddUser}
-              className="w-full sm:w-auto px-4 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-2 cursor-pointer transition-all"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Yeni Kullanıcı Tanımla</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setShowPasswords((prev) => !prev)}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-[#0f6bae]" />}
+                <span>{showPasswords ? "Şifreleri Gizle" : "Şifreleri Göster"}</span>
+              </button>
+              <button
+                onClick={handleOpenAddUser}
+                className="w-full sm:w-auto px-4 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-2 cursor-pointer transition-all"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Yeni Kullanıcı Tanımla</span>
+              </button>
+              <button
+                onClick={() => setIsQuickDeleteUserModalOpen(true)}
+                className="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-2 cursor-pointer transition-all"
+                title="Kullanıcı Silme Paneli"
+              >
+                <UserMinus className="w-4 h-4" />
+                <span>Kullanıcı Sil</span>
+              </button>
+            </div>
           </div>
 
           {/* User Cards Grid */}
@@ -1086,6 +1984,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               const isSysAdmin = isUserSysAdmin(user);
               const effectiveModules = getUserEffectiveModules(user);
               const userFilesCount = getFilesForUser(user.userId).length;
+              const uname = user.username || user.email?.split("@")[0] || user.userId;
+              const upass = user.passwordPlain || "123456";
 
               return (
                 <div
@@ -1113,6 +2013,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                           {user.role || "Ön Muhasebe"}
                         </span>
                       )}
+                    </div>
+
+                    {/* 🔑 Giriş Kimlik Bilgileri Kutusu (Kullanıcı Adı & Şifre) */}
+                    <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1">
+                          <KeyRound className="w-3 h-3 text-amber-600" />
+                          Giriş Kimlik Bilgileri
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyText(
+                              `Kullanıcı Adı: ${uname}\nE-Posta: ${user.email}\nŞifre: ${upass}`,
+                              `ucard_all_${user.userId}`
+                            )
+                          }
+                          className="text-[10px] font-bold text-[#0f6bae] hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedKey === `ucard_all_${user.userId}` ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-700">Kopyalandı</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Tümünü Kopyala</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-0.5">
+                        <div className="bg-white px-2.5 py-1.5 rounded-lg border border-amber-200/80 flex items-center justify-between gap-1">
+                          <div className="min-w-0">
+                            <span className="text-[9px] text-slate-400 font-semibold block">Kullanıcı Adı</span>
+                            <span className="font-mono font-bold text-xs text-[#0f6bae] truncate block">{uname}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(uname, `ucard_u_${user.userId}`)}
+                            className="p-1 text-slate-400 hover:text-[#0f6bae] cursor-pointer shrink-0"
+                            title="Kullanıcı Adını Kopyala"
+                          >
+                            {copiedKey === `ucard_u_${user.userId}` ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="bg-white px-2.5 py-1.5 rounded-lg border border-amber-200/80 flex items-center justify-between gap-1">
+                          <div className="min-w-0">
+                            <span className="text-[9px] text-slate-400 font-semibold block">Giriş Şifresi</span>
+                            <span className="font-mono font-bold text-xs text-amber-900 truncate block">
+                              {showPasswords ? upass : "••••••••"}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(upass, `ucard_p_${user.userId}`)}
+                            className="p-1 text-slate-400 hover:text-amber-800 cursor-pointer shrink-0"
+                            title="Şifreyi Kopyala"
+                          >
+                            {copiedKey === `ucard_p_${user.userId}` ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-100 space-y-1.5 text-xs">
@@ -1150,26 +2123,299 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => handleOpenEditPermissions(user)}
-                        className="p-2 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-[#0f6bae] rounded-xl border border-slate-200 hover:border-blue-200 cursor-pointer transition-all"
-                        title="Modül Yetkilerini Düzenle"
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-[#0f6bae] rounded-xl border border-slate-200 hover:border-blue-200 font-bold text-xs flex items-center gap-1 cursor-pointer transition-all"
+                        title="Kullanıcı Adı, Şifre ve Modül Yetkilerini Düzenle"
                       >
-                        <Sliders className="w-4 h-4" />
+                        <Sliders className="w-3.5 h-3.5" />
+                        <span>Şifre & Yetki</span>
                       </button>
 
-                      {canDeleteUser(user) && (
+                      {canDeleteUser(user) ? (
                         <button
                           onClick={() => handleOpenDeleteUserModal(user)}
-                          className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl border border-rose-200 cursor-pointer transition-all"
-                          title="Kullanıcıyı Sil"
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 rounded-xl border border-rose-200 font-bold text-xs flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                          title="Kullanıcıyı Kalıcı Olarak Sil"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Sil</span>
                         </button>
+                      ) : (
+                        <span
+                          className="px-2.5 py-1.5 bg-slate-100 text-slate-400 rounded-xl border border-slate-200 text-xs font-medium flex items-center gap-1 cursor-not-allowed"
+                          title="Kendi aktif oturum hesabınızı silemezsiniz"
+                        >
+                          <Lock className="w-3 h-3" />
+                          <span>Aktif</span>
+                        </span>
                       )}
                     </div>
                   </div>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🏢 TAB: ŞİRKETLER & MYSOFT ENTEGRASYON VE EŞLEŞTİRME */}
+      {/* ========================================================================= */}
+      {activeTab === "companies" && (
+        <div className="space-y-6">
+          {/* Header Action Bar */}
+          <div className="card-elevation-2 bg-white p-6 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-[#0f6bae]" />
+                <h3 className="text-base font-bold text-slate-900">
+                  Şirket Yönetimi & Mysoft VKN/TCKN Eşleştirme Masası
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                Sisteme yeni şirket ekleyin. <strong>Yeni eklenen şirkette bütün modüller (Faturalar, Cariler, Bankalar, Stoklar vb.) tamamen boş ve tertemiz olarak açılır.</strong> Admin panelinden her şirketin giriş kullanıcı adını, şifresini ve VKN/TCKN numaralarını yönetebilirsiniz.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPasswords((prev) => !prev)}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-[#0f6bae]" />}
+                <span>{showPasswords ? "Şifreleri Gizle" : "Şifreleri Göster"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenAddCompany}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98 shrink-0"
+              >
+                <Building2 className="w-4 h-4" />
+                <span>+ Yeni Şirket Ekle</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="flex items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Şirket adı, unvan, kullanıcı adı, VKN veya TCKN ile ara..."
+                value={companySearchTerm}
+                onChange={(e) => setCompanySearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:border-[#0f6bae] outline-none"
+              />
+            </div>
+            <span className="text-xs font-mono font-bold text-slate-500">
+              Toplam: {adminCompanies.length} Şirket
+            </span>
+          </div>
+
+          {/* Companies Table / Grid */}
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="p-4">Şirket / Firma Adı</th>
+                    <th className="p-4">Kullanıcı Adı & Şifre (Giriş)</th>
+                    <th className="p-4">Vergi Dairesi</th>
+                    <th className="p-4 font-mono">VKN / TCKN</th>
+                    <th className="p-4">Mysoft e-Belge Eşleşmesi</th>
+                    <th className="p-4">Modül Durumu</th>
+                    <th className="p-4 text-center">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {adminCompanies
+                    .filter((c) => {
+                      if (!companySearchTerm.trim()) return true;
+                      const q = companySearchTerm.toLowerCase();
+                      return (
+                        c.companyName?.toLowerCase().includes(q) ||
+                        c.companyTitle?.toLowerCase().includes(q) ||
+                        c.loginUsername?.toLowerCase().includes(q) ||
+                        c.vkn?.includes(q) ||
+                        c.tckn?.includes(q) ||
+                        c.taxNumber?.includes(q)
+                      );
+                    })
+                    .map((comp) => {
+                      const isActive = comp.id === adminActiveCompId;
+                      const compUser = comp.loginUsername || (comp.id === "comp_default" ? "test" : comp.id === "comp_kurumsal_default" ? "sirket" : comp.id === "comp_sahis_default" ? "sahis" : comp.vkn || comp.tckn || "kullanici");
+                      const compPass = comp.loginPasswordPlain || "123456";
+
+                      return (
+                        <tr key={comp.id} className={`hover:bg-slate-50/80 transition-colors ${isActive ? "bg-sky-50/40" : ""}`}>
+                          <td className="p-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold shrink-0 ${
+                                isActive ? "bg-[#0f6bae] text-white" : "bg-slate-100 text-slate-600"
+                              }`}>
+                                <Building className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                  <span>{comp.companyName}</span>
+                                  {isActive && (
+                                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.2 rounded-full">
+                                      Aktif
+                                    </span>
+                                  )}
+                                  {comp.isDefault && (
+                                    <span className="bg-slate-100 text-slate-600 text-[9px] px-1.5 py-0.2 rounded font-normal">
+                                      Ana
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 truncate max-w-xs mt-0.5">
+                                  {comp.companyTitle || comp.companyName}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="p-4">
+                            <div className="flex flex-col gap-1">
+                              <div className="inline-flex items-center gap-1.5 bg-blue-50 text-[#0f6bae] border border-blue-200 px-2 py-0.5 rounded-md font-mono font-bold text-[11px] w-fit">
+                                <KeyRound className="w-3 h-3 text-[#0f6bae]" />
+                                <span>K.Adı: {compUser}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyText(compUser, `ctab_u_${comp.id}`)}
+                                  className="text-blue-400 hover:text-[#0f6bae] cursor-pointer"
+                                  title="Kullanıcı Adını Kopyala"
+                                >
+                                  {copiedKey === `ctab_u_${comp.id}` ? (
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                              <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-md font-mono font-bold text-[11px] w-fit">
+                                <span>Şifre: {showPasswords ? compPass : "••••••••"}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyText(compPass, `ctab_p_${comp.id}`)}
+                                  className="text-amber-500 hover:text-amber-800 cursor-pointer"
+                                  title="Şifreyi Kopyala"
+                                >
+                                  {copiedKey === `ctab_p_${comp.id}` ? (
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="p-4 text-slate-700 font-medium">
+                            {comp.taxOffice || "Merkez"}
+                          </td>
+
+                          <td className="p-4 font-mono font-bold text-slate-800">
+                            {comp.vkn ? (
+                              <div>VKN: {comp.vkn}</div>
+                            ) : null}
+                            {comp.tckn ? (
+                              <div className="text-slate-600">TCKN: {comp.tckn}</div>
+                            ) : null}
+                            {!comp.vkn && !comp.tckn ? comp.taxNumber || "—" : null}
+                          </td>
+
+                          <td className="p-4">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-2 h-2 rounded-full ${
+                                  comp.tenantIdentifierNumber ? "bg-emerald-500" : "bg-amber-400"
+                                }`} />
+                                <span className="font-mono font-bold text-indigo-700">
+                                  {comp.tenantIdentifierNumber || comp.vkn || comp.tckn || "Eşleşmedi"}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-slate-500 block">
+                                Eşleşen: {comp.mysoftMatchedType?.toUpperCase() || "VKN"}
+                              </span>
+                              {(comp.eFaturaPrefix || comp.eArsivPrefix) && (
+                                <div className="pt-1 text-[10px] space-y-0.5">
+                                  <div className="text-blue-700 font-mono">
+                                    e-Fat: <strong>{comp.eFaturaPrefix || "GIB"}</strong> {comp.eFaturaNextNumber ? `(${comp.eFaturaNextNumber})` : ""}
+                                  </div>
+                                  <div className="text-purple-700 font-mono">
+                                    e-Arş: <strong>{comp.eArsivPrefix || "EAR"}</strong> {comp.eArsivNextNumber ? `(${comp.eArsivNextNumber})` : ""}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="p-4">
+                            {comp.id === "comp_default" ? (
+                              <span className="text-[11px] text-slate-600 font-medium bg-slate-100 px-2 py-0.5 rounded-lg">
+                                Standart Demo Verisi
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1 w-fit">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Boş Modüller (İzole)
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {!isActive && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSwitchCompany(comp.id)}
+                                  className="px-2.5 py-1.5 bg-[#0f6bae] hover:bg-[#005289] text-white font-bold text-xs rounded-xl shadow-2xs transition-all active:scale-98 cursor-pointer"
+                                  title="Bu Şirkete Geç"
+                                >
+                                  Şirkete Geç
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenMysoftMatch(comp)}
+                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs rounded-xl flex items-center gap-1 transition-all cursor-pointer"
+                                title="Mysoft VKN & TCKN Eşleştirmesini Yap"
+                              >
+                                <Globe className="w-3.5 h-3.5" />
+                                <span>Eşleştir</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditCompany(comp)}
+                                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                                title="Şirketi ve Şifresini Düzenle"
+                              >
+                                <Sliders className="w-3.5 h-3.5" />
+                              </button>
+
+                              {comp.id !== "comp_default" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCompany(comp.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                                  title="Şirketi Sil"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1275,7 +2521,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                 </div>
                 <div>
                   <h3 className="font-editorial text-base font-medium text-white">Yeni Personel / Kullanıcı Ekle</h3>
-                  <p className="text-[11px] text-[#9daec3]">Sistem girişi ve rol bazlı modül yetkilendirmesi</p>
+                  <p className="text-[11px] text-[#9daec3]">Sistem girişi, kullanıcı adı, şifre ve rol bazlı modül yetkilendirmesi</p>
                 </div>
               </div>
               <button
@@ -1295,7 +2541,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                     <div>
                       <h4 className="text-xs font-bold uppercase tracking-wider label-caps">Kullanıcı Başarıyla Oluşturuldu</h4>
                       <p className="text-xs text-slate-700 mt-1">
-                        Aşağıdaki giriş bilgilerini personelinizle paylaşabilirsiniz. Güvenlik amacıyla bu bilgileri güvenli bir yerde saklayınız.
+                        Aşağıdaki giriş bilgilerini personelinizle paylaşabilirsiniz. Bu bilgiler aynı zamanda Admin Paneli şifre tablosuna kaydedilmiştir.
                       </p>
                     </div>
                   </div>
@@ -1306,11 +2552,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                       <span className="font-semibold text-slate-900">{createdSuccessInfo.name}</span>
                     </div>
                     <div className="flex justify-between items-center py-1 border-b border-slate-200">
+                      <span className="text-slate-500 font-sans">Kullanıcı Adı (Giriş):</span>
+                      <span className="font-bold text-[#0f6bae]">{createdSuccessInfo.username}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-b border-slate-200">
                       <span className="text-slate-500 font-sans">E-posta:</span>
                       <span className="font-semibold text-slate-900">{createdSuccessInfo.email}</span>
                     </div>
                     <div className="flex justify-between items-center py-1 border-b border-slate-200">
-                      <span className="text-slate-500 font-sans">İlk Giriş Şifresi:</span>
+                      <span className="text-slate-500 font-sans">Giriş Şifresi:</span>
                       <span className="font-bold text-[#0f6bae] bg-[#eaedff] px-2 py-0.5 rounded border border-[#c6cdff]">
                         {createdSuccessInfo.password || createdSuccessInfo.passwordPlain}
                       </span>
@@ -1328,7 +2578,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                       type="button"
                       onClick={() => {
                         const pwd = createdSuccessInfo.password || createdSuccessInfo.passwordPlain;
-                        const info = `Muavin ERP Giriş Bilgileri\nE-posta: ${createdSuccessInfo.email}\nŞifre: ${pwd}`;
+                        const info = `Muavin ERP Giriş Bilgileri\nKullanıcı Adı: ${createdSuccessInfo.username}\nE-posta: ${createdSuccessInfo.email}\nŞifre: ${pwd}`;
                         navigator.clipboard.writeText(info);
                         setCopiedKey("credentials");
                         setTimeout(() => setCopiedKey(null), 2000);
@@ -1357,7 +2607,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                     <div>
                       <span className="font-semibold text-slate-900">Merkezi Yetkilendirme Kuralı: </span>
                       <span className="text-slate-600 text-[11px]">
-                        Sistem dışarıdan serbest kayda kapalıdır. Siz burada personel oluşturmadığınız sürece hiç kimse sisteme yeni kayıt yapamaz veya giriş sağlayamaz.
+                        Sistem dışarıdan serbest kayda kapalıdır. Burada tanımladığınız kullanıcı adı ve şifreler Admin Panelinde her zaman görüntülenebilir.
                       </span>
                     </div>
                   </div>
@@ -1369,7 +2619,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                         Ad Soyad <span className="text-[#b91c1c]">*</span>
@@ -1386,13 +2636,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
 
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Kullanıcı Adı (Giriş)
+                      </label>
+                      <input
+                        type="text"
+                        value={newUserUsername}
+                        onChange={(e) => setNewUserUsername(e.target.value)}
+                        placeholder="Örn: ahmetyilmaz"
+                        className="w-full px-3 py-1.5 bg-[#faf8ff] border border-[#e2e7ff] rounded font-mono text-xs text-slate-800 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae] focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                         E-posta Adresi <span className="text-[#b91c1c]">*</span>
                       </label>
                       <input
                         type="email"
                         required
                         value={newUserEmail}
-                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        onChange={(e) => {
+                          setNewUserEmail(e.target.value);
+                          if (!newUserUsername && e.target.value.includes("@")) {
+                            setNewUserUsername(e.target.value.split("@")[0].toLowerCase());
+                          }
+                        }}
                         placeholder="personel@sirketiniz.com"
                         className="w-full px-3 py-1.5 bg-[#faf8ff] border border-[#e2e7ff] rounded text-xs text-slate-800 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae] focus:outline-none"
                       />
@@ -1489,29 +2757,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 bg-[#faf8ff] border border-[#e2e7ff] rounded">
-                      {ALL_APP_MODULES.map((mod) => {
-                        const checked = newUserAllowedModules.includes(mod.key);
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-2 bg-[#faf8ff] border border-[#e2e7ff] rounded">
+                      {allAppModules.map((mod) => {
+                        const checked = isKeyAllowedInList(
+                          mod.key,
+                          mod.parentKey,
+                          newUserAllowedModules
+                        );
                         return (
                           <label
                             key={mod.key}
                             className={`flex items-center gap-2 p-1.5 rounded text-[11px] cursor-pointer transition-colors ${
-                              checked ? "bg-[#eaedff] text-[#0f6bae] font-medium" : "text-slate-700 hover:bg-white"
+                              checked
+                                ? mod.isSubModule
+                                  ? "bg-purple-50 text-purple-900 font-medium"
+                                  : "bg-[#eaedff] text-[#0f6bae] font-medium"
+                                : "text-slate-700 hover:bg-white"
                             }`}
                           >
                             <input
                               type="checkbox"
                               checked={checked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setNewUserAllowedModules((prev) => [...prev, mod.key]);
-                                } else {
-                                  setNewUserAllowedModules((prev) => prev.filter((k) => k !== mod.key));
-                                }
+                              onChange={() => {
+                                setNewUserAllowedModules((prev) =>
+                                  toggleModuleSelectionWithSubModules(
+                                    mod.key,
+                                    prev
+                                  ) as AppModuleKey[]
+                                );
                               }}
                               className="w-3.5 h-3.5 text-[#0f6bae] rounded border-slate-300 focus:ring-[#0f6bae]"
                             />
-                            <span className="truncate">{mod.label}</span>
+                            <span className="truncate">
+                              {mod.isSubModule ? `↳ ${mod.label}` : mod.label}
+                            </span>
                           </label>
                         );
                       })}
@@ -1624,17 +2903,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
         </div>
       )}
 
-      {/* 4. DETAYLI YETKİ DÜZENLEME MODALI */}
+      {/* 4. DETAYLI YETKİ VE GİRİŞ BİLGİLERİ (KULLANICI ADI & ŞİFRE) DÜZENLEME MODALI */}
       {editingPermissionsUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-lg border border-[#e2e7ff] shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+          <div className="bg-white rounded-lg border border-[#e2e7ff] shadow-xl w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden">
             <div
               className="p-4 text-white flex items-center justify-between border-b"
               style={{ backgroundColor: "#131b2e", borderColor: "#222a3d" }}
             >
               <div>
                 <h3 className="font-editorial text-base font-medium text-white">
-                  Yetkileri Düzenle: {editingPermissionsUser.name}
+                  Kullanıcı Adı, Şifre & Yetkiler: {editingPermissionsUser.name}
                 </h3>
                 <p className="text-[11px] text-[#9daec3] font-mono">{editingPermissionsUser.email}</p>
               </div>
@@ -1647,6 +2926,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
             </div>
 
             <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar">
+              {/* 🔑 Giriş Kimlik Bilgileri (Kullanıcı Adı & Şifre) Düzenleme Alanı */}
+              <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                    Giriş Kimlik Bilgileri (Kullanıcı Adı & Şifre)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditPasswordPlain(generateRandomPassword())}
+                    className="text-[10px] font-bold text-[#0f6bae] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" /> Yeni Şifre Üret
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                      Kullanıcı Adı (Giriş)
+                    </label>
+                    <input
+                      type="text"
+                      value={editUsername}
+                      onChange={(e) => setEditUsername(e.target.value)}
+                      placeholder="kullanici_adi"
+                      className="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-lg font-mono text-xs font-bold text-[#0f6bae] focus:border-[#0f6bae] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                      Giriş Şifresi
+                    </label>
+                    <input
+                      type="text"
+                      value={editPasswordPlain}
+                      onChange={(e) => setEditPasswordPlain(e.target.value)}
+                      placeholder="Giriş şifresi"
+                      className="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-lg font-mono text-xs font-bold text-amber-950 focus:border-[#0f6bae] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Quick Presets */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-semibold text-slate-700 uppercase tracking-wider label-caps">
@@ -1666,16 +2989,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                 </div>
               </div>
 
-              {/* Modules list */}
+              {/* Modules & Sub-Modules list */}
               <div className="space-y-2 pt-2 border-t border-[#e2e7ff]">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-semibold text-slate-800 uppercase tracking-wider label-caps">
-                    İzin Verilen Modüller ({selectedModulesToEdit.length}/{ALL_APP_MODULES.length})
+                    İzin Verilen Ana Modüller & Alt Modüller ({selectedModulesToEdit.length}/{allAppModules.length})
                   </label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setSelectedModulesToEdit(ALL_APP_MODULES.map((m) => m.key))}
+                      onClick={() => setSelectedModulesToEdit(allAppModules.map((m) => m.key))}
                       className="text-[10px] text-[#0f6bae] font-semibold hover:underline"
                     >
                       Tümünü Seç
@@ -1691,29 +3014,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 p-2 bg-[#faf8ff] border border-[#e2e7ff] rounded max-h-64 overflow-y-auto">
-                  {ALL_APP_MODULES.map((mod) => {
-                    const isChecked = selectedModulesToEdit.includes(mod.key);
+                <div className="grid grid-cols-2 gap-2 p-2 bg-[#faf8ff] border border-[#e2e7ff] rounded max-h-60 overflow-y-auto">
+                  {allAppModules.map((mod) => {
+                    const isChecked = isKeyAllowedInList(
+                      mod.key,
+                      mod.parentKey,
+                      selectedModulesToEdit
+                    );
                     return (
                       <label
                         key={mod.key}
                         className={`flex items-center gap-2 p-2 rounded text-xs cursor-pointer transition-colors ${
-                          isChecked ? "bg-[#eaedff] text-[#0f6bae] font-medium" : "text-slate-700 hover:bg-white"
+                          isChecked
+                            ? mod.isSubModule
+                              ? "bg-purple-50 text-purple-900 font-medium border border-purple-200"
+                              : "bg-[#eaedff] text-[#0f6bae] font-medium"
+                            : "text-slate-700 hover:bg-white"
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedModulesToEdit((prev) => [...prev, mod.key]);
-                            } else {
-                              setSelectedModulesToEdit((prev) => prev.filter((k) => k !== mod.key));
-                            }
+                          onChange={() => {
+                            setSelectedModulesToEdit((prev) =>
+                              toggleModuleSelectionWithSubModules(
+                                mod.key,
+                                prev
+                              ) as AppModuleKey[]
+                            );
                           }}
                           className="w-4 h-4 text-[#0f6bae] rounded border-slate-300 focus:ring-[#0f6bae]"
                         />
-                        <span className="truncate">{mod.label}</span>
+                        <span className="truncate">
+                          {mod.isSubModule ? `↳ ${mod.label}` : mod.label}
+                        </span>
                       </label>
                     );
                   })}
@@ -1721,23 +3055,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 border-t border-[#e2e7ff] flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEditingPermissionsUser(null)}
-                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveEditedPermissions}
-                disabled={savingPermissions}
-                className="px-4 py-1.5 bg-[#0f6bae] hover:bg-[#005289] text-white font-semibold text-xs rounded shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {savingPermissions ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                <span>{savingPermissions ? "Kaydediliyor..." : "Yetkileri Güncelle"}</span>
-              </button>
+            <div className="p-4 bg-slate-50 border-t border-[#e2e7ff] flex items-center justify-between gap-2">
+              {canDeleteUser(editingPermissionsUser) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = editingPermissionsUser;
+                    setEditingPermissionsUser(null);
+                    handleOpenDeleteUserModal(target);
+                  }}
+                  className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Kullanıcıyı Sistemden Kalıcı Olarak Sil"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Kullanıcıyı Sil</span>
+                </button>
+              ) : (
+                <div />
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingPermissionsUser(null)}
+                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditedPermissions}
+                  disabled={savingPermissions}
+                  className="px-4 py-1.5 bg-[#0f6bae] hover:bg-[#005289] text-white font-semibold text-xs rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {savingPermissions ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>{savingPermissions ? "Kaydediliyor..." : "Şifre & Yetkileri Güncelle"}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2031,6 +3384,337 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
         </div>
       )}
 
+      {/* 🔴 HIZLI KULLANICI SİLME LİSTESİ MODALI */}
+      {isQuickDeleteUserModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-rose-700 via-rose-600 to-red-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
+                  <UserMinus className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Kullanıcı Silme Paneli</h3>
+                  <p className="text-xs text-rose-100 font-medium">
+                    Sistemde kayıtlı kullanıcı ve personelleri görüntüleyip dilediğinizi kalıcı olarak silebilirsiniz
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsQuickDeleteUserModalOpen(false)}
+                className="p-1.5 text-rose-100 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search Filter */}
+            <div className="p-4 bg-slate-50 border-b border-slate-200">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Silmek istediğiniz kullanıcıyı ara (isim, e-posta, şirket)..."
+                  value={quickDeleteSearchTerm}
+                  onChange={(e) => setQuickDeleteSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* User List */}
+            <div className="p-4 overflow-y-auto space-y-2.5 flex-1 custom-scrollbar">
+              {(() => {
+                const filtered = users.filter((u) => {
+                  if (!quickDeleteSearchTerm.trim()) return true;
+                  const term = quickDeleteSearchTerm.toLowerCase();
+                  return (
+                    u.name?.toLowerCase().includes(term) ||
+                    u.email?.toLowerCase().includes(term) ||
+                    u.companyName?.toLowerCase().includes(term) ||
+                    u.role?.toLowerCase().includes(term)
+                  );
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-12 text-slate-400 text-xs font-medium space-y-2">
+                      <Users className="w-8 h-8 mx-auto text-slate-300" />
+                      <p>Aramaya uygun kullanıcı bulunamadı.</p>
+                    </div>
+                  );
+                }
+
+                return filtered.map((u) => {
+                  const deletable = canDeleteUser(u);
+                  const isSysAdmin = isUserSysAdmin(u);
+                  const userFilesCount = getFilesForUser(u.userId).length;
+
+                  return (
+                    <div
+                      key={u.userId}
+                      className="p-3.5 bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-[#131b2e] text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0 border border-[#222a3d]">
+                          {u.name ? u.name.charAt(0).toUpperCase() : "U"}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-slate-900 truncate">{u.name}</h4>
+                            {isSysAdmin ? (
+                              <span className="bg-[#131b2e] text-[#c6cdff] border border-[#222a3d] text-[9px] font-bold px-1.5 py-0.5 rounded label-caps">
+                                Süper Admin
+                              </span>
+                            ) : (
+                              <span className="bg-blue-50 text-[#0f6bae] border border-blue-200 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                                {u.role || "Personel"}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 font-mono truncate">{u.email}</p>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            {u.companyName ? `${u.companyName} • ` : ""}{userFilesCount} dosya
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        {deletable ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsQuickDeleteUserModalOpen(false);
+                              handleOpenDeleteUserModal(u);
+                            }}
+                            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Kullanıcıyı Sil</span>
+                          </button>
+                        ) : (
+                          <span className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 cursor-not-allowed">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Aktif Oturum (Silinemez)</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-xs text-slate-500 font-medium">
+                Toplam Kayıtlı: {users.length} Kullanıcı
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsQuickDeleteUserModalOpen(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Company Modal */}
+      <CompanyModal
+        isOpen={isCompModalOpen}
+        onClose={() => setIsCompModalOpen(false)}
+        onSave={handleSaveCompany}
+        initialCompany={compToEdit}
+        mode={compModalMode}
+        currentUser={currentUser}
+      />
+
+      {/* Define Custom Module / Sub-Module Modal (Admin & System Administrator Only) */}
+      {showDefineModuleModal && isAdminOrSysAdmin(currentUser) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-indigo-50 dark:from-emerald-950/30 dark:to-indigo-950/30">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                    Yeni Modül / Alt Modül Tanımla
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Sadece Admin ve Sistem Yöneticisi tarafından tanımlanabilir
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDefineModuleModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNewModuleForm((prev) => ({ ...prev, isSubModule: false }))
+                  }
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    !newModuleForm.isSubModule
+                      ? "border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 font-bold"
+                      : "border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                  }`}
+                >
+                  <div className="text-xs font-extrabold uppercase">Ana Modül</div>
+                  <div className="text-[11px] opacity-80 mt-0.5">
+                    Doğrudan ana menü ve yetki matrisinde yer alır
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNewModuleForm((prev) => ({ ...prev, isSubModule: true }))
+                  }
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    newModuleForm.isSubModule
+                      ? "border-purple-600 bg-purple-50/60 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 font-bold"
+                      : "border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                  }`}
+                >
+                  <div className="text-xs font-extrabold uppercase">Alt Modül</div>
+                  <div className="text-[11px] opacity-80 mt-0.5">
+                    Bir ana modüle bağlı alt sekme/yetki olarak tanımlanır
+                  </div>
+                </button>
+              </div>
+
+              {newModuleForm.isSubModule && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Bağlı Olduğu Ana Modül
+                  </label>
+                  <select
+                    value={newModuleForm.parentKey}
+                    onChange={(e) =>
+                      setNewModuleForm((prev) => ({
+                        ...prev,
+                        parentKey: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                  >
+                    {allAppModules
+                      .filter((m) => !m.isSubModule)
+                      .map((parent) => (
+                        <option key={parent.key} value={parent.key}>
+                          {parent.label} ({parent.category})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  {newModuleForm.isSubModule ? "Alt Modül Adı *" : "Ana Modül Adı *"}
+                </label>
+                <input
+                  type="text"
+                  value={newModuleForm.label}
+                  onChange={(e) =>
+                    setNewModuleForm((prev) => ({ ...prev, label: e.target.value }))
+                  }
+                  placeholder="Örn: İthalat / İhracat Operasyonları"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Modül Kategorisi
+                  </label>
+                  <select
+                    value={newModuleForm.category}
+                    onChange={(e) =>
+                      setNewModuleForm((prev) => ({
+                        ...prev,
+                        category: e.target.value as any,
+                      }))
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                  >
+                    <option value="Temel">Temel</option>
+                    <option value="Ticari & Finans">Ticari & Finans</option>
+                    <option value="Operasyon">Operasyon</option>
+                    <option value="Sektörel">Sektörel</option>
+                    <option value="Rapor & Analiz">Rapor & Analiz</option>
+                    <option value="Sistem">Sistem</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Teknik Kod (Opsiyonel)
+                  </label>
+                  <input
+                    type="text"
+                    value={newModuleForm.key}
+                    onChange={(e) =>
+                      setNewModuleForm((prev) => ({ ...prev, key: e.target.value }))
+                    }
+                    placeholder="Otomatik oluşturulur"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Modül / Alt Modül Açıklaması
+                </label>
+                <input
+                  type="text"
+                  value={newModuleForm.description}
+                  onChange={(e) =>
+                    setNewModuleForm((prev) => ({
+                      ...prev,
+                      description: e.target.value,
+                    }))
+                  }
+                  placeholder="Yetki matrisinde görünecek açıklama..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDefineModuleModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateCustomModule}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-emerald-600/20 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                Modülü Sisteme Tanımla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

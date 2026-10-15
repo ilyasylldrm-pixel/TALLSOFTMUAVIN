@@ -179,6 +179,35 @@ export const Waybills: React.FC<WaybillsProps> = ({
     }
   };
 
+  const handleDownloadWaybillExcel = () => {
+    if (!selectedWaybillForView) return;
+    const wb = selectedWaybillForView;
+    const headers = [
+      "Kalem No",
+      "Ürün / Hizmet Adı",
+      "Miktar",
+      "Birim",
+      "Açıklama",
+    ];
+
+    const rows: (string | number)[][] = wb.items.map((it, idx) => [
+      idx + 1,
+      it.productName,
+      it.quantity,
+      it.unit,
+      it.description || "-",
+    ]);
+
+    exportToExcel({
+      filename: `${wb.waybillNumber}_Irsaliye_Detayi_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "İrsaliye Detayı",
+      title: `${companySettings?.companyName || "FİRMA"} - RESMİ İRSALİYE SEVK DETAYI VE KALEM LİSTESİ`,
+      subtitle: `İrsaliye No: ${wb.waybillNumber} | Tür: ${wb.type === "dispatch" ? "Sevk İrsaliyesi" : "Alış İrsaliyesi"} | Cari: ${wb.contactName} | Tarih: ${formatDate(wb.waybillDate)} | Durum: ${wb.status === "delivered" ? "Teslim Edildi" : "Sevk Edildi"}`,
+      headers,
+      rows,
+    });
+  };
+
   // New Waybill Form State
   const [waybillType, setWaybillType] = useState<WaybillType>("dispatch");
   const [waybillNumber, setWaybillNumber] = useState("");
@@ -920,7 +949,7 @@ export const Waybills: React.FC<WaybillsProps> = ({
                                 <option value="">-- Listeden Ürün Seçiniz --</option>
                                 {products.map((p) => (
                                   <option key={p.id} value={p.id}>
-                                    [{p.code}] {p.name} - Stok: {p.stockQuantity} {p.unit} (Satış: ₺{p.sellPrice})
+                                    [{p.code}] {p.name} - Stok: {p.stockQuantity} {p.unit} (Satış: ₺{p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                                   </option>
                                 ))}
                               </select>
@@ -1114,6 +1143,15 @@ export const Waybills: React.FC<WaybillsProps> = ({
               </button>
               <button
                 type="button"
+                onClick={handleDownloadWaybillExcel}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-500 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
+                title="İrsaliye Detaylarını ve Kalemlerini Excel (.xlsx) Olarak İndir"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>Excel İndir</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleDownloadWaybillPDF}
                 disabled={isDownloadingWaybillPDF}
                 className="bg-purple-600 hover:bg-purple-700 text-white border border-purple-500 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all disabled:opacity-50"
@@ -1259,8 +1297,11 @@ export const Waybills: React.FC<WaybillsProps> = ({
                         ₺{selectedWaybillForView.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm font-black text-purple-950 pt-2 border-t border-purple-300">
-                      <span>GENEL TOPLAM:</span>
+                    <div
+                      style={{ backgroundColor: "#83b8ff", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+                      className="flex justify-between items-center text-sm font-black text-slate-950 p-2 rounded-lg border border-[#60a5fa] mt-1 print:bg-[#83b8ff]"
+                    >
+                      <span className="text-xs uppercase">İŞLEM TUTARI / GENEL TOPLAM:</span>
                       <span>₺{selectedWaybillForView.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
                     </div>
                   </div>
@@ -1344,12 +1385,12 @@ export const Waybills: React.FC<WaybillsProps> = ({
 
             <p className="text-xs text-slate-600 leading-relaxed">
               <strong className="text-slate-900">{convertConfirmWaybill.waybillNumber}</strong> numaralı irsaliye,{" "}
-              <strong>₺{convertConfirmWaybill.grandTotal.toLocaleString("tr-TR")}</strong> tutarında resmi e-Faturaya dönüştürülecektir.
+              <strong>₺{convertConfirmWaybill.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> tutarında resmi e-Faturaya dönüştürülecektir.
             </p>
 
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1 text-slate-700">
               <div>• Ürün stok miktarları otomatik düşürülecektir/artırılacaktır.</div>
-              <div>• Cari hesaba ₺{convertConfirmWaybill.grandTotal.toLocaleString("tr-TR")} borç/alacak işlenecektir.</div>
+              <div>• Cari hesaba ₺{convertConfirmWaybill.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} borç/alacak işlenecektir.</div>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">

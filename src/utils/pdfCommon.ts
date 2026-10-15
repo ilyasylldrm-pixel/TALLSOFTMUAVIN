@@ -22,8 +22,13 @@ export function getCurrencySymbol(currency?: string): string {
  * e.g., 12500.5 -> "₺12.500,50" or "$1.250,50" or "12.500,50 CHF"
  */
 export function formatCurrency(amount: number | null | undefined, currency?: string): string {
-  if (amount === null || amount === undefined || isNaN(Number(amount))) return "0,00 ₺";
   const symbol = getCurrencySymbol(currency);
+  if (amount === null || amount === undefined || isNaN(Number(amount))) {
+    if (["₺", "$", "€", "£"].includes(symbol)) {
+      return `${symbol}0,00`;
+    }
+    return `0,00 ${symbol}`;
+  }
   const formattedNum = Number(amount).toLocaleString("tr-TR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,

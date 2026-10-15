@@ -7,6 +7,7 @@ import {
   PuantajCode,
   DayPuantajDetail,
   CustomPayrollAdjustment,
+  CompanySettings,
 } from "../types";
 import { getActivePayrollParameters } from "../data/payrollParametersData";
 
@@ -211,29 +212,46 @@ export const calculatePuantajStats = (
   let countR = 0;
   let countM = 0;
 
-  // Fazla mesai sayaçları (4857 Sayılı İş Kanunu)
-  let overtimeNormalHours = 0;
-  let overtimeWeekendHours = 0;
-  let overtimeHolidayHours = 0;
-  let overtimeHolidayDays = 0;
+  // Fazla mesai sayaçları (4857 Sayılı İş Kanunu ve Yasal Zam Oranları)
+  // 1. Fazla Çalışma (%50 Zamlı): Haftalık 45 saati aşan çalışmalar için 1,5 katı
+  // 2. Fazla Sürelerle Çalışma (%25 Zamlı): 40-45 saat arası çalışmalar için 1,25 katı
+  // 3. Hafta Tatili Çalışması: Çalışılmasa bile hak edilen 1 günlük ücrete ek olarak +1,5 yevmiye daha verilerek toplam 2,5 yevmiye
+  // 4. Genel Tatil / Bayram Çalışması (%100 Zamlı): Normal ücrete ilave +1 tam yevmiye (toplam 2 yevmiye)
+  let overtimeNormalHours = 0; // %50 zamlı (1.5x)
+  let overtimeExtensionHours = 0; // %25 zamlı (1.25x)
+  let overtimeWeekendDays = 0; // Hafta tatilinde tam gün çalışma (+1.5 yevmiye ek)
+  let overtimeWeekendHours = 0; // Hafta tatili saatlik mesai (1.5x ek)
+  let overtimeHolidayDays = 0; // Resmi tatil tam gün çalışma (+1 tam yevmiye)
+  let overtimeHolidayHours = 0; // Resmi tatil saatlik mesai (%100 zamlı / 1.0x ek)
 
   for (let day = 1; day <= totalDays; day++) {
     const raw = puantaj[day];
     const code: PuantajCode = typeof raw === "string" ? raw : raw ? raw.code : "N";
     const otHours = typeof raw === "object" && raw ? raw.overtimeHours || 0 : 0;
+    const otType = typeof raw === "object" && raw ? (raw as any).overtimeType : undefined;
     const isHolOt = typeof raw === "object" && raw ? Boolean(raw.isHolidayOvertime) : false;
 
     if (code === "N") {
       countN++;
-      if (otHours > 0) overtimeNormalHours += otHours;
+      if (otHours > 0) {
+        if (otType === "extension_25") {
+          overtimeExtensionHours += otHours;
+        } else {
+          overtimeNormalHours += otHours;
+        }
+      }
     } else if (code === "HT") {
       countHT++;
-      if (otHours > 0) overtimeWeekendHours += otHours;
-      if (isHolOt) overtimeWeekendHours += 7.5;
+      if (isHolOt) {
+        overtimeWeekendDays += 1; // Hafta tatili tam gün çalışma (+1.5 yevmiye)
+      }
+      if (otHours > 0) {
+        overtimeWeekendHours += otHours;
+      }
     } else if (code === "RT") {
       countRT++;
       if (isHolOt) {
-        overtimeHolidayDays += 1;
+        overtimeHolidayDays += 1; // 4857 Sayılı Kanun Madde 47: Resmi tatil tam gün +1 tam yevmiye
       }
       if (otHours > 0) {
         overtimeHolidayHours += otHours;
@@ -255,16 +273,31 @@ export const calculatePuantajStats = (
   const unpaidDays = countM + sickDeduction;
   const sgkDays = Math.max(0, Math.min(30, 30 - unpaidDays));
 
+  // Türkiye Cumhuriyeti 4857 Sayılı İş Kanunu Ücret Esasları:
+  // Aylık maktu çalışma standardı = 225 saat, Günlük yevmiye standardı = 30 gün
   const hourlyGross = baseGross > 0 ? baseGross / 225 : 0;
   const dailyGross = baseGross > 0 ? baseGross / 30 : 0;
 
+  // 1. Fazla Çalışma (%50 Zamlı): Haftalık 45 saati aşan çalışmalar için saatlik ücret 1,5 katı ödenir
   const normalOvertimePay = Math.round(hourlyGross * 1.5 * overtimeNormalHours);
-  const weekendOvertimePay = Math.round(hourlyGross * 2.0 * overtimeWeekendHours);
-  const holidayHoursOvertimePay = Math.round(hourlyGross * 2.0 * overtimeHolidayHours);
-  const holidayDaysOvertimePay = Math.round(dailyGross * 1.0 * overtimeHolidayDays);
 
-  const calculatedOvertimePay = normalOvertimePay + weekendOvertimePay + holidayHoursOvertimePay + holidayDaysOvertimePay;
-  const totalOvertimeHours = overtimeNormalHours + overtimeWeekendHours + overtimeHolidayHours;
+  // 2. Fazla Sürelerle Çalışma (%25 Zamlı): Haftalık 40-45 saat arası çalışmalar için 1,25 katı ödenir
+  const extensionOvertimePay = Math.round(hourlyGross * 1.25 * overtimeExtensionHours);
+
+  // 3. Hafta Tatili Çalışması (Toplam 2,5 Yevmiye):
+  // Çalışılmasa bile hak edilen 1 günlük ücrete ek olarak, çalışılan gün için 1,5 yevmiye daha verilerek toplam 2,5 yevmiye ödenir
+  const weekendDaysOvertimePay = Math.round(dailyGross * 1.5 * overtimeWeekendDays);
+  const weekendHoursOvertimePay = Math.round(hourlyGross * 1.5 * overtimeWeekendHours);
+  const weekendOvertimePay = weekendDaysOvertimePay + weekendHoursOvertimePay;
+
+  // 4. Genel Tatil / Bayram Çalışması (%100 Zamlı):
+  // Resmi tatil veya bayram gününde çalışılması durumunda normal günlük ücrete ilave olarak +1 tam yevmiye (toplam 2 yevmiye) ödenir
+  const holidayDaysOvertimePay = Math.round(dailyGross * 1.0 * overtimeHolidayDays);
+  const holidayHoursOvertimePay = Math.round(hourlyGross * 1.0 * overtimeHolidayHours);
+  const holidayOvertimePay = holidayDaysOvertimePay + holidayHoursOvertimePay;
+
+  const calculatedOvertimePay = normalOvertimePay + extensionOvertimePay + weekendOvertimePay + holidayOvertimePay;
+  const totalOvertimeHours = overtimeNormalHours + overtimeExtensionHours + overtimeWeekendHours + overtimeHolidayHours;
 
   return {
     countN,
@@ -280,16 +313,22 @@ export const calculatePuantajStats = (
     sgkDays,
     paidDays: countN + countHT + countRT + countYI + countUI + countDI + (countR <= 2 ? countR : 2),
     overtimeNormalHours,
+    overtimeExtensionHours,
+    overtimeWeekendDays,
     overtimeWeekendHours,
-    overtimeHolidayHours,
     overtimeHolidayDays,
+    overtimeHolidayHours,
     totalOvertimeHours,
     hourlyGross,
     dailyGross,
     normalOvertimePay,
+    extensionOvertimePay,
     weekendOvertimePay,
+    weekendDaysOvertimePay,
+    weekendHoursOvertimePay,
     holidayHoursOvertimePay,
     holidayDaysOvertimePay,
+    holidayOvertimePay,
     calculatedOvertimePay,
   };
 };
@@ -367,7 +406,8 @@ export const calculatePayrollRecordHelper = (
   custom: CustomPayrollAdjustment = {},
   advanceRequests: AdvanceRequest[] = [],
   leaveRequests: LeaveRequest[] = [],
-  legalDeductions: LegalDeduction[] = []
+  legalDeductions: LegalDeduction[] = [],
+  companySettings?: CompanySettings
 ): PayrollRecord => {
   const autoAdv = getAutoAdvanceForEmployee(emp.id, advanceRequests);
   const autoLvs = getAutoLeavesForEmployee(emp.id, leaveRequests);
@@ -384,6 +424,8 @@ export const calculatePayrollRecordHelper = (
 
   let overtimePay = custom.overtimePay ?? 0;
   let overtimeNormalHours = custom.overtimeNormalHours ?? 0;
+  let overtimeExtensionHours = custom.overtimeExtensionHours ?? 0;
+  let overtimeWeekendDays = custom.overtimeWeekendDays ?? 0;
   let overtimeWeekendHours = custom.overtimeWeekendHours ?? 0;
   let overtimeHolidayDays = custom.overtimeHolidayDays ?? 0;
   let overtimeHolidayHours = custom.overtimeHolidayHours ?? 0;
@@ -400,6 +442,12 @@ export const calculatePayrollRecordHelper = (
     if (custom.overtimeNormalHours === undefined || custom.overtimeNormalHours === null) {
       overtimeNormalHours = stats.overtimeNormalHours;
     }
+    if (custom.overtimeExtensionHours === undefined || custom.overtimeExtensionHours === null) {
+      overtimeExtensionHours = stats.overtimeExtensionHours;
+    }
+    if (custom.overtimeWeekendDays === undefined || custom.overtimeWeekendDays === null) {
+      overtimeWeekendDays = stats.overtimeWeekendDays;
+    }
     if (custom.overtimeWeekendHours === undefined || custom.overtimeWeekendHours === null) {
       overtimeWeekendHours = stats.overtimeWeekendHours;
     }
@@ -411,8 +459,17 @@ export const calculatePayrollRecordHelper = (
     }
   }
 
-  const foodAllowance = custom.foodAllowance ?? (emp.foodAllowance || 0);
-  const roadAllowance = custom.roadAllowance ?? (emp.roadAllowance || 0);
+  const applyAll = companySettings?.applyAllowancesToAllEmployees !== false;
+  const defaultFood = (applyAll || !emp.foodAllowance)
+    ? (companySettings?.defaultFoodAllowance ?? 5500)
+    : (emp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500);
+
+  const defaultRoad = (applyAll || !emp.roadAllowance)
+    ? (companySettings?.defaultRoadAllowance ?? 2500)
+    : (emp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500);
+
+  const foodAllowance = custom.foodAllowance ?? defaultFood;
+  const roadAllowance = custom.roadAllowance ?? defaultRoad;
   const customPayments = custom.customPayments || [];
   const customPaymentsTotal = custom.customPaymentsTotal !== undefined
     ? custom.customPaymentsTotal
@@ -531,6 +588,8 @@ export const calculatePayrollRecordHelper = (
     bonusAmount,
     overtimePay,
     overtimeNormalHours,
+    overtimeExtensionHours,
+    overtimeWeekendDays,
     overtimeWeekendHours,
     overtimeHolidayDays,
     overtimeHolidayHours,
@@ -569,4 +628,23 @@ export const calculatePayrollRecordHelper = (
     isCustomized: Boolean(custom.isCustomized) || autoAdv.totalAdvance > 0 || autoLvs.unpaidDays > 0,
     isRetired,
   };
+};
+
+/**
+ * İnsan kaynakları bordro ve personel belgelerinde kullanılan şirket ünvanı yardımcısı.
+ * "Muavin Bilişim Teknolojileri ve Danışmanlık Anonim Şirketi" için resmi kısa ünvan: "MUAVİN BİLİŞİM TEKN.DAN.A.Ş."
+ */
+export const getHrCompanyTitle = (settings?: CompanySettings | null): string => {
+  const fullTitle = settings?.companyTitle?.trim() || "";
+  const name = settings?.companyName?.trim() || "";
+
+  if (
+    fullTitle.toLowerCase().includes("muavin bilişim teknolojileri") ||
+    fullTitle.toLowerCase().includes("muavin bilişim") ||
+    name.toLowerCase().includes("muavin bilişim")
+  ) {
+    return "MUAVİN BİLİŞİM TEKN.DAN.A.Ş.";
+  }
+
+  return fullTitle || name || "MUAVİN BİLİŞİM TEKN.DAN.A.Ş.";
 };

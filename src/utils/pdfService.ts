@@ -632,6 +632,87 @@ export async function generateAccountStatementAutoTablePDF({
 }
 
 /**
+ * Prints a jsPDF document directly using a hidden iframe.
+ * Invokes doc.autoPrint() so standard PDF viewers immediately display the print dialog.
+ */
+export function printJsPdfDocument(pdf: jsPDF, blob?: Blob): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      if (typeof window === "undefined") {
+        resolve(false);
+        return;
+      }
+
+      pdf.autoPrint();
+      const pdfBlob = blob || pdf.output("blob");
+      const blobUrl = URL.createObjectURL(pdfBlob);
+
+      // Clean up previously created PDF print frames
+      document.querySelectorAll(".muavin-pdf-print-frame").forEach((el) => el.remove());
+
+      const iframe = document.createElement("iframe");
+      iframe.className = "muavin-pdf-print-frame";
+      iframe.setAttribute("aria-hidden", "true");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "none";
+      iframe.style.opacity = "0";
+      iframe.style.pointerEvents = "none";
+      iframe.style.zIndex = "-1";
+      iframe.src = blobUrl;
+      document.body.appendChild(iframe);
+
+      let triggered = false;
+      const doPrint = () => {
+        if (triggered) return;
+        triggered = true;
+
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          resolve(true);
+        } catch (err) {
+          console.warn("Direct iframe PDF print failed:", err);
+          resolve(false);
+        } finally {
+          setTimeout(() => {
+            if (document.body.contains(iframe)) {
+              iframe.remove();
+            }
+            URL.revokeObjectURL(blobUrl);
+          }, 60000);
+        }
+      };
+
+      iframe.onload = () => {
+        setTimeout(doPrint, 250);
+      };
+
+      // Fallback timer if onload does not fire for application/pdf in some browser engines
+      setTimeout(doPrint, 800);
+    } catch (err) {
+      console.error("printJsPdfDocument exception:", err);
+      resolve(false);
+    }
+  });
+}
+
+/**
+ * Direct print handler for Official Account Statement (Cari Hesap Ekstresi & Muavin Defteri).
+ * Generates the EXACT same official vector-sharp PDF as the 'PDF İndir' action and triggers print.
+ */
+export async function printAccountStatementPDF(
+  options: AccountStatementPDFOptions
+): Promise<boolean> {
+  const result = await generateAccountStatementAutoTablePDF(options);
+  if (!result || !result.pdf) return false;
+  return printJsPdfDocument(result.pdf, result.blob);
+}
+
+/**
  * Universal autoTable PDF table generator from ExportData interface
  * Replaces unreliable DOM scraping with pure vector rendering and full Turkish Unicode support
  */
@@ -779,6 +860,429 @@ export async function generateAutoTableFromExportData({
   return { pdf: doc, blob, fileName: cleanFilename };
 }
 
+export interface ExportElementToPDFOptions {
+  orientation?: "p" | "l";
+  format?: string | [number, number];
+  margin?: number;
+  scale?: number;
+  pageMode?: "all" | "slip_only" | "forms_only";
+  targetSelector?: string;
+  fitToSinglePage?: boolean;
+}
+
+/**
+ * Injects exact print styling, extracted @media print rules, and print:* utilities
+ * directly into cloned document for HTML2Canvas to guarantee 100% fidelity with window.print() view
+ */
+export function injectPrintStylesIntoClone(
+  clonedDoc: Document,
+  orientation: "p" | "l" = "l",
+  targetElementId?: string
+): void {
+  // 1. Extract existing @media print CSS rules from all active stylesheets
+  let extractedPrintCss = "";
+  try {
+    const styleSheets = Array.from(document.styleSheets || []);
+    styleSheets.forEach((sheet) => {
+      try {
+        const rules = Array.from(sheet.cssRules || []);
+        rules.forEach((rule) => {
+          if (
+            rule instanceof CSSMediaRule &&
+            (rule.conditionText === "print" || (rule as any).media?.mediaText?.includes("print"))
+          ) {
+            Array.from(rule.cssRules || []).forEach((innerRule) => {
+              extractedPrintCss += innerRule.cssText + "\n";
+            });
+          }
+        });
+      } catch {
+        // Cross-origin stylesheet security or CORS - ignore
+      }
+    });
+  } catch {
+    // Ignore stylesheet iteration errors
+  }
+
+  // 2. Comprehensive print reset, exact typography, and Tailwind print:* utilities
+  const printStyleEl = clonedDoc.createElement("style");
+  printStyleEl.id = "cloned-exact-print-stylesheet";
+  const containerWidth = orientation === "l" ? "1100px" : "794px";
+
+  printStyleEl.textContent = `
+    /* === Extracted @media print rules from app === */
+    ${extractedPrintCss}
+
+    /* === Universal Print Overrides for HTML2Canvas Clone === */
+    * {
+      box-sizing: border-box !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      text-rendering: optimizeLegibility !important;
+    }
+    html, body {
+      background: #ffffff !important;
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      height: auto !important;
+      min-height: 0 !important;
+      overflow: visible !important;
+    }
+    header, nav, aside, .no-print, [data-no-print="true"], button {
+      display: none !important;
+    }
+
+    /* === Tailwind print:* utility classes activation in cloned view === */
+    .print\\:hidden { display: none !important; }
+    .print\\:block { display: block !important; }
+    .print\\:inline-block { display: inline-block !important; }
+    .print\\:flex { display: flex !important; }
+    .print\\:grid { display: grid !important; }
+    .print\\:grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
+    .print\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .print\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+    .print\\:grid-cols-8 { grid-template-columns: repeat(8, minmax(0, 1fr)) !important; }
+    .print\\:shadow-none { box-shadow: none !important; }
+    .print\\:border-0 { border-width: 0px !important; border-style: none !important; }
+    .print\\:border-slate-400 { border-color: #94a3b8 !important; }
+    .print\\:p-0 { padding: 0px !important; }
+    .print\\:m-0 { margin: 0px !important; }
+    .print\\:p-0\\.5 { padding: 0.125rem !important; }
+    .print\\:p-1\\.5 { padding: 0.375rem !important; }
+    .print\\:p-2 { padding: 0.5rem !important; }
+    .print\\:py-0\\.5 { padding-top: 0.125rem !important; padding-bottom: 0.125rem !important; }
+    .print\\:px-1\\.5 { padding-left: 0.375rem !important; padding-right: 0.375rem !important; }
+    .print\\:py-1 { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+    .print\\:pb-1 { padding-bottom: 0.25rem !important; }
+    .print\\:mb-1 { margin-bottom: 0.25rem !important; }
+    .print\\:mb-1\\.5 { margin-bottom: 0.375rem !important; }
+    .print\\:mb-2 { margin-bottom: 0.5rem !important; }
+    .print\\:mt-0 { margin-top: 0px !important; }
+    .print\\:gap-1 { gap: 0.25rem !important; }
+    .print\\:gap-2 { gap: 0.5rem !important; }
+    .print\\:text-lg { font-size: 1.125rem !important; line-height: 1.75rem !important; }
+    .print\\:text-\\[8px\\] { font-size: 8px !important; line-height: 1.25 !important; }
+    .print\\:text-\\[7\\.5px\\] { font-size: 7.5px !important; line-height: 1.25 !important; }
+    .print\\:h-5 { height: 1.25rem !important; }
+    .print\\:overflow-hidden { overflow: hidden !important; }
+    .print\\:overflow-visible { overflow: visible !important; }
+    .print\\:divide-y-0 > :not([hidden]) ~ :not([hidden]) { border-top-width: 0px !important; }
+    .print\\:divide-slate-300 > :not([hidden]) ~ :not([hidden]) { border-color: #cbd5e1 !important; }
+    .print\\:bg-white { background-color: #ffffff !important; }
+    .print\\:bg-slate-900 { background-color: #0f172a !important; }
+    .print\\:w-full { width: 100% !important; }
+    .print\\:max-w-none { max-width: none !important; }
+    .print\\:space-y-0 > :not([hidden]) ~ :not([hidden]) { margin-top: 0px !important; }
+    .print\\:break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
+    .print\\:visible { visibility: visible !important; }
+    .print\\:opacity-100 { opacity: 1 !important; }
+
+    /* === Exact Payroll Print Formatting (Matches A4 Landscape) === */
+    #printable-payroll-area {
+      visibility: visible !important;
+      display: block !important;
+      position: static !important;
+      width: ${containerWidth} !important;
+      max-width: ${containerWidth} !important;
+      margin: 0 auto !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+    }
+    .payroll-main-slip-a4 {
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      margin: 0 !important;
+      padding: 1.5mm 2.5mm !important;
+      font-size: 8.5px !important;
+      line-height: 1.3 !important;
+      border: none !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      background: #ffffff !important;
+    }
+    .payroll-main-slip-a4.landscape-mode {
+      font-size: 8.5px !important;
+      padding: 1.5mm 2.5mm !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .payroll-company-header {
+      padding-bottom: 2px !important;
+      margin-bottom: 2.5px !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .payroll-company-header h1 {
+      font-size: 13px !important;
+      font-weight: bold !important;
+      line-height: 1.2 !important;
+      text-align: center !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .payroll-company-header p {
+      font-size: 8px !important;
+      line-height: 1.2 !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .payroll-employee-card {
+      padding: 2px 4px !important;
+      margin-bottom: 2.5px !important;
+      gap: 2px !important;
+      font-size: 8px !important;
+      line-height: 1.25 !important;
+      display: grid !important;
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .payroll-employee-card span {
+      line-height: 1.25 !important;
+    }
+    .payroll-main-slip-a4.landscape-mode table {
+      font-size: 8px !important;
+      line-height: 1.35 !important;
+    }
+    .payroll-main-slip-a4.landscape-mode table td,
+    .payroll-main-slip-a4.landscape-mode table th {
+      padding: 1.5px 3px !important;
+      line-height: 1.35 !important;
+      vertical-align: middle !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .puantaj-visual-container {
+      margin-bottom: 2.5px !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      overflow: visible !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .puantaj-visual-container table {
+      table-layout: fixed !important;
+      width: 100% !important;
+      border-collapse: collapse !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .puantaj-visual-container table th,
+    .payroll-main-slip-a4.landscape-mode .puantaj-visual-container table td {
+      padding: 2px 0.5px !important;
+      font-size: 7.5px !important;
+      line-height: 1.25 !important;
+      height: auto !important;
+      vertical-align: middle !important;
+      overflow: visible !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .puantaj-visual-container table tr {
+      height: auto !important;
+    }
+    .payroll-main-slip-a4.landscape-mode .net-salary-banner {
+      padding: 3px 6px !important;
+      border-radius: 8px !important;
+    }
+    .net-salary-banner {
+      background-color: #83b8ff !important;
+      border: 2px solid #60a5fa !important;
+      color: #0f172a !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .payroll-supplemental-form-a4 {
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      margin-top: 0 !important;
+      padding: 4px 6px !important;
+      border: none !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      background: #ffffff !important;
+    }
+
+    /* === Exact Finance Receipt Print & PDF Formatting === */
+    #printable-receipt {
+      visibility: visible !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+      width: 794px !important;
+      max-width: 794px !important;
+      margin: 0 auto !important;
+      padding: 32px 40px !important;
+      background: #ffffff !important;
+      box-shadow: none !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 4px !important;
+      overflow: visible !important;
+    }
+    #printable-receipt * {
+      text-overflow: clip !important;
+      overflow: visible !important;
+    }
+    #printable-receipt .truncate {
+      text-overflow: clip !important;
+      overflow: visible !important;
+      white-space: normal !important;
+    }
+    #printable-receipt [data-testid='receipt-header-banner'],
+    #printable-receipt > div:first-child > div:nth-child(2) {
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      width: 100% !important;
+      background-color: #f0f4ff !important;
+      border: 1px solid #c7d2fe !important;
+      border-radius: 12px !important;
+      padding: 14px 16px !important;
+      overflow: visible !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #printable-receipt > div:first-child > div:nth-child(4) {
+      background-color: #83b8ff !important;
+      border: 1px solid #60a5fa !important;
+      color: #0f172a !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* === Technical Service A4 Forms (Oto, BT & Bilişim, Beyaz Eşya & Klima) === */
+    #printable-auto-service-slip,
+    #printable-it-service-slip,
+    #printable-appliance-service-slip,
+    #printable-service-slip,
+    .printable-a4-document {
+      visibility: visible !important;
+      display: block !important;
+      width: 794px !important;
+      max-width: 794px !important;
+      box-sizing: border-box !important;
+      margin: 0 auto !important;
+      padding: 28px 32px !important;
+      background: #ffffff !important;
+      box-shadow: none !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 4px !important;
+      overflow: visible !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #printable-auto-service-slip *,
+    #printable-it-service-slip *,
+    #printable-appliance-service-slip *,
+    #printable-service-slip *,
+    .printable-a4-document * {
+      box-sizing: border-box !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* === Stock Ekstre A4 Landscape Print & PDF Formatting === */
+    #printable-stock-ekstre {
+      visibility: visible !important;
+      display: block !important;
+      width: 1080px !important;
+      max-width: 1080px !important;
+      box-sizing: border-box !important;
+      margin: 0 auto !important;
+      padding: 16px 20px !important;
+      background: #ffffff !important;
+      box-shadow: none !important;
+      border: none !important;
+      overflow: visible !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #printable-stock-ekstre [data-testid='stock-movements-banner'],
+    #printable-stock-ekstre .stock-movements-banner {
+      background-color: #83b8ff !important;
+      border: 1px solid #60a5fa !important;
+      color: #0f172a !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #printable-stock-ekstre .stock-th-colored,
+    #printable-stock-ekstre th.stock-th-colored,
+    #printable-stock-ekstre .stock-badge-colored,
+    .stock-th-colored,
+    .stock-badge-colored {
+      background-color: #83b8ff !important;
+      color: #0f172a !important;
+      border-color: #60a5fa !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #printable-stock-ekstre .pdf-page-block,
+    #printable-stock-ekstre .stock-ekstre-page {
+      width: 1080px !important;
+      max-width: 1080px !important;
+      box-sizing: border-box !important;
+      margin: 0 auto !important;
+      padding: 16px 20px !important;
+      background: #ffffff !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+
+    /* === Official Account Statement (Cari Hesap Ekstresi & Muavin) === */
+    #printable-ledger {
+      visibility: visible !important;
+      display: block !important;
+      width: 100% !important;
+      max-width: 820px !important;
+      box-sizing: border-box !important;
+      margin: 0 auto !important;
+      padding: 16px 20px !important;
+      background: #ffffff !important;
+      box-shadow: none !important;
+      border: none !important;
+      overflow: visible !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #printable-ledger thead tr th {
+      background-color: #1e1b4b !important;
+      color: #ffffff !important;
+      border-color: #1e1b4b !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #printable-ledger tfoot tr {
+      background-color: #e0e7ff !important;
+      color: #1e1b4b !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #printable-ledger tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+  `;
+  clonedDoc.head.appendChild(printStyleEl);
+
+  // 3. Normalize container elements in cloned document
+  if (targetElementId) {
+    const clonedTarget = clonedDoc.getElementById(targetElementId);
+    if (clonedTarget) {
+      let curr: HTMLElement | null = clonedTarget;
+      while (curr && curr !== clonedDoc.body) {
+        curr.style.overflow = "visible";
+        curr.style.maxHeight = "none";
+        curr.style.height = "auto";
+        curr.style.maxWidth = "none";
+        curr = curr.parentElement;
+      }
+      clonedTarget.style.width = containerWidth;
+      clonedTarget.style.maxWidth = containerWidth;
+      clonedTarget.style.margin = "0 auto";
+      clonedTarget.style.boxShadow = "none";
+      clonedTarget.style.border = "none";
+    }
+  }
+
+  // 4. Strip modal styling (shadow, rounded borders) from discrete blocks
+  const blocks = clonedDoc.querySelectorAll(
+    ".payroll-main-slip-a4, .payroll-supplemental-form-a4, #printable-payroll-area, .printable-paper"
+  );
+  blocks.forEach((el: any) => {
+    el.style.boxShadow = "none";
+    el.style.border = "none";
+    el.style.borderRadius = "0";
+    el.style.maxWidth = "100%";
+  });
+}
+
 /**
  * Enhanced DOM-to-PDF export service using html2canvas with print-specific styling and element-aware page breaks
  * Optimized for lightning-fast execution and zero UI lag
@@ -786,7 +1290,7 @@ export async function generateAutoTableFromExportData({
 export async function exportElementToPDFWithPrintStyling(
   elementId: string,
   filename: string = "belge.pdf",
-  options: { orientation?: "p" | "l"; margin?: number; scale?: number } = {}
+  options: ExportElementToPDFOptions = {}
 ): Promise<{ pdf: jsPDF; blob: Blob; fileName: string } | null> {
   const element = document.getElementById(elementId);
   if (!element) {
@@ -796,13 +1300,143 @@ export async function exportElementToPDFWithPrintStyling(
   }
 
   // Yield to the browser to ensure UI loading indicators and spinners render smoothly
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  await new Promise((resolve) => setTimeout(resolve, 30));
 
-  const { orientation = "p", margin = 8 } = options;
-  const targetScale = typeof options.scale === "number" ? options.scale : 1.6;
+  const orientation = options.orientation || "p";
+  const margin = typeof options.margin === "number" ? options.margin : (orientation === "l" ? 3 : 6);
+  const { pageMode = "all", targetSelector } = options;
+  const targetScale = typeof options.scale === "number" ? options.scale : 2;
 
   try {
-    const elWidth = element.scrollWidth || element.clientWidth || 920;
+    const pdf = new jsPDF(orientation, "mm", "a4");
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+
+    const imgWidth = pdfWidth - margin * 2;
+    const pageUsableHeight = pdfHeight - margin * 2;
+    const defaultWindowWidth = orientation === "l" ? 1100 : 794;
+
+    // Check if element contains discrete document blocks (e.g. Bordro slip, SGK Eksik Gün Formu)
+    const rawBlocks = Array.from(
+      element.querySelectorAll<HTMLElement>(
+        ".payroll-main-slip-a4, .payroll-supplemental-form-a4, .pdf-page-block, .page-break-before"
+      )
+    ).filter((el) => {
+      const style = window.getComputedStyle(el);
+      return style.display !== "none" && style.visibility !== "hidden";
+    });
+
+    // Only take top-level blocks among these
+    const topLevelBlocks = rawBlocks.filter(
+      (b) => !rawBlocks.some((other) => other !== b && other.contains(b))
+    );
+
+    let targetBlocks = topLevelBlocks;
+    if (pageMode === "slip_only") {
+      targetBlocks = topLevelBlocks.filter((b) => b.classList.contains("payroll-main-slip-a4"));
+    } else if (pageMode === "forms_only") {
+      targetBlocks = topLevelBlocks.filter((b) => b.classList.contains("payroll-supplemental-form-a4"));
+    } else if (targetSelector) {
+      targetBlocks = topLevelBlocks.filter((b) => b.matches(targetSelector) || b.querySelector(targetSelector));
+    }
+
+    // MULTI-BLOCK MODE: Render each distinct page block strictly on its own page(s)
+    if (targetBlocks.length > 0) {
+      let globalPageIndex = 0;
+
+      for (let i = 0; i < targetBlocks.length; i++) {
+        const block = targetBlocks[i];
+        const blockH = block.scrollHeight || block.clientHeight || 750;
+
+        const blockCanvas = await html2canvas(block, {
+          scale: targetScale,
+          useCORS: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: defaultWindowWidth,
+          windowHeight: Math.max(blockH, orientation === "l" ? 780 : 1120),
+          onclone: (clonedDoc) => {
+            sanitizeOklchForHtml2Canvas(clonedDoc);
+            injectPrintStylesIntoClone(clonedDoc, orientation, elementId);
+          },
+        });
+
+        const blockImgHeightMm = (blockCanvas.height * imgWidth) / blockCanvas.width;
+        const isPayrollSlip = block.classList.contains("payroll-main-slip-a4");
+        const shouldFitToSinglePage =
+          options.fitToSinglePage ||
+          isPayrollSlip ||
+          Boolean(block.querySelector(".payroll-main-slip-a4"));
+
+        if (shouldFitToSinglePage || blockImgHeightMm <= pageUsableHeight + 4) {
+          if (globalPageIndex > 0) {
+            pdf.addPage();
+          }
+          const imgData = blockCanvas.toDataURL("image/jpeg", 0.98);
+
+          if (shouldFitToSinglePage && blockImgHeightMm > pageUsableHeight + 4) {
+            // Proportional single-page fit with top-aligned margin
+            const scaleFactor = Math.min(1, pageUsableHeight / blockImgHeightMm);
+            const fittedH = blockImgHeightMm * scaleFactor;
+            const fittedW = imgWidth * scaleFactor;
+            const xOffset = margin + (imgWidth - fittedW) / 2;
+            const yOffset = margin;
+            pdf.addImage(imgData, "JPEG", xOffset, yOffset, fittedW, fittedH);
+          } else {
+            pdf.addImage(imgData, "JPEG", margin, margin, imgWidth, Math.min(blockImgHeightMm, pageUsableHeight));
+          }
+          globalPageIndex++;
+        } else {
+          // Block exceeds single page: paginate this block individually
+          const pxPerMm = blockCanvas.width / imgWidth;
+          const targetPagePx = pageUsableHeight * pxPerMm;
+
+          let yStart = 0;
+          while (yStart < blockCanvas.height - 5) {
+            const chunkHeightPx = Math.min(targetPagePx, blockCanvas.height - yStart);
+            if (chunkHeightPx <= 0) break;
+
+            const subCanvas = document.createElement("canvas");
+            subCanvas.width = blockCanvas.width;
+            subCanvas.height = chunkHeightPx;
+            const ctx = subCanvas.getContext("2d");
+            if (ctx) {
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, subCanvas.width, subCanvas.height);
+              ctx.drawImage(
+                blockCanvas,
+                0,
+                yStart,
+                blockCanvas.width,
+                chunkHeightPx,
+                0,
+                0,
+                blockCanvas.width,
+                chunkHeightPx
+              );
+            }
+
+            if (globalPageIndex > 0) {
+              pdf.addPage();
+            }
+
+            const subImgData = subCanvas.toDataURL("image/jpeg", 0.98);
+            const subImgHeightMm = (chunkHeightPx * imgWidth) / blockCanvas.width;
+            pdf.addImage(subImgData, "JPEG", margin, margin, imgWidth, subImgHeightMm);
+
+            yStart += chunkHeightPx;
+            globalPageIndex++;
+          }
+        }
+      }
+
+      const cleanFilename = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
+      const blob = pdf.output("blob");
+      return { pdf, blob, fileName: cleanFilename };
+    }
+
     const elHeight = element.scrollHeight || element.clientHeight || 1200;
 
     const canvas = await html2canvas(element, {
@@ -812,44 +1446,33 @@ export async function exportElementToPDFWithPrintStyling(
       backgroundColor: "#ffffff",
       scrollX: 0,
       scrollY: 0,
-      windowWidth: Math.max(elWidth, 960),
-      windowHeight: Math.max(elHeight + 100, 1100),
+      windowWidth: defaultWindowWidth,
+      windowHeight: Math.max(elHeight, orientation === "l" ? 780 : 1120),
       onclone: (clonedDoc) => {
         sanitizeOklchForHtml2Canvas(clonedDoc);
-        const clonedTarget = clonedDoc.getElementById(elementId);
-        if (clonedTarget) {
-          let curr: HTMLElement | null = clonedTarget;
-          while (curr && curr !== clonedDoc.body) {
-            curr.style.overflow = "visible";
-            curr.style.maxHeight = "none";
-            curr.style.height = "auto";
-            curr.style.maxWidth = "none";
-            curr = curr.parentElement;
-          }
-          clonedDoc.body.style.overflow = "visible";
-          clonedDoc.body.style.height = "auto";
-
-          clonedTarget.style.width = `${elWidth}px`;
-          clonedTarget.style.maxWidth = `${elWidth}px`;
-          clonedTarget.style.margin = "0 auto";
-          clonedTarget.style.boxShadow = "none";
-          clonedTarget.style.border = "none";
-        }
+        injectPrintStylesIntoClone(clonedDoc, orientation, elementId);
       },
     });
-
-    const pdf = new jsPDF(orientation, "mm", "a4");
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-
-    const imgWidth = pdfWidth - margin * 2;
-    const pageUsableHeight = pdfHeight - margin * 2;
     const totalImgHeightMm = (canvas.height * imgWidth) / canvas.width;
 
-    if (totalImgHeightMm <= pageUsableHeight + 1) {
+    const shouldFitSinglePage =
+      options.fitToSinglePage ||
+      Boolean(element.querySelector(".payroll-main-slip-a4")) ||
+      element.classList.contains("payroll-main-slip-a4");
+
+    if (shouldFitSinglePage || totalImgHeightMm <= pageUsableHeight + 4) {
       // Single Page Fast Path
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
-      pdf.addImage(imgData, "JPEG", margin, margin, imgWidth, totalImgHeightMm);
+      const imgData = canvas.toDataURL("image/jpeg", 0.98);
+      if (shouldFitSinglePage && totalImgHeightMm > pageUsableHeight + 4) {
+        const scaleFactor = Math.min(1, pageUsableHeight / totalImgHeightMm);
+        const fittedH = totalImgHeightMm * scaleFactor;
+        const fittedW = imgWidth * scaleFactor;
+        const xOffset = margin + (imgWidth - fittedW) / 2;
+        const yOffset = margin;
+        pdf.addImage(imgData, "JPEG", xOffset, yOffset, fittedW, fittedH);
+      } else {
+        pdf.addImage(imgData, "JPEG", margin, margin, imgWidth, Math.min(totalImgHeightMm, pageUsableHeight));
+      }
     } else {
       // Element-aware page break calculation
       const pxPerMm = canvas.width / imgWidth;

@@ -181,9 +181,12 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
             {grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
           </span>
         </div>
-        <div className="flex justify-between items-center pt-1 border-t border-slate-300 font-black text-sm">
-          <span>🎯 Ödenecek Tutar</span>
-          <span className="font-mono text-indigo-700">
+        <div
+          style={{ backgroundColor: "#83b8ff", color: "#0f172a" }}
+          className="flex justify-between items-center p-2 rounded-lg border border-[#60a5fa] font-black text-sm text-slate-950"
+        >
+          <span>🎯 Ödenecek Tutar / Bakiye</span>
+          <span className="font-mono text-slate-950 font-black">
             {currSymbol}
             {payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
           </span>

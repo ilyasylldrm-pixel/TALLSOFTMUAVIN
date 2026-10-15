@@ -1,6 +1,7 @@
 import React from "react";
 import { Employee, CompanySettings, PayrollRecord, DayPuantajDetail } from "../types";
 import { formatCurrency, formatDate } from "../utils/exportUtils";
+import { getHrCompanyTitle } from "../utils/puantajUtils";
 
 interface MissingDayFormProps {
   companySettings: CompanySettings;
@@ -67,9 +68,6 @@ export const MissingDayNotificationForm: React.FC<MissingDayFormProps> = ({
 
   const missingDaysCount = record.unpaidLeaveDays || 0;
   const missingDayCode = record.missingDayCode || "21";
-  const missingDayCodeLabel =
-    MISSING_DAY_CODE_DESCRIPTIONS[missingDayCode] ||
-    `${missingDayCode} - Eksik Gün Nedeni`;
 
   const reasonDetail =
     record.missingDayReason ||
@@ -77,9 +75,11 @@ export const MissingDayNotificationForm: React.FC<MissingDayFormProps> = ({
 
   // Extract specific missing day dates from puantaj
   const missingDayDates: string[] = [];
+  let hasReportCode = false;
   if (puantajDays) {
     Object.entries(puantajDays).forEach(([dayNumStr, detail]: [string, any]) => {
-      if (detail && (detail.code === "M" || detail.code === "Üİ")) {
+      if (detail && (detail.code === "M" || detail.code === "R" || detail.code === "Üİ")) {
+        if (detail.code === "R") hasReportCode = true;
         const dNum = parseInt(dayNumStr, 10);
         const padDay = dNum < 10 ? `0${dNum}` : `${dNum}`;
         const padMonth = monthNum < 10 ? `0${monthNum}` : `${monthNum}`;
@@ -88,10 +88,16 @@ export const MissingDayNotificationForm: React.FC<MissingDayFormProps> = ({
     });
   }
 
+  const effectiveMissingDaysCount = missingDaysCount > 0 ? missingDaysCount : missingDayDates.length;
+  const effectiveMissingDayCode = hasReportCode && missingDayCode === "21" ? "01" : missingDayCode;
+  const missingDayCodeLabel =
+    MISSING_DAY_CODE_DESCRIPTIONS[effectiveMissingDayCode] ||
+    `${effectiveMissingDayCode} - Eksik Gün Nedeni`;
+
   return (
     <div
       id={`missing-day-form-${employee.id}`}
-      className="page-break-always print:page-break-before bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-slate-300 text-slate-900 print:shadow-none print:border-0 print:p-0 mt-8"
+      className="payroll-supplemental-form-a4 page-break-always print:page-break-before bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-slate-300 text-slate-900 print:shadow-none print:border-0 print:p-0 print:mt-0 mt-8"
     >
       {/* Üst Resmi SGK Anteti */}
       <div className="border-b-2 border-slate-900 pb-3 mb-4 flex flex-col sm:flex-row items-start justify-between gap-4">
@@ -115,7 +121,7 @@ export const MissingDayNotificationForm: React.FC<MissingDayFormProps> = ({
             Form Düzenleme Tarihi: {formatDate(new Date())}
           </div>
           <div className="text-[10px] text-rose-700 font-extrabold mt-1">
-            Toplam Eksik Gün: {missingDaysCount} GÜN
+            Toplam Eksik Gün: {effectiveMissingDaysCount} GÜN
           </div>
         </div>
       </div>
@@ -135,7 +141,7 @@ export const MissingDayNotificationForm: React.FC<MissingDayFormProps> = ({
           <div>
             <span className="text-[10px] text-slate-500 block">İşveren / Şirket Ünvanı:</span>
             <span className="font-bold text-slate-900 truncate block">
-              {companySettings.companyTitle || companySettings.companyName || "ŞİRKET ÜNVANI"}
+              {getHrCompanyTitle(companySettings)}
             </span>
           </div>
           <div>
@@ -201,7 +207,7 @@ export const MissingDayNotificationForm: React.FC<MissingDayFormProps> = ({
                   Eksik Gün Sayısı:
                 </td>
                 <td className="p-2.5 font-black text-rose-900 text-sm">
-                  {missingDaysCount} GÜN (İlgili Ay İçinde Çalışılmayan Gün Sayısı)
+                  {effectiveMissingDaysCount} GÜN (İlgili Ay İçinde Çalışılmayan Gün Sayısı)
                 </td>
               </tr>
               <tr>
@@ -210,7 +216,7 @@ export const MissingDayNotificationForm: React.FC<MissingDayFormProps> = ({
                 </td>
                 <td className="p-2.5 font-bold text-slate-900">
                   <span className="inline-block bg-slate-900 text-white font-mono px-2 py-0.5 rounded text-[11px] mr-2">
-                    Kod: {missingDayCode}
+                    Kod: {effectiveMissingDayCode}
                   </span>
                   <span>{missingDayCodeLabel}</span>
                 </td>
@@ -241,7 +247,7 @@ export const MissingDayNotificationForm: React.FC<MissingDayFormProps> = ({
                     </div>
                   ) : (
                     <span className="text-slate-600 font-medium">
-                      {monthName} {year} dönemi puantaj kayıtları uyarınca toplam {missingDaysCount} gün.
+                      {monthName} {year} dönemi puantaj kayıtları uyarınca toplam {effectiveMissingDaysCount} gün.
                     </span>
                   )}
                 </td>
@@ -253,7 +259,7 @@ export const MissingDayNotificationForm: React.FC<MissingDayFormProps> = ({
                 <td className="p-2.5 font-black text-slate-900">
                   {formatCurrency(record.unpaidLeaveDeduction || 0, "TRY")}
                   <span className="text-[11px] text-slate-500 font-normal ml-2">
-                    (Brüt yevmiye x {missingDaysCount} gün esas alınarak bordroya yansıtılmıştır)
+                    (Brüt yevmiye x {effectiveMissingDaysCount} gün esas alınarak bordroya yansıtılmıştır)
                   </span>
                 </td>
               </tr>
@@ -338,7 +344,7 @@ export const DeductionAuthorizationForm: React.FC<DeductionFormProps> = ({
   return (
     <div
       id={`deduction-form-${employee.id}`}
-      className="page-break-always print:page-break-before bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-slate-300 text-slate-900 print:shadow-none print:border-0 print:p-0 mt-8"
+      className="payroll-supplemental-form-a4 page-break-always print:page-break-before bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-slate-300 text-slate-900 print:shadow-none print:border-0 print:p-0 print:mt-0 mt-8"
     >
       {/* Üst Başlık */}
       <div className="border-b-2 border-slate-900 pb-3 mb-4 flex flex-col sm:flex-row items-start justify-between gap-4">
@@ -372,7 +378,7 @@ export const DeductionAuthorizationForm: React.FC<DeductionFormProps> = ({
         <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50">
           <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">İŞVEREN BİLGİLERİ</span>
           <div className="font-bold text-slate-900 text-sm">
-            {companySettings.companyTitle || companySettings.companyName || "ŞİRKET ÜNVANI"}
+            {getHrCompanyTitle(companySettings)}
           </div>
           <div className="text-slate-600 mt-1">
             VKN: {companySettings.taxNumber} · SGK İşyeri No: {companySettings.sgkCredentials?.workplaceRegistrationNo || "—"}
@@ -512,11 +518,18 @@ export const DeductionAuthorizationForm: React.FC<DeductionFormProps> = ({
                   {formatCurrency(totalDeductions, "TRY")}
                 </td>
               </tr>
-              <tr className="bg-emerald-950 text-white font-black text-xs">
-                <td colSpan={4} className="p-2.5 text-right border-r border-emerald-800">
-                  KESİNTİLER SONRASI NET ÖDENECEK MAAŞ TUTARI:
+              <tr
+                style={{
+                  backgroundColor: "#83b8ff",
+                  WebkitPrintColorAdjust: "exact",
+                  printColorAdjust: "exact",
+                }}
+                className="text-slate-950 font-black text-xs print:bg-[#83b8ff]"
+              >
+                <td colSpan={4} className="p-2.5 text-right border-r border-[#60a5fa]">
+                  KESİNTİLER SONRASI İŞLEM TUTARI / NET ÖDENECEK MAAŞ:
                 </td>
-                <td className="p-2.5 text-right text-emerald-300 text-base">
+                <td className="p-2.5 text-right text-slate-950 text-base font-black font-mono">
                   {formatCurrency(record.payableNetSalary || record.netSalary, "TRY")}
                 </td>
               </tr>
@@ -596,7 +609,7 @@ export const AdvanceRequestPrintForm: React.FC<AdvanceRequestFormProps> = ({
   return (
     <div
       id={`advance-request-form-${employee.id}`}
-      className="page-break-always print:page-break-before bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-slate-300 text-slate-900 print:shadow-none print:border-0 print:p-0 mt-8"
+      className="payroll-supplemental-form-a4 page-break-always print:page-break-before bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-slate-300 text-slate-900 print:shadow-none print:border-0 print:p-0 print:mt-0 mt-8"
     >
       {/* Üst Antet */}
       <div className="border-b-2 border-slate-900 pb-3 mb-4 flex flex-col sm:flex-row items-start justify-between gap-4">
@@ -630,7 +643,7 @@ export const AdvanceRequestPrintForm: React.FC<AdvanceRequestFormProps> = ({
         <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50">
           <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">İŞVEREN ŞİRKET BİLGİLERİ</span>
           <div className="font-bold text-slate-900 text-sm">
-            {companySettings.companyTitle || companySettings.companyName || "ŞİRKET ÜNVANI"}
+            {getHrCompanyTitle(companySettings)}
           </div>
           <div className="text-slate-600 mt-1">
             VKN: {companySettings.taxNumber} · SGK No: {companySettings.sgkCredentials?.workplaceRegistrationNo || "—"}

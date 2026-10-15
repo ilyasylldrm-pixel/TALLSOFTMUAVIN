@@ -37,7 +37,6 @@ import {
   getUserProfile,
   findUserProfileByEmail,
   isUserCreatedByAdmin,
-  setCachedAccessToken,
 } from "../lib/firebase";
 import { AppModuleKey } from "../types";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
@@ -47,7 +46,9 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  username?: string;
   companyName: string;
+  companyId?: string;
   phone: string;
   taxNumber: string;
   selectedLogoId: number;
@@ -352,9 +353,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         const finalProfile: UserProfile = {
           id: firebaseUid,
+          username: preCreated?.username || cleanEmail.split("@")[0],
           name: fullName.trim() || preCreated?.name || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : "Personel"),
           email: cleanEmail,
           companyName: preCreated?.companyName || (isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : (companyName.trim() || "Muavin ERP Müşterisi")),
+          companyId: preCreated?.companyId,
           phone: preCreated?.phone || phone.trim() || "+90 (212) 555 0100",
           taxNumber: preCreated?.taxNumber || taxNumber.trim() || "1234567890",
           selectedLogoId: preCreated?.selectedLogoId || selectedLogo.id,
@@ -407,6 +410,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       let firebaseUid = preCreated?.userId || (isSystemAdmin ? "nuT309AyQxQKddnAp1ZJjlSgBXt2" : `usr_${Date.now()}`);
       let authSuccessful = false;
 
+      const authEmailToUse = preCreated?.email || (cleanEmail.includes("@") ? cleanEmail : `${cleanEmail}@muavin.com`);
+
       // 1. Check if user is pre-created by admin with passwordPlain
       const enteredPassword = password;
       const cleanEnteredPassword = enteredPassword.trim();
@@ -420,12 +425,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         authSuccessful = true;
         // Optionally register/sync in Firebase Auth in background so native credentials work too
         try {
-          const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, enteredPassword);
+          const userCredential = await createUserWithEmailAndPassword(auth, authEmailToUse, enteredPassword);
           firebaseUid = userCredential.user.uid;
         } catch {
           // If already created in Firebase Auth, attempt sign-in to sync session
           try {
-            const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, enteredPassword);
+            const userCredential = await signInWithEmailAndPassword(auth, authEmailToUse, enteredPassword);
             firebaseUid = userCredential.user.uid;
           } catch {
             // Keep existing preCreated.userId
@@ -434,14 +439,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       } else {
         // 2. Try Firebase Auth with email & password
         try {
-          const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, enteredPassword);
+          const userCredential = await signInWithEmailAndPassword(auth, authEmailToUse, enteredPassword);
           firebaseUid = userCredential.user.uid;
           authSuccessful = true;
         } catch (signInErr: any) {
           if (isSystemAdmin) {
             // Auto bootstrap system admin
             try {
-              const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, enteredPassword);
+              const userCredential = await createUserWithEmailAndPassword(auth, authEmailToUse, enteredPassword);
               firebaseUid = userCredential.user.uid;
               authSuccessful = true;
             } catch {
@@ -460,9 +465,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       // Final profile constructed with admin permissions
       const finalProfile: UserProfile = {
         id: firebaseUid,
+        username: preCreated?.username || (cleanEmail.includes("@") ? cleanEmail.split("@")[0] : cleanEmail),
         name: preCreated?.name || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : cleanEmail.split("@")[0]),
-        email: cleanEmail,
+        email: preCreated?.email || authEmailToUse,
         companyName: preCreated?.companyName || (isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin ERP Müşterisi"),
+        companyId: preCreated?.companyId,
         phone: preCreated?.phone || "+90 (212) 555 0100",
         taxNumber: preCreated?.taxNumber || "1234567890",
         selectedLogoId: preCreated?.selectedLogoId || selectedLogo.id,
@@ -491,10 +498,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setSubmitting(true);
     try {
       const userCredential = await signInWithPopup(auth, googleProvider);
-      const credential = GoogleAuthProvider.credentialFromResult(userCredential);
-      if (credential?.accessToken) {
-        setCachedAccessToken(credential.accessToken);
-      }
       const user = userCredential.user;
       const userEmail = user.email || "";
       const cleanUserEmail = userEmail.trim().toLowerCase();
@@ -518,9 +521,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       const finalProfile: UserProfile = {
         id: firebaseUid,
+        username: preCreated?.username,
         name: preCreated?.name || user.displayName || (isSystemAdmin ? "İlyas Yıldırım (Sistem Yöneticisi)" : cleanUserEmail.split("@")[0]),
         email: cleanUserEmail,
         companyName: preCreated?.companyName || (isSystemAdmin ? "Muavin Finans & ERP Genel Merkez" : "Muavin ERP Müşterisi"),
+        companyId: preCreated?.companyId,
         phone: preCreated?.phone || "+90 (212) 555 0100",
         taxNumber: preCreated?.taxNumber || "1234567890",
         selectedLogoId: preCreated?.selectedLogoId || selectedLogo.id,
@@ -785,12 +790,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             {/* SECURITY & ADMIN-ONLY REGISTRATION NOTICE BADGE */}
-            <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs">
-              <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="p-3 bg-blue-50/80 border border-blue-200/80 rounded-xl flex items-start gap-2.5 text-xs text-blue-900 shadow-2xs">
+              <ShieldAlert className="w-4 h-4 text-[#0f6bae] shrink-0 mt-0.5" />
               <div className="leading-snug">
-                <span className="font-bold text-amber-950">Kapalı Kurumsal Sistem: </span>
-                <span className="text-amber-800 text-[11px]">
-                  Dışarıdan serbest kayıt kapalıdır. Yalnızca Sistem Yöneticisi tarafından önceden tanımlanmış yetkili kullanıcılar ve personeller sisteme giriş yapabilir.
+                <span className="font-bold text-[#005289]">Kurumsal Güvenli Giriş: </span>
+                <span className="text-blue-800 text-[11px]">
+                  Şirket eklerken tanımladığınız <strong>Kullanıcı Adı</strong> ve <strong>Şifre</strong> ile veya Sistem Yöneticisi hesabınızla doğrudan giriş yapabilirsiniz.
                 </span>
               </div>
             </div>
@@ -885,17 +890,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
 
-              {/* EMAIL FIELD */}
+              {/* EMAIL / USERNAME FIELD */}
               <div>
                 <label className="block text-xs font-semibold text-[#131b2e] mb-1">
-                  E-Posta Adresi
+                  {mode === "login" ? "Kullanıcı Adı veya E-Posta" : "E-Posta Adresi"}
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-[#0f6bae] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
-                    type="email"
+                    type={mode === "login" ? "text" : "email"}
                     required
-                    placeholder="ornek@sirketiniz.com"
+                    placeholder={mode === "login" ? "Kullanıcı adınız veya e-posta adresiniz" : "ornek@sirketiniz.com"}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-white border border-[#dae2fd] focus:border-[#0f6bae] rounded-xl pl-9 pr-3 py-2.5 text-xs font-bold text-[#131b2e] focus:outline-none focus:ring-2 focus:ring-[#0f6bae]/20 transition-all"

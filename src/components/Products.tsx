@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useDeferredValue } from "react";
-import { Product, Invoice, Contact, Warehouse, Employee, Transaction, CompanySettings } from "../types";
+import { Product, Invoice, Contact, Warehouse, Branch, Employee, Transaction, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency, formatDate, exportElementToPDF, exportToExcel, exportToPDF } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate, exportElementToPDF, exportToExcel, exportToPDF, printHtmlElement } from "../utils/exportUtils";
 import { formatProductWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { TableColumnFilterInput } from "./common/TableColumnFilterInput";
@@ -70,6 +70,7 @@ interface ProductsProps {
   invoices?: Invoice[];
   contacts?: Contact[];
   warehouses?: Warehouse[];
+  branches?: Branch[];
   employees?: Employee[];
   transactions?: Transaction[];
   companySettings?: CompanySettings;
@@ -79,6 +80,9 @@ interface ProductsProps {
   onUpdateProduct?: (product: Product) => void;
   onDeleteProduct: (id: string) => void;
   onBulkDeleteProducts?: (ids: string[]) => void;
+  onAddWarehouse?: (warehouse: Warehouse) => void;
+  onUpdateWarehouse?: (warehouse: Warehouse) => void;
+  onDeleteWarehouse?: (id: string) => void;
 }
 
 export interface ProductMovement {
@@ -168,15 +172,32 @@ export function getProductStockInWarehouse(
   if (whId === "all") {
     return product.stockQuantity || 0;
   }
-  if (product.warehouseQuantities && product.warehouseQuantities[whId] !== undefined) {
-    return product.warehouseQuantities[whId];
+  if (product.warehouseQuantities && Object.keys(product.warehouseQuantities).length > 0) {
+    if (product.warehouseQuantities[whId] !== undefined) {
+      return product.warehouseQuantities[whId];
+    }
+    if (product.warehouseId === whId) {
+      const explicitSum = Object.values(product.warehouseQuantities).reduce((s, q) => s + (Number(q) || 0), 0);
+      if (explicitSum === 0 && (product.stockQuantity || 0) > 0) {
+        return product.stockQuantity || 0;
+      }
+    }
+    return 0;
   }
-  if (product.warehouseId === whId) {
-    return product.stockQuantity || 0;
+  if (product.warehouseId) {
+    return product.warehouseId === whId ? product.stockQuantity || 0 : 0;
   }
   if (allWarehouses.length > 0) {
     const index = allWarehouses.findIndex((w) => w.id === whId);
     const total = product.stockQuantity || 0;
+    if (allWarehouses.length === 1) {
+      return index === 0 ? total : 0;
+    }
+    if (allWarehouses.length === 2) {
+      if (index === 0) return Math.floor(total * 0.6);
+      if (index === 1) return Math.max(0, total - Math.floor(total * 0.6));
+      return 0;
+    }
     if (index === 0) return Math.floor(total * 0.5);
     if (index === 1) return Math.floor(total * 0.3);
     if (index === 2) return Math.max(0, total - Math.floor(total * 0.5) - Math.floor(total * 0.3));
@@ -319,6 +340,7 @@ export const Products: React.FC<ProductsProps> = ({
   invoices = [],
   contacts = [],
   warehouses = [],
+  branches = [],
   employees = [],
   transactions = [],
   companySettings,
@@ -328,9 +350,116 @@ export const Products: React.FC<ProductsProps> = ({
   onUpdateProduct,
   onDeleteProduct,
   onBulkDeleteProducts,
+  onAddWarehouse,
+  onUpdateWarehouse,
+  onDeleteWarehouse,
 }: ProductsProps) => {
   const selection = useTableSelection();
   const activeWarehouses = warehouses && warehouses.length > 0 ? warehouses : defaultWarehouses;
+
+  // Quick Warehouse Add/Edit Modal State inside Products & Warehouses module
+  const [isWhModalOpen, setIsWhModalOpen] = useState(false);
+  const [editingWh, setEditingWh] = useState<Warehouse | null>(null);
+  const [whCode, setWhCode] = useState("");
+  const [whName, setWhName] = useState("");
+  const [whType, setWhType] = useState<Warehouse["type"]>("main");
+  const [whCapacityM2, setWhCapacityM2] = useState<number>(1000);
+  const [whManagerName, setWhManagerName] = useState("");
+  const [whPhone, setWhPhone] = useState("");
+  const [whBranchName, setWhBranchName] = useState("");
+  const [whCity, setWhCity] = useState("İstanbul");
+  const [whDistrict, setWhDistrict] = useState("Merkez");
+  const [whFullAddress, setWhFullAddress] = useState("");
+  const [whStatus, setWhStatus] = useState<"active" | "passive">("active");
+
+  const handleOpenWhModal = (wh?: Warehouse) => {
+    if (wh) {
+      setEditingWh(wh);
+      setWhCode(wh.code);
+      setWhName(wh.name);
+      setWhType(wh.type || "main");
+      setWhCapacityM2(wh.capacityM2 || 1000);
+      setWhManagerName(wh.managerName || "");
+      setWhPhone(wh.phone || "");
+      setWhBranchName(wh.branchName || branches[0]?.name || "Merkez Şube");
+      setWhCity(wh.address?.city || companySettings?.city || "İstanbul");
+      setWhDistrict(wh.address?.district || companySettings?.district || "Merkez");
+      setWhFullAddress(wh.address?.fullAddress || "");
+      setWhStatus(wh.status || "active");
+    } else {
+      setEditingWh(null);
+      const nextNum = String(activeWarehouses.length + 1).padStart(3, "0");
+      setWhCode(`DEP-${nextNum}`);
+      setWhName("");
+      setWhType(activeWarehouses.length === 0 ? "main" : "regional");
+      setWhCapacityM2(1000);
+      setWhManagerName("");
+      setWhPhone(companySettings?.phone || "");
+      setWhBranchName(branches[0]?.name || `${companySettings?.companyName || "İşletme"} - Merkez Şube`);
+      setWhCity(companySettings?.city || "İstanbul");
+      setWhDistrict(companySettings?.district || "Merkez");
+      setWhFullAddress(companySettings?.address || "");
+      setWhStatus("active");
+    }
+    setIsWhModalOpen(true);
+  };
+
+  const handleSaveWarehouse = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedName = whName.trim();
+    const trimmedCode = whCode.trim() || `DEP-00${activeWarehouses.length + 1}`;
+    if (!trimmedName) {
+      triggerFormErrorNotification("Lütfen depo adını giriniz.", "Depo Kayıt Hatası", "Depo Adı");
+      return;
+    }
+
+    if (editingWh) {
+      const updatedWh: Warehouse = {
+        ...editingWh,
+        code: trimmedCode,
+        name: trimmedName,
+        type: whType,
+        capacityM2: Number(whCapacityM2) || 500,
+        managerName: whManagerName.trim(),
+        phone: whPhone.trim(),
+        branchName: whBranchName.trim() || "Merkez Şube",
+        status: whStatus,
+        address: {
+          ...editingWh.address,
+          country: "Türkiye",
+          city: whCity.trim() || "İstanbul",
+          district: whDistrict.trim() || "Merkez",
+          fullAddress: whFullAddress.trim() || `${whDistrict.trim() || "Merkez"} / ${whCity.trim() || "İstanbul"}`,
+        },
+      };
+      onUpdateWarehouse?.(updatedWh);
+    } else {
+      const newWh: Warehouse = {
+        id: `wh_${Date.now()}`,
+        code: trimmedCode,
+        name: trimmedName,
+        type: whType,
+        capacityM2: Number(whCapacityM2) || 500,
+        managerName: whManagerName.trim(),
+        phone: whPhone.trim(),
+        branchId: branches[0]?.id || "br_main",
+        branchName: whBranchName.trim() || branches[0]?.name || "Merkez Şube",
+        isDefault: activeWarehouses.length === 0,
+        status: whStatus,
+        address: {
+          country: "Türkiye",
+          city: whCity.trim() || "İstanbul",
+          district: whDistrict.trim() || "Merkez",
+          fullAddress: whFullAddress.trim() || `${whDistrict.trim() || "Merkez"} / ${whCity.trim() || "İstanbul"}`,
+        },
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      onAddWarehouse?.(newWh);
+      setPrimaryWarehouseId(newWh.id);
+    }
+    setIsWhModalOpen(false);
+    setEditingWh(null);
+  };
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
@@ -430,13 +559,19 @@ export const Products: React.FC<ProductsProps> = ({
       setIsPdfGenerating(true);
       const safeCode = (selectedEkstreProduct.code || "Stok").replace(/[^a-zA-Z0-9_-]/g, "_");
       const fileName = `Stok_Ekstresi_${safeCode}_${new Date().toISOString().split("T")[0]}.pdf`;
-      await exportElementToPDF("printable-stock-ekstre", fileName, { orientation: "p", margin: 8, scale: 2 });
+      await exportElementToPDF("printable-stock-ekstre", fileName, { orientation: "l", format: "a4", margin: 6, scale: 2 });
     } catch (err) {
       console.error("Stok Ekstresi PDF oluşturulurken hata:", err);
       triggerFormErrorNotification("PDF belgesi oluşturulurken bir hata oluştu.", "PDF Hatası");
     } finally {
       setIsPdfGenerating(false);
     }
+  };
+
+  // Excel (.xlsx) Export Handler for Ekstre
+  const handleExportEkstreExcel = () => {
+    if (!selectedEkstreProduct) return;
+    exportToExcel(getEkstreExportData());
   };
 
   // Precompute analytics map for all products once
@@ -581,7 +716,12 @@ export const Products: React.FC<ProductsProps> = ({
       setBarcode(p.barcode || "");
       setImeiOrSerialNo(p.imeiOrSerialNo || "");
       setEnableImei(!!p.imeiOrSerialNo);
-      setPrimaryWarehouseId(p.warehouseId || activeWarehouses[0]?.id || "wh_1");
+      setPrimaryWarehouseId(
+        p.warehouseId && activeWarehouses.some((w) => w.id === p.warehouseId)
+          ? p.warehouseId
+          : activeWarehouses[0]?.id || "wh_1"
+      );
+      nav.openEdit(p, p.id);
     } else {
       setEditingProduct(null);
       setCode(`URN-${Date.now().toString().slice(-5)}`);
@@ -596,7 +736,12 @@ export const Products: React.FC<ProductsProps> = ({
       setBarcode("8690" + Math.floor(100000000 + Math.random() * 900000000).toString());
       setImeiOrSerialNo("");
       setEnableImei(false);
-      setPrimaryWarehouseId(activeWarehouses[0]?.id || "wh_1");
+      setPrimaryWarehouseId(
+        selectedWarehouseId !== "all" && activeWarehouses.some((w) => w.id === selectedWarehouseId)
+          ? selectedWarehouseId
+          : activeWarehouses[0]?.id || "wh_1"
+      );
+      nav.openCreate();
     }
     setIsModalOpen(true);
   };
@@ -605,11 +750,14 @@ export const Products: React.FC<ProductsProps> = ({
     const initialProd = prodId ? products.find((p) => p.id === prodId) : products[0];
     const pId = initialProd ? initialProd.id : "";
     setTransferProductId(pId);
-    setTransferFromWhId(fromWh || activeWarehouses[0]?.id || "wh_1");
-    setTransferToWhId(fromWh === activeWarehouses[1]?.id ? activeWarehouses[0]?.id : activeWarehouses[1]?.id || "wh_2");
+    const defaultFrom = fromWh || activeWarehouses[0]?.id || "wh_1";
+    setTransferFromWhId(defaultFrom);
+    const fallbackTo = activeWarehouses.find((w) => w.id !== defaultFrom)?.id || activeWarehouses[0]?.id || "wh_2";
+    setTransferToWhId(fallbackTo);
     setTransferQuantity(10);
     setTransferNotes("");
     setTransferSuccessMsg("");
+    nav.openCreate();
     setIsTransferModalOpen(true);
   };
 
@@ -670,14 +818,31 @@ export const Products: React.FC<ProductsProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const safeName = (name || "").trim();
-    if (!safeName) return;
+    if (!safeName) {
+      triggerFormErrorNotification("Lütfen ürün veya hizmet adını giriniz.", "Stok Kartı Hatası", "Ürün Adı");
+      return;
+    }
 
     const safeBarcode = (barcode || "").trim();
     const safeImei = (imeiOrSerialNo || "").trim();
-    const selectedWh = activeWarehouses.find((w) => w.id === primaryWarehouseId);
+    const targetWhId = primaryWarehouseId || activeWarehouses[0]?.id || "wh_1";
+    const selectedWh = activeWarehouses.find((w) => w.id === targetWhId) || activeWarehouses[0];
     const isImeiApplicable = stockType === "Ticari Mal" || enableImei || safeName.length > 0;
 
     if (editingProduct) {
+      const updatedQuantities: Record<string, number> = {
+        ...(editingProduct.warehouseQuantities || {}),
+      };
+      // If product had no multi-warehouse split or its primary warehouse changed, put the updated stockQuantity into targetWhId
+      const otherWhTotal = Object.entries(updatedQuantities)
+        .filter(([k]) => k !== targetWhId && k !== editingProduct.warehouseId)
+        .reduce((sum, [, val]) => sum + (Number(val) || 0), 0);
+
+      if (editingProduct.warehouseId && editingProduct.warehouseId !== targetWhId) {
+        delete updatedQuantities[editingProduct.warehouseId];
+      }
+      updatedQuantities[targetWhId] = Math.max(0, stockQuantity - otherWhTotal);
+
       const updatedProd: Product = {
         ...editingProduct,
         code: code || editingProduct.code,
@@ -691,8 +856,9 @@ export const Products: React.FC<ProductsProps> = ({
         stockType,
         barcode: safeBarcode || undefined,
         imeiOrSerialNo: isImeiApplicable && safeImei ? safeImei : undefined,
-        warehouseId: primaryWarehouseId,
-        warehouseName: selectedWh?.name,
+        warehouseId: targetWhId,
+        warehouseName: selectedWh?.name || "Merkez Ana Depo",
+        warehouseQuantities: updatedQuantities,
       };
       if (onUpdateProduct) {
         onUpdateProduct(updatedProd);
@@ -700,9 +866,11 @@ export const Products: React.FC<ProductsProps> = ({
         onAddProduct(updatedProd);
       }
     } else {
-      const gebzeQty = Math.floor(stockQuantity * 0.5);
-      const ikitelliQty = Math.floor(stockQuantity * 0.3);
-      const ankaraQty = Math.max(0, stockQuantity - gebzeQty - ikitelliQty);
+      const initialWhQuantities: Record<string, number> = {};
+      activeWarehouses.forEach((w) => {
+        initialWhQuantities[w.id] = w.id === targetWhId ? stockQuantity : 0;
+      });
+      initialWhQuantities[targetWhId] = stockQuantity;
 
       const newProd: Product = {
         id: "p_" + Date.now(),
@@ -717,19 +885,14 @@ export const Products: React.FC<ProductsProps> = ({
         stockType,
         barcode: safeBarcode || undefined,
         imeiOrSerialNo: isImeiApplicable && safeImei ? safeImei : undefined,
-        warehouseId: primaryWarehouseId,
-        warehouseName: selectedWh?.name,
-        warehouseQuantities: {
-          [primaryWarehouseId]: stockQuantity,
-          wh_1: primaryWarehouseId === "wh_1" ? stockQuantity : gebzeQty,
-          wh_2: primaryWarehouseId === "wh_2" ? stockQuantity : ikitelliQty,
-          wh_3: primaryWarehouseId === "wh_3" ? stockQuantity : ankaraQty,
-        },
+        warehouseId: targetWhId,
+        warehouseName: selectedWh?.name || "Merkez Ana Depo",
+        warehouseQuantities: initialWhQuantities,
       };
       onAddProduct(newProd);
     }
 
-    setIsModalOpen(false);
+    handleBackToList();
   };
 
   // Sütun Bazlı Filtreleme Durumu
@@ -923,43 +1086,100 @@ export const Products: React.FC<ProductsProps> = ({
       })
     : [];
 
-  // Export Data Builder for Main Product List
+  // Multi-page pagination engine for A4 Landscape Stock Statement
+  const ekstrePages = useMemo(() => {
+    if (filteredEkstreMovements.length <= 7) {
+      return [filteredEkstreMovements];
+    }
+    const pages: (typeof filteredEkstreMovements)[] = [];
+    const FIRST_PAGE_COUNT = 7;
+    const SUBSEQUENT_PAGE_COUNT = 10;
+
+    pages.push(filteredEkstreMovements.slice(0, FIRST_PAGE_COUNT));
+    let remaining = filteredEkstreMovements.slice(FIRST_PAGE_COUNT);
+
+    while (remaining.length > 0) {
+      if (remaining.length <= 7) {
+        pages.push(remaining);
+        remaining = [];
+      } else {
+        pages.push(remaining.slice(0, SUBSEQUENT_PAGE_COUNT));
+        remaining = remaining.slice(SUBSEQUENT_PAGE_COUNT);
+      }
+    }
+
+    return pages.length > 0 ? pages : [[]];
+  }, [filteredEkstreMovements]);
+
+  // Export Data Builder for Main Product List with detailed warehouse breakdown
   const getProductsExportData = (targetProducts: Product[] = filteredProducts): ExportData => {
+    // Her deponun adını içeren dinamik sütun başlıkları
+    const warehouseHeaders = activeWarehouses.map((w) => `${w.name} (Adet)`);
+
     const headers = [
       "Stok Kodu",
       "Barkod",
       "Ürün / Hizmet Adı",
-      "Seri/IMEI Noları",
-      "Bulunduğu Depo",
+      "Kategori",
+      "Stok Türü",
       "Birim",
+      ...warehouseHeaders,
+      "Toplam Stok (Adet)",
       "Alış Fiyatı",
       "Satış Fiyatı",
       "Para Birimi",
-      "Mevcut Stok Qty",
       "KDV Oranı (%)",
       "Kritik Stok Sınırı",
-      "Stok Türü",
+      "Depo Dağılım Özeti",
+      "Seri/IMEI Noları",
     ];
-    const rows = targetProducts.map((p) => [
-      p.code || "",
-      p.barcode || "",
-      p.name || "",
-      p.serials && p.serials.length > 0 ? p.serials.join(", ") : "",
-      p.warehouseName || activeWarehouses[0]?.name || "",
-      p.unit || "Adet",
-      formatCurrency(p.purchasePrice || 0, p.currency || "TRY"),
-      formatCurrency(p.sellingPrice || 0, p.currency || "TRY"),
-      p.currency || "TRY",
-      p.stockQuantity || 0,
-      p.vatRate || 0,
-      p.minStockAlert || 0,
-      p.isService ? "Hizmet / Servis" : "Fiziksel Stok",
-    ]);
+
+    const rows = targetProducts.map((p) => {
+      // Her depodaki güncel stok miktarı
+      const warehouseQtys = activeWarehouses.map((w) => {
+        if (p.isService) return 0;
+        return getProductStockInWarehouse(p, w.id, activeWarehouses);
+      });
+
+      // Hangi depoda kaç adet olduğunu gösteren anlaşılır özet metin
+      const warehouseBreakdownSummary = p.isService
+        ? "Hizmet / Servis (Fiziksel Stok Yok)"
+        : activeWarehouses
+            .map((w) => `${w.name}: ${getProductStockInWarehouse(p, w.id, activeWarehouses)} ${p.unit || "Adet"}`)
+            .join(" | ");
+
+      const totalQty = p.isService ? 0 : (p.stockQuantity || 0);
+
+      return [
+        p.code || "",
+        p.barcode || "",
+        p.name || "",
+        p.category || "-",
+        p.isService ? "Hizmet / Servis" : (p.stockType || "Ticari Mal"),
+        p.unit || "Adet",
+        ...warehouseQtys,
+        totalQty,
+        formatCurrency(p.purchasePrice || p.buyPrice || 0, p.currency || "TRY"),
+        formatCurrency(p.sellingPrice || p.sellPrice || 0, p.currency || "TRY"),
+        p.currency || "TRY",
+        p.vatRate || 0,
+        p.minStockAlert || 0,
+        warehouseBreakdownSummary,
+        p.serials && p.serials.length > 0 ? p.serials.join(", ") : "",
+      ];
+    });
+
+    const filenameDate = new Date().toISOString().split("T")[0];
+    const dateStr = new Date().toLocaleDateString("tr-TR");
 
     return {
-      filename: `Stok_Listesi_${new Date().toISOString().split("T")[0]}`,
-      title: "ÜRÜN VE HİZMET STOK LİSTESİ",
-      subtitle: selectedWarehouseId === "all" ? `Tüm Depolar Genel Toplamı (${targetProducts.length} Ürün)` : `${selectedWhObj?.name || "Seçili Depo"} Stok Durumu (${targetProducts.length} Ürün)`,
+      filename: `Stok_Depo_Dagilim_Listesi_${filenameDate}`,
+      sheetName: "Depo Stok Dağılımı",
+      title: "ÜRÜN VE DEPO BAZLI STOK DAĞILIM RAPORU",
+      subtitle:
+        selectedWarehouseId === "all"
+          ? `Tüm Depolar Genel Dağılımı (${activeWarehouses.length} Depo, ${targetProducts.length} Stok Kalemi) - Tarih: ${dateStr}`
+          : `${selectedWhObj?.name || "Seçili Depo"} Filtreli Liste (${activeWarehouses.length} Depo Dağılımı ile, ${targetProducts.length} Stok Kalemi) - Tarih: ${dateStr}`,
       headers,
       rows,
     };
@@ -1241,6 +1461,27 @@ export const Products: React.FC<ProductsProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={handleExportEkstreExcel}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs active:scale-95"
+                title="Stok Ekstresini ve Hareket Dökümünü Excel (.xlsx) Olarak İndir"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>Excel İndir</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportEkstrePDF}
+                disabled={isPdfGenerating}
+                className="bg-rose-700 hover:bg-rose-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs active:scale-95 disabled:opacity-60"
+                title="Stok Ekstresini Aynı Formatla PDF (.pdf) Olarak İndir"
+              >
+                <FileText className="w-4 h-4 text-rose-200" />
+                <span>{isPdfGenerating ? "PDF..." : "PDF İndir"}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setWhatsAppProduct(selectedEkstreProduct)}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                 title="Stok Ekstresini WhatsApp ile Paylaş"
@@ -1251,12 +1492,16 @@ export const Products: React.FC<ProductsProps> = ({
 
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => {
+                  printHtmlElement("printable-stock-ekstre", `Stok_Ekstresi_${selectedEkstreProduct.code || "Rapor"}`, {
+                    orientation: "landscape",
+                  });
+                }}
                 className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                title="Yazdır"
+                title="A4 Yatay Yazdır"
               >
                 <Printer className="w-4 h-4 text-slate-300" />
-                <span className="hidden sm:inline">Yazdır</span>
+                <span className="hidden sm:inline">Yazdır (A4 Yatay)</span>
               </button>
             </div>
           }
@@ -1297,11 +1542,22 @@ export const Products: React.FC<ProductsProps> = ({
               {/* Movement Filter Tabs & Search */}
               <div className="flex items-center gap-2 flex-wrap ml-auto">
                 <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-purple-200 shadow-2xs">
+                  <span className="text-[11px] font-bold text-slate-700 px-1.5 flex items-center gap-1">
+                    <Filter className="w-3 h-3 text-purple-600" />
+                    İşlem Türü:
+                  </span>
                   <button
                     type="button"
                     onClick={() => setEkstreTab("all")}
+                    style={
+                      ekstreTab === "all"
+                        ? { backgroundColor: "#83b8ff", color: "#0f172a", borderColor: "#60a5fa" }
+                        : {}
+                    }
                     className={`px-2.5 py-1 text-xs font-bold rounded-md cursor-pointer transition-all ${
-                      ekstreTab === "all" ? "bg-purple-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                      ekstreTab === "all"
+                        ? "shadow-2xs font-black border"
+                        : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
                     Tümü ({ekstreAnalytics.movements.length})
@@ -1309,8 +1565,15 @@ export const Products: React.FC<ProductsProps> = ({
                   <button
                     type="button"
                     onClick={() => setEkstreTab("purchase")}
+                    style={
+                      ekstreTab === "purchase"
+                        ? { backgroundColor: "#83b8ff", color: "#0f172a", borderColor: "#60a5fa" }
+                        : {}
+                    }
                     className={`px-2.5 py-1 text-xs font-bold rounded-md cursor-pointer transition-all ${
-                      ekstreTab === "purchase" ? "bg-blue-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                      ekstreTab === "purchase"
+                        ? "shadow-2xs font-black border"
+                        : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
                     Alış / Giriş ({ekstreAnalytics.purchaseMovements.length})
@@ -1318,8 +1581,15 @@ export const Products: React.FC<ProductsProps> = ({
                   <button
                     type="button"
                     onClick={() => setEkstreTab("sales")}
+                    style={
+                      ekstreTab === "sales"
+                        ? { backgroundColor: "#83b8ff", color: "#0f172a", borderColor: "#60a5fa" }
+                        : {}
+                    }
                     className={`px-2.5 py-1 text-xs font-bold rounded-md cursor-pointer transition-all ${
-                      ekstreTab === "sales" ? "bg-indigo-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                      ekstreTab === "sales"
+                        ? "shadow-2xs font-black border"
+                        : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
                     Satış / Çıkış ({ekstreAnalytics.salesMovements.length})
@@ -1340,330 +1610,608 @@ export const Products: React.FC<ProductsProps> = ({
             </div>
 
             {/* 3. Printable Statement Canvas Container */}
-            <div className="p-3 sm:p-6 bg-slate-200/60 overflow-y-auto custom-scrollbar flex-1 flex justify-center">
+            <div className="p-3 sm:p-6 bg-slate-200/60 overflow-y-auto custom-scrollbar flex-1 flex flex-col items-center">
               <div
                 id="printable-stock-ekstre"
-                className="bg-white text-slate-900 p-6 sm:p-8 rounded-2xl shadow-xl border border-purple-200 w-full max-w-4xl mx-auto space-y-5 font-sans text-xs sm:text-sm"
+                data-orientation="landscape"
+                className="landscape-mode w-full max-w-5xl lg:max-w-6xl mx-auto space-y-6"
               >
-                {/* 3.1 Corporate Header */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b-2 border-purple-900">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className="w-9 h-9 rounded-xl bg-purple-900 text-white flex items-center justify-center font-black text-sm shadow-md">
-                        <Package className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <h2 className="text-base sm:text-lg font-black tracking-tight text-purple-950 uppercase">
-                          {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL STOK VE DEPO YÖNETİMİ"}
-                        </h2>
-                        <p className="text-[10px] sm:text-xs text-slate-500 font-semibold">
-                          Envanter Kayıt, Ambar Stok Takip ve Tevsik Sistemi
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-[11px] text-slate-600 pl-11 space-y-0.5">
-                      {companySettings?.address && <p>{companySettings.address}</p>}
-                      <p>
-                        {companySettings?.taxOffice && `${companySettings.taxOffice} V.D.`}
-                        {companySettings?.taxNumber && ` • VKN/TCKN: ${companySettings.taxNumber}`}
-                        {companySettings?.phone && ` • Tel: ${companySettings.phone}`}
-                      </p>
-                    </div>
-                  </div>
+                {ekstrePages.map((pageMovements, pageIndex) => {
+                  const isFirstPage = pageIndex === 0;
+                  const isLastPage = pageIndex === ekstrePages.length - 1;
+                  const hasMultiplePages = ekstrePages.length > 1;
 
-                  <div className="text-left sm:text-right bg-purple-50/80 p-3 rounded-xl border border-purple-200 space-y-1 shrink-0 w-full sm:w-auto">
-                    <div className="inline-block bg-purple-900 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md tracking-wider">
-                      RESMİ STOK VE DEPO EKSTRESİ
-                    </div>
-                    <div className="text-xs font-bold text-slate-900">
-                      Stok Kodu: <span className="font-mono text-purple-950 font-black">{selectedEkstreProduct.code}</span>
-                    </div>
-                    <div className="text-[11px] text-slate-600">
-                      Tarih: <span className="font-mono font-bold text-slate-900">{new Date().toLocaleDateString("tr-TR")}</span>
-                    </div>
-                    <div className="text-[10px] text-purple-900 font-extrabold">
-                      Kapsam:{" "}
-                      <span>
-                        {ekstreWarehouseId === "all"
-                          ? "Konsolide (Tüm Depolar)"
-                          : activeWarehouses.find((w) => w.id === ekstreWarehouseId)?.name || "Seçili Depo"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  return (
+                    <React.Fragment key={`ekstre-page-fragment-${pageIndex}`}>
+                      {pageIndex > 0 && (
+                        <div className="no-print my-6 flex items-center justify-center gap-3 text-xs text-purple-700 font-bold w-full">
+                          <div className="h-px bg-purple-300 flex-1"></div>
+                          <span className="bg-purple-100 px-3.5 py-1.5 rounded-full border border-purple-300 shadow-2xs flex items-center gap-1.5 text-purple-950 font-bold">
+                            📄 {pageIndex + 1}. Sayfa Başlangıcı (A4 Yatay Baskı Sayfası)
+                          </span>
+                          <div className="h-px bg-purple-300 flex-1"></div>
+                        </div>
+                      )}
 
-                {/* 3.2 Product Title Banner */}
-                <div className="bg-gradient-to-r from-purple-900 via-purple-800 to-indigo-900 text-white p-3.5 rounded-xl text-center shadow-md">
-                  <h1 className="text-sm sm:text-base font-black tracking-wide uppercase">
-                    ÜRÜN HAREKET EKSTRESİ VE DEPO ENVANTER BELGESİ
-                  </h1>
-                  <p className="text-[11px] text-purple-200 mt-0.5 font-medium">
-                    {selectedEkstreProduct.name} • Barkod: {selectedEkstreProduct.barcode || "Tanımsız"} • Stok Türü: {selectedEkstreProduct.stockType || "Ticari Mal"}
-                  </p>
-                </div>
+                      <div
+                        className="pdf-page-block stock-ekstre-page landscape-mode bg-white text-slate-900 p-6 sm:p-8 rounded-2xl shadow-xl border border-purple-200 w-full mx-auto space-y-5 font-sans text-xs sm:text-sm"
+                      >
+                        {isFirstPage ? (
+                          <>
+                            {/* 3.1 Corporate Header */}
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b-2 border-purple-900">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-9 h-9 rounded-xl bg-purple-900 text-white flex items-center justify-center font-black text-sm shadow-md">
+                                    <Package className="w-5 h-5 text-white" />
+                                  </div>
+                                  <div>
+                                    <h2 className="text-base sm:text-lg font-black tracking-tight text-purple-950 uppercase">
+                                      {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL STOK VE DEPO YÖNETİMİ"}
+                                    </h2>
+                                    <p className="text-[10px] sm:text-xs text-slate-500 font-semibold">
+                                      Envanter Kayıt, Ambar Stok Takip ve Tevsik Sistemi
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="text-[11px] text-slate-600 pl-11 space-y-0.5">
+                                  {companySettings?.address && <p>{companySettings.address}</p>}
+                                  <p>
+                                    {companySettings?.taxOffice && `${companySettings.taxOffice} V.D.`}
+                                    {companySettings?.taxNumber && ` • VKN/TCKN: ${companySettings.taxNumber}`}
+                                    {companySettings?.phone && ` • Tel: ${companySettings.phone}`}
+                                  </p>
+                                </div>
+                              </div>
 
-                {/* 3.3 Two-Column Details Card: Product Info & Warehouse Distribution */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Left: Product Card Details */}
-                  <div className="bg-slate-50/90 rounded-xl p-3.5 border border-purple-200/80 space-y-2">
-                    <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
-                        <Tag className="w-3.5 h-3.5 text-purple-700" />
-                        Ürün & Kart Bilgileri
-                      </span>
-                      <span className="bg-purple-100 text-purple-900 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
-                        Stok Kartı
-                      </span>
-                    </div>
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Ürün Adı:</span>
-                        <span className="font-bold text-slate-900 text-right max-w-[200px] truncate">{selectedEkstreProduct.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Stok Kodu:</span>
-                        <span className="font-mono font-bold text-purple-950">{selectedEkstreProduct.code}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Kategori & Cins:</span>
-                        <span className="font-semibold text-slate-800">{selectedEkstreProduct.category || "Genel"} / {selectedEkstreProduct.stockType || "Ticari Mal"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Barkod / Seri:</span>
-                        <span className="font-mono font-medium text-slate-700">{selectedEkstreProduct.barcode || "-"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">KDV Oranı & Birim:</span>
-                        <span className="font-bold text-slate-900">%{selectedEkstreProduct.vatRate || 20} • {selectedEkstreProduct.unit || "Adet"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-medium">Kritik Stok Uyarısı:</span>
-                        <span className="font-bold text-amber-700">{selectedEkstreProduct.minStockAlert || 0} {selectedEkstreProduct.unit}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right: Warehouse & Inventory Distribution */}
-                  <div className="bg-slate-50/90 rounded-xl p-3.5 border border-purple-200/80 space-y-2">
-                    <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
-                        <WarehouseIcon className="w-3.5 h-3.5 text-purple-700" />
-                        Depo Bazlı Stok Dağılımı
-                      </span>
-                      <span className="bg-emerald-100 text-emerald-900 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
-                        Fiili Envanter
-                      </span>
-                    </div>
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between items-center bg-purple-100/70 px-2.5 py-1 rounded-lg font-bold">
-                        <span className="text-purple-950">İncelenen Kapsam Bakiye:</span>
-                        <span className="font-mono text-purple-950 text-sm font-black">
-                          {getProductStockInWarehouse(selectedEkstreProduct, ekstreWarehouseId, activeWarehouses)}{" "}
-                          <span className="text-xs">{selectedEkstreProduct.unit}</span>
-                        </span>
-                      </div>
-                      <div className="space-y-1 pt-0.5">
-                        {activeWarehouses.map((wh) => {
-                          const qty = getProductStockInWarehouse(selectedEkstreProduct, wh.id, activeWarehouses);
-                          const isCurrent = ekstreWarehouseId === wh.id;
-                          return (
-                            <div
-                              key={wh.id}
-                              className={`flex justify-between items-center px-2 py-0.5 rounded text-[11px] ${
-                                isCurrent ? "bg-purple-200/60 font-bold text-purple-950" : "text-slate-700"
-                              }`}
-                            >
-                              <span>{wh.name} ({wh.code}):</span>
-                              <span className="font-mono font-bold">{qty} {selectedEkstreProduct.unit}</span>
+                              <div className="text-left sm:text-right bg-purple-50/80 p-3 rounded-xl border border-purple-200 space-y-1 shrink-0 w-full sm:w-auto">
+                                <div className="flex items-center justify-start sm:justify-end gap-1.5">
+                                  <span className="inline-block bg-purple-900 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md tracking-wider">
+                                    RESMİ STOK VE DEPO EKSTRESİ
+                                  </span>
+                                  {hasMultiplePages && (
+                                    <span className="text-[10px] font-mono font-bold bg-purple-200 text-purple-950 px-2 py-0.5 rounded-md border border-purple-300">
+                                      Sayfa 1 / {ekstrePages.length}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs font-bold text-slate-900">
+                                  Stok Kodu: <span className="font-mono text-purple-950 font-black">{selectedEkstreProduct.code}</span>
+                                </div>
+                                <div className="text-[11px] text-slate-700 flex items-center justify-start sm:justify-end gap-1.5">
+                                  <span className="font-semibold text-slate-600">Tarih:</span>
+                                  <span
+                                    style={{
+                                      backgroundColor: "#83b8ff",
+                                      color: "#0f172a",
+                                      borderColor: "#60a5fa",
+                                      WebkitPrintColorAdjust: "exact",
+                                      printColorAdjust: "exact",
+                                    }}
+                                    className="stock-badge-colored font-mono font-bold px-2 py-0.5 rounded text-[11px] border shadow-2xs"
+                                  >
+                                    {new Date().toLocaleDateString("tr-TR")}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-purple-900 font-extrabold">
+                                  Kapsam:{" "}
+                                  <span>
+                                    {ekstreWarehouseId === "all"
+                                      ? "Konsolide (Tüm Depolar)"
+                                      : activeWarehouses.find((w) => w.id === ekstreWarehouseId)?.name || "Seçili Depo"}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+
+                            {/* 3.2 Product Title Banner */}
+                            <div className="bg-gradient-to-r from-purple-900 via-purple-800 to-indigo-900 text-white p-3.5 rounded-xl text-center shadow-md">
+                              <h1 className="text-sm sm:text-base font-black tracking-wide uppercase">
+                                ÜRÜN HAREKET EKSTRESİ VE DEPO ENVANTER BELGESİ
+                              </h1>
+                              <p className="text-[11px] text-purple-200 mt-0.5 font-medium">
+                                {selectedEkstreProduct.name} • Barkod: {selectedEkstreProduct.barcode || "Tanımsız"} • Stok Türü: {selectedEkstreProduct.stockType || "Ticari Mal"}
+                              </p>
+                            </div>
+
+                            {/* 3.3 Two-Column Details Card: Product Info & Warehouse Distribution */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {/* Left: Product Card Details */}
+                              <div className="bg-slate-50/90 rounded-xl p-3.5 border border-purple-200/80 space-y-2">
+                                <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
+                                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
+                                    <Tag className="w-3.5 h-3.5 text-purple-700" />
+                                    Ürün & Kart Bilgileri
+                                  </span>
+                                  <span className="bg-purple-100 text-purple-900 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
+                                    Stok Kartı
+                                  </span>
+                                </div>
+                                <div className="space-y-1 text-xs">
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">Ürün Adı:</span>
+                                    <span className="font-bold text-slate-900 text-right max-w-[200px] truncate">{selectedEkstreProduct.name}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">Stok Kodu:</span>
+                                    <span className="font-mono font-bold text-purple-950">{selectedEkstreProduct.code}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">Kategori & Cins:</span>
+                                    <span className="font-semibold text-slate-800">{selectedEkstreProduct.category || "Genel"} / {selectedEkstreProduct.stockType || "Ticari Mal"}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">Barkod / Seri:</span>
+                                    <span className="font-mono font-medium text-slate-700">{selectedEkstreProduct.barcode || "-"}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">KDV Oranı & Birim:</span>
+                                    <span className="font-bold text-slate-900">%{selectedEkstreProduct.vatRate || 20} • {selectedEkstreProduct.unit || "Adet"}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">Kritik Stok Uyarısı:</span>
+                                    <span className="font-bold text-amber-700">{selectedEkstreProduct.minStockAlert || 0} {selectedEkstreProduct.unit}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Right: Warehouse & Inventory Distribution */}
+                              <div className="bg-slate-50/90 rounded-xl p-3.5 border border-purple-200/80 space-y-2">
+                                <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
+                                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
+                                    <WarehouseIcon className="w-3.5 h-3.5 text-purple-700" />
+                                    Depo Bazlı Stok Dağılımı
+                                  </span>
+                                  <span className="bg-emerald-100 text-emerald-900 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
+                                    Fiili Envanter
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5 text-xs">
+                                  <div className="flex justify-between items-center bg-purple-100/70 px-2.5 py-1 rounded-lg font-bold">
+                                    <span className="text-purple-950">İncelenen Kapsam Bakiye:</span>
+                                    <span className="font-mono text-purple-950 text-sm font-black">
+                                      {getProductStockInWarehouse(selectedEkstreProduct, ekstreWarehouseId, activeWarehouses)}{" "}
+                                      <span className="text-xs">{selectedEkstreProduct.unit}</span>
+                                    </span>
+                                  </div>
+                                  <div className="space-y-1 pt-0.5">
+                                    {activeWarehouses.map((wh) => {
+                                      const qty = getProductStockInWarehouse(selectedEkstreProduct, wh.id, activeWarehouses);
+                                      const isCurrent = ekstreWarehouseId === wh.id;
+                                      return (
+                                        <div
+                          key={wh.id}
+                          className={`flex justify-between items-center px-2 py-0.5 rounded text-[11px] ${
+                            isCurrent ? "bg-purple-200/60 font-bold text-purple-950" : "text-slate-700"
+                          }`}
+                        >
+                          <span>{wh.name} ({wh.code}):</span>
+                          <span className="font-mono font-bold">{qty} {selectedEkstreProduct.unit}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
+              </div>
+            </div>
 
-                {/* 3.4 Summary Analytics 4-Box Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  {/* Box 1: Mal Alımları / Giriş */}
-                  <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3 space-y-1 text-center">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-blue-900">
-                      TOPLAM GİRİŞ / ALIŞ
-                    </div>
-                    <div className="text-xs text-blue-800 font-bold">
-                      {ekstreAnalytics.totalBuyQty} {selectedEkstreProduct.unit}
-                    </div>
-                    <div className="text-sm sm:text-base font-black font-mono text-blue-950">
-                      ₺{ekstreAnalytics.totalBuySpent.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[10px] text-blue-700 font-semibold border-t border-blue-200/60 pt-1">
-                      AOF: ₺{ekstreAnalytics.avgBuyPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </div>
-                  </div>
-
-                  {/* Box 2: Mal Satışları / Çıkış */}
-                  <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3 space-y-1 text-center">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-indigo-900">
-                      TOPLAM ÇIKIŞ / SATIŞ
-                    </div>
-                    <div className="text-xs text-indigo-800 font-bold">
-                      {ekstreAnalytics.totalSellQty} {selectedEkstreProduct.unit}
-                    </div>
-                    <div className="text-sm sm:text-base font-black font-mono text-indigo-950">
-                      ₺{ekstreAnalytics.totalSellRevenue.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[10px] text-indigo-700 font-semibold border-t border-indigo-200/60 pt-1">
-                      Ort. Satış: ₺{ekstreAnalytics.avgSellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </div>
-                  </div>
-
-                  {/* Box 3: Brüt Kar & Marj */}
-                  <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 space-y-1 text-center">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-emerald-900">
-                      BRÜT KAR & PERFORMANS
-                    </div>
-                    <div className="text-xs text-emerald-800 font-bold">
-                      %{ekstreAnalytics.marginPercent.toFixed(1)} Kar Marjı
-                    </div>
-                    <div className="text-sm sm:text-base font-black font-mono text-emerald-800">
-                      ₺{ekstreAnalytics.totalRealizedProfit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[10px] text-emerald-700 font-semibold border-t border-emerald-200/60 pt-1">
-                      Birim Kar: +₺{ekstreAnalytics.unitProfit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </div>
-                  </div>
-
-                  {/* Box 4: Mevcut Stok Değerleme */}
-                  <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3 space-y-1 text-center">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-purple-900">
-                      MEVCUT STOK DEĞERİ
-                    </div>
-                    <div className="text-xs text-purple-800 font-bold">
-                      {selectedEkstreProduct.stockQuantity} {selectedEkstreProduct.unit} Bakiye
-                    </div>
-                    <div className="text-sm sm:text-base font-black font-mono text-purple-950">
-                      ₺{ekstreAnalytics.currentStockValuation.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[10px] text-purple-700 font-semibold border-t border-purple-200/60 pt-1">
-                      Maliyet Bazlı Değerleme
-                    </div>
-                  </div>
+            {/* 3.4 Summary Analytics 4-Box Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {/* Box 1: Mal Alımları / Giriş */}
+              <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3 space-y-1 text-center">
+                <div className="text-[10px] font-black uppercase tracking-wider text-blue-900">
+                  TOPLAM GİRİŞ / ALIŞ
                 </div>
-
-                {/* 3.5 Movement Details Table */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-purple-950 border-b border-purple-200 pb-1">
-                    <span>RESMİ STOK HAREKETLERİ VE EVRAK DÖKÜMÜ</span>
-                    <span className="text-[11px] text-slate-500 font-normal">
-                      Listelenen İşlem Sayısı: <strong className="text-slate-800">{filteredEkstreMovements.length}</strong>
-                    </span>
-                  </div>
-
-                  <div className="overflow-x-auto w-full rounded-xl border border-purple-200">
-                    <table className="w-full text-left text-xs border-collapse min-w-[700px]">
-                      <thead className="bg-purple-900 text-white font-extrabold text-[11px]">
-                        <tr>
-                          <th className="py-2.5 px-3">Tarih</th>
-                          <th className="py-2.5 px-3">İşlem Türü</th>
-                          <th className="py-2.5 px-3">Evrak / Fatura No</th>
-                          <th className="py-2.5 px-3">Cari / Müşteri / Tedarikçi</th>
-                          <th className="py-2.5 px-3 text-right">Miktar</th>
-                          <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
-                          <th className="py-2.5 px-3 text-right">KDV Dahil Tutar</th>
-                          <th className="py-2.5 px-3 text-right bg-purple-950 text-purple-100">Yürüyen Bakiye</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-purple-100 text-slate-800">
-                        {filteredEkstreMovements.map((m, idx) => {
-                          const isPurchase = m.type === "purchase";
-                          return (
-                            <tr key={m.id} className={idx % 2 === 0 ? "bg-white" : "bg-purple-50/30"}>
-                              <td className="py-2 px-3 font-mono font-medium text-slate-700">{formatDate(m.issueDate)}</td>
-                              <td className="py-2 px-3">
-                                <span
-                                  className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded text-[10px] ${
-                                    isPurchase
-                                      ? "bg-blue-100 text-blue-800 border border-blue-200"
-                                      : "bg-indigo-100 text-indigo-800 border border-indigo-200"
-                                  }`}
-                                >
-                                  {isPurchase ? "Alış / Giriş" : "Satış / Çıkış"}
-                                </span>
-                              </td>
-                              <td className="py-2 px-3 font-mono font-bold text-slate-900">{m.invoiceNumber}</td>
-                              <td className="py-2 px-3 font-semibold text-slate-900 truncate max-w-[180px]">
-                                {m.contactName}
-                              </td>
-                              <td className="py-2 px-3 text-right font-mono tabular-nums font-tabular-num-md font-extrabold text-slate-900">
-                                {isPurchase ? "+" : "-"}{m.quantity} {m.unit}
-                              </td>
-                              <td className="py-2 px-3 text-right font-mono tabular-nums font-tabular-num-md text-slate-700">
-                                ₺{m.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-2 px-3 text-right font-mono tabular-nums font-tabular-num-md font-bold text-slate-900">
-                                ₺{m.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-2 px-3 text-right font-mono tabular-nums font-tabular-num-md font-black text-purple-950 bg-purple-100/50">
-                                {m.runningBalance !== undefined ? m.runningBalance : "-"} {m.unit}
-                              </td>
-                            </tr>
-                          );
-                        })}
-
-                        {filteredEkstreMovements.length === 0 && (
-                          <tr>
-                            <td colSpan={8} className="text-center py-8 text-slate-400 font-medium">
-                              Bu kriterlere ve filtreye uygun stok hareketi bulunamadı.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                <div className="text-xs text-blue-800 font-bold">
+                  {ekstreAnalytics.totalBuyQty} {selectedEkstreProduct.unit}
                 </div>
+                <div className="text-sm sm:text-base font-black font-mono text-blue-950">
+                  ₺{ekstreAnalytics.totalBuySpent.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-blue-700 font-semibold border-t border-blue-200/60 pt-1">
+                  AOF: ₺{ekstreAnalytics.avgBuyPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+              </div>
 
-                {/* 3.6 Legal Provisions / Statutory Note */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5 text-[10px] text-slate-600 leading-relaxed">
-                  <div className="font-extrabold text-slate-800 uppercase flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
-                    YASAL HÜKÜMLER, ENVANTER TEVSİK VE TEYİT ŞARTLARI
-                  </div>
-                  <p>
-                    <strong>1.</strong> İşbu stok ekstresi, 213 Sayılı Vergi Usul Kanunu (VUK M.182-196) envanter ve ambar kayıtları ile 6102 Sayılı Türk Ticaret Kanunu hükümleri uyarınca işletme fiili ve kaydi stok hareketlerinin tevsiki amacıyla düzenlenmiştir.
+              {/* Box 2: Mal Satışları / Çıkış */}
+              <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3 space-y-1 text-center">
+                <div className="text-[10px] font-black uppercase tracking-wider text-indigo-900">
+                  TOPLAM ÇIKIŞ / SATIŞ
+                </div>
+                <div className="text-xs text-indigo-800 font-bold">
+                  {ekstreAnalytics.totalSellQty} {selectedEkstreProduct.unit}
+                </div>
+                <div className="text-sm sm:text-base font-black font-mono text-indigo-950">
+                  ₺{ekstreAnalytics.totalSellRevenue.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-indigo-700 font-semibold border-t border-indigo-200/60 pt-1">
+                  Ort. Satış: ₺{ekstreAnalytics.avgSellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+
+              {/* Box 3: Brüt Kar & Marj */}
+              <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 space-y-1 text-center">
+                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-900">
+                  BRÜT KAR & PERFORMANS
+                </div>
+                <div className="text-xs text-emerald-800 font-bold">
+                  %{ekstreAnalytics.marginPercent.toFixed(1)} Kar Marjı
+                </div>
+                <div className="text-sm sm:text-base font-black font-mono text-emerald-800">
+                  ₺{ekstreAnalytics.totalRealizedProfit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-emerald-700 font-semibold border-t border-emerald-200/60 pt-1">
+                  Birim Kar: +₺{ekstreAnalytics.unitProfit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+
+              {/* Box 4: Mevcut Stok Değerleme */}
+              <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3 space-y-1 text-center">
+                <div className="text-[10px] font-black uppercase tracking-wider text-purple-900">
+                  MEVCUT STOK DEĞERİ
+                </div>
+                <div className="text-xs text-purple-800 font-bold">
+                  {selectedEkstreProduct.stockQuantity} {selectedEkstreProduct.unit} Bakiye
+                </div>
+                <div className="text-sm sm:text-base font-black font-mono text-purple-950">
+                  ₺{ekstreAnalytics.currentStockValuation.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-purple-700 font-semibold border-t border-purple-200/60 pt-1">
+                  Maliyet Bazlı Değerleme
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          /* SUBSEQUENT PAGES: Corporate Mini-Header + STOK BİLGİLERİ SECTION */
+          <div className="space-y-3 pb-2 border-b border-purple-200">
+            {/* Subsequent Page Corporate Mini-Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-purple-200/80">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-900 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                  <Package className="w-4.5 h-4.5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black tracking-tight text-purple-950 uppercase">
+                    {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL STOK VE DEPO YÖNETİMİ"}
+                  </h2>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    Resmi Stok Hareketleri ve Ambar Envanter Ekstresi
                   </p>
-                  <p>
-                    <strong>2.</strong> Depo giriş-çıkışları irsaliye, e-fatura ve ambar kabul/sevk belgeleri ile tevsik edilmiş olup kaydi bakiye ile fiili sayım sonuçları mutabık kabul edilir.
-                  </p>
-                  <p>
-                    <strong>3.</strong> Konsolide veya depo bazlı hareket kayıtları denetim ve resmi incelemelerde tevsik edici belge niteliği taşır.
-                  </p>
                 </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider bg-purple-900 text-white px-2.5 py-1 rounded-lg">
+                  RESMİ STOK EKSTRESİ
+                </span>
+                <span className="text-xs font-mono font-black bg-purple-100 text-purple-950 border border-purple-300 px-2.5 py-1 rounded-lg">
+                  Sayfa {pageIndex + 1} / {ekstrePages.length}
+                </span>
+              </div>
+            </div>
 
-                {/* 3.7 Official Signatures */}
-                <div className="grid grid-cols-2 gap-8 pt-4 border-t border-purple-200">
-                  <div className="text-center space-y-12">
-                    <div>
-                      <div className="font-extrabold text-slate-900 text-xs uppercase">DÜZENLEYEN / DEPO SORUMLUSU</div>
-                      <div className="text-[10px] text-slate-500">Ambar Kayıt & Stok Teslim Sorumlusu</div>
-                    </div>
-                    <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto"></div>
-                    <div className="text-[10px] text-slate-400 italic">İmza / Kaşe</div>
-                  </div>
-
-                  <div className="text-center space-y-12">
-                    <div>
-                      <div className="font-extrabold text-slate-900 text-xs uppercase">ŞİRKET YETKİLİSİ / MUHASEBE ONAYI</div>
-                      <div className="text-[10px] text-slate-500">Mali İşler & Envanter Yetkilisi</div>
-                    </div>
-                    <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto"></div>
-                    <div className="text-[10px] text-slate-400 italic">İmza / Mühür</div>
-                  </div>
+            {/* STOK BİLGİLERİ BÖLÜMÜ (Stock Information Section on Subsequent Pages) */}
+            <div className="bg-gradient-to-br from-purple-50/90 via-slate-50 to-blue-50/50 rounded-xl p-3 border border-purple-200/90 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
+                <span className="text-[11px] font-black uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-purple-700" />
+                  STOK VE ÜRÜN BİLGİLERİ
+                </span>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-[11px] text-slate-600 font-medium">Tarih:</span>
+                  <span
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      color: "#0f172a",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="stock-badge-colored font-mono font-bold px-2 py-0.5 rounded text-[11px] border shadow-2xs"
+                  >
+                    {new Date().toLocaleDateString("tr-TR")}
+                  </span>
                 </div>
+              </div>
 
-                {/* 3.8 Footer text */}
-                <div className="text-center pt-2 border-t border-slate-100 text-[10px] text-slate-400">
-                  Bu stok ekstresi elektronik ortamda oluşturulmuş olup resmi envanter ve muhasebe kayıtlarının tevsik edici belgesidir. • Muavin Stok & Depo Yönetim Sistemi
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                <div className="bg-white/90 p-2 rounded-lg border border-purple-100">
+                  <span className="text-[10px] text-slate-500 font-semibold block">Ürün / Hizmet:</span>
+                  <span className="font-bold text-slate-900 truncate block text-xs" title={selectedEkstreProduct.name}>
+                    {selectedEkstreProduct.name}
+                  </span>
                 </div>
+                <div className="bg-white/90 p-2 rounded-lg border border-purple-100">
+                  <span className="text-[10px] text-slate-500 font-semibold block">Stok Kodu:</span>
+                  <span className="font-mono font-black text-purple-950 block text-xs">{selectedEkstreProduct.code}</span>
+                </div>
+                <div className="bg-white/90 p-2 rounded-lg border border-purple-100">
+                  <span className="text-[10px] text-slate-500 font-semibold block">Barkod / Seri:</span>
+                  <span className="font-mono font-medium text-slate-700 block text-xs">{selectedEkstreProduct.barcode || "-"}</span>
+                </div>
+                <div className="bg-white/90 p-2 rounded-lg border border-purple-100">
+                  <span className="text-[10px] text-slate-500 font-semibold block">Kategori & Cins:</span>
+                  <span className="font-semibold text-slate-800 truncate block text-xs">
+                    {selectedEkstreProduct.category || "Genel"} / {selectedEkstreProduct.stockType || "Ticari Mal"}
+                  </span>
+                </div>
+                <div className="bg-white/90 p-2 rounded-lg border border-purple-100">
+                  <span className="text-[10px] text-slate-500 font-semibold block">KDV & Birim:</span>
+                  <span className="font-bold text-slate-900 block text-xs">
+                    %{selectedEkstreProduct.vatRate || 20} • {selectedEkstreProduct.unit || "Adet"}
+                  </span>
+                </div>
+                <div className="bg-purple-100/80 p-2 rounded-lg border border-purple-300">
+                  <span className="text-[10px] text-purple-900 font-black block">Mevcut Bakiye:</span>
+                  <span className="font-mono font-black text-purple-950 block text-xs">
+                    {getProductStockInWarehouse(selectedEkstreProduct, ekstreWarehouseId, activeWarehouses)} {selectedEkstreProduct.unit}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 3.5 Movement Details Table */}
+        <div className="space-y-2">
+          <div
+            data-testid="stock-movements-banner"
+            style={{
+              backgroundColor: "#83b8ff",
+              color: "#0f172a",
+              borderColor: "#60a5fa",
+              WebkitPrintColorAdjust: "exact",
+              printColorAdjust: "exact",
+            }}
+            className="stock-movements-banner flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-black text-slate-950 border border-[#60a5fa] shadow-2xs"
+          >
+            <span className="flex items-center gap-1.5 uppercase tracking-wide">
+              <FileSpreadsheet className="w-4 h-4 text-slate-900" />
+              RESMİ STOK HAREKETLERİ VE EVRAK DÖKÜMÜ {hasMultiplePages ? `(SAYFA ${pageIndex + 1} / ${ekstrePages.length})` : ""}
+            </span>
+            <span className="text-[11px] text-slate-900 font-bold bg-white/70 px-2.5 py-0.5 rounded-lg border border-[#60a5fa]/60">
+              {hasMultiplePages ? (
+                <>
+                  Sayfadaki Hareket: <strong className="text-slate-950">{pageMovements.length}</strong> / Toplam: <strong className="text-slate-950">{filteredEkstreMovements.length}</strong>
+                </>
+              ) : (
+                <>
+                  Listelenen İşlem Sayısı: <strong className="text-slate-950">{filteredEkstreMovements.length}</strong>
+                </>
+              )}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto w-full rounded-xl border border-purple-200">
+            <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+              <thead className="bg-[#83b8ff] text-slate-950 font-extrabold text-[11px]">
+                <tr>
+                  <th
+                    data-testid="th-tarih"
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      color: "#0f172a",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="stock-th-colored py-2.5 px-3 border-r border-[#60a5fa] text-slate-950 font-black text-left"
+                  >
+                    Tarih
+                  </th>
+                  <th
+                    data-testid="th-islem-turu"
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      color: "#0f172a",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="stock-th-colored py-2.5 px-3 border-r border-[#60a5fa] text-slate-950 font-black text-left"
+                  >
+                    İşlem Türü
+                  </th>
+                  <th
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      color: "#0f172a",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="stock-th-colored py-2.5 px-3 border-r border-[#60a5fa] text-slate-950 font-black text-left"
+                  >
+                    Evrak / Fatura No
+                  </th>
+                  <th
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      color: "#0f172a",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="stock-th-colored py-2.5 px-3 border-r border-[#60a5fa] text-slate-950 font-black text-left"
+                  >
+                    Cari / Müşteri / Tedarikçi
+                  </th>
+                  <th
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      color: "#0f172a",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="stock-th-colored py-2.5 px-3 border-r border-[#60a5fa] text-slate-950 font-black text-right"
+                  >
+                    Miktar
+                  </th>
+                  <th
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      color: "#0f172a",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="stock-th-colored py-2.5 px-3 border-r border-[#60a5fa] text-slate-950 font-black text-right"
+                  >
+                    Birim Fiyat
+                  </th>
+                  <th
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      color: "#0f172a",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="stock-th-colored py-2.5 px-3 border-r border-[#60a5fa] text-slate-950 font-black text-right"
+                  >
+                    KDV Dahil Tutar
+                  </th>
+                  <th
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      color: "#0f172a",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="stock-th-colored py-2.5 px-3 text-slate-950 font-black text-right"
+                  >
+                    Yürüyen Bakiye
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-100 text-slate-800">
+                {pageMovements.map((m, idx) => {
+                  const isPurchase = m.type === "purchase";
+                  return (
+                    <tr key={m.id} className={idx % 2 === 0 ? "bg-white" : "bg-purple-50/30"}>
+                      <td className="py-2 px-3 font-mono font-medium text-slate-700">
+                        <span
+                          style={{
+                            backgroundColor: "#83b8ff",
+                            color: "#0f172a",
+                            borderColor: "#60a5fa",
+                            WebkitPrintColorAdjust: "exact",
+                            printColorAdjust: "exact",
+                          }}
+                          className="stock-badge-colored inline-block font-mono font-bold px-2 py-0.5 rounded text-[11px] border shadow-2xs"
+                        >
+                          {formatDate(m.issueDate)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3">
+                        <span
+                          style={{
+                            backgroundColor: "#83b8ff",
+                            color: "#0f172a",
+                            borderColor: "#60a5fa",
+                            WebkitPrintColorAdjust: "exact",
+                            printColorAdjust: "exact",
+                          }}
+                          className="stock-badge-colored inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded text-[10px] border shadow-2xs"
+                        >
+                          {isPurchase ? "Alış / Giriş" : "Satış / Çıkış"}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 font-mono font-bold text-slate-900">{m.invoiceNumber}</td>
+                      <td className="py-2 px-3 font-semibold text-slate-900 truncate max-w-[180px]">
+                        {m.contactName}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums font-tabular-num-md font-extrabold text-slate-900">
+                        {isPurchase ? "+" : "-"}{m.quantity} {m.unit}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums font-tabular-num-md text-slate-700">
+                        ₺{m.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums font-tabular-num-md font-bold text-slate-900">
+                        ₺{m.totalWithVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums font-tabular-num-md font-black text-purple-950 bg-purple-100/50">
+                        {m.runningBalance !== undefined ? m.runningBalance : "-"} {m.unit}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {pageMovements.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="text-center py-8 text-slate-400 font-medium">
+                      Bu kriterlere ve filtreye uygun stok hareketi bulunamadı.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 3.6 Legal Provisions & Signatures (Shown on Last Page or Single Page) */}
+        {isLastPage ? (
+          <>
+            {/* Legal Provisions / Statutory Note */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5 text-[10px] text-slate-600 leading-relaxed">
+              <div className="font-extrabold text-slate-800 uppercase flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
+                YASAL HÜKÜMLER, ENVANTER TEVSİK VE TEYİT ŞARTLARI
+              </div>
+              <p>
+                <strong>1.</strong> İşbu stok ekstresi, 213 Sayılı Vergi Usul Kanunu (VUK M.182-196) envanter ve ambar kayıtları ile 6102 Sayılı Türk Ticaret Kanunu hükümleri uyarınca işletme fiili ve kaydi stok hareketlerinin tevsiki amacıyla düzenlenmiştir.
+              </p>
+              <p>
+                <strong>2.</strong> Depo giriş-çıkışları irsaliye, e-fatura ve ambar kabul/sevk belgeleri ile tevsik edilmiş olup kaydi bakiye ile fiili sayım sonuçları mutabık kabul edilir.
+              </p>
+              <p>
+                <strong>3.</strong> Konsolide veya depo bazlı hareket kayıtları denetim ve resmi incelemelerde tevsik edici belge niteliği taşır.
+              </p>
+            </div>
+
+            {/* Official Signatures */}
+            <div className="grid grid-cols-2 gap-8 pt-4 border-t border-purple-200">
+              <div className="text-center space-y-12">
+                <div>
+                  <div className="font-extrabold text-slate-900 text-xs uppercase">DÜZENLEYEN / DEPO SORUMLUSU</div>
+                  <div className="text-[10px] text-slate-500">Ambar Kayıt & Stok Teslim Sorumlusu</div>
+                </div>
+                <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto"></div>
+                <div className="text-[10px] text-slate-400 italic">İmza / Kaşe</div>
+              </div>
+
+              <div className="text-center space-y-12">
+                <div>
+                  <div className="font-extrabold text-slate-900 text-xs uppercase">ŞİRKET YETKİLİSİ / MUHASEBE ONAYI</div>
+                  <div className="text-[10px] text-slate-500">Mali İşler & Envanter Yetkilisi</div>
+                </div>
+                <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto"></div>
+                <div className="text-[10px] text-slate-400 italic">İmza / Mühür</div>
+              </div>
+            </div>
+
+            {/* Footer text */}
+            <div className="text-center pt-2 border-t border-slate-100 text-[10px] text-slate-400 flex items-center justify-between">
+              <span>Bu stok ekstresi elektronik ortamda oluşturulmuş olup resmi envanter ve muhasebe kayıtlarının tevsik edici belgesidir.</span>
+              {hasMultiplePages && (
+                <span className="font-mono font-bold text-slate-500">Sayfa {pageIndex + 1} / {ekstrePages.length}</span>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-between pt-2 border-t border-purple-100 text-[10px] text-slate-500 font-semibold">
+            <span>Resmi Stok Ekstresi • Muavin Stok ve Depo Yönetim Sistemi</span>
+            <span className="bg-purple-50 text-purple-900 px-2 py-0.5 rounded border border-purple-200">
+              Sayfa {pageIndex + 1} / {ekstrePages.length} • Hareket detayları {pageIndex + 2}. sayfada devam etmektedir →
+            </span>
+          </div>
+        )}
+      </div>
+    </React.Fragment>
+  );
+})}
               </div>
             </div>
 
@@ -1673,6 +2221,16 @@ export const Products: React.FC<ProductsProps> = ({
                 Toplam Kayıt: <strong className="text-purple-950">{filteredEkstreMovements.length}</strong> hareket listeleniyor
               </span>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportEkstreExcel}
+                  className="px-4 py-2 font-bold bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs cursor-pointer transition-colors shadow-xs flex items-center gap-1.5 active:scale-95"
+                  title="Stok Ekstresi ve Hareketlerini Excel (.xlsx) Olarak İndir"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                  <span>Excel İndir</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleExportEkstrePDF}
@@ -1697,8 +2255,9 @@ export const Products: React.FC<ProductsProps> = ({
     );
   }
 
-      {/* FULL-PAGE DETAIL VIEW: STOK KART EKLE / DÜZENLE */}
-      {isModalOpen && (
+  /* FULL-PAGE DETAIL VIEW: STOK KART EKLE / DÜZENLE */
+  if (isModalOpen) {
+    return (
         <DetailPageLayout
           title={editingProduct ? `${editingProduct.name} - Stok Kartını Düzenle` : "Yeni Stok / Ürün Kartı Tanımla"}
           subtitle="Stok cinsi, depo seçimi, barkod ve fiyat bilgileri ile ürün tanımlayın"
@@ -1753,7 +2312,19 @@ export const Products: React.FC<ProductsProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">Giriş / Ana Depo *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-800">Giriş / Ana Depo *</label>
+                    {onAddWarehouse && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenWhModal()}
+                        className="text-[10px] font-bold text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Yeni Depo Ekle</span>
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={primaryWarehouseId}
                     onChange={(e) => setPrimaryWarehouseId(e.target.value)}
@@ -1941,76 +2512,161 @@ export const Products: React.FC<ProductsProps> = ({
               </div>
             </form>
           </div>
+
+          {/* Allow creating a warehouse while on the Add/Edit Product page */}
+          {isWhModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div className="bg-[#131b2e] text-white px-5 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-[#0f6bae] flex items-center justify-center">
+                      <WarehouseIcon className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold">{editingWh ? "Depo Bilgilerini Düzenle" : "Yeni Depo Tanımla"}</h3>
+                      <p className="text-[11px] text-slate-300">İşletmeniz için yeni stok deposu ekleyin</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsWhModalOpen(false)}
+                    className="p-1 text-slate-300 hover:text-white rounded-lg cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <form onSubmit={handleSaveWarehouse} className="p-5 space-y-3.5 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Depo Kodu *</label>
+                      <input
+                        type="text"
+                        required
+                        value={whCode}
+                        onChange={(e) => setWhCode(e.target.value)}
+                        placeholder="DEP-001"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono font-bold text-slate-900"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block font-bold text-slate-700 mb-1">Depo Adı *</label>
+                      <input
+                        type="text"
+                        required
+                        value={whName}
+                        onChange={(e) => setWhName(e.target.value)}
+                        placeholder="Örn: Merkez Ana Depo veya Şube Deposu"
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Depo Tipi</label>
+                      <select
+                        value={whType}
+                        onChange={(e) => setWhType(e.target.value as Warehouse["type"])}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-semibold text-slate-900"
+                      >
+                        <option value="main">Ana Depo</option>
+                        <option value="regional">Bölge / Şube Deposu</option>
+                        <option value="transit">Transit Lojistik Depo</option>
+                        <option value="cold_storage">Soğuk Hava Deposu</option>
+                        <option value="bonded">Antrepo / Serbest Depo</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Kapasite (m²)</label>
+                      <input
+                        type="number"
+                        value={whCapacityM2}
+                        onChange={(e) => setWhCapacityM2(parseInt(e.target.value) || 0)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Depo Sorumlusu</label>
+                      <input
+                        type="text"
+                        value={whManagerName}
+                        onChange={(e) => setWhManagerName(e.target.value)}
+                        placeholder="Ad Soyad"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Telefon</label>
+                      <input
+                        type="text"
+                        value={whPhone}
+                        onChange={(e) => setWhPhone(e.target.value)}
+                        placeholder="+90 (212) 000 00 00"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">İl</label>
+                      <input
+                        type="text"
+                        value={whCity}
+                        onChange={(e) => setWhCity(e.target.value)}
+                        placeholder="İstanbul"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">İlçe</label>
+                      <input
+                        type="text"
+                        value={whDistrict}
+                        onChange={(e) => setWhDistrict(e.target.value)}
+                        placeholder="Şişli"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Açık Adres</label>
+                    <input
+                      type="text"
+                      value={whFullAddress}
+                      onChange={(e) => setWhFullAddress(e.target.value)}
+                      placeholder="Mahalle, Cadde, Sokak, No..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                    />
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsWhModalOpen(false)}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                    >
+                      İptal
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-xl bg-[#0f6bae] hover:bg-[#005289] text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>{editingWh ? "Depoyu Güncelle" : "Depoyu Kaydet"}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </DetailPageLayout>
     );
   }
-
-      {/* CATALOG WHATSAPP MODAL */}
-      {isCatalogWhatsAppOpen && (
-        <UniversalWhatsAppModal
-          isOpen={isCatalogWhatsAppOpen}
-          onClose={() => setIsCatalogWhatsAppOpen(false)}
-          title="WhatsApp ile Ürün & Fiyat Listesi Paylaş"
-          documentTypeLabel="Fiyat Kataloğu"
-          recipientName="Sayın Müşterimiz"
-          recipientPhone=""
-          defaultMessage={`Sayın Müşterimiz,\n\n*${companySettings?.companyTitle || companySettings?.companyName || "Şirketimiz"}* güncel Ürün & Fiyat Listesi Kataloğumuz ekte bilgilerinize sunulmuştur.\n\n📦 *Toplam Ürün Sayısı:* ${filteredProducts.length} Kalem\n📅 *Tarih:* ${formatDate(new Date())}\n\nSipariş ve detaylı bilgi için lütfen bizimle iletişime geçiniz.`}
-          documentFileName={`Fiyat_Listesi_${new Date().toISOString().split("T")[0]}.pdf`}
-          companySettings={companySettings}
-          onGeneratePdf={async () => {
-            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
-            return generateAutoTableFromExportData(getProductsExportData());
-          }}
-        />
-    );
-  }
-
-      {/* SINGLE PRODUCT / EKSTRE WHATSAPP MODAL */}
-      {whatsAppProduct && (
-        <UniversalWhatsAppModal
-          isOpen={!!whatsAppProduct}
-          onClose={() => setWhatsAppProduct(null)}
-          title={`WhatsApp ile Stok Bilgisi Paylaş (${whatsAppProduct.name})`}
-          documentTypeLabel="Ürün & Stok Bilgi Kartı"
-          recipientName="Sayın İlgili"
-          recipientPhone=""
-          defaultMessage={formatProductWhatsAppMessage(whatsAppProduct, companySettings)}
-          documentFileName={`Stok_Ekstresi_${(whatsAppProduct.code || "Stok").replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`}
-          companySettings={companySettings}
-          onGeneratePdf={async () => {
-            const el = document.getElementById("printable-stock-ekstre");
-            if (el) {
-              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
-              const safeCode = (whatsAppProduct.code || "Stok").replace(/[^a-zA-Z0-9_-]/g, "_");
-              return exportElementToPDFWithPrintStyling(
-                "printable-stock-ekstre",
-                `Stok_Ekstresi_${safeCode}.pdf`,
-                { orientation: "p", margin: 6, scale: 1.6 }
-              );
-            }
-            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
-            const expData: ExportData = {
-              filename: `Urun_${whatsAppProduct.code || "Bilgi"}`,
-              title: `Ürün ve Fiyat Bilgi Kartı: ${whatsAppProduct.name}`,
-              subtitle: `Stok Kodu: ${whatsAppProduct.code} | Barkod: ${whatsAppProduct.barcode || "-"} | Mevcut Stok: ${whatsAppProduct.stockQuantity} ${whatsAppProduct.unit}`,
-              headers: ["Ürün Adı", "Stok Kodu", "KDV %", "Alış Fiyatı", "Satış Fiyatı", "Mevcut Stok"],
-              rows: [
-                [
-                  whatsAppProduct.name,
-                  whatsAppProduct.code || "-",
-                  `%${whatsAppProduct.vatRate ?? 20}`,
-                  formatCurrency(whatsAppProduct.buyPrice),
-                  formatCurrency(whatsAppProduct.sellPrice),
-                  `${whatsAppProduct.stockQuantity} ${whatsAppProduct.unit}`,
-                ],
-              ],
-            };
-            return generateAutoTableFromExportData(expData);
-          }}
-        />
-    );
-  }
-
 
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
@@ -2019,42 +2675,53 @@ export const Products: React.FC<ProductsProps> = ({
         badge="Envanter & Lojistik"
         badgeIcon={<Package className="w-2.5 h-2.5 text-[#0f6bae]" />}
         title="Stok ve Depo Yönetimi"
-        description="Depo bazlı stok takibi, depolar arası sevk transferi, kritik seviye takibi ve resmi envanter ekstresi."
+        description="Depo bazlı stok takibi, yeni depo ve stok tanımlama, depolar arası sevk transferi ve resmi envanter ekstresi."
         actions={
           <>
             <button
               type="button"
+              onClick={() => handleOpenWhModal()}
+              className="px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs hover:bg-purple-50 shrink-0 bg-white"
+              style={{ borderColor: theme.cardBorder, color: theme.pageText }}
+              title="İşletmeye yeni depo ekle"
+            >
+              <WarehouseIcon className="w-4 h-4 text-purple-600" />
+              <span>+ Yeni Depo Ekle</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleOpenTransferModal()}
               className="px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer shadow-2xs hover:bg-slate-50 shrink-0"
-                  style={{ borderColor: theme.cardBorder, color: theme.pageText }}
-                >
-                  <ArrowRightLeft className="w-4 h-4 text-amber-600" />
-                  <span>Depo Transferi</span>
-                </button>
+              style={{ borderColor: theme.cardBorder, color: theme.pageText }}
+            >
+              <ArrowRightLeft className="w-4 h-4 text-amber-600" />
+              <span>Depo Transferi</span>
+            </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsImportModalOpen(true)}
-                  className="px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs hover:bg-slate-50 shrink-0 bg-white"
-                  style={{ borderColor: theme.cardBorder, color: theme.pageText }}
-                  title="Excel veya CSV dosyasından stok ve ürünleri toplu içe aktar"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  <span>İçe Aktar</span>
-                </button>
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs hover:bg-slate-50 shrink-0 bg-white"
+              style={{ borderColor: theme.cardBorder, color: theme.pageText }}
+              title="Excel veya CSV dosyasından stok ve ürünleri toplu içe aktar"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>İçe Aktar</span>
+            </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleOpenAddModal()}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
-                  style={{ backgroundColor: theme.primaryColor }}
-                >
-                  <Plus className="w-4 h-4 stroke-[2.5]" />
-                  <span>+ Yeni Stok Kartı</span>
-                </button>
-              </>
-            }
-          />
+            <button
+              type="button"
+              onClick={() => handleOpenAddModal()}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+              style={{ backgroundColor: theme.primaryColor }}
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>+ Yeni Stok Kartı</span>
+            </button>
+          </>
+        }
+      />
 
           {/* 2. TOP 4 KPI SUMMARY CARDS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2158,16 +2825,24 @@ export const Products: React.FC<ProductsProps> = ({
             className="rounded-2xl p-3 sm:p-4 border shadow-2xs"
             style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
           >
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100 mb-3">
               <div className="flex items-center gap-2">
                 <WarehouseIcon className="w-4 h-4 text-purple-600" />
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Depo Bazlı Stok Görünümü
+                  Depo Bazlı Stok Görünümü & Depo Yönetimi
+                </span>
+                <span className="text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+                  {activeWarehouses.length} Depo Tanımlı
                 </span>
               </div>
-              <span className="text-xs font-bold text-slate-400">
-                {activeWarehouses.length} Depo Tanımlı
-              </span>
+              <button
+                type="button"
+                onClick={() => handleOpenWhModal()}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Yeni Depo Ekle</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -2199,23 +2874,53 @@ export const Products: React.FC<ProductsProps> = ({
                 const isSelected = selectedWarehouseId === wh.id;
                 const analytics = getWhAnalytics(wh.id);
                 return (
-                  <button
+                  <div
                     key={wh.id}
-                    type="button"
                     onClick={() => setSelectedWarehouseId(wh.id)}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative group ${
                       isSelected
                         ? "border-purple-500 bg-purple-50/50 shadow-2xs ring-1 ring-purple-500/20"
                         : "border-slate-200/80 bg-slate-50/50 hover:bg-slate-100/60"
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800 truncate max-w-[170px]" title={wh.name}>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-bold text-slate-800 truncate max-w-[140px]" title={wh.name}>
                         {wh.name}
                       </span>
-                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
-                        {wh.code}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {onUpdateWarehouse && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenWhModal(wh);
+                            }}
+                            className="p-1 text-slate-400 hover:text-purple-700 hover:bg-purple-100 rounded transition-colors cursor-pointer"
+                            title="Depoyu Düzenle"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                        )}
+                        {onDeleteWarehouse && activeWarehouses.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`'${wh.name}' deposunu silmek istediğinize emin misiniz?`)) {
+                                onDeleteWarehouse(wh.id);
+                                if (selectedWarehouseId === wh.id) setSelectedWarehouseId("all");
+                              }
+                            }}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                            title="Depoyu Sil"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
+                          {wh.code}
+                        </span>
+                      </div>
                     </div>
                     <div className="text-lg font-bold font-mono text-slate-900 mt-1">
                       ₺{analytics.totalValue.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
@@ -2224,7 +2929,7 @@ export const Products: React.FC<ProductsProps> = ({
                       <span>{analytics.totalItems} Kalem</span>
                       <span>{analytics.totalQty} Miktar</span>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -2296,6 +3001,7 @@ export const Products: React.FC<ProductsProps> = ({
                   </span>
                 )}
               </button>
+              <ExportButtons getExportData={getProductsExportData} size="sm" />
               <ColumnManagementDropdown
                 columns={productColumns}
                 columnVisibility={productColVisibility}
@@ -2304,7 +3010,6 @@ export const Products: React.FC<ProductsProps> = ({
                 onResetToDefaults={resetProductCols}
                 hiddenCount={hiddenProductColCount}
               />
-              <ExportButtons getExportData={getProductsExportData} size="sm" />
               <button
                 type="button"
                 onClick={() => setIsImportModalOpen(true)}
@@ -2832,7 +3537,7 @@ export const Products: React.FC<ProductsProps> = ({
                                       Toplam Stok Envanter Değeri
                                     </span>
                                     <span className="font-mono tabular-nums font-bold text-purple-700 text-sm mt-0.5 block">
-                                      ₺{(p.stock * p.buyPrice).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                      ₺{((p.stockQuantity || 0) * (p.buyPrice || 0)).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                                     </span>
                                   </div>
                                 </div>
@@ -2858,7 +3563,27 @@ export const Products: React.FC<ProductsProps> = ({
                       <td colSpan={visibleProductColCount} className="text-center py-12 text-slate-500">
                         <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                         <p className="font-extrabold text-slate-700 text-sm">Aramanıza veya Filtreye Uygun Ürün Bulunamadı</p>
-                        <p className="text-xs text-slate-400 mt-1">Farklı bir depo seçebilir veya arama kelimesini değiştirebilirsiniz.</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Yeni stok kartı ekleyebilir, farklı bir depo seçebilir veya arama kelimesini değiştirebilirsiniz.
+                        </p>
+                        <div className="mt-4 flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddModal()}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-[#0f6bae] hover:bg-[#005289] text-white shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Yeni Stok Kartı Ekle</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenWhModal()}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <WarehouseIcon className="w-3.5 h-3.5" />
+                            <span>+ Yeni Depo Ekle</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -2880,6 +3605,224 @@ export const Products: React.FC<ProductsProps> = ({
               className="border-t border-slate-100"
             />
           </div>
+
+      {/* YENİ DEPO EKLE / DÜZENLE MODAL */}
+      {isWhModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#131b2e] text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#0f6bae] flex items-center justify-center">
+                  <WarehouseIcon className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">{editingWh ? "Depo Bilgilerini Düzenle" : "Yeni Depo Tanımla"}</h3>
+                  <p className="text-[11px] text-slate-300">
+                    {companySettings?.companyName || "İşletme"} bünyesine yeni stok deposu ekleyin
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsWhModalOpen(false)}
+                className="p-1 text-slate-300 hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveWarehouse} className="p-5 space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Depo Kodu *</label>
+                  <input
+                    type="text"
+                    required
+                    value={whCode}
+                    onChange={(e) => setWhCode(e.target.value)}
+                    placeholder="DEP-001"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono font-bold text-slate-900"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Depo Adı *</label>
+                  <input
+                    type="text"
+                    required
+                    value={whName}
+                    onChange={(e) => setWhName(e.target.value)}
+                    placeholder="Örn: Merkez Ana Depo veya Şube Deposu"
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Depo Tipi</label>
+                  <select
+                    value={whType}
+                    onChange={(e) => setWhType(e.target.value as Warehouse["type"])}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-semibold text-slate-900"
+                  >
+                    <option value="main">Ana Depo</option>
+                    <option value="regional">Bölge / Şube Deposu</option>
+                    <option value="transit">Transit Lojistik Depo</option>
+                    <option value="cold_storage">Soğuk Hava Deposu</option>
+                    <option value="bonded">Antrepo / Serbest Depo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Kapasite (m²)</label>
+                  <input
+                    type="number"
+                    value={whCapacityM2}
+                    onChange={(e) => setWhCapacityM2(parseInt(e.target.value) || 0)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Depo Sorumlusu</label>
+                  <input
+                    type="text"
+                    value={whManagerName}
+                    onChange={(e) => setWhManagerName(e.target.value)}
+                    placeholder="Ad Soyad"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Telefon</label>
+                  <input
+                    type="text"
+                    value={whPhone}
+                    onChange={(e) => setWhPhone(e.target.value)}
+                    placeholder="+90 (212) 000 00 00"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">İl</label>
+                  <input
+                    type="text"
+                    value={whCity}
+                    onChange={(e) => setWhCity(e.target.value)}
+                    placeholder="İstanbul"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">İlçe</label>
+                  <input
+                    type="text"
+                    value={whDistrict}
+                    onChange={(e) => setWhDistrict(e.target.value)}
+                    placeholder="Şişli"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Açık Adres</label>
+                <input
+                  type="text"
+                  value={whFullAddress}
+                  onChange={(e) => setWhFullAddress(e.target.value)}
+                  placeholder="Mahalle, Cadde, Sokak, No..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsWhModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-[#0f6bae] hover:bg-[#005289] text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{editingWh ? "Depoyu Güncelle" : "Depoyu Kaydet"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CATALOG WHATSAPP MODAL */}
+      {isCatalogWhatsAppOpen && (
+        <UniversalWhatsAppModal
+          isOpen={isCatalogWhatsAppOpen}
+          onClose={() => setIsCatalogWhatsAppOpen(false)}
+          title="WhatsApp ile Ürün & Fiyat Listesi Paylaş"
+          documentTypeLabel="Fiyat Kataloğu"
+          recipientName="Sayın Müşterimiz"
+          recipientPhone=""
+          defaultMessage={`Sayın Müşterimiz,\n\n*${companySettings?.companyTitle || companySettings?.companyName || "Şirketimiz"}* güncel Ürün & Fiyat Listesi Kataloğumuz ekte bilgilerinize sunulmuştur.\n\n📦 *Toplam Ürün Sayısı:* ${filteredProducts.length} Kalem\n📅 *Tarih:* ${formatDate(new Date())}\n\nSipariş ve detaylı bilgi için lütfen bizimle iletişime geçiniz.`}
+          documentFileName={`Fiyat_Listesi_${new Date().toISOString().split("T")[0]}.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            return generateAutoTableFromExportData(getProductsExportData());
+          }}
+        />
+      )}
+
+      {/* SINGLE PRODUCT / EKSTRE WHATSAPP MODAL */}
+      {whatsAppProduct && (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppProduct}
+          onClose={() => setWhatsAppProduct(null)}
+          title={`WhatsApp ile Stok Bilgisi Paylaş (${whatsAppProduct.name})`}
+          documentTypeLabel="Ürün & Stok Bilgi Kartı"
+          recipientName="Sayın İlgili"
+          recipientPhone=""
+          defaultMessage={formatProductWhatsAppMessage(whatsAppProduct, companySettings)}
+          documentFileName={`Stok_Ekstresi_${(whatsAppProduct.code || "Stok").replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const el = document.getElementById("printable-stock-ekstre");
+            if (el) {
+              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+              const safeCode = (whatsAppProduct.code || "Stok").replace(/[^a-zA-Z0-9_-]/g, "_");
+              return exportElementToPDFWithPrintStyling(
+                "printable-stock-ekstre",
+                `Stok_Ekstresi_${safeCode}.pdf`,
+                { orientation: "l", margin: 6, scale: 1.6 }
+              );
+            }
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `Urun_${whatsAppProduct.code || "Bilgi"}`,
+              title: `Ürün ve Fiyat Bilgi Kartı: ${whatsAppProduct.name}`,
+              subtitle: `Stok Kodu: ${whatsAppProduct.code} | Barkod: ${whatsAppProduct.barcode || "-"} | Mevcut Stok: ${whatsAppProduct.stockQuantity} ${whatsAppProduct.unit}`,
+              headers: ["Ürün Adı", "Stok Kodu", "KDV %", "Alış Fiyatı", "Satış Fiyatı", "Mevcut Stok"],
+              rows: [
+                [
+                  whatsAppProduct.name,
+                  whatsAppProduct.code || "-",
+                  `%${whatsAppProduct.vatRate ?? 20}`,
+                  formatCurrency(whatsAppProduct.buyPrice),
+                  formatCurrency(whatsAppProduct.sellPrice),
+                  `${whatsAppProduct.stockQuantity} ${whatsAppProduct.unit}`,
+                ],
+              ],
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
+      )}
 
       <DataImportModal
         isOpen={isImportModalOpen}

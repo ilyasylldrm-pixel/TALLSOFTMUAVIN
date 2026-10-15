@@ -6,6 +6,7 @@ import { AuthModal, UserProfile, BRAND_LOGOS } from "./components/AuthModal";
 import { GitHubPublishModal } from "./components/GitHubPublishModal";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { triggerFormErrorNotification } from "./context/FormErrorContext";
+import { UniversalPrintModal } from "./components/common/UniversalPrintModal";
 
 // Auto-recover from Vite module preload errors on new deployments/updates
 if (typeof window !== "undefined") {
@@ -101,8 +102,16 @@ import {
   resetToDemoData,
   exportBackupJSON,
   importBackupJSON,
+  getCompaniesList,
+  getActiveCompanyId,
+  setActiveCompanyId,
+  addCompanyItem,
+  updateCompanyItem,
+  deleteCompanyItem,
+  DEFAULT_COMPANY,
 } from "./utils/storage";
-import { readStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
+import { readStoredMysoftTenantVkn, writeStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
+import { CompanyModal } from "./components/CompanyModal";
 
 import {
   Contact,
@@ -114,6 +123,7 @@ import {
   Order,
   Waybill,
   CompanySettings,
+  CompanyItem,
   Cheque,
   ChequeStatus,
   PromissoryNote,
@@ -135,9 +145,11 @@ import {
   FixedAsset,
   AssetMaintenanceRecord,
   AssetDisposalRecord,
+  isAdminOrSysAdmin,
+  isModuleOrSubModuleAllowed,
 } from "./types";
 
-import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X } from "lucide-react";
+import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X, Lock } from "lucide-react";
 import { DetailPageLayout } from "./components/common/DetailPageLayout";
 
 import { FinanceSubModule } from "./components/Accounts";
@@ -179,6 +191,91 @@ export default function App() {
   // Storage State
   const [data, setData] = useState(() => getStoredData());
 
+  // Multi-Company State
+  const [companies, setCompanies] = useState<CompanyItem[]>(() => getCompaniesList());
+  const [activeCompanyId, setActiveCompanyIdState] = useState<string>(() => getActiveCompanyId());
+  const [isNewCompanyModalOpen, setIsNewCompanyModalOpen] = useState(false);
+
+  const handleSelectCompany = (companyId: string, compList?: CompanyItem[]) => {
+    setActiveCompanyId(companyId);
+    setActiveCompanyIdState(companyId);
+    const freshData = getStoredData(companyId);
+    const effectiveList = compList || companies;
+    const comp = effectiveList.find((c) => c.id === companyId);
+    if (comp) {
+      writeStoredMysoftTenantVkn(comp.tenantIdentifierNumber || comp.vkn || comp.tckn);
+      freshData.settings = {
+        ...freshData.settings,
+        companyName: comp.companyName,
+        companyTitle: comp.companyTitle || comp.companyName,
+        taxOffice: comp.taxOffice || "Merkez",
+        taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || freshData.settings.taxNumber,
+        vkn: comp.vkn,
+        tckn: comp.tckn,
+        mysoftMatchedType: comp.mysoftMatchedType,
+        tenantIdentifierNumber: comp.tenantIdentifierNumber,
+        mysoftStatus: comp.mysoftStatus,
+        eFaturaPrefix: comp.eFaturaPrefix,
+        eFaturaNextNumber: comp.eFaturaNextNumber,
+        eArsivPrefix: comp.eArsivPrefix,
+        eArsivNextNumber: comp.eArsivNextNumber,
+        defaultInvoicePrefix: comp.eFaturaPrefix || freshData.settings.defaultInvoicePrefix,
+      };
+    }
+    setData(freshData);
+  };
+
+  const handleAddCompany = (newComp: CompanyItem, makeActiveImmediately = true) => {
+    const updatedList = addCompanyItem(newComp);
+    setCompanies(updatedList);
+    if (makeActiveImmediately) {
+      handleSelectCompany(newComp.id, updatedList);
+    }
+  };
+
+  const handleUpdateCompany = (comp: CompanyItem) => {
+    const updatedList = updateCompanyItem(comp);
+    setCompanies(updatedList);
+    if (activeCompanyId === comp.id) {
+      setData((prev) => ({
+        ...prev,
+        settings: {
+          ...prev.settings,
+          companyName: comp.companyName,
+          companyTitle: comp.companyTitle,
+          taxOffice: comp.taxOffice,
+          taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || prev.settings.taxNumber,
+          vkn: comp.vkn,
+          tckn: comp.tckn,
+          mysoftMatchedType: comp.mysoftMatchedType,
+          tenantIdentifierNumber: comp.tenantIdentifierNumber,
+          mysoftStatus: comp.mysoftStatus,
+          eFaturaPrefix: comp.eFaturaPrefix,
+          eFaturaNextNumber: comp.eFaturaNextNumber,
+          eArsivPrefix: comp.eArsivPrefix,
+          eArsivNextNumber: comp.eArsivNextNumber,
+          defaultInvoicePrefix: comp.eFaturaPrefix || prev.settings.defaultInvoicePrefix,
+          mysoftCredentials: {
+            tenantIdentifierNumber: comp.tenantIdentifierNumber,
+          },
+        },
+      }));
+      writeStoredMysoftTenantVkn(comp.tenantIdentifierNumber || comp.vkn || comp.tckn);
+    }
+  };
+
+  const handleDeleteCompany = (id: string) => {
+    if (id === DEFAULT_COMPANY.id) {
+      alert("Varsayılan ana şirket silinemez.");
+      return;
+    }
+    const updatedList = deleteCompanyItem(id);
+    setCompanies(updatedList);
+    if (activeCompanyId === id) {
+      handleSelectCompany(DEFAULT_COMPANY.id);
+    }
+  };
+
   // Quick Action Modal State
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [initialContactIdForInvoice, setInitialContactIdForInvoice] = useState<string | null>(null);
@@ -212,6 +309,13 @@ export default function App() {
       setCurrentTab("admin");
     }
   }, [currentUser]);
+
+  // Oturum açan kullanıcının tanımlı bir şirketi varsa aktif şirketi otomatik olarak o şirkete geçir
+  useEffect(() => {
+    if (currentUser?.companyId && currentUser.companyId !== activeCompanyId) {
+      handleSelectCompany(currentUser.companyId);
+    }
+  }, [currentUser?.companyId]);
 
   useEffect(() => {
     cleanupOversizedStorage();
@@ -273,35 +377,35 @@ export default function App() {
     setAuthModalOpen(true);
   };
 
-  // Sync state changes with localStorage per slice
-  useEffect(() => { saveStoredData("SETTINGS", data.settings); }, [data.settings]);
-  useEffect(() => { saveStoredData("CONTACTS", data.contacts); }, [data.contacts]);
-  useEffect(() => { saveStoredData("ACCOUNTS", data.accounts); }, [data.accounts]);
-  useEffect(() => { saveStoredData("INVOICES", data.invoices); }, [data.invoices]);
-  useEffect(() => { saveStoredData("TRANSACTIONS", data.transactions); }, [data.transactions]);
-  useEffect(() => { saveStoredData("PRODUCTS", data.products); }, [data.products]);
-  useEffect(() => { saveStoredData("QUOTES", data.quotes); }, [data.quotes]);
-  useEffect(() => { if (data.orders) saveStoredData("ORDERS", data.orders); }, [data.orders]);
-  useEffect(() => { if (data.waybills) saveStoredData("WAYBILLS", data.waybills); }, [data.waybills]);
-  useEffect(() => { if (data.cheques) saveStoredData("CHEQUES", data.cheques); }, [data.cheques]);
-  useEffect(() => { if (data.promissoryNotes) saveStoredData("PROMISSORY_NOTES", data.promissoryNotes); }, [data.promissoryNotes]);
-  useEffect(() => { if (data.branches) saveStoredData("BRANCHES", data.branches); }, [data.branches]);
-  useEffect(() => { if (data.warehouses) saveStoredData("WAREHOUSES", data.warehouses); }, [data.warehouses]);
-  useEffect(() => { if (data.employees) saveStoredData("EMPLOYEES", data.employees); }, [data.employees]);
-  useEffect(() => { if (data.leaveRequests) saveStoredData("LEAVE_REQUESTS", data.leaveRequests); }, [data.leaveRequests]);
-  useEffect(() => { if (data.advanceRequests) saveStoredData("ADVANCE_REQUESTS", data.advanceRequests); }, [data.advanceRequests]);
-  useEffect(() => { if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions); }, [data.legalDeductions]);
-  useEffect(() => { if (data.costProjects) saveStoredData("COST_PROJECTS", data.costProjects); }, [data.costProjects]);
-  useEffect(() => { if (data.assetCustodies) saveStoredData("ASSET_CUSTODIES", data.assetCustodies); }, [data.assetCustodies]);
-  useEffect(() => { if (data.boms) saveStoredData("BOMS", data.boms); }, [data.boms]);
-  useEffect(() => { if (data.routings) saveStoredData("ROUTINGS", data.routings); }, [data.routings]);
-  useEffect(() => { if (data.workstations) saveStoredData("WORKSTATIONS", data.workstations); }, [data.workstations]);
-  useEffect(() => { if (data.workOrders) saveStoredData("WORK_ORDERS", data.workOrders); }, [data.workOrders]);
-  useEffect(() => { if (data.subcontractOrders) saveStoredData("SUBCONTRACT_ORDERS", data.subcontractOrders); }, [data.subcontractOrders]);
-  useEffect(() => { if (data.autoServices) saveStoredData("AUTO_SERVICES", data.autoServices); }, [data.autoServices]);
-  useEffect(() => { if (data.itServices) saveStoredData("IT_SERVICES", data.itServices); }, [data.itServices]);
-  useEffect(() => { if (data.applianceServices) saveStoredData("APPLIANCE_SERVICES", data.applianceServices); }, [data.applianceServices]);
-  useEffect(() => { if (data.constructionProjects) saveStoredData("CONSTRUCTION_PROJECTS", data.constructionProjects); }, [data.constructionProjects]);
+  // Sync state changes with localStorage per slice (scoped to activeCompanyId)
+  useEffect(() => { saveStoredData("SETTINGS", data.settings, activeCompanyId); }, [data.settings, activeCompanyId]);
+  useEffect(() => { saveStoredData("CONTACTS", data.contacts, activeCompanyId); }, [data.contacts, activeCompanyId]);
+  useEffect(() => { saveStoredData("ACCOUNTS", data.accounts, activeCompanyId); }, [data.accounts, activeCompanyId]);
+  useEffect(() => { saveStoredData("INVOICES", data.invoices, activeCompanyId); }, [data.invoices, activeCompanyId]);
+  useEffect(() => { saveStoredData("TRANSACTIONS", data.transactions, activeCompanyId); }, [data.transactions, activeCompanyId]);
+  useEffect(() => { saveStoredData("PRODUCTS", data.products, activeCompanyId); }, [data.products, activeCompanyId]);
+  useEffect(() => { saveStoredData("QUOTES", data.quotes, activeCompanyId); }, [data.quotes, activeCompanyId]);
+  useEffect(() => { if (data.orders) saveStoredData("ORDERS", data.orders, activeCompanyId); }, [data.orders, activeCompanyId]);
+  useEffect(() => { if (data.waybills) saveStoredData("WAYBILLS", data.waybills, activeCompanyId); }, [data.waybills, activeCompanyId]);
+  useEffect(() => { if (data.cheques) saveStoredData("CHEQUES", data.cheques, activeCompanyId); }, [data.cheques, activeCompanyId]);
+  useEffect(() => { if (data.promissoryNotes) saveStoredData("PROMISSORY_NOTES", data.promissoryNotes, activeCompanyId); }, [data.promissoryNotes, activeCompanyId]);
+  useEffect(() => { if (data.branches) saveStoredData("BRANCHES", data.branches, activeCompanyId); }, [data.branches, activeCompanyId]);
+  useEffect(() => { if (data.warehouses) saveStoredData("WAREHOUSES", data.warehouses, activeCompanyId); }, [data.warehouses, activeCompanyId]);
+  useEffect(() => { if (data.employees) saveStoredData("EMPLOYEES", data.employees, activeCompanyId); }, [data.employees, activeCompanyId]);
+  useEffect(() => { if (data.leaveRequests) saveStoredData("LEAVE_REQUESTS", data.leaveRequests, activeCompanyId); }, [data.leaveRequests, activeCompanyId]);
+  useEffect(() => { if (data.advanceRequests) saveStoredData("ADVANCE_REQUESTS", data.advanceRequests, activeCompanyId); }, [data.advanceRequests, activeCompanyId]);
+  useEffect(() => { if (data.legalDeductions) saveStoredData("LEGAL_DEDUCTIONS", data.legalDeductions, activeCompanyId); }, [data.legalDeductions, activeCompanyId]);
+  useEffect(() => { if (data.costProjects) saveStoredData("COST_PROJECTS", data.costProjects, activeCompanyId); }, [data.costProjects, activeCompanyId]);
+  useEffect(() => { if (data.assetCustodies) saveStoredData("ASSET_CUSTODIES", data.assetCustodies, activeCompanyId); }, [data.assetCustodies, activeCompanyId]);
+  useEffect(() => { if (data.boms) saveStoredData("BOMS", data.boms, activeCompanyId); }, [data.boms, activeCompanyId]);
+  useEffect(() => { if (data.routings) saveStoredData("ROUTINGS", data.routings, activeCompanyId); }, [data.routings, activeCompanyId]);
+  useEffect(() => { if (data.workstations) saveStoredData("WORKSTATIONS", data.workstations, activeCompanyId); }, [data.workstations, activeCompanyId]);
+  useEffect(() => { if (data.workOrders) saveStoredData("WORK_ORDERS", data.workOrders, activeCompanyId); }, [data.workOrders, activeCompanyId]);
+  useEffect(() => { if (data.subcontractOrders) saveStoredData("SUBCONTRACT_ORDERS", data.subcontractOrders, activeCompanyId); }, [data.subcontractOrders, activeCompanyId]);
+  useEffect(() => { if (data.autoServices) saveStoredData("AUTO_SERVICES", data.autoServices, activeCompanyId); }, [data.autoServices, activeCompanyId]);
+  useEffect(() => { if (data.itServices) saveStoredData("IT_SERVICES", data.itServices, activeCompanyId); }, [data.itServices, activeCompanyId]);
+  useEffect(() => { if (data.applianceServices) saveStoredData("APPLIANCE_SERVICES", data.applianceServices, activeCompanyId); }, [data.applianceServices, activeCompanyId]);
+  useEffect(() => { if (data.constructionProjects) saveStoredData("CONSTRUCTION_PROJECTS", data.constructionProjects, activeCompanyId); }, [data.constructionProjects, activeCompanyId]);
 
   // Auto & IT & Appliance & Construction Service Handlers
   const handleUpdateAutoServices = (services: AutoServiceRecord[]) => {
@@ -720,8 +824,57 @@ export default function App() {
         return c;
       });
 
+      // Advance Mysoft e-Fatura / e-Arşiv sequential invoice number when issuing a sales invoice
+      let updatedSettings = prev.settings;
+      if (invoice.type === "sales" && invoice.docKind !== "receipt") {
+        const cleanNo = String(invoice.invoiceNumber || "").trim().toUpperCase();
+        const serialMatch = cleanNo.match(/^([A-Z0-9]{3})(\d{4})(\d{9})$/);
+        if (serialMatch) {
+          const usedPrefix = serialMatch[1];
+          const usedYear = serialMatch[2];
+          const usedSeq = parseInt(serialMatch[3], 10) || 0;
+          const nextSerialNo = `${usedPrefix}${usedYear}${String(usedSeq + 1).padStart(9, "0")}`;
+          const isEArsivDoc =
+            invoice.eDocumentType === "e_arsiv" ||
+            invoice.invoiceScenario === "EARSIVFATURA" ||
+            usedPrefix === (prev.settings.eArsivPrefix || "EAR").toUpperCase();
+
+          updatedSettings = {
+            ...prev.settings,
+            ...(isEArsivDoc
+              ? {
+                  eArsivPrefix: prev.settings.eArsivPrefix || usedPrefix,
+                  eArsivNextNumber: nextSerialNo,
+                }
+              : {
+                  eFaturaPrefix: prev.settings.eFaturaPrefix || usedPrefix,
+                  eFaturaNextNumber: nextSerialNo,
+                }),
+          };
+
+          const activeComp = companies.find((c) => c.id === activeCompanyId);
+          if (activeComp) {
+            const updatedComp: CompanyItem = {
+              ...activeComp,
+              ...(isEArsivDoc
+                ? {
+                    eArsivPrefix: activeComp.eArsivPrefix || usedPrefix,
+                    eArsivNextNumber: nextSerialNo,
+                  }
+                : {
+                    eFaturaPrefix: activeComp.eFaturaPrefix || usedPrefix,
+                    eFaturaNextNumber: nextSerialNo,
+                  }),
+            };
+            const updatedCompList = updateCompanyItem(updatedComp);
+            setCompanies(updatedCompList);
+          }
+        }
+      }
+
       return {
         ...prev,
+        settings: updatedSettings,
         invoices: [invoice, ...prev.invoices],
         contacts: updatedContacts as Contact[],
       };
@@ -1105,49 +1258,88 @@ export default function App() {
     amount: number,
     desc: string
   ) => {
-    const fromAcc = data.accounts.find((a) => a.id === fromId);
-    const fromContact = data.contacts.find((c) => c.id === fromId);
+    if (!fromId || !toId || fromId === toId || amount <= 0) return;
 
-    const toAcc = data.accounts.find((a) => a.id === toId);
-    const toContact = data.contacts.find((c) => c.id === toId);
+    setData((prev) => {
+      const fromAcc = prev.accounts.find((a) => a.id === fromId);
+      const fromContact = prev.contacts.find((c) => c.id === fromId);
+      const toAcc = prev.accounts.find((a) => a.id === toId);
+      const toContact = prev.contacts.find((c) => c.id === toId);
 
-    if ((!fromAcc && !fromContact) || (!toAcc && !toContact)) return;
+      if ((!fromAcc && !fromContact) || (!toAcc && !toContact)) return prev;
 
-    const fromName = fromAcc?.name || fromContact?.name || "Borçlu Hesap";
-    const toName = toAcc?.name || toContact?.name || "Alacaklı Hesap";
+      const fromName = fromAcc?.name || fromContact?.name || "Borçlu Hesap";
+      const toName = toAcc?.name || toContact?.name || "Alacaklı Hesap";
+      const docNo = `VRM-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+      const now = Date.now();
+      const todayStr = new Date().toISOString().split("T")[0];
 
-    const defaultAccId = data.accounts[0]?.id || "";
+      const txOut: Transaction = {
+        id: "tx_out_" + now,
+        date: todayStr,
+        type: "expense",
+        amount,
+        currency: fromAcc?.currency || toAcc?.currency || "TRY",
+        accountId: fromAcc ? fromAcc.id : (prev.accounts[0]?.id || ""),
+        accountName: fromAcc ? fromAcc.name : (fromContact ? `Cari: ${fromContact.name}` : "Virman Hesabı"),
+        contactId: fromContact ? fromContact.id : undefined,
+        contactName: fromContact ? fromContact.name : undefined,
+        category: "Virman / Transfer",
+        description: `Virman (Çıkış): ${fromName} -> ${toName}${desc ? ` (${desc})` : ""}`,
+        documentNo: docNo,
+      };
 
-    const txOut: Transaction = {
-      id: "tx_out_" + Date.now(),
-      date: new Date().toISOString().split("T")[0],
-      type: "expense",
-      amount,
-      currency: "TRY",
-      accountId: fromAcc ? fromAcc.id : defaultAccId,
-      accountName: fromAcc ? fromAcc.name : (fromContact ? `Cari Virman (${fromContact.name})` : "Virman Hesabı"),
-      contactId: fromContact ? fromContact.id : undefined,
-      contactName: fromContact ? fromContact.name : undefined,
-      category: "Virman / Transfer",
-      description: `Virman (Borçlu): ${fromName} -> ${toName} (${desc || "Virman Transferi"})`,
-    };
+      const txIn: Transaction = {
+        id: "tx_in_" + (now + 1),
+        date: todayStr,
+        type: "income",
+        amount,
+        currency: toAcc?.currency || fromAcc?.currency || "TRY",
+        accountId: toAcc ? toAcc.id : (prev.accounts[0]?.id || ""),
+        accountName: toAcc ? toAcc.name : (toContact ? `Cari: ${toContact.name}` : "Virman Hesabı"),
+        contactId: toContact ? toContact.id : undefined,
+        contactName: toContact ? toContact.name : undefined,
+        category: "Virman / Transfer",
+        description: `Virman (Giriş): ${toName} <- ${fromName}${desc ? ` (${desc})` : ""}`,
+        documentNo: docNo,
+      };
 
-    const txIn: Transaction = {
-      id: "tx_in_" + (Date.now() + 1),
-      date: new Date().toISOString().split("T")[0],
-      type: "income",
-      amount,
-      currency: "TRY",
-      accountId: toAcc ? toAcc.id : defaultAccId,
-      accountName: toAcc ? toAcc.name : (toContact ? `Cari Virman (${toContact.name})` : "Virman Hesabı"),
-      contactId: toContact ? toContact.id : undefined,
-      contactName: toContact ? toContact.name : undefined,
-      category: "Virman / Transfer",
-      description: `Virman (Alacaklı): ${toName} <- ${fromName} (${desc || "Virman Transferi"})`,
-    };
+      const updatedAccounts = prev.accounts.map((acc) => {
+        let bal = acc.balance;
+        if (fromAcc && acc.id === fromAcc.id) {
+          bal -= amount;
+        }
+        if (toAcc && acc.id === toAcc.id) {
+          bal += amount;
+        }
+        return { ...acc, balance: bal };
+      });
 
-    handleAddTransaction(txOut);
-    handleAddTransaction(txIn);
+      let updatedContacts = prev.contacts;
+      if (fromContact || toContact) {
+        updatedContacts = prev.contacts.map((c) => {
+          let bal = c.balance;
+          if (fromContact && c.id === fromContact.id) {
+            bal += amount;
+          }
+          if (toContact && c.id === toContact.id) {
+            bal -= amount;
+          }
+          return {
+            ...c,
+            balance: bal,
+            balanceType: bal > 0 ? ("receivable" as const) : bal < 0 ? ("payable" as const) : ("balanced" as const),
+          };
+        });
+      }
+
+      return {
+        ...prev,
+        transactions: [txOut, txIn, ...prev.transactions],
+        accounts: updatedAccounts,
+        contacts: updatedContacts,
+      };
+    });
   };
 
   const handleAddCheque = (cheque: Cheque) => {
@@ -1452,12 +1644,19 @@ export default function App() {
   };
 
   const handleConvertQuoteToInvoice = (quote: Quote) => {
-    const prefix = "MUV2026";
-    const nextSeq = String(data.invoices.length + 1).padStart(7, "0");
+    const currentYear = new Date().getFullYear();
+    const prefix = (data.settings.eFaturaPrefix || data.settings.defaultInvoicePrefix || "GIB")
+      .trim()
+      .toUpperCase()
+      .slice(0, 3)
+      .padEnd(3, "X");
+    const nextSeq = String(data.invoices.length + 1).padStart(9, "0");
+    const resolvedInvoiceNo =
+      data.settings.eFaturaNextNumber || `${prefix}${currentYear}${nextSeq}`;
 
     const newInvoice: Invoice = {
       id: "inv_" + Date.now(),
-      invoiceNumber: `${prefix}${nextSeq}`,
+      invoiceNumber: resolvedInvoiceNo,
       type: "sales",
       contactId: quote.contactId,
       contactName: quote.contactName,
@@ -1547,10 +1746,25 @@ export default function App() {
   };
 
   const handleSaveSettings = (newSettings: CompanySettings) => {
-    setData((prev) => ({
-      ...prev,
-      settings: newSettings,
-    }));
+    setData((prev) => {
+      let updatedEmployees = prev.employees;
+      if (newSettings.applyAllowancesToAllEmployees !== false) {
+        const newFood = newSettings.defaultFoodAllowance ?? 5500;
+        const newRoad = newSettings.defaultRoadAllowance ?? 2500;
+        updatedEmployees = (prev.employees || []).map((emp) => ({
+          ...emp,
+          foodAllowance: newFood,
+          roadAllowance: newRoad,
+        }));
+        saveStoredData("EMPLOYEES", updatedEmployees);
+      }
+      saveStoredData("SETTINGS", newSettings);
+      return {
+        ...prev,
+        settings: newSettings,
+        employees: updatedEmployees,
+      };
+    });
   };
 
   const handleResetDemoData = () => {
@@ -1817,12 +2031,81 @@ export default function App() {
     }
   };
 
+  const activeCompanyObj =
+    companies.find((c) => c.id === activeCompanyId) || companies[0] || null;
+
+  const isCurrentTabAuthorized = (tab: NavItem): boolean => {
+    if (tab === "dashboard") return true;
+    if (tab === "admin") return isAdminOrSysAdmin(currentUser);
+
+    const tabPermissionMap: Record<string, { key: string; parent?: string }> = {
+      company: { key: "companies" },
+      company_profile: { key: "companies_profile", parent: "companies" },
+      company_companies: { key: "companies_list", parent: "companies" },
+      company_mysoft: { key: "companies_mysoft", parent: "companies" },
+      company_branches: { key: "companies_branches", parent: "companies" },
+      company_warehouses: { key: "companies_warehouses", parent: "companies" },
+      company_settings: { key: "companies_settings", parent: "companies" },
+      settings: { key: "companies_settings", parent: "companies" },
+      contacts: { key: "contacts" },
+      contacts_debtors: { key: "contacts_customers", parent: "contacts" },
+      contacts_risky: { key: "contacts_customers", parent: "contacts" },
+      invoices: { key: "invoices" },
+      invoices_sales: { key: "invoices_sales", parent: "invoices" },
+      invoices_purchase: { key: "invoices_purchase", parent: "invoices" },
+      e_documents_outgoing: { key: "invoices_sales", parent: "invoices" },
+      e_documents_incoming: { key: "invoices_purchase", parent: "invoices" },
+      orders_module: { key: "orders_module" },
+      orders: { key: "orders_sales", parent: "orders_module" },
+      quotes: { key: "orders_quotes", parent: "orders_module" },
+      quotes_and_slips: { key: "invoices_expense", parent: "invoices" },
+      accounts: { key: "accounts" },
+      transactions: { key: "finance_gelir_gider", parent: "accounts" },
+      income_slips: { key: "invoices_sales", parent: "invoices" },
+      expenses: { key: "invoices_expense", parent: "invoices" },
+      products: { key: "products" },
+      products_list: { key: "products_stock", parent: "products" },
+      fixed_assets: { key: "fixed_assets" },
+      production: { key: "production" },
+      sectors: { key: "sectors_hub" },
+      waybills: { key: "waybills" },
+      waybills_dispatch: { key: "waybills_sales", parent: "waybills" },
+      waybills_receipt: { key: "waybills_purchase", parent: "waybills" },
+      auto_service: { key: "auto_service" },
+      it_service: { key: "it_service" },
+      appliance_service: { key: "appliance_service" },
+      construction_costing: { key: "construction_costing" },
+      hr: { key: "hr" },
+      files: { key: "files" },
+      reports: { key: "reports" },
+      e_services: { key: "e_services" },
+      company_e_services: { key: "e_services" },
+      whatsapp: { key: "whatsapp" },
+    };
+
+    const mapped = tabPermissionMap[tab];
+    if (!mapped) return true;
+    return isModuleOrSubModuleAllowed(
+      mapped.key,
+      mapped.parent,
+      currentUser,
+      activeCompanyObj
+    );
+  };
+
   return (
     <div className="flex min-h-screen bg-theme-page text-slate-900 font-sans antialiased">
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
         onSelectTab={(tab) => {
+          if (!isCurrentTabAuthorized(tab)) {
+            triggerFormErrorNotification(
+              "Bu modül veya alt modül için erişim yetkiniz bulunmamaktadır. Modül ve alt modül tanımlama/yetkilendirme işlemleri sadece Admin ve Sistem Yöneticisi tarafından yapılabilir.",
+              "Yetkisiz Erişim"
+            );
+            return;
+          }
           setCurrentTab(tab);
         }}
         activeFinanceSubTab={financeSubTab}
@@ -1840,6 +2123,7 @@ export default function App() {
           setCurrentTab("construction_costing");
         }}
         onOpenGitHubPublish={() => setIsGitHubPublishOpen(true)}
+        activeCompany={companies.find((c) => c.id === activeCompanyId) || companies[0]}
       />
 
       {/* Main App Content Area */}
@@ -1858,6 +2142,10 @@ export default function App() {
           onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
           logoUrl={data.settings?.logoUrl || "/logo.svg"}
           onOpenGitHubPublish={() => setIsGitHubPublishOpen(true)}
+          companies={companies}
+          activeCompanyId={activeCompanyId}
+          onSelectCompany={handleSelectCompany}
+          onOpenNewCompanyModal={() => setIsNewCompanyModalOpen(true)}
         />
 
         <main className="flex-1 pb-12 bg-theme-page">
@@ -1937,6 +2225,7 @@ export default function App() {
               onCollectAllInvoices={handleCollectAllInvoices}
               initialContactIdForNewInvoice={initialContactIdForInvoice}
               onSelectTab={setCurrentTab}
+              onAddContact={handleAddContact}
             />
           )}
 
@@ -2030,6 +2319,7 @@ export default function App() {
               invoices={data.invoices}
               contacts={data.contacts}
               warehouses={data.warehouses || []}
+              branches={data.branches || []}
               employees={data.employees || []}
               transactions={data.transactions || []}
               companySettings={data.settings}
@@ -2039,6 +2329,9 @@ export default function App() {
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
               onBulkDeleteProducts={handleBulkDeleteProducts}
+              onAddWarehouse={handleAddWarehouse}
+              onUpdateWarehouse={handleUpdateWarehouse}
+              onDeleteWarehouse={handleDeleteWarehouse}
             />
           )}
 
@@ -2111,6 +2404,7 @@ export default function App() {
               <SectorsModule
                 sectors={data.sectors || []}
                 activeSectorId={data.activeSectorId || "catering"}
+                currentUser={currentUser}
                 onSelectActiveSector={(secId) => {
                   setData((prev) => ({
                     ...prev,
@@ -2212,6 +2506,7 @@ export default function App() {
               branches={data.branches || []}
               warehouses={data.warehouses || []}
               costProjects={data.costProjects || []}
+              onSaveSettings={handleSaveSettings}
               onAddEmployee={handleAddEmployee}
               onUpdateEmployee={handleUpdateEmployee}
               onDeleteEmployee={handleDeleteEmployee}
@@ -2225,7 +2520,9 @@ export default function App() {
               onAddAsset={handleAddAsset}
               onUpdateAsset={handleUpdateAsset}
               onDeleteAsset={handleDeleteAsset}
+              transactions={data.transactions || []}
               onAddTransaction={handleAddTransaction}
+              onUpdateTransaction={handleUpdateTransaction}
             />
           )}
 
@@ -2243,16 +2540,36 @@ export default function App() {
           )}
 
           {currentTab === "admin" && (
-            <AdminDashboard
-              currentUser={
-                currentUser || {
-                  id: "usr_admin_001",
-                  name: "Sistem Yöneticisi",
-                  email: "admin@tallsoft.com.tr",
-                  role: "Süper Admin",
+            isAdminOrSysAdmin(currentUser) ? (
+              <AdminDashboard
+                currentUser={
+                  currentUser || {
+                    id: "usr_admin_001",
+                    name: "Sistem Yöneticisi",
+                    email: "admin@tallsoft.com.tr",
+                    role: "Süper Admin",
+                  }
                 }
-              }
-            />
+                companies={companies}
+                activeCompanyId={activeCompanyId}
+                onSelectCompany={handleSelectCompany}
+                onAddCompany={handleAddCompany}
+                onUpdateCompany={handleUpdateCompany}
+                onDeleteCompany={handleDeleteCompany}
+              />
+            ) : (
+              <div className="p-8 max-w-xl mx-auto mt-12 bg-white rounded-2xl border border-amber-200 shadow-sm text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Yetkisiz Erişim
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Admin Yönetici Paneli ile tüm modül ve alt modüllerin tanımlanması/yetkilendirilmesi münhasıran <strong>Admin</strong> ve <strong>Sistem Yöneticisi</strong> yetkisindedir.
+                </p>
+              </div>
+            )
           )}
 
           {currentTab === "reports" && (
@@ -2271,7 +2588,7 @@ export default function App() {
             />
           )}
 
-          {["company", "company_profile", "company_branches", "company_warehouses", "company_settings", "settings"].includes(currentTab) && (
+          {["company", "company_profile", "company_companies", "company_mysoft", "company_branches", "company_warehouses", "company_settings", "settings"].includes(currentTab) && (
             <CompanyManagement
               settings={data.settings}
               branches={data.branches || []}
@@ -2286,8 +2603,19 @@ export default function App() {
               onExportBackup={handleExportBackup}
               onImportBackup={handleImportBackup}
               onResetDemoData={handleResetDemoData}
+              companies={companies}
+              activeCompanyId={activeCompanyId}
+              onSelectCompany={handleSelectCompany}
+              onAddCompany={handleAddCompany}
+              onUpdateCompany={handleUpdateCompany}
+              onDeleteCompany={handleDeleteCompany}
+              currentUser={currentUser}
               activeSubTab={
-                currentTab === "company_branches"
+                currentTab === "company_companies"
+                  ? "companies"
+                  : currentTab === "company_mysoft"
+                  ? "mysoft"
+                  : currentTab === "company_branches"
                   ? "branches"
                   : currentTab === "company_warehouses"
                   ? "warehouses"
@@ -2296,7 +2624,9 @@ export default function App() {
                   : "profile"
               }
               onSelectSubTab={(tab) => {
-                if (tab === "branches") setCurrentTab("company_branches");
+                if (tab === "companies") setCurrentTab("company_companies");
+                else if (tab === "mysoft") setCurrentTab("company_mysoft");
+                else if (tab === "branches") setCurrentTab("company_branches");
                 else if (tab === "warehouses") setCurrentTab("company_warehouses");
                 else if (tab === "settings") setCurrentTab("company_settings");
                 else setCurrentTab("company_profile");
@@ -2410,6 +2740,46 @@ export default function App() {
                   </p>
                 </div>
               </button>
+
+              <button
+                onClick={() => {
+                  setIsQuickAddOpen(false);
+                  setCurrentTab("products");
+                }}
+                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-purple-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+              >
+                <div className="w-11 h-11 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                  <Plus className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm text-slate-900">
+                    Stok Kartı & Depo Ekle
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Test, şirket ve şahıs işletmelerine yeni ürün veya depo tanımlayın
+                  </p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsQuickAddOpen(false);
+                  setCurrentTab("company_warehouses");
+                }}
+                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-amber-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+              >
+                <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <Plus className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm text-slate-900">
+                    Şube & Depo Yönetimi
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Firma bilgileri üzerinden yeni depo ve şube ekleyin
+                  </p>
+                </div>
+              </button>
             </div>
           </div>
         </DetailPageLayout>
@@ -2429,9 +2799,27 @@ export default function App() {
         onLoginSuccess={(user) => {
           setCurrentUser(user);
           setAuthModalOpen(false);
+          if (user.companyId) {
+            handleSelectCompany(user.companyId);
+          }
         }}
         initialMode={authModalMode}
         canClose={!!currentUser}
+      />
+
+      {/* Universal Print & Document Viewer Engine Modal */}
+      <UniversalPrintModal />
+
+      {/* Global Yeni Şirket Ekle Modalı */}
+      <CompanyModal
+        isOpen={isNewCompanyModalOpen}
+        onClose={() => setIsNewCompanyModalOpen(false)}
+        onSave={(newComp, makeActive) => {
+          handleAddCompany(newComp, makeActive);
+          setIsNewCompanyModalOpen(false);
+        }}
+        mode="create"
+        currentUser={currentUser}
       />
     </div>
   );

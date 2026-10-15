@@ -1351,7 +1351,7 @@ export const AiExpenseScannerModal: React.FC<AiExpenseScannerModalProps> = ({
                     >
                       {accounts.map((acc) => (
                         <option key={acc.id} value={acc.id}>
-                          {acc.name} ({acc.type === "cash" ? "Kasa" : acc.type === "bank" ? "Banka" : "POS"} - ₺{(acc.balance ?? 0).toLocaleString("tr-TR")})
+                          {acc.name} ({acc.type === "cash" ? "Kasa" : acc.type === "bank" ? "Banka" : "POS"} - ₺{(acc.balance ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                         </option>
                       ))}
                     </select>

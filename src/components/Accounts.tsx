@@ -4,7 +4,7 @@ import jsPDF from "jspdf";
 import { ExportButtons } from "./ExportButtons";
 import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
 import { BankStatementImportModal } from "./BankStatementImportModal";
-import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, printHtmlElement, exportToExcel, exportToPDF } from "../utils/exportUtils";
 import { exportElementToPDFWithPrintStyling } from "../utils/pdfService";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
@@ -686,13 +686,53 @@ export const Accounts: React.FC<AccountsProps> = ({
     try {
       setIsPdfGenerating(true);
       const fileName = `Dekont_${receiptData?.documentNo || "Finans_Dekontu"}.pdf`;
-      await exportElementToPDF("printable-receipt", fileName, { orientation: "p", margin: 8, scale: 2 });
+      await exportElementToPDF("printable-receipt", fileName, {
+        orientation: "p",
+        margin: 8,
+        scale: 2,
+        fitToSinglePage: true,
+      });
     } catch (err) {
       console.error("Dekont PDF oluşturulurken hata:", err);
       triggerFormErrorNotification("PDF belgesi oluşturulurken bir hata oluştu.", "PDF Hatası");
     } finally {
       setIsPdfGenerating(false);
     }
+  };
+
+  const handleExportReceiptExcel = () => {
+    if (!receiptData) return;
+    const r = receiptData;
+    const headers = ["Bilgi / Alan", "Değer"];
+    const rows: (string | number)[][] = [
+      ["Belge Başlığı", r.documentTitle || "Finans Belgesi"],
+      ["Evrak / Makbuz No", r.documentNo || "-"],
+      ["İşlem Tarihi", r.date || "-"],
+      ["Hesap Adı", r.accountName || "-"],
+      ["İşlem Türü / Cari", r.contactName || "-"],
+      ["İşlem Tutarı", formatCurrency(r.amount, r.currency || "TRY")],
+      ["Para Birimi", r.currency || "TRY"],
+      ["Açıklama", r.description || "-"],
+    ];
+
+    exportToExcel({
+      filename: `Dekont_${r.documentNo || "Finans_Belgesi"}_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Dekont Detayı",
+      title: `${companySettings?.companyName || "FİRMA"} - ${r.documentTitle || "FİNANS DEKONTU"}`,
+      subtitle: `Belge No: ${r.documentNo} | Tarih: ${r.date} | Tutar: ${formatCurrency(r.amount, r.currency || "TRY")}`,
+      headers,
+      rows,
+    });
+  };
+
+  const handlePrintReceipt = async () => {
+    const element = document.getElementById("printable-receipt");
+    if (!element) {
+      triggerFormErrorNotification("Yazdırılacak dekont içeriği bulunamadı.", "Yazdırma Hatası");
+      return;
+    }
+    const docTitle = `Dekont_${receiptData?.documentNo || "Finans_Dekontu"}`;
+    await printHtmlElement("printable-receipt", docTitle, { orientation: "portrait" });
   };
 
   // Universal Finance Share Modal State
@@ -748,15 +788,15 @@ export const Accounts: React.FC<AccountsProps> = ({
       textPayload = generateTransactionShareText(item);
     } else if (docType === "cheque") {
       title = `Çek Bilgisi Paylaş (${item.chequeNumber})`;
-      subtitle = `Vade: ${item.dueDate} - Tutar: ₺${item.amount.toLocaleString("tr-TR")}`;
+      subtitle = `Vade: ${item.dueDate} - Tutar: ₺${item.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       textPayload = generateChequeShareText(item);
     } else if (docType === "note") {
       title = `Senet Bilgisi Paylaş (${item.noteNumber})`;
-      subtitle = `Vade: ${item.dueDate} - Tutar: ₺${item.amount.toLocaleString("tr-TR")}`;
+      subtitle = `Vade: ${item.dueDate} - Tutar: ₺${item.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       textPayload = generateNoteShareText(item);
     } else if (docType === "virman") {
       title = `Virman Transfer Dekontu Paylaş`;
-      subtitle = `Tarih: ${item.date} - Tutar: ₺${item.amount.toLocaleString("tr-TR")}`;
+      subtitle = `Tarih: ${item.date} - Tutar: ₺${item.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       textPayload = generateTransactionShareText(item);
     }
 
@@ -831,8 +871,8 @@ export const Accounts: React.FC<AccountsProps> = ({
     setShareConfig((prev) => ({ ...prev, isOpen: false }));
   };
 
-  // New Transaction State
-  const [addTxContext, setAddTxContext] = useState<"kasa" | "banka">("kasa");
+  // New Transaction State (Kasa / Banka / POS)
+  const [addTxContext, setAddTxContext] = useState<"kasa" | "banka" | "pos">("kasa");
   const [txType, setTxType] = useState<"income" | "expense">("income");
   const [txAccountId, setTxAccountId] = useState("");
   const [txContactId, setTxContactId] = useState("");
@@ -842,27 +882,47 @@ export const Accounts: React.FC<AccountsProps> = ({
   const [txCategory, setTxCategory] = useState("");
   const [txDescription, setTxDescription] = useState("");
 
-  const handleOpenAddTxModal = (context: "kasa" | "banka") => {
+  // Banka POS Özel Alanları
+  const [posCommissionRate, setPosCommissionRate] = useState<string>("2.45");
+  const [posValorDays, setPosValorDays] = useState<number>(1);
+  const [posTerminalName, setPosTerminalName] = useState<string>("Fiziksel POS Terminali (Yazarkasa)");
+  const [posSlipNo, setPosSlipNo] = useState<string>("");
+  const [autoRecordPosCommission, setAutoRecordPosCommission] = useState<boolean>(true);
+
+  const handleOpenAddTxModal = (context: "kasa" | "banka" | "pos", preselectedAccountId?: string) => {
     setAddTxContext(context);
     setTxType("income");
     setTxContactId("");
     setTxAmount("");
-    setTxDate(new Date().toISOString().split("T")[0]);
-    setTxDocumentNo("");
+    const today = new Date().toISOString().split("T")[0];
+    setTxDate(today);
     setTxDescription("");
 
     if (context === "kasa") {
-      const defaultAcc = selectedCashAccountId || accounts.find((a) => a.type === "cash")?.id || accounts[0]?.id || "";
+      const defaultAcc = preselectedAccountId || selectedCashAccountId || accounts.find((a) => a.type === "cash")?.id || accounts[0]?.id || "";
       setTxAccountId(defaultAcc);
-      setTxCategory("Kasa Tahsilat / Gelir");
+      setTxCategory("Kasa Tahsilat / Nakit Gelir");
+      setTxDocumentNo(`MKB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
+    } else if (context === "pos") {
+      const defaultAcc = preselectedAccountId || selectedBankAccountId || accounts.find((a) => a.type === "credit_card" || a.type === "bank")?.id || accounts[0]?.id || "";
+      setTxAccountId(defaultAcc);
+      setTxCategory("POS Tahsilatı (Kredi Kartı)");
+      const slipCode = `SLP-${Math.floor(100000 + Math.random() * 900000)}`;
+      setTxDocumentNo(slipCode);
+      setPosSlipNo(slipCode);
+      setPosCommissionRate("2.45");
+      setPosValorDays(1);
+      setPosTerminalName("Fiziksel POS Terminali (Yazarkasa)");
     } else {
       const defaultAcc =
+        preselectedAccountId ||
         selectedBankAccountId ||
         accounts.find((a) => a.type === "bank" || a.type === "credit_card")?.id ||
         accounts[0]?.id ||
         "";
       setTxAccountId(defaultAcc);
       setTxCategory("Banka Havale / EFT");
+      setTxDocumentNo(`DKN-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`);
     }
 
     setIsAddTxModalOpen(true);
@@ -870,13 +930,55 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   const handleSaveTransaction = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!txAccountId || !txAmount || Number(txAmount) <= 0) return;
+    if (!txAccountId) {
+      triggerFormErrorNotification("Lütfen işlem yapılacak hesabı seçin.", "Form Uyarısı", "Hesap");
+      return;
+    }
+    if (!txAmount || Number(txAmount) <= 0) {
+      triggerFormErrorNotification("Lütfen geçerli bir işlem tutarı girin.", "Form Uyarısı", "Tutar");
+      return;
+    }
 
     const targetAcc = accounts.find((a) => a.id === txAccountId);
-    if (!targetAcc) return;
+    if (!targetAcc) {
+      triggerFormErrorNotification("Seçilen hesap sistemde bulunamadı.", "Form Uyarısı", "Hesap");
+      return;
+    }
 
     const targetContact = contacts.find((c) => c.id === txContactId);
     const numAmount = Number(txAmount);
+
+    let finalCategory = txCategory;
+    let finalDesc = txDescription;
+    const finalDocNo = String(txDocumentNo || (addTxContext === "pos" ? posSlipNo : "")).trim() || undefined;
+
+    if (addTxContext === "pos") {
+      finalCategory = txCategory || (txType === "income" ? "POS Tahsilatı" : "POS İade / İptal");
+      const commRate = parseFloat(posCommissionRate) || 0;
+      const commAmount = (numAmount * commRate) / 100;
+      const netAmount = numAmount - commAmount;
+
+      let valorDateStr = "";
+      if (posValorDays > 0) {
+        const vDate = new Date(txDate || new Date().toISOString().split("T")[0]);
+        vDate.setDate(vDate.getDate() + posValorDays);
+        valorDateStr = vDate.toISOString().split("T")[0];
+      }
+
+      finalDesc = [
+        txDescription || (txType === "income" ? "POS Kredi Kartı Tahsilatı" : "POS İade / İptal"),
+        commRate > 0 ? `Komisyon: %${commRate} (-₺${commAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })})` : null,
+        commRate > 0 ? `Net Hesaba: ₺${netAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : null,
+        valorDateStr ? `Valör: ${valorDateStr} (${posValorDays} gün)` : null,
+        posTerminalName ? `Terminal: ${posTerminalName}` : null,
+      ].filter(Boolean).join(" • ");
+    } else if (addTxContext === "kasa") {
+      finalCategory = txCategory || (txType === "income" ? "Kasa Nakit Tahsilat" : "Kasa Nakit Tediye / Ödeme");
+      finalDesc = txDescription || (txType === "income" ? "Kasa Nakit Girişi" : "Kasa Nakit Çıkışı");
+    } else {
+      finalCategory = txCategory || (txType === "income" ? "Banka Havale / EFT Tahsilat" : "Banka Havale / EFT Ödeme");
+      finalDesc = txDescription || (txType === "income" ? "Gelen Transfer / Havale" : "Gönderilen Transfer / Havale");
+    }
 
     const newTx: Transaction = {
       id: "tx_" + Date.now(),
@@ -888,13 +990,34 @@ export const Accounts: React.FC<AccountsProps> = ({
       accountName: targetAcc.name,
       contactId: targetContact ? targetContact.id : undefined,
       contactName: targetContact ? targetContact.name : undefined,
-      category: txCategory || (addTxContext === "kasa" ? "Kasa İşlemi" : "Banka İşlemi"),
-      description: txDescription || `${addTxContext === "kasa" ? "Kasa" : "Banka"} Hareketi`,
-      documentNo: String(txDocumentNo || "").trim() || undefined,
+      category: finalCategory,
+      description: finalDesc,
+      documentNo: finalDocNo,
     };
 
     if (onAddTransaction) {
       onAddTransaction(newTx);
+    }
+
+    // POS Komisyon Kesintisini Otomatik Gider Fişi Olarak İşle
+    if (addTxContext === "pos" && autoRecordPosCommission && txType === "income") {
+      const commRate = parseFloat(posCommissionRate) || 0;
+      const commAmount = (numAmount * commRate) / 100;
+      if (commAmount > 0 && onAddTransaction) {
+        const commTx: Transaction = {
+          id: "tx_comm_" + (Date.now() + 2),
+          date: txDate || new Date().toISOString().split("T")[0],
+          type: "expense",
+          amount: Number(commAmount.toFixed(2)),
+          currency: targetAcc.currency || "TRY",
+          accountId: targetAcc.id,
+          accountName: targetAcc.name,
+          category: "Banka & POS Komisyon Gideri",
+          description: `POS Komisyon Kesintisi (%${commRate}) • Slip No: ${finalDocNo || "SLP"}`,
+          documentNo: finalDocNo ? `KOM-${finalDocNo}` : undefined,
+        };
+        onAddTransaction(commTx);
+      }
     }
 
     setIsAddTxModalOpen(false);
@@ -1121,7 +1244,22 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   const handleExecuteTransfer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (fromAccId === toAccId || transferAmount <= 0) return;
+    if (!fromAccId) {
+      triggerFormErrorNotification("Lütfen borçlu (kaynak) hesabı seçin.", "Virman Uyarısı", "Kaynak Hesap");
+      return;
+    }
+    if (!toAccId) {
+      triggerFormErrorNotification("Lütfen alacaklı (hedef) hesabı seçin.", "Virman Uyarısı", "Hedef Hesap");
+      return;
+    }
+    if (fromAccId === toAccId) {
+      triggerFormErrorNotification("Kaynak ve hedef hesap aynı olamaz. Lütfen farklı iki hesap seçin.", "Virman Uyarısı");
+      return;
+    }
+    if (!transferAmount || transferAmount <= 0) {
+      triggerFormErrorNotification("Lütfen geçerli bir transfer tutarı girin.", "Virman Uyarısı", "Tutar");
+      return;
+    }
 
     onTransferBetweenAccounts(fromAccId, toAccId, transferAmount, transferDesc);
     handleBackToList();
@@ -1131,7 +1269,14 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   const handleSaveCheque = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!String(chqNumber || "").trim() || chqAmount <= 0) return;
+    if (!String(chqNumber || "").trim()) {
+      triggerFormErrorNotification("Lütfen çek numarasını girin.", "Çek Uyarısı", "Çek No");
+      return;
+    }
+    if (chqAmount <= 0) {
+      triggerFormErrorNotification("Lütfen geçerli bir çek tutarı girin.", "Çek Uyarısı", "Tutar");
+      return;
+    }
 
     const selectedContact = contacts.find((c) => c.id === chqContactId);
 
@@ -1163,7 +1308,14 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   const handleSaveNote = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!String(ntNumber || "").trim() || ntAmount <= 0) return;
+    if (!String(ntNumber || "").trim()) {
+      triggerFormErrorNotification("Lütfen senet numarasını girin.", "Senet Uyarısı", "Senet No");
+      return;
+    }
+    if (ntAmount <= 0) {
+      triggerFormErrorNotification("Lütfen geçerli bir senet tutarı girin.", "Senet Uyarısı", "Tutar");
+      return;
+    }
 
     const selectedContact = contacts.find((c) => c.id === ntContactId);
 
@@ -1534,6 +1686,241 @@ export const Accounts: React.FC<AccountsProps> = ({
   const displayedCheques = filteredCheques.slice(0, chequeDisplayLimit);
   const displayedNotes = filteredNotes.slice(0, noteDisplayLimit);
   const displayedVirmanTransactions = virmanTransactions.slice(0, virmanDisplayLimit);
+
+  // Direct Excel (.xlsx) & PDF (.pdf) Export Data Getters and Handlers
+  const getKasaExportData = (): ExportData => {
+    const selectedAcc = accounts.find((a) => a.id === selectedCashAccountId);
+    const subtitle = selectedAcc
+      ? `Seçili Kasa: ${selectedAcc.name} (${selectedAcc.currency || "TRY"}) - Toplam ${kasaTransactions.length} Hareket`
+      : `Tüm Nakit Kasalar - Toplam ${kasaTransactions.length} Hareket`;
+
+    const headers = [
+      "Sıra",
+      "Tarih",
+      "Evrak / Makbuz No",
+      "Kasa Adı",
+      "İşlem Türü",
+      "Cari / Kategori",
+      "Açıklama",
+      "Tutar",
+      "Para Birimi",
+    ];
+
+    const rows = kasaTransactions.map((tx, idx) => {
+      const typeLabel =
+        tx.type === "income" || tx.type === "collection"
+          ? "Giriş / Tahsilat"
+          : "Çıkış / Ödeme";
+      return [
+        idx + 1,
+        tx.date || "-",
+        tx.documentNo || "-",
+        tx.accountName || "-",
+        typeLabel,
+        tx.contactName || tx.category || "-",
+        tx.description || "-",
+        tx.amount || 0,
+        tx.currency || "TRY",
+      ];
+    });
+
+    return {
+      filename: `Kasa_Hareketleri_${selectedAcc ? selectedAcc.name.replace(/[^a-zA-Z0-9_-]/g, "_") : "Genel"}_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Kasa Hareketleri",
+      title: "NAKİT KASA HAREKETLERİ LİSTESİ",
+      subtitle,
+      headers,
+      rows,
+    };
+  };
+
+  const handleExportKasaExcel = () => exportToExcel(getKasaExportData());
+  const handleExportKasaPDF = () => exportToPDF(getKasaExportData());
+
+  const getBankaExportData = (): ExportData => {
+    const selectedAcc = accounts.find((a) => a.id === selectedBankAccountId);
+    const subtitle = selectedAcc
+      ? `Seçili Banka Hesabı: ${selectedAcc.name} (${selectedAcc.currency || "TRY"}) - Toplam ${bankTransactions.length} Hareket`
+      : `Tüm Banka ve POS Hesapları - Toplam ${bankTransactions.length} Hareket`;
+
+    const headers = [
+      "Sıra",
+      "Tarih",
+      "Dekont / İşlem No",
+      "Banka Hesabı",
+      "İşlem Türü",
+      "Cari / Kategori",
+      "Açıklama",
+      "Tutar",
+      "Para Birimi",
+    ];
+
+    const rows = bankTransactions.map((tx, idx) => {
+      const typeLabel =
+        tx.type === "income" || tx.type === "collection"
+          ? "Gelen Havale / Tahsilat"
+          : "Giden Havale / Ödeme";
+      return [
+        idx + 1,
+        tx.date || "-",
+        tx.documentNo || "-",
+        tx.accountName || "-",
+        typeLabel,
+        tx.contactName || tx.category || "-",
+        tx.description || "-",
+        tx.amount || 0,
+        tx.currency || "TRY",
+      ];
+    });
+
+    return {
+      filename: `Banka_Hareketleri_${selectedAcc ? selectedAcc.name.replace(/[^a-zA-Z0-9_-]/g, "_") : "Genel"}_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Banka Hareketleri",
+      title: "BANKA VE POS HESAP HAREKETLERİ LİSTESİ",
+      subtitle,
+      headers,
+      rows,
+    };
+  };
+
+  const handleExportBankaExcel = () => exportToExcel(getBankaExportData());
+  const handleExportBankaPDF = () => exportToPDF(getBankaExportData());
+
+  const getChequesExportData = (): ExportData => {
+    const headers = [
+      "Sıra",
+      "Çek No",
+      "Çek Tipi",
+      "Banka",
+      "Şube",
+      "Hesap No",
+      "Keşideci / Cari",
+      "Düzenleme Tarihi",
+      "Vade Tarihi",
+      "Tutar",
+      "Para Birimi",
+      "Durum",
+    ];
+
+    const statusMap: Record<string, string> = {
+      portfolio: "Portföyde",
+      endorsed: "Ciro Edildi",
+      collected: "Tahsil Edildi",
+      bounced: "Karşılıksız",
+    };
+
+    const rows = filteredCheques.map((c, idx) => [
+      idx + 1,
+      c.chequeNumber || "-",
+      c.type === "received" ? "Alınan (Müşteri) Çeki" : "Verilen (Firma) Çeki",
+      c.bankName || "-",
+      c.branchName || "-",
+      c.accountNumber || "-",
+      c.contactName || c.drawer || "-",
+      c.issueDate || "-",
+      c.dueDate || "-",
+      c.amount || 0,
+      c.currency || "TRY",
+      statusMap[c.status] || c.status,
+    ]);
+
+    return {
+      filename: `Cek_Portfoy_Listesi_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Çek Portföyü",
+      title: "ÇEK PORTFÖYÜ LİSTESİ",
+      subtitle: `Toplam ${filteredCheques.length} Adet Çek Kaydı`,
+      headers,
+      rows,
+    };
+  };
+
+  const handleExportChequesExcel = () => exportToExcel(getChequesExportData());
+  const handleExportChequesPDF = () => exportToPDF(getChequesExportData());
+
+  const getNotesExportData = (): ExportData => {
+    const headers = [
+      "Sıra",
+      "Senet No",
+      "Senet Tipi",
+      "Borçlu / Muhatap",
+      "İlgili Cari",
+      "Düzenleme Tarihi",
+      "Vade Tarihi",
+      "Tutar",
+      "Para Birimi",
+      "Durum",
+    ];
+
+    const statusMap: Record<string, string> = {
+      portfolio: "Portföyde",
+      endorsed: "Ciro Edildi",
+      collected: "Tahsil Edildi",
+      protested: "Protestolu",
+    };
+
+    const rows = filteredNotes.map((n, idx) => [
+      idx + 1,
+      n.noteNumber || "-",
+      n.type === "received" ? "Alınan (Müşteri) Senedi" : "Verilen (Firma) Senedi",
+      n.debtorName || "-",
+      n.contactName || "-",
+      n.issueDate || "-",
+      n.dueDate || "-",
+      n.amount || 0,
+      n.currency || "TRY",
+      statusMap[n.status] || n.status,
+    ]);
+
+    return {
+      filename: `Senet_Portfoy_Listesi_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Senet Portföyü",
+      title: "SENET PORTFÖYÜ LİSTESİ",
+      subtitle: `Toplam ${filteredNotes.length} Adet Senet Kaydı`,
+      headers,
+      rows,
+    };
+  };
+
+  const handleExportNotesExcel = () => exportToExcel(getNotesExportData());
+  const handleExportNotesPDF = () => exportToPDF(getNotesExportData());
+
+  const getVirmanExportData = (): ExportData => {
+    const headers = [
+      "Sıra",
+      "Tarih",
+      "İşlem Fiş No",
+      "Hesap",
+      "İşlem Türü",
+      "Kategori",
+      "Açıklama",
+      "Tutar",
+      "Para Birimi",
+    ];
+
+    const rows = virmanTransactions.map((tx, idx) => [
+      idx + 1,
+      tx.date || "-",
+      tx.documentNo || "-",
+      tx.accountName || "-",
+      tx.type === "income" ? "Giriş (Alacak)" : "Çıkış (Borç)",
+      tx.category || "-",
+      tx.description || "-",
+      tx.amount || 0,
+      tx.currency || "TRY",
+    ]);
+
+    return {
+      filename: `Virman_Transfer_Gecmisi_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Virman Transfer",
+      title: "HESAPLAR ARASI VİRMAN TRANSFER GEÇMİŞİ",
+      subtitle: `Toplam ${virmanTransactions.length} Adet Virman Hareketi`,
+      headers,
+      rows,
+    };
+  };
+
+  const handleExportVirmanExcel = () => exportToExcel(getVirmanExportData());
+  const handleExportVirmanPDF = () => exportToPDF(getVirmanExportData());
 
   const renderDateFilterBar = (subModuleName: string) => {
     const isFiltered = Boolean(startDate || endDate);
@@ -2195,145 +2582,172 @@ export const Accounts: React.FC<AccountsProps> = ({
     );
   }
 
-  // Helper to render printable receipt content
+  // Helper to render printable receipt content in strict A4 format
   const renderPrintableReceiptContent = (receipt: ReceiptData) => (
     <div
       id="printable-receipt"
-      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
-      className="bg-white text-slate-900 p-4 sm:p-8 md:p-10 rounded-2xl shadow-xl border border-slate-200 w-full mx-auto space-y-5 sm:space-y-6 font-sans text-xs sm:text-sm"
+      style={{ backgroundColor: "#ffffff", color: "#0f172a", maxWidth: "794px", minHeight: "1123px" }}
+      className="bg-white text-slate-900 p-8 sm:p-12 border border-slate-300/90 shadow-2xl rounded-sm w-full max-w-[794px] min-h-[1123px] mx-auto flex flex-col justify-between font-sans text-xs sm:text-sm print:border-none print:shadow-none print:rounded-none print:p-0 print:m-0 print:max-w-none print:w-full print:min-h-0"
     >
-      {/* Corporate Header Section */}
-      <div className="border-b-2 border-indigo-900 pb-4 sm:pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="shrink-0">
-            <Logo size="lg" src={companySettings?.logoUrl || "/logo.svg"} />
-          </div>
-          <div className="space-y-0.5 min-w-0">
-            <div className="font-extrabold text-sm sm:text-base md:text-lg text-slate-950 tracking-tight leading-tight truncate sm:whitespace-normal">
-              {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL FİNANS VE YÖNETİM HİZMETLERİ"}
+      {/* Top Half of A4 Sheet: Corporate Header, Subtitle, Details Grid, Grand Total */}
+      <div className="space-y-5 sm:space-y-6">
+        {/* Corporate Header Section */}
+        <div className="border-b-2 border-indigo-900 pb-4 sm:pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 min-w-0">
+            <div className="shrink-0 mt-0.5">
+              <Logo size="lg" src={companySettings?.logoUrl || "/logo.svg"} />
             </div>
-            <div className="text-[10px] sm:text-[11px] text-slate-600 space-y-0.5">
-              <div className="truncate sm:whitespace-normal">{companySettings?.address || "Merkez Mah. Büyükdere Cad. No:142 Şişli / İstanbul"}</div>
-              <div>
-                Vergi Dairesi: {companySettings?.taxOffice || "Boğaziçi"} • VKN/TCKN: {companySettings?.taxNumber || "1234567890"}
+            <div className="space-y-0.5 min-w-0">
+              <div className="font-black text-sm sm:text-base md:text-lg text-slate-950 tracking-tight leading-tight">
+                {companySettings?.companyTitle || companySettings?.companyName || "MUAVİN KURUMSAL FİNANS VE YÖNETİM HİZMETLERİ"}
               </div>
-              <div>
-                Tel: {companySettings?.phone || "0850 123 45 67"} • E-posta: {companySettings?.email || "finans@muavin.com"}
+              <div className="text-[10px] sm:text-[11px] text-slate-600 space-y-0.5">
+                <div>{companySettings?.address || "Merkez Mah. Büyükdere Cad. No:142 Şişli / İstanbul"}</div>
+                <div>
+                  Vergi Dairesi: {companySettings?.taxOffice || "Boğaziçi"} • VKN/TCKN: {companySettings?.taxNumber || "1234567890"}
+                </div>
+                <div>
+                  Tel: {companySettings?.phone || "0850 123 45 67"} • E-posta: {companySettings?.email || "finans@muavin.com"}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div
-          style={{ backgroundColor: "#f8fafc", borderColor: "#cbd5e1" }}
-          className="text-left sm:text-center p-3 rounded-2xl border w-full sm:w-auto min-w-[200px] shrink-0"
-        >
-          <span className="text-[10px] sm:text-[11px] font-black text-indigo-950 uppercase tracking-widest block">
-            RESMİ FİNANS DEKONTU
-          </span>
           <div
-            style={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }}
-            className="font-mono text-xs font-black py-1 px-2 rounded-lg border mt-1"
+            style={{ backgroundColor: "#f8fafc", borderColor: "#cbd5e1" }}
+            className="text-left sm:text-center p-3 rounded-xl border w-full sm:w-auto min-w-[210px] shrink-0"
           >
-            {receipt.documentNo}
-          </div>
-          <div className="text-[10px] sm:text-[11px] text-slate-500 font-semibold mt-1">
-            Tarih: {receipt.date} {receipt.time ? `• ${receipt.time}` : ""}
+            <span className="text-[10px] sm:text-[11px] font-black text-indigo-950 uppercase tracking-widest block">
+              RESMİ FİNANS DEKONTU
+            </span>
+            <div
+              style={{ backgroundColor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }}
+              className="font-mono text-xs font-black py-1 px-2.5 rounded-lg border mt-1 tracking-wider"
+            >
+              {receipt.documentNo}
+            </div>
+            <div className="text-[10px] sm:text-[11px] text-slate-500 font-semibold mt-1">
+              Tarih: {receipt.date} {receipt.time ? `• ${receipt.time}` : ""}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Subtitle / Description */}
-      <div
-        style={{ backgroundColor: "#eef2ff", borderColor: "#c7d2fe" }}
-        className="p-3 sm:p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-      >
-        <div className="min-w-0">
-          <span className="font-extrabold text-indigo-950 text-xs block truncate">
-            {receipt.documentTitle}
-          </span>
-          <span className="text-[11px] text-indigo-700 font-medium block truncate">
-            {receipt.subTitle || "Resmi muhasebe işlem ve bakiye kaydı"}
-          </span>
+        {/* Subtitle / Description - Tam Gösterim (Full visibility & high contrast in Print & PDF) */}
+        <div
+          data-testid="receipt-header-banner"
+          style={{
+            backgroundColor: "#f0f4ff",
+            borderColor: "#c7d2fe",
+            color: "#0f172a",
+            WebkitPrintColorAdjust: "exact",
+            printColorAdjust: "exact",
+          }}
+          className="p-3.5 sm:p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 overflow-visible w-full print:bg-[#f0f4ff] print:border-[#c7d2fe] print:flex print:flex-row print:justify-between print:items-center print:p-4 print:my-2 print:visible print:opacity-100"
+        >
+          <div className="min-w-0 flex-1">
+            <h2 className="font-black text-indigo-950 text-xs sm:text-sm md:text-base block whitespace-normal break-words leading-tight print:text-indigo-950 print:text-base print:font-black">
+              {receipt.documentTitle}
+            </h2>
+            <p className="text-[11px] sm:text-xs text-indigo-800 font-semibold block whitespace-normal break-words mt-1 leading-normal print:text-indigo-800 print:text-xs">
+              {receipt.subTitle || "Resmi muhasebe işlem ve bakiye kaydı"}
+            </p>
+          </div>
+          {receipt.statusText && (
+            <span
+              style={{
+                backgroundColor: "#312e81",
+                color: "#ffffff",
+                WebkitPrintColorAdjust: "exact",
+                printColorAdjust: "exact",
+              }}
+              className="px-3 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-black tracking-wider uppercase shrink-0 self-start sm:self-auto whitespace-nowrap shadow-2xs print:bg-[#312e81] print:text-white print:px-3 print:py-1.5 print:rounded-lg print:text-xs print:font-black"
+            >
+              {receipt.statusText}
+            </span>
+          )}
         </div>
-        {receipt.statusText && (
-          <span
-            style={{ backgroundColor: "#312e81", color: "#ffffff" }}
-            className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold tracking-wider uppercase shrink-0 self-start sm:self-auto"
-          >
-            {receipt.statusText}
-          </span>
+
+        {/* Details Table / Grid */}
+        <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-200">
+          {receipt.details.map((d, index) => (
+            <div
+              key={index}
+              className={`flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:px-4 text-xs gap-1 sm:gap-4 ${
+                index % 2 === 0 ? "bg-white" : "bg-slate-50/70"
+              }`}
+            >
+              <span className="font-bold text-slate-600 sm:w-1/3">{d.label}</span>
+              <span className="font-bold text-slate-900 sm:w-2/3 sm:text-right break-words">
+                {d.value}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Grand Total Highlight Box */}
+        <div
+          style={{
+            backgroundColor: "#83b8ff",
+            color: "#0f172a",
+            borderColor: "#60a5fa",
+            WebkitPrintColorAdjust: "exact",
+            printColorAdjust: "exact",
+          }}
+          className="rounded-xl p-3.5 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md border print:bg-[#83b8ff]"
+        >
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-900/80 block">
+              İŞLEM TUTARI / BAKİYE
+            </span>
+            <span className="text-xs sm:text-sm font-bold text-slate-950 italic mt-0.5 block break-words">
+              # {numberToTurkishWords(receipt.amount, receipt.currency)} #
+            </span>
+          </div>
+          <div className="text-left sm:text-right shrink-0">
+            <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-slate-950 block">
+              {formatCurrency(receipt.amount, receipt.currency)}
+            </span>
+          </div>
+        </div>
+
+        {/* Description / Notes if any */}
+        {receipt.description && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700">
+            <span className="font-bold text-slate-900 block mb-0.5">İşlem Açıklaması / Not:</span>
+            {receipt.description}
+          </div>
         )}
       </div>
 
-      {/* Details Table / Grid */}
-      <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-200">
-        {receipt.details.map((d, index) => (
-          <div
-            key={index}
-            className={`flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:px-4 text-xs gap-1 sm:gap-4 ${
-              index % 2 === 0 ? "bg-white" : "bg-slate-50/70"
-            }`}
-          >
-            <span className="font-bold text-slate-600 sm:w-1/3">{d.label}</span>
-            <span className="font-bold text-slate-900 sm:w-2/3 sm:text-right break-words">
-              {d.value}
-            </span>
+      {/* Bottom Half of A4 Sheet: Official Signatures Zone & Institutional Footer */}
+      <div className="pt-8 sm:pt-12 space-y-4">
+        {/* Signatures Zone */}
+        <div className="grid grid-cols-2 gap-8 border-t border-slate-300 pt-6 text-center">
+          <div className="space-y-8">
+            <div className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+              TESLİM EDEN / ONAYLAYAN
+            </div>
+            <div className="border-t border-dashed border-slate-400 pt-1 text-[11px] text-slate-500 w-48 mx-auto font-medium">
+              Yetkili İmza &amp; Kaşe
+            </div>
           </div>
-        ))}
-      </div>
-
-      {/* Grand Total Highlight Box */}
-      <div
-        style={{ backgroundColor: "#0f172a", color: "#ffffff" }}
-        className="rounded-xl p-3.5 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
-      >
-        <div>
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-            İŞLEM TUTARI / BAKİYE
-          </span>
-          <span className="text-xs sm:text-sm font-bold text-indigo-200 italic mt-0.5 block break-words">
-            # {numberToTurkishWords(receipt.amount, receipt.currency)} #
-          </span>
+          <div className="space-y-8">
+            <div className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+              TESLİM ALAN / CARİ FİRMA
+            </div>
+            <div className="border-t border-dashed border-slate-400 pt-1 text-[11px] text-slate-500 w-48 mx-auto font-medium">
+              Yetkili İmza &amp; Kaşe
+            </div>
+          </div>
         </div>
-        <div className="text-left sm:text-right shrink-0">
-          <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-white block">
-            {formatCurrency(receipt.amount, receipt.currency)}
+
+        {/* Footer Notice & Security Stamp */}
+        <div className="border-t border-slate-100 pt-3 flex flex-col sm:flex-row items-center justify-between gap-1 text-[10px] text-slate-400">
+          <span>Bu dekont Muavin ERP Finans Yönetim Sistemi tarafından elektronik ortamda üretilmiştir.</span>
+          <span className="font-mono text-[9px] text-slate-400 font-semibold">
+            BELGE KODU: {receipt.documentNo} • STANDART A4 (210 × 297 MM)
           </span>
         </div>
-      </div>
-
-      {/* Description / Notes if any */}
-      {receipt.description && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700">
-          <span className="font-bold text-slate-900 block mb-0.5">İşlem Açıklaması:</span>
-          {receipt.description}
-        </div>
-      )}
-
-      {/* Signatures Zone */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 pt-6 sm:pt-8 border-t border-slate-200 text-center">
-        <div className="space-y-6 sm:space-y-10">
-          <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-            TESLİM EDEN / ONAYLAYAN
-          </div>
-          <div className="border-t border-dashed border-slate-300 pt-1 text-[11px] text-slate-400 w-44 mx-auto">
-            İmza &amp; Kaşe
-          </div>
-        </div>
-        <div className="space-y-6 sm:space-y-10">
-          <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-            TESLİM ALAN / CARİ FİRMA
-          </div>
-          <div className="border-t border-dashed border-slate-300 pt-1 text-[11px] text-slate-400 w-44 mx-auto">
-            İmza &amp; Kaşe
-          </div>
-        </div>
-      </div>
-
-      {/* Footer Notice */}
-      <div className="text-[10px] text-slate-400 text-center pt-2">
-        Bu dekont Muavin ERP Finans Yönetim Sistemi tarafından elektronik ortamda üretilmiştir.
       </div>
     </div>
   );
@@ -2358,7 +2772,7 @@ export const Accounts: React.FC<AccountsProps> = ({
               position: "fixed",
               left: 0,
               top: 0,
-              width: "800px",
+              width: "794px",
               zIndex: -100,
               opacity: 0,
               pointerEvents: "none",
@@ -2399,7 +2813,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                 return exportElementToPDFWithPrintStyling(
                   "printable-receipt",
                   `Dekont_${receiptData.documentNo || "Finans_Dekontu"}.pdf`,
-                  { orientation: "p", margin: 8, scale: 2 }
+                  { orientation: "p", margin: 8, scale: 2, fitToSinglePage: true }
                 );
               }
               return null;
@@ -2442,17 +2856,28 @@ export const Accounts: React.FC<AccountsProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => window.print()}
-              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              onClick={handlePrintReceipt}
+              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs active:scale-95"
+              title="A4 formatında yazdır"
             >
               <Printer className="w-4 h-4 text-emerald-400" />
               <span className="hidden sm:inline">Yazdır</span>
             </button>
             <button
               type="button"
+              onClick={handleExportReceiptExcel}
+              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer active:scale-95"
+              title="Dekont Detayını Excel (.xlsx) Olarak İndir"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>Excel İndir</span>
+            </button>
+            <button
+              type="button"
               onClick={handleExportReceiptPDF}
               disabled={isPdfGenerating}
-              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50 active:scale-95"
+              title="A4 formatında yüksek kaliteli PDF indir"
             >
               <FileCheck2 className="w-4 h-4 text-purple-200" />
               <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
@@ -2470,41 +2895,7 @@ export const Accounts: React.FC<AccountsProps> = ({
           </div>
         }
       >
-        <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6">
-          {/* WhatsApp İletişim & Entegrasyon Merkezi Entegrasyonu */}
-          <div
-            className="border rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-2xs transition-colors"
-            style={{
-              backgroundColor: theme.cardBg,
-              borderColor: theme.cardBorder,
-            }}
-          >
-            <div className="flex items-start sm:items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs shrink-0 mt-0.5 sm:mt-0">
-                <MessageSquare className="w-5 h-5 fill-white" />
-              </div>
-              <div className="min-w-0">
-                <h4 className="text-xs font-extrabold flex items-center gap-1.5 flex-wrap" style={{ color: theme.pageText }}>
-                  <span>WhatsApp İletişim Merkezi</span>
-                  <span className="bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
-                    Canlı Entegrasyon
-                  </span>
-                </h4>
-                <p className="text-[11px] mt-0.5 line-clamp-2 sm:line-clamp-none" style={{ color: theme.pageTextMuted }}>
-                  Bu resmi finans dekontunu PDF eki ve onaylı muhasebe şablonuyla doğrudan WhatsApp üzerinden anında paylaşabilirsiniz.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsReceiptWhatsAppOpen(true)}
-              className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer shrink-0 active:scale-95"
-            >
-              <Zap className="w-4 h-4 text-emerald-200 fill-emerald-200" />
-              <span>WhatsApp ile Paylaş</span>
-            </button>
-          </div>
-
+        <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 flex justify-center overflow-x-auto print:p-0">
           {renderPrintableReceiptContent(receiptData)}
         </div>
       </DetailPageLayout>
@@ -2858,22 +3249,72 @@ export const Accounts: React.FC<AccountsProps> = ({
     );
   }
 
-      {/* NEW TRANSACTION MODAL (Kasa / Banka) */}
-      {isAddTxModalOpen && (
-        <DetailPageLayout
-          title={addTxContext === "kasa" ? "Yeni Kasa Hareketi Ekle" : "Yeni Banka Hareketi Ekle"}
-          subtitle={addTxContext === "kasa" ? "Nakit Giriş / Çıkış Fişi Kaydı" : "Banka Havale / EFT / Gelen & Giden Transfer Kaydı"}
+  {/* NEW TRANSACTION MODAL (Kasa / Banka / POS) */}
+  if (isAddTxModalOpen) {
+    return (
+      <DetailPageLayout
+          title={
+            addTxContext === "kasa"
+              ? "Yeni Kasa Hareketi Ekle"
+              : addTxContext === "pos"
+              ? "Yeni Banka POS Hareketi Ekle"
+              : "Yeni Banka Hareketi Ekle"
+          }
+          subtitle={
+            addTxContext === "kasa"
+              ? "Nakit Giriş / Çıkış Fişi ve Kasa Tahsilat/Tediye Kaydı"
+              : addTxContext === "pos"
+              ? "Kredi Kartı POS Tahsilatı, Komisyon Oranı ve Slip Belgesi Kaydı"
+              : "Banka Havale / EFT / Gelen & Giden Transfer Kaydı"
+          }
           breadcrumbs={[
-            { label: "Kasa & Banka", onClick: () => setIsAddTxModalOpen(false) },
-            { label: addTxContext === "kasa" ? "Yeni Kasa Hareketi" : "Yeni Banka Hareketi", active: true },
+            { label: "Finans Yönetimi", onClick: () => setIsAddTxModalOpen(false) },
+            {
+              label:
+                addTxContext === "kasa"
+                  ? "Kasa Hareketleri"
+                  : addTxContext === "pos"
+                  ? "Banka POS Hareketleri"
+                  : "Banka Hareketleri",
+              onClick: () => setIsAddTxModalOpen(false),
+            },
+            {
+              label:
+                addTxContext === "kasa"
+                  ? "Yeni Kasa Hareketi"
+                  : addTxContext === "pos"
+                  ? "Yeni POS Slip Kaydı"
+                  : "Yeni Banka Hareketi",
+              active: true,
+            },
           ]}
           onBack={() => setIsAddTxModalOpen(false)}
           statusBadge={
-            <span className={`text-xs font-bold px-3 py-1 rounded-xl border ${addTxContext === "kasa" ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-blue-50 text-blue-800 border-blue-200"}`}>
-              {addTxContext === "kasa" ? "KASA FİŞİ" : "BANKA FİŞİ"}
+            <span
+              className={`text-xs font-bold px-3 py-1 rounded-xl border ${
+                addTxContext === "kasa"
+                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                  : addTxContext === "pos"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-blue-50 text-blue-800 border-blue-200"
+              }`}
+            >
+              {addTxContext === "kasa"
+                ? "KASA FİŞİ"
+                : addTxContext === "pos"
+                ? "BANKA POS SLİP"
+                : "BANKA DEKONTU"}
             </span>
           }
-          headerIcon={addTxContext === "kasa" ? <Banknote className="w-5 h-5 text-amber-600" /> : <Building className="w-5 h-5 text-blue-600" />}
+          headerIcon={
+            addTxContext === "kasa" ? (
+              <Banknote className="w-5 h-5 text-amber-600" />
+            ) : addTxContext === "pos" ? (
+              <CreditCard className="w-5 h-5 text-emerald-600" />
+            ) : (
+              <Building className="w-5 h-5 text-blue-600" />
+            )
+          }
           actions={
             <div className="flex items-center gap-2">
               <button
@@ -2883,42 +3324,119 @@ export const Accounts: React.FC<AccountsProps> = ({
               >
                 Vazgeç
               </button>
+              <button
+                type="submit"
+                form="add-transaction-form"
+                className={`px-5 py-2 font-bold text-white rounded-xl cursor-pointer text-xs flex items-center gap-1.5 shadow-xs transition-all ${
+                  addTxContext === "kasa"
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : addTxContext === "pos"
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>
+                  {addTxContext === "kasa"
+                    ? "Kasa Hareketini Kaydet"
+                    : addTxContext === "pos"
+                    ? "POS Tahsilatını Kaydet"
+                    : "Banka Hareketini Kaydet"}
+                </span>
+              </button>
             </div>
           }
         >
           <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
+            {/* Quick Context Switcher: Kasa / Banka / Banka POS */}
+            <div className="grid grid-cols-3 gap-1.5 p-1.5 bg-slate-100 rounded-2xl border border-slate-200/80 mb-2">
+              <button
+                type="button"
+                onClick={() => handleOpenAddTxModal("kasa")}
+                className={`py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  addTxContext === "kasa"
+                    ? "bg-white text-amber-800 shadow-xs border border-amber-200"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Banknote className="w-3.5 h-3.5 text-amber-600" />
+                <span>Kasa (Nakit)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenAddTxModal("banka")}
+                className={`py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  addTxContext === "banka"
+                    ? "bg-white text-blue-800 shadow-xs border border-blue-200"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Building className="w-3.5 h-3.5 text-blue-600" />
+                <span>Banka (Havale)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenAddTxModal("pos")}
+                className={`py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  addTxContext === "pos"
+                    ? "bg-white text-emerald-800 shadow-xs border border-emerald-200"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Banka POS</span>
+              </button>
+            </div>
 
-            <form onSubmit={handleSaveTransaction} className="space-y-4 text-xs">
+            <form id="add-transaction-form" onSubmit={handleSaveTransaction} className="space-y-4 text-xs">
               {/* İşlem Tipi */}
               <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
                 <button
                   type="button"
                   onClick={() => setTxType("income")}
-                  className={`py-2 px-3 rounded-lg font-bold text-center transition-all cursor-pointer ${
+                  className={`py-2 px-3 rounded-lg font-bold text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     txType === "income"
                       ? "bg-emerald-600 text-white shadow-xs"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  {addTxContext === "kasa" ? "Tahsilat / Kasa Gelir (+)" : "Gelen Transfer / Tahsilat (+)"}
+                  <ArrowDownLeft className="w-3.5 h-3.5" />
+                  <span>
+                    {addTxContext === "kasa"
+                      ? "Tahsilat / Kasa Gelir (+)"
+                      : addTxContext === "pos"
+                      ? "POS Kredi Kartı Tahsilatı (+)"
+                      : "Gelen Transfer / Tahsilat (+)"}
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTxType("expense")}
-                  className={`py-2 px-3 rounded-lg font-bold text-center transition-all cursor-pointer ${
+                  className={`py-2 px-3 rounded-lg font-bold text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     txType === "expense"
                       ? "bg-rose-600 text-white shadow-xs"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  {addTxContext === "kasa" ? "Ödeme / Kasa Gider (-)" : "Gönderilen Transfer / Ödeme (-)"}
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                  <span>
+                    {addTxContext === "kasa"
+                      ? "Tediye / Kasa Gider (-)"
+                      : addTxContext === "pos"
+                      ? "POS İptal / İade Çıkışı (-)"
+                      : "Gönderilen Transfer / Ödeme (-)"}
+                  </span>
                 </button>
               </div>
 
               {/* Hesap Seçimi */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  {addTxContext === "kasa" ? "Kasa Hesabı *" : "Banka Hesabı *"}
+                  {addTxContext === "kasa"
+                    ? "Kasa Hesabı *"
+                    : addTxContext === "pos"
+                    ? "Tahsilatın Aktarılacağı Banka / POS Hesabı *"
+                    : "Banka Hesabı *"}
                 </label>
                 <select
                   value={txAccountId}
@@ -2930,16 +3448,133 @@ export const Accounts: React.FC<AccountsProps> = ({
                     .filter((a) =>
                       addTxContext === "kasa"
                         ? a.type === "cash"
-                        : a.type === "bank" || a.type === "credit_card"
+                        : a.type === "bank" || a.type === "credit_card" || a.type === "pos"
                     )
                     .map((acc) => (
                       <option key={acc.id} value={acc.id}>
-                        {acc.name} - Bakiye: ₺
+                        {acc.name} ({acc.bankName || (acc.type === "cash" ? "Nakit Kasa" : "Banka/POS")}) - Bakiye: ₺
                         {acc.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                       </option>
                     ))}
                 </select>
               </div>
+
+              {/* POS Özel Alanları */}
+              {addTxContext === "pos" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200/90">
+                  <div>
+                    <label className="block font-bold text-emerald-950 mb-1">
+                      POS Terminal Türü / Cihaz Adı *
+                    </label>
+                    <select
+                      value={posTerminalName}
+                      onChange={(e) => setPosTerminalName(e.target.value)}
+                      className="w-full bg-white border border-emerald-300 rounded-xl p-2.5 font-bold text-emerald-950 text-xs cursor-pointer"
+                    >
+                      <option value="Fiziksel POS Terminali (Yazarkasa)">Fiziksel POS Terminali (Yazarkasa / Mağaza)</option>
+                      <option value="Sanal POS (E-Ticaret / Web Ödeme)">Sanal POS (E-Ticaret / Web Ödeme)</option>
+                      <option value="Mobil Saha POS (Android POS)">Mobil Saha POS (Android POS)</option>
+                      <option value="Garanti BBVA Sanal POS">Garanti BBVA Sanal POS</option>
+                      <option value="Akbank Sanal POS">Akbank Sanal POS</option>
+                      <option value="Yapı Kredi Sanal POS">Yapı Kredi Sanal POS</option>
+                      <option value="İş Bankası Sanal POS">İş Bankası Sanal POS</option>
+                      <option value="QNB Finansbank POS">QNB Finansbank POS</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-emerald-950 mb-1">
+                      Kredi Kartı Slip / Referans No *
+                    </label>
+                    <input
+                      type="text"
+                      value={posSlipNo}
+                      onChange={(e) => {
+                        setPosSlipNo(e.target.value);
+                        setTxDocumentNo(e.target.value);
+                      }}
+                      placeholder="Örn: SLP-891024"
+                      className="w-full bg-white border border-emerald-300 rounded-xl p-2.5 font-mono font-bold text-emerald-950 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-emerald-950 mb-1">
+                      Banka Komisyon Oranı (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        value={posCommissionRate}
+                        onChange={(e) => setPosCommissionRate(e.target.value)}
+                        placeholder="2.45"
+                        className="w-full bg-white border border-emerald-300 rounded-xl p-2.5 pr-8 font-mono font-bold text-emerald-950 text-xs"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 font-bold text-emerald-700 text-xs">%</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-emerald-950 mb-1">
+                      Valör Süresi (Bloke Gün)
+                    </label>
+                    <select
+                      value={posValorDays}
+                      onChange={(e) => setPosValorDays(parseInt(e.target.value) || 0)}
+                      className="w-full bg-white border border-emerald-300 rounded-xl p-2.5 font-bold text-emerald-950 text-xs cursor-pointer"
+                    >
+                      <option value="0">0 Gün (Aynı Gün Anında)</option>
+                      <option value="1">1 Gün (Ertesi Gün Valörlü)</option>
+                      <option value="7">7 Gün (Haftalık Valör)</option>
+                      <option value="14">14 Gün (2 Hafta Valör)</option>
+                      <option value="28">28 Gün (Aylık Blokeli)</option>
+                      <option value="30">30 Gün (Aylık Blokeli)</option>
+                    </select>
+                  </div>
+
+                  {/* Canlı POS Hesaplama Bilgi Kartı */}
+                  {Number(txAmount) > 0 && (
+                    <div className="col-span-full bg-white rounded-xl p-3 border border-emerald-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase font-extrabold block">Brüt Tahsilat</span>
+                        <span className="font-bold text-slate-900 font-mono text-sm">
+                          ₺{Number(txAmount).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-rose-600 uppercase font-extrabold block">
+                          Kesilen POS Komisyonu (%{posCommissionRate || "0"})
+                        </span>
+                        <span className="font-bold text-rose-600 font-mono text-sm">
+                          -₺{((Number(txAmount) * (parseFloat(posCommissionRate) || 0)) / 100).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-emerald-700 uppercase font-extrabold block">Net Hesaba Geçecek</span>
+                        <span className="font-extrabold text-emerald-700 font-mono text-base">
+                          ₺{(Number(txAmount) - ((Number(txAmount) * (parseFloat(posCommissionRate) || 0)) / 100)).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="col-span-full flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="auto-record-comm"
+                      checked={autoRecordPosCommission}
+                      onChange={(e) => setAutoRecordPosCommission(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-600 border-emerald-300 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <label htmlFor="auto-record-comm" className="text-xs font-semibold text-emerald-950 cursor-pointer">
+                      POS komisyon kesintisini otomatik olarak "Banka & POS Komisyon Gideri" fişi olarak kaydet
+                    </label>
+                  </div>
+                </div>
+              )}
 
               {/* Cari Hesap Seçimi */}
               <div>
@@ -2961,23 +3596,25 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </select>
               </div>
 
-              {/* Evrak / Makbuz / Dekont No */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  {addTxContext === "kasa" ? "Evrak / Makbuz Numarası" : "Dekont Numarası"}
-                </label>
-                <input
-                  type="text"
-                  value={txDocumentNo}
-                  onChange={(e) => setTxDocumentNo(e.target.value)}
-                  placeholder={
-                    addTxContext === "kasa"
-                      ? "Örn: MKB-2026-001 veya EVR-102"
-                      : "Örn: DKN-8839201"
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono font-bold"
-                />
-              </div>
+              {/* Evrak / Makbuz / Dekont No (POS harici ise) */}
+              {addTxContext !== "pos" && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    {addTxContext === "kasa" ? "Evrak / Makbuz Numarası" : "Dekont Numarası"}
+                  </label>
+                  <input
+                    type="text"
+                    value={txDocumentNo}
+                    onChange={(e) => setTxDocumentNo(e.target.value)}
+                    placeholder={
+                      addTxContext === "kasa"
+                        ? "Örn: MKB-2026-001 veya EVR-102"
+                        : "Örn: DKN-8839201"
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono font-bold"
+                  />
+                </div>
+              )}
 
               {/* Tutar ve Tarih */}
               <div className="grid grid-cols-2 gap-3">
@@ -3017,7 +3654,11 @@ export const Accounts: React.FC<AccountsProps> = ({
                     type="text"
                     value={txCategory}
                     onChange={(e) => setTxCategory(e.target.value)}
-                    placeholder="Örn: Tahsilat, Ödeme, Masraf"
+                    placeholder={
+                      addTxContext === "pos"
+                        ? "POS Tahsilatı (Kredi Kartı)"
+                        : "Örn: Tahsilat, Ödeme, Masraf"
+                    }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium text-slate-900"
                   />
                 </div>
@@ -3047,10 +3688,16 @@ export const Accounts: React.FC<AccountsProps> = ({
                   className={`px-5 py-2 font-bold text-white rounded-xl cursor-pointer ${
                     addTxContext === "kasa"
                       ? "bg-amber-600 hover:bg-amber-700"
+                      : addTxContext === "pos"
+                      ? "bg-emerald-600 hover:bg-emerald-700"
                       : "bg-blue-600 hover:bg-blue-700"
                   }`}
                 >
-                  {addTxContext === "kasa" ? "Kasa Hareketini Kaydet" : "Banka Hareketini Kaydet"}
+                  {addTxContext === "kasa"
+                    ? "Kasa Hareketini Kaydet"
+                    : addTxContext === "pos"
+                    ? "POS Tahsilatını Kaydet"
+                    : "Banka Hareketini Kaydet"}
                 </button>
               </div>
             </form>
@@ -4053,50 +4700,68 @@ export const Accounts: React.FC<AccountsProps> = ({
         description="Nakit Kasa, Banka Hesapları, Çek, Senet ve Hesaplar Arası Virman Yönetimi."
         actions={
           <>
-            <button
-              onClick={() => {
-                setIsTransferModalOpen(true);
-                detailNav.openTransfer();
-              }}
-              className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs shrink-0"
-            >
-              <ArrowRightLeft className="w-4 h-4 text-purple-600" />
-              <span>Hızlı Virman</span>
-            </button>
-
-            {activeSubModule === "cek" && (
+            {activeSubModule !== "virman" && (
               <button
                 onClick={() => {
-                  setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
-                  setIsChequeModalOpen(true);
+                  setIsTransferModalOpen(true);
+                  detailNav.openTransfer();
                 }}
-                className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
-                style={{ backgroundColor: theme.primaryColor }}
+                className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs shrink-0"
+                title="Hesaplar arası anlık virman transferi yap"
               >
-                <Plus className="w-4 h-4" />
-                <span>Yeni Çek Girişi</span>
+                <ArrowRightLeft className="w-4 h-4 text-purple-600" />
+                <span>Hızlı Virman</span>
               </button>
             )}
 
-            {activeSubModule === "senet" && (
-              <button
-                onClick={() => {
-                  setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
-                  setIsNoteModalOpen(true);
-                }}
-                className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
-                style={{ backgroundColor: theme.primaryColor }}
-              >
-                <Plus className="w-4 h-4" />
-                <span>Yeni Senet Girişi</span>
-              </button>
+            {activeSubModule === "kasa" && (
+              <>
+                <button
+                  onClick={() => handleOpenAddTxModal("kasa")}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
+                  title="Yeni Nakit Kasa Hareketi (Giriş / Çıkış) Ekle"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Kasa Hareketi Ekle</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setAccType("cash");
+                    setIsAccountModalOpen(true);
+                    detailNav.openCreate();
+                  }}
+                  className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
+                  style={{ backgroundColor: theme.primaryColor }}
+                  title="Yeni Nakit Kasa Hesabı Tanımla"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Yeni Kasa Ekle</span>
+                </button>
+              </>
             )}
 
             {activeSubModule === "banka" && (
               <>
                 <button
+                  onClick={() => handleOpenAddTxModal("banka")}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
+                  title="Yeni Banka Havale / EFT Hareketi Ekle"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Banka Hareketi Ekle</span>
+                </button>
+                <button
+                  onClick={() => handleOpenAddTxModal("pos")}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
+                  title="Yeni Kredi Kartı POS Tahsilatı ve Slip Kaydı Ekle"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Banka POS Hareketi Ekle</span>
+                </button>
+                <button
                   onClick={() => setIsBankStatementModalOpen(true)}
                   className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
+                  title="Banka Ekstresi (CSV / Excel) Yükle"
                 >
                   <FileSpreadsheet className="w-4 h-4 text-blue-600" />
                   <span>Banka Ekstresi Yükle</span>
@@ -4109,6 +4774,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                   }}
                   className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
                   style={{ backgroundColor: theme.primaryColor }}
+                  title="Yeni Banka Hesabı Tanımla"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Yeni Banka Hesabı</span>
@@ -4116,18 +4782,67 @@ export const Accounts: React.FC<AccountsProps> = ({
               </>
             )}
 
-            {activeSubModule === "kasa" && (
+            {activeSubModule === "cek" && (
+              <>
+                <button
+                  onClick={() => {
+                    setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
+                    setIsChequeModalOpen(true);
+                  }}
+                  className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
+                  style={{ backgroundColor: theme.primaryColor }}
+                  title="Yeni Alınan veya Verilen Çek Kaydı Ekle"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Çek Ekle</span>
+                </button>
+                <button
+                  onClick={() => handleOpenEndorseModal("cheque")}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs shrink-0"
+                  title="Portföydeki bir çeki ciro et"
+                >
+                  <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
+                  <span>Çek Ciro Et</span>
+                </button>
+              </>
+            )}
+
+            {activeSubModule === "senet" && (
+              <>
+                <button
+                  onClick={() => {
+                    setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
+                    setIsNoteModalOpen(true);
+                  }}
+                  className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
+                  style={{ backgroundColor: theme.primaryColor }}
+                  title="Yeni Alınan veya Verilen Senet Kaydı Ekle"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Senet Ekle</span>
+                </button>
+                <button
+                  onClick={() => handleOpenEndorseModal("note")}
+                  className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs shrink-0"
+                  title="Portföydeki bir senedi ciro et"
+                >
+                  <ArrowRightLeft className="w-4 h-4 text-purple-600" />
+                  <span>Senet Ciro Et</span>
+                </button>
+              </>
+            )}
+
+            {activeSubModule === "virman" && (
               <button
                 onClick={() => {
-                  setAccType("cash");
-                  setIsAccountModalOpen(true);
-                  detailNav.openCreate();
+                  setIsTransferModalOpen(true);
+                  detailNav.openTransfer();
                 }}
-                className="text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
-                style={{ backgroundColor: theme.primaryColor }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-2xs transition-all shrink-0"
+                title="Yeni Hesaplar Arası Virman Transferi Ekle"
               >
-                <Plus className="w-4 h-4" />
-                <span>Yeni Kasa Ekle</span>
+                <ArrowRightLeft className="w-4 h-4" />
+                <span>Yeni Virman Kaydı Ekle</span>
               </button>
             )}
           </>
@@ -4390,6 +5105,15 @@ export const Accounts: React.FC<AccountsProps> = ({
                           >
                             <MessageCircle className="w-3.5 h-3.5 text-emerald-850" />
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddTxModal("kasa", acc.id)}
+                            className="p-1.5 rounded-lg border border-amber-400 bg-amber-200/80 hover:bg-amber-300 text-amber-950 transition-colors cursor-pointer shadow-2xs shrink-0 flex items-center gap-1 text-[11px] font-bold"
+                            title="Bu Kasaya Nakit Giriş/Çıkış Hareketi Ekle"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-amber-900" />
+                            <span className="hidden sm:inline">Hareket Ekle</span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -4453,6 +5177,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </span>
                   )}
                 </button>
+                <ExportButtons getExportData={getKasaExportData} size="sm" />
                 <ColumnManagementDropdown
                   columns={kasaColumns}
                   columnVisibility={kasaColVisibility}
@@ -4468,24 +5193,6 @@ export const Accounts: React.FC<AccountsProps> = ({
                   <Plus className="w-4 h-4" />
                   <span>Kasa Hareketi Ekle</span>
                 </button>
-                <ExportButtons
-                  getExportData={() => ({
-                    filename: `Kasa_Hareketleri_${new Date().toISOString().split("T")[0]}`,
-                    title: "NAKİT KASA HAREKETLERİ LİSTESİ",
-                    subtitle: selectedCashAccountId ? `Seçili Kasa: ${accounts.find(a => a.id === selectedCashAccountId)?.name}` : "Tüm Kasalar Genel Toplamı",
-                    headers: ["Tarih", "Makbuz No", "Kasa Adı", "İşlem Türü / Cari", "Açıklama", "Tutar", "Para Birimi"],
-                    rows: kasaTransactions.map((tx) => [
-                      tx.date,
-                      tx.documentNo || "-",
-                      tx.accountName || "-",
-                      `${tx.type === "income" || tx.type === "collection" ? "Tahsilat / Gelir" : "Ödeme / Gider"} (${tx.contactName || tx.category || "-"})`,
-                      tx.description || "-",
-                      formatCurrency(tx.amount || 0, tx.currency || "TRY"),
-                      tx.currency || "TRY",
-                    ]),
-                  })}
-                  size="sm"
-                />
               </div>
             </div>
 
@@ -4871,6 +5578,24 @@ export const Accounts: React.FC<AccountsProps> = ({
                           >
                             <MessageCircle className="w-3.5 h-3.5 text-emerald-850" />
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddTxModal("banka", acc.id)}
+                            className="p-1.5 rounded-lg border border-blue-400 bg-blue-200/80 hover:bg-blue-300 text-blue-950 transition-colors cursor-pointer shadow-2xs shrink-0 flex items-center gap-1 text-[11px] font-bold"
+                            title="Bu Bankaya Havale / EFT Hareketi Ekle"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-blue-900" />
+                            <span className="hidden sm:inline">Havale/EFT</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddTxModal("pos", acc.id)}
+                            className="p-1.5 rounded-lg border border-emerald-400 bg-emerald-200/80 hover:bg-emerald-300 text-emerald-950 transition-colors cursor-pointer shadow-2xs shrink-0 flex items-center gap-1 text-[11px] font-bold"
+                            title="Bu Hesaba POS / Kredi Kartı Tahsilatı Ekle"
+                          >
+                            <CreditCard className="w-3.5 h-3.5 text-emerald-900" />
+                            <span className="hidden sm:inline">POS Slip</span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -4940,6 +5665,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </span>
                   )}
                 </button>
+                <ExportButtons getExportData={getBankaExportData} size="sm" />
                 <ColumnManagementDropdown
                   columns={bankaColumns}
                   columnVisibility={bankaColVisibility}
@@ -4961,28 +5687,19 @@ export const Accounts: React.FC<AccountsProps> = ({
                 <button
                   onClick={() => handleOpenAddTxModal("banka")}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Yeni Banka Havale / EFT İşlemi Ekle"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Banka Hareketi Ekle</span>
                 </button>
-                <ExportButtons
-                  getExportData={() => ({
-                    filename: `Banka_Hareketleri_${new Date().toISOString().split("T")[0]}`,
-                    title: "BANKA HESABI HAVALE / EFT / POS HAREKETLERİ",
-                    subtitle: selectedBankAccountId ? `Seçili Banka: ${accounts.find(a => a.id === selectedBankAccountId)?.name}` : "Tüm Bankalar Genel Toplamı",
-                    headers: ["Tarih", "Dekont No", "Banka Hesabı", "İşlem Türü / Cari", "Açıklama", "Tutar", "Para Birimi"],
-                    rows: bankTransactions.map((tx) => [
-                      tx.date,
-                      tx.documentNo || "-",
-                      tx.accountName || "-",
-                      `${tx.type === "income" || tx.type === "collection" ? "Gelen Transfer / Gelir" : "Giden Transfer / Gider"} (${tx.contactName || tx.category || "-"})`,
-                      tx.description || "-",
-                      formatCurrency(tx.amount || 0, tx.currency || "TRY"),
-                      tx.currency || "TRY",
-                    ]),
-                  })}
-                  size="sm"
-                />
+                <button
+                  onClick={() => handleOpenAddTxModal("pos")}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Kredi kartı POS tahsilatı, komisyon oranı ve slip kaydı ekleyin"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Banka POS Hareketi Ekle</span>
+                </button>
               </div>
             </div>
 
@@ -5354,8 +6071,20 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
 
               <button
-                onClick={() => handleOpenEndorseModal("cheque")}
+                onClick={() => {
+                  setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
+                  setIsChequeModalOpen(true);
+                }}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                title="Yeni Alınan veya Verilen Çek Kaydı Ekle"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Çek Ekle</span>
+              </button>
+
+              <button
+                onClick={() => handleOpenEndorseModal("cheque")}
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                 title="Portföydeki bir çeki başka bir cariye devret/ciro et"
               >
                 <ArrowRightLeft className="w-4 h-4" />
@@ -5381,6 +6110,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                 )}
               </button>
 
+              <ExportButtons getExportData={getChequesExportData} size="sm" />
               <ColumnManagementDropdown
                 columns={chequeColumns}
                 columnVisibility={chequeColVisibility}
@@ -5388,26 +6118,6 @@ export const Accounts: React.FC<AccountsProps> = ({
                 onSetAllColumns={setAllChequeCols}
                 onResetToDefaults={resetChequeCols}
                 hiddenCount={hiddenChequeColCount}
-              />
-
-              <ExportButtons
-                getExportData={() => ({
-                  filename: `Cek_Portfoy_Listesi_${new Date().toISOString().split("T")[0]}`,
-                  title: "ÇEK PORTFÖYÜ LİSTESİ",
-                  subtitle: `Toplam ${cheques.length} Adet Çek Kaydı`,
-                  headers: ["Çek No", "Çek Tipi", "Banka / Şube", "Keşideci / Cari", "Vade Tarihi", "Tutar", "Para Birimi", "Durum"],
-                  rows: cheques.map((c) => [
-                    c.chequeNumber,
-                    c.type === "received" ? "Alınan (Müşteri) Çeki" : "Verilen (Firma) Çeki",
-                    `${c.bankName || ""} ${c.branchName ? "/ " + c.branchName : ""}`,
-                    c.contactName || c.drawer || "-",
-                    c.dueDate,
-                    formatCurrency(c.amount || 0, c.currency || "TRY"),
-                    c.currency || "TRY",
-                    c.status === "portfolio" ? "Portföyde" : c.status === "endorsed" ? "Ciro Edildi" : c.status === "collected" ? "Tahsil Edildi" : c.status === "bounced" ? "Karşılıksız" : c.status,
-                  ]),
-                })}
-                size="sm"
               />
             </div>
           </div>
@@ -5812,8 +6522,20 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
 
               <button
-                onClick={() => handleOpenEndorseModal("note")}
+                onClick={() => {
+                  setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
+                  setIsNoteModalOpen(true);
+                }}
                 className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                title="Yeni Alınan veya Verilen Senet Kaydı Ekle"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Senet Ekle</span>
+              </button>
+
+              <button
+                onClick={() => handleOpenEndorseModal("note")}
+                className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                 title="Portföydeki bir seneti başka bir cariye devret/ciro et"
               >
                 <ArrowRightLeft className="w-4 h-4" />
@@ -5839,6 +6561,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                 )}
               </button>
 
+              <ExportButtons getExportData={getNotesExportData} size="sm" />
               <ColumnManagementDropdown
                 columns={noteColumns}
                 columnVisibility={noteColVisibility}
@@ -5846,26 +6569,6 @@ export const Accounts: React.FC<AccountsProps> = ({
                 onSetAllColumns={setAllNoteCols}
                 onResetToDefaults={resetNoteCols}
                 hiddenCount={hiddenNoteColCount}
-              />
-
-              <ExportButtons
-                getExportData={() => ({
-                  filename: `Senet_Portfoy_Listesi_${new Date().toISOString().split("T")[0]}`,
-                  title: "SENET PORTFÖYÜ LİSTESİ",
-                  subtitle: `Toplam ${promissoryNotes.length} Adet Senet Kaydı`,
-                  headers: ["Senet No", "Senet Tipi", "Borçlu / Cari", "Vade Tarihi", "Düzenleme Tarihi", "Tutar", "Para Birimi", "Durum"],
-                  rows: promissoryNotes.map((n) => [
-                    n.noteNumber,
-                    n.type === "received" ? "Alınan (Müşteri) Senedi" : "Verilen (Firma) Senedi",
-                    n.contactName || n.debtorName || "-",
-                    n.dueDate,
-                    n.issueDate || "-",
-                    formatCurrency(n.amount || 0, n.currency || "TRY"),
-                    n.currency || "TRY",
-                    n.status === "portfolio" ? "Portföyde" : n.status === "endorsed" ? "Ciro Edildi" : n.status === "collected" ? "Tahsil Edildi" : n.status === "protested" ? "Protestolu" : n.status,
-                  ]),
-                })}
-                size="sm"
               />
             </div>
           </div>
@@ -6234,9 +6937,23 @@ export const Accounts: React.FC<AccountsProps> = ({
                   </p>
                 </div>
               </h3>
-              <span className="text-[11px] font-bold px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg shrink-0 self-start sm:self-auto">
-                Çift Taraflı Mahsup / Bakiye Aktarımı
-              </span>
+              <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                <span className="text-[11px] font-bold px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg shrink-0">
+                  Çift Taraflı Mahsup / Bakiye Aktarımı
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTransferModalOpen(true);
+                    detailNav.openTransfer();
+                  }}
+                  className="px-3 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                  title="Tam sayfa detaylı virman fişi düzenle"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Tam Ekran Virman Belgesi</span>
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleExecuteTransfer} className="space-y-4 text-xs">
@@ -6364,14 +7081,32 @@ export const Accounts: React.FC<AccountsProps> = ({
 
           {/* Virman History Table - Formun tam altında ve tam genişlikte */}
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <span>Virman Transfer Geçmişi</span>
-                <span className="text-xs font-semibold px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full">
-                  {virmanTransactions.length} Kayıt
-                </span>
-              </h3>
-            </div>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <span>Virman Transfer Geçmişi</span>
+                  <span className="text-xs font-semibold px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full">
+                    {virmanTransactions.length} Kayıt
+                  </span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleExportVirmanExcel}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 active:scale-95"
+                  title="Virman transfer geçmişini Excel (.xlsx) olarak indir"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="hidden sm:inline">Excel İndir</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportVirmanPDF}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 active:scale-95"
+                  title="Virman transfer geçmişini aynı formatta PDF (.pdf) olarak indir"
+                >
+                  <FileText className="w-3.5 h-3.5 text-rose-600" />
+                  <span className="hidden sm:inline">PDF İndir</span>
+                </button>
+              </div>
 
             <div
               className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden p-2"

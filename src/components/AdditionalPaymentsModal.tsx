@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { X, Gift, Utensils, Bus, Plus, Trash2, CheckCircle2, Calculator } from "lucide-react";
-import { AdditionalPaymentItem } from "../types";
+import { AdditionalPaymentItem, CompanySettings } from "../types";
 import { formatCurrency } from "../utils/exportUtils";
 
 export interface AdditionalPaymentsModalProps {
@@ -11,6 +11,7 @@ export interface AdditionalPaymentsModalProps {
   initialFoodAllowance: number;
   initialRoadAllowance: number;
   initialCustomPayments: AdditionalPaymentItem[];
+  companySettings?: CompanySettings;
   onApply: (data: {
     foodAllowance: number;
     roadAllowance: number;
@@ -28,18 +29,19 @@ export const AdditionalPaymentsModal: React.FC<AdditionalPaymentsModalProps> = (
   initialFoodAllowance,
   initialRoadAllowance,
   initialCustomPayments,
+  companySettings,
   onApply,
 }) => {
   // Modlar: "daily" (Günlük birim tutar * Fiili çalışma günü) veya "fixed" (Aylık sabit net tutar)
   const [foodMode, setFoodMode] = useState<"daily" | "fixed">("daily");
-  const defaultDailyFood = actualWorkDays > 0 ? Math.round(initialFoodAllowance / actualWorkDays) || 170 : 170;
+  const defaultDailyFood = companySettings?.dailyFoodAllowanceRate ?? (actualWorkDays > 0 ? Math.round(initialFoodAllowance / actualWorkDays) || 300 : 300);
   const [dailyFoodRate, setDailyFoodRate] = useState<number>(defaultDailyFood);
-  const [fixedFoodAmount, setFixedFoodAmount] = useState<number>(initialFoodAllowance);
+  const [fixedFoodAmount, setFixedFoodAmount] = useState<number>(initialFoodAllowance || (companySettings?.defaultFoodAllowance ?? 5500));
 
   const [roadMode, setRoadMode] = useState<"daily" | "fixed">("daily");
-  const defaultDailyRoad = actualWorkDays > 0 ? Math.round(initialRoadAllowance / actualWorkDays) || 75 : 75;
+  const defaultDailyRoad = companySettings?.dailyRoadAllowanceRate ?? (actualWorkDays > 0 ? Math.round(initialRoadAllowance / actualWorkDays) || 115 : 115);
   const [dailyRoadRate, setDailyRoadRate] = useState<number>(defaultDailyRoad);
-  const [fixedRoadAmount, setFixedRoadAmount] = useState<number>(initialRoadAllowance);
+  const [fixedRoadAmount, setFixedRoadAmount] = useState<number>(initialRoadAllowance || (companySettings?.defaultRoadAllowance ?? 2500));
 
   // Serbest ek ödeme kalemleri (Prim, Yakacak, Bayram Harçlığı, Performans Ödülü vb.)
   const [customList, setCustomList] = useState<AdditionalPaymentItem[]>(
@@ -154,9 +156,9 @@ export const AdditionalPaymentsModal: React.FC<AdditionalPaymentsModalProps> = (
         <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs sm:text-sm">
           {/* 1. Yemek Yardımı */}
           <div className="p-3.5 rounded-2xl border border-orange-200 bg-orange-50/40 space-y-2.5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-orange-500 text-white flex items-center justify-center shadow-xs">
+                <div className="w-7 h-7 rounded-lg bg-orange-500 text-white flex items-center justify-center shadow-xs shrink-0">
                   <Utensils className="w-4 h-4" />
                 </div>
                 <div>
@@ -165,7 +167,7 @@ export const AdditionalPaymentsModal: React.FC<AdditionalPaymentsModalProps> = (
                 </div>
               </div>
 
-              <div className="inline-flex rounded-xl bg-orange-200/60 p-0.5 text-[11px] font-bold">
+              <div className="inline-flex rounded-xl bg-orange-200/60 p-0.5 text-[11px] font-bold self-start sm:self-auto">
                 <button
                   type="button"
                   onClick={() => setFoodMode("daily")}
@@ -227,9 +229,9 @@ export const AdditionalPaymentsModal: React.FC<AdditionalPaymentsModalProps> = (
 
           {/* 2. Yol Yardımı / Ulaşım */}
           <div className="p-3.5 rounded-2xl border border-sky-200 bg-sky-50/40 space-y-2.5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center shadow-xs">
+                <div className="w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center shadow-xs shrink-0">
                   <Bus className="w-4 h-4" />
                 </div>
                 <div>
@@ -238,7 +240,7 @@ export const AdditionalPaymentsModal: React.FC<AdditionalPaymentsModalProps> = (
                 </div>
               </div>
 
-              <div className="inline-flex rounded-xl bg-sky-200/60 p-0.5 text-[11px] font-bold">
+              <div className="inline-flex rounded-xl bg-sky-200/60 p-0.5 text-[11px] font-bold self-start sm:self-auto">
                 <button
                   type="button"
                   onClick={() => setRoadMode("daily")}
@@ -300,9 +302,9 @@ export const AdditionalPaymentsModal: React.FC<AdditionalPaymentsModalProps> = (
 
           {/* 3. Serbest Tanımlı Ek Ödemeler (Prim, Yakacak, Bayram Yardımı vb.) */}
           <div className="p-3.5 rounded-2xl border border-purple-200 bg-purple-50/40 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-purple-700 text-white flex items-center justify-center shadow-xs">
+                <div className="w-7 h-7 rounded-lg bg-purple-700 text-white flex items-center justify-center shadow-xs shrink-0">
                   <Gift className="w-4 h-4 text-amber-300" />
                 </div>
                 <div>
@@ -315,7 +317,7 @@ export const AdditionalPaymentsModal: React.FC<AdditionalPaymentsModalProps> = (
                 </div>
               </div>
 
-              <span className="text-xs font-black text-purple-900 bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200">
+              <span className="text-xs font-black text-purple-900 bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 self-start sm:self-auto">
                 Toplam: {formatCurrency(customPaymentsTotal, "TRY")}
               </span>
             </div>
@@ -396,10 +398,10 @@ export const AdditionalPaymentsModal: React.FC<AdditionalPaymentsModalProps> = (
           </div>
 
           {/* Toplam Ek Ödeme Özeti */}
-          <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-3.5 rounded-2xl flex items-center justify-between shadow-md">
+          <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-md">
             <div className="space-y-0.5">
               <span className="text-[11px] text-purple-200 font-semibold block">TOPLAM BORDROYA AKTARILACAK EK ÖDEME</span>
-              <div className="flex items-center gap-3 text-xs text-purple-300">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-purple-300">
                 <span>Yemek: {formatCurrency(computedFoodAllowance, "TRY")}</span>
                 <span>&bull;</span>
                 <span>Yol: {formatCurrency(computedRoadAllowance, "TRY")}</span>
@@ -407,28 +409,28 @@ export const AdditionalPaymentsModal: React.FC<AdditionalPaymentsModalProps> = (
                 <span>Ek Kalemler: {formatCurrency(customPaymentsTotal, "TRY")}</span>
               </div>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <span className="text-lg sm:text-xl font-black text-amber-300">{formatCurrency(grandTotal, "TRY")}</span>
             </div>
           </div>
         </div>
 
         {/* Modal Alt Aksiyonlar */}
-        <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
+        <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 transition-all cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 transition-all cursor-pointer text-center"
           >
             Vazgeç
           </button>
           <button
             type="button"
             onClick={handleSaveAndApply}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95"
           >
-            <CheckCircle2 className="w-4 h-4 text-emerald-100" />
-            <span>Hesaplamayı Bordroya Aktar ({formatCurrency(grandTotal, "TRY")})</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-100 shrink-0" />
+            <span className="truncate">Hesaplamayı Bordroya Aktar ({formatCurrency(grandTotal, "TRY")})</span>
           </button>
         </div>
       </div>

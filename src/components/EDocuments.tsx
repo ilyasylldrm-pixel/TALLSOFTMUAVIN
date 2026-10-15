@@ -54,6 +54,8 @@ import { DetailPageLayout } from "./common/DetailPageLayout";
 import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
+import { ExportButtons } from "./ExportButtons";
+import { ExportData } from "../utils/exportUtils";
 
 export interface EDocumentsProps {
   /** The navigation item controls the API direction without exposing credentials to the browser. */
@@ -80,6 +82,7 @@ const formatMoney = (value: unknown, currency = "TRY") => {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
     currency: currency === "₺" ? "TRY" : currency || "TRY",
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
 };
@@ -735,6 +738,48 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     return { total: documents.length, accepted, waiting, failed, amount: total };
   }, [documents]);
 
+  const getEDocumentsExportData = useCallback((): ExportData => {
+    const isDespatch = family === "despatch";
+    const dirText = activeDirection === "inbox" ? "Gelen" : "Giden";
+    const dateStr = new Date().toLocaleDateString("tr-TR");
+    const headers = [
+      "Belge No",
+      "Yön",
+      "Belge Türü",
+      "Cari Unvanı / Taraf",
+      "VKN / TCKN",
+      "Tarih",
+      "Tutar",
+      "Para Birimi",
+      "Durum",
+      "ETTN / UUID",
+    ];
+    const rows = filteredDocuments.map((doc) => {
+      const data = asRecord(doc);
+      return [
+        documentNumber(doc) || "-",
+        dirText,
+        documentType(doc) || "-",
+        documentParty(doc) || "-",
+        documentTaxNumber(doc) || "-",
+        documentDate(doc) ? formatDate(documentDate(doc)) : "-",
+        documentAmount(doc) !== undefined ? formatMoney(documentAmount(doc)) : "-",
+        documentCurrency(doc) || "TRY",
+        resolveMysoftDocumentStatus(documentStatus(doc)).label,
+        String(data.ettn || data.uuid || "-"),
+      ];
+    });
+
+    return {
+      filename: `Mysoft_${dirText}_${isDespatch ? "eIrsaliyeler" : "eFaturalar"}_${new Date().toISOString().split("T")[0]}`,
+      sheetName: isDespatch ? "e-İrsaliye" : "e-Fatura",
+      title: `MYSOFT ${dirText.toUpperCase()} ${isDespatch ? "E-İRSALİYELER" : "E-FATURALAR"} LİSTESİ`,
+      subtitle: `Toplam ${filteredDocuments.length} Belge | Rapor Tarihi: ${dateStr}`,
+      headers,
+      rows,
+    };
+  }, [family, activeDirection, filteredDocuments]);
+
   const directionLabel = isDespatch
     ? activeDirection === "inbox"
       ? "Gelen e-İrsaliyeler"
@@ -1002,6 +1047,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                 </option>
               ))}
             </select>
+            <ExportButtons getExportData={getEDocumentsExportData} size="sm" />
           </div>
         </div>
         {lastSyncedAt && (

@@ -173,16 +173,23 @@ export function buildMysoftInvoiceOutboxPayload(
     typeof options.docNo === "string" && options.docNo.trim()
       ? options.docNo.trim()
       : typeof invoice.invoiceNumber === "string" && invoice.invoiceNumber.trim()
-        ? invoice.invoiceNumber.trim()
+        ? invoice.invoiceNumber.replace(/\s*\(TASLAK\)\s*$/i, "").trim()
         : "";
 
+  const invoicePrefixMatch = /^[A-Za-z0-9]{3}20\d{2}/.test(effectiveDocNo)
+    ? effectiveDocNo.slice(0, 3).toUpperCase()
+    : "";
+  const companyTypePrefix = (
+    eDocumentType === "EARSIVFATURA" ? company.eArsivPrefix : company.eFaturaPrefix
+  )
+    ?.trim()
+    .toUpperCase()
+    .slice(0, 3);
   const prefix =
-    options.prefix ||
+    options.prefix?.trim().toUpperCase().slice(0, 3) ||
+    invoicePrefixMatch ||
+    companyTypePrefix ||
     (effectiveDocNo ? effectiveDocNo.replace(/\d+$/, "").slice(0, 3).toUpperCase() : undefined) ||
-    String(invoice.invoiceNumber || "")
-      .replace(/\d+$/, "")
-      .slice(0, 3)
-      .toUpperCase() ||
     undefined;
 
   // Shape mirrors Mysoft GET /api/InvoiceOutbox/createInvoiceOutboxTestJson
@@ -218,13 +225,13 @@ export function buildMysoftInvoiceOutboxPayload(
     invoiceAccount: {
       vknTckn: buyerTax || undefined,
       accountName: contact.name || invoice.contactName,
-      taxOfficeName: contact.taxOffice || undefined,
+      taxOfficeName: contact.taxOffice || invoice.taxOffice || undefined,
       countryName: "TÜRKİYE",
-      cityName: contact.city || undefined,
-      citySubdivision: contact.district || undefined,
-      streetName: contact.address || undefined,
-      telephone1: contact.phone || undefined,
-      email1: contact.email || undefined,
+      cityName: contact.city || invoice.customerCity || undefined,
+      citySubdivision: contact.district || invoice.customerDistrict || undefined,
+      streetName: contact.address || invoice.customerAddress || undefined,
+      telephone1: contact.phone || invoice.customerPhone || undefined,
+      email1: contact.email || invoice.customerEmail || undefined,
     },
     invoiceDetail: (invoice.items || []).map((item, index) =>
       mapLine(item, index, currency),

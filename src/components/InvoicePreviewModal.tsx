@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Invoice, InvoiceItem, CompanySettings, Contact, getContactAccountCode } from "../types";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
-import { getCurrencySymbol, formatDate, exportElementToPDF } from "../utils/exportUtils";
+import { getCurrencySymbol, formatDate, exportElementToPDF, printHtmlElement, exportToExcel } from "../utils/exportUtils";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
 import {
   computeInvoiceTotals,
@@ -29,6 +29,7 @@ import {
   Edit2,
   Clock,
   CheckCircle,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { NavItem } from "./Sidebar";
@@ -102,8 +103,13 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   const hasDiscounts = totalDiscount > 0 || computedItems.some((i) => (i.discountAmount && i.discountAmount > 0) || (i.discountRate && i.discountRate > 0));
 
   const contactName = invoice.contactName || contact?.name || "Belirtilmemiş Müşteri / Tedarikçi";
-  const contactTaxOffice = contact?.taxOffice || invoice.taxNumber || "-";
-  const contactTaxNo = contact?.taxNumber || invoice.taxNumber || "-";
+  const contactTaxOffice = invoice.taxOffice || contact?.taxOffice || "-";
+  const contactTaxNo = invoice.taxNumber || contact?.taxNumber || "-";
+  const contactAddress = invoice.customerAddress || contact?.address || "Adres Belirtilmemiş";
+  const contactCity = invoice.customerCity || contact?.city || "";
+  const contactPhone = invoice.customerPhone || contact?.phone || "-";
+  const contactEmail = invoice.customerEmail || contact?.email || "-";
+  const isManualCustomer = invoice.isManualCustomer || (!contact && !invoice.contactId?.startsWith("cnt_"));
   const accountCode = contact ? getContactAccountCode(contact) : (invType === "sales" ? "120.00000" : "320.00000");
 
   const writtenAmount = numberToTurkishWords(payableAmount);
@@ -112,7 +118,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
     if (onPrint) {
       onPrint();
     } else {
-      window.print();
+      printHtmlElement("invoice-preview-paper", `${invNumber}_Fatura`);
     }
   };
 
@@ -130,6 +136,55 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
     } finally {
       setIsDownloading(false);
     }
+  };
+
+  const handleExportExcel = () => {
+    const headers = [
+      "Sıra No",
+      "Mal / Hizmet Adı",
+      "Miktar",
+      "Birim",
+      "Birim Fiyat",
+      "İskonto (%)",
+      "KDV Oranı (%)",
+      "KDV Tutarı",
+      "Mal / Hizmet Tutarı",
+      "Genel Toplam (KDV Dahil)",
+    ];
+
+    const rows: (string | number)[][] = computedItems.map((item, idx) => [
+      idx + 1,
+      item.productName || item.description || "Kalem",
+      item.quantity || 1,
+      item.unit || "Adet",
+      (item.unitPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }),
+      item.discountRate ? `%${item.discountRate}` : "%0",
+      `%${item.vatRate || 0}`,
+      (item.vatAmount || item.calculatedVatAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }),
+      (item.subtotal || item.effectiveTaxableAmount || item.totalWithoutVat || item.grossAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }),
+      (item.total || item.lineGrandTotal || item.totalWithVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }),
+    ]);
+
+    // Summary totals rows
+    rows.push([]);
+    rows.push(["", "", "", "", "", "", "Ara Toplam:", (subtotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }), currency]);
+    if (totalDiscount > 0) {
+      rows.push(["", "", "", "", "", "", "Toplam İskonto:", `-${(totalDiscount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, currency]);
+    }
+    rows.push(["", "", "", "", "", "", "Hesaplanan KDV:", (totalVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }), currency]);
+    if (totalWithholding > 0) {
+      rows.push(["", "", "", "", "", "", "Tevkifat Tutarı:", `-${(totalWithholding || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, currency]);
+    }
+    rows.push(["", "", "", "", "", "", "Ödenecek Tutar:", (payableAmount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }), currency]);
+
+    exportToExcel({
+      filename: `${invNumber}_Fatura_Detayi_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Fatura Detayı",
+      title: `${companySettings.companyName || "FİRMA"} - FATURA DETAYI VE KALEM LİSTESİ`,
+      subtitle: `Fatura No: ${invNumber} | Cari: ${contactName} | Tarih: ${formatDate(issueDate)} | Vade: ${formatDate(dueDate)}`,
+      headers,
+      rows,
+    });
   };
 
   return (
@@ -186,6 +241,16 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
           >
             <Zap className="w-4 h-4 text-emerald-100 fill-emerald-100" />
             <span>WhatsApp ile Gönder</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            className="bg-emerald-700 hover:bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+            title="Fatura Detaylarını ve Kalemlerini Excel (.xlsx) Olarak İndir"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
+            <span>Excel İndir</span>
           </button>
 
           <button
@@ -378,11 +443,15 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   <span className="text-[10px] font-black uppercase text-indigo-700 block tracking-wider">
                     ALICI / MÜŞTERİ BİLGİLERİ
                   </span>
-                  {accountCode && (
+                  {isManualCustomer ? (
+                    <span className="font-mono text-[10px] bg-amber-100 text-amber-800 border border-amber-200 font-bold px-1.5 py-0.5 rounded">
+                      Münferit / Elle Giriş
+                    </span>
+                  ) : accountCode ? (
                     <span className="font-mono text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded">
                       Cari Kodu: {accountCode}
                     </span>
-                  )}
+                  ) : null}
                 </div>
                 <p className="font-extrabold text-slate-900">{contactName}</p>
                 <p className="text-slate-600">
@@ -392,9 +461,11 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   VKN / TCKN: <strong>{contactTaxNo}</strong>
                 </p>
                 <p className="text-slate-500">
-                  {contact?.address || "Adres Belirtilmemiş"}, {contact?.city || ""}
+                  {contactAddress}{contactCity ? `, ${contactCity}` : ""}
                 </p>
-                <p className="text-slate-500">Tel: {contact?.phone || "-"}</p>
+                <p className="text-slate-500">
+                  Tel: {contactPhone} {contactEmail && contactEmail !== "-" ? `| E-posta: ${contactEmail}` : ""}
+                </p>
               </div>
             </div>
 
@@ -693,9 +764,17 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   </span>
                 </div>
 
-                <div className="pt-2 border-t-2 border-slate-900 flex justify-between items-center text-sm font-black">
-                  <span>🎯 ÖDENECEK / TAHSİL EDİLECEK NET TUTAR:</span>
-                  <span className="text-lg font-mono text-indigo-700">
+                <div
+                  style={{
+                    backgroundColor: "#83b8ff",
+                    borderColor: "#60a5fa",
+                    WebkitPrintColorAdjust: "exact",
+                    printColorAdjust: "exact",
+                  }}
+                  className="p-2.5 rounded-lg border flex justify-between items-center text-sm font-black text-slate-950 mt-1 print:bg-[#83b8ff]"
+                >
+                  <span className="text-xs uppercase tracking-wide">🎯 ÖDENECEK / İŞLEM TUTARI BAKİYE:</span>
+                  <span className="text-lg font-mono font-black text-slate-950">
                     {currSymbol}
                     {payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                   </span>

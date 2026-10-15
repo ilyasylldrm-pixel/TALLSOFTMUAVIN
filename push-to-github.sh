@@ -1,39 +1,19 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Muavin - GitHub'a Otomatik Proje Aktarım Scripti
+# Muavin - GitHub Çift Yönlü Senkronizasyon (Gönder & Al) Scripti
 # ==============================================================================
 
 set -e
 
-REPO_URL="${1:-}"
+REPO_URL="${1:-https://github.com/ilyasylldrm-pixel/TALLSOFTMUAVIN.git}"
 
-if [ -z "$REPO_URL" ]; then
-  echo "======================================================================"
-  echo " GitHub Repository Aktarımı"
-  echo "======================================================================"
-  echo "Kullanım:"
-  echo "  ./push-to-github.sh <GITHUB_REPO_URL>"
-  echo ""
-  echo "Örnek (Token ile - En Çok Tercih Edilen):"
-  echo "  ./push-to-github.sh https://<GITHUB_TOKEN>@github.com/<KULLANICI_ADI>/<REPO_ADI>.git"
-  echo ""
-  echo "Örnek (Standart HTTPS):"
-  echo "  ./push-to-github.sh https://github.com/<KULLANICI_ADI>/<REPO_ADI>.git"
-  echo "======================================================================"
-  exit 1
-fi
-
-# 1. Git deposu yoksa otomatik başlat ve commit oluştur
+# 1. Git deposu yoksa otomatik başlat
 if [ ! -d ".git" ]; then
   echo "Git deposu başlatılıyor (git init)..."
   git init
   git config user.name "Muavin"
   git config user.email "ilyasylldrm@gmail.com"
   git branch -M main
-  echo "Dosyalar sahneleniyor (git add)..."
-  git add .
-  echo "İlk commit oluşturuluyor..."
-  git commit -m "feat: Muavin Ön Muhasebe, İnşaat Maliyetlendirme ve Üretim Yönetimi"
 fi
 
 # 2. Remote origin ayarla
@@ -44,13 +24,27 @@ else
   git remote add origin "$REPO_URL"
 fi
 
-# 3. Dalı main olarak doğrula
-git branch -M main
+# 3. GitHub'dan en güncel durumu al (fetch)
+echo "GitHub'dan güncel değişiklikler alınıyor (git fetch origin main)..."
+git fetch origin main || true
 
-# 4. GitHub'a zorlamalı/temiz gönder (push)
+# 4. Tüm yerel değişiklikleri sahnele ve commit et
+git branch -M main
+echo "Dosyalar sahneleniyor (git add .)..."
+git add .
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Değişiklikler commit ediliyor..."
+  git commit -m "feat: Admin paneli kimlik bilgileri, modül yetkilendirme ve gelir faturası arayüz güncellemeleri ($(date +'%Y-%m-%d %H:%M'))"
+fi
+
+# 5. Uzak dal ile birleştir (varsa)
+git merge origin/main --allow-unrelated-histories -X ours --no-edit || git merge --abort || true
+
+# 6. GitHub'a gönder (push)
 echo "GitHub'a gönderiliyor (git push -u origin main --force)..."
 git push -u origin main --force
 
 echo "======================================================================"
-echo " Başarıyla GitHub'a aktarıldı!"
+echo " Başarıyla GitHub ile eşitlendi (Gönderildi & Alındı)!"
 echo "======================================================================"
+

@@ -35,6 +35,34 @@ export class ErrorBoundary extends (React.Component as any) {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
+    // Detect React hook dispatcher null error caused by dev server restart or version hash shifts
+    const isHookOrChunkMismatch =
+      error?.message?.includes("Invalid hook call") ||
+      error?.message?.includes("reading 'useState'") ||
+      error?.message?.includes("dynamically imported module") ||
+      error?.message?.includes("Failed to fetch") ||
+      error?.message?.includes("MIME type");
+
+    if (isHookOrChunkMismatch && typeof window !== "undefined") {
+      let reloadLock = null;
+      try {
+        reloadLock = sessionStorage.getItem("hook_mismatch_reload_lock");
+      } catch {
+        // ignore
+      }
+      const now = Date.now();
+      const lastReloadTime = reloadLock ? parseInt(reloadLock, 10) : 0;
+      if (!reloadLock || (now - lastReloadTime > 6000)) {
+        try {
+          sessionStorage.setItem("hook_mismatch_reload_lock", now.toString());
+        } catch {
+          // ignore
+        }
+        window.location.reload();
+        return;
+      }
+    }
+
     try {
       triggerFormErrorNotification(
         error.message || "Bileşen yüklenirken beklenmeyen bir hata oluştu.",
@@ -48,6 +76,7 @@ export class ErrorBoundary extends (React.Component as any) {
   private handleRetry = () => {
     try {
       sessionStorage.removeItem("chunk_reload_lock");
+      sessionStorage.removeItem("hook_mismatch_reload_lock");
     } catch {
       // ignore
     }
@@ -58,6 +87,12 @@ export class ErrorBoundary extends (React.Component as any) {
   };
 
   private handleReload = () => {
+    try {
+      sessionStorage.removeItem("chunk_reload_lock");
+      sessionStorage.removeItem("hook_mismatch_reload_lock");
+    } catch {
+      // ignore
+    }
     window.location.reload();
   };
 

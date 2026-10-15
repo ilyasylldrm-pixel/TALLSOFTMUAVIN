@@ -51,3 +51,7 @@ Thumbs.db
 data/github-config.json
 *.token
 
+# Bun Lockfiles (use package-lock.json with npm)
+bun.lock
+bun.lockb
+

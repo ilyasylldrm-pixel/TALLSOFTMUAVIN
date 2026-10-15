@@ -14,7 +14,7 @@ import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
 import { Pagination } from "./common/Pagination";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { DataImportModal } from "./common/DataImportModal";
-import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, generateAccountStatementAutoTablePDF, exportElementToPDFWithPrintStyling, LedgerSummaryData, exportToExcel, exportToPDF } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, generateAccountStatementAutoTablePDF, printAccountStatementPDF, printHtmlElement, exportElementToPDFWithPrintStyling, LedgerSummaryData, exportToExcel, exportToPDF } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
 import * as XLSX from "xlsx";
@@ -241,6 +241,7 @@ export const Contacts: React.FC<ContactsProps> = ({
   const [ekstreTab, setEkstreTab] = useState<"all" | "invoices" | "collections" | "payments">("all");
   const [ekstreSearch, setEkstreSearch] = useState<string>("");
   const [isPdfGenerating, setIsPdfGenerating] = useState<boolean>(false);
+  const [isPrintingLedger, setIsPrintingLedger] = useState<boolean>(false);
 
   // Share Modal State (WhatsApp & Email)
   const [shareType, setShareType] = useState<"whatsapp" | "email" | null>(null);
@@ -1657,6 +1658,34 @@ export const Contacts: React.FC<ContactsProps> = ({
     }
   };
 
+  // Direct PDF Print using the EXACT same format as PDF download
+  const handlePrintLedgerPDFDirect = async () => {
+    if (!selectedLedgerContact) return;
+    try {
+      setIsPrintingLedger(true);
+      const printed = await printAccountStatementPDF({
+        companySettings,
+        contact: selectedLedgerContact,
+        entries: filteredLedgerEntries,
+        summary: ledgerSummary,
+      });
+
+      if (!printed) {
+        // Fallback: If browser restricts direct iframe PDF blob print, use isolated iframe on formatted element
+        await printHtmlElement("printable-ledger", `Cari_Ekstre_${selectedLedgerContact.name}`, {
+          orientation: "portrait",
+        });
+      }
+    } catch (err) {
+      console.warn("Cari Ekstre PDF yazdırma hatası, HTML yazdırma deneniyor:", err);
+      await printHtmlElement("printable-ledger", `Cari_Ekstre_${selectedLedgerContact.name}`, {
+        orientation: "portrait",
+      });
+    } finally {
+      setIsPrintingLedger(false);
+    }
+  };
+
   // Excel (.xlsx) Export with Turkish Character & Formatting Support
   const exportLedgerExcel = (contact: Contact) => {
     const entries = getLedgerEntries(contact.id);
@@ -1785,153 +1814,42 @@ export const Contacts: React.FC<ContactsProps> = ({
     }
   };
 
-  // Direct Print Window Handler
-  const handlePrintLedger = (contact: Contact) => {
-    const entries = getLedgerEntries(contact.id);
-    const totalDebit = entries.reduce((acc, curr) => acc + curr.debit, 0);
-    const totalCredit = entries.reduce((acc, curr) => acc + curr.credit, 0);
-    const netBalance = totalDebit - totalCredit;
+  // Direct Print Handler (Exact same official format as PDF download)
+  const handlePrintLedger = async (contact: Contact) => {
+    try {
+      const entries = getLedgerEntries(contact.id);
+      const totalDebit = entries.reduce((acc, curr) => acc + curr.debit, 0);
+      const totalCredit = entries.reduce((acc, curr) => acc + curr.credit, 0);
+      const netBalance = totalDebit - totalCredit;
+      const summary: LedgerSummaryData = {
+        totalDebit,
+        totalCredit,
+        netBalance,
+        invoiceCount: entries.filter((e) => e.documentType === "Fatura").length,
+        collectionCount: entries.filter((e) => e.documentType === "Tahsilat").length,
+        paymentCount: entries.filter((e) => e.documentType === "Tediye").length,
+        totalMovements: entries.length,
+        lastMovementDate: entries.length > 0 ? entries[entries.length - 1].date : undefined,
+      };
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      window.print();
-      return;
+      const printed = await printAccountStatementPDF({
+        companySettings,
+        contact,
+        entries,
+        summary,
+      });
+
+      if (!printed) {
+        await printHtmlElement("printable-ledger", `Cari_Ekstre_${contact.name}`, {
+          orientation: "portrait",
+        });
+      }
+    } catch (err) {
+      console.warn("handlePrintLedger error:", err);
+      await printHtmlElement("printable-ledger", `Cari_Ekstre_${contact.name}`, {
+        orientation: "portrait",
+      });
     }
-
-    const compTitle = companySettings?.companyName || "FİRMA ADI";
-    const compSub = companySettings?.companyTitle || "";
-    const compTax = companySettings?.taxNumber ? `VKN/TCKN: ${companySettings.taxNumber} (${companySettings.taxOffice || ""})` : "";
-    const compPhone = companySettings?.phone ? `Tel: ${companySettings.phone}` : "";
-
-    const rowsHtml = entries.length === 0
-      ? `<tr><td colspan="7" style="text-align:center; padding: 24px; color: #64748b; font-size: 12px;">Kayıtlı cari hareket bulunmuyor.</td></tr>`
-      : entries
-          .map(
-            (e, idx) => `
-        <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#faf5ff'}; border-bottom: 1px solid #e9d5ff; page-break-inside: avoid; break-inside: avoid;">
-          <td style="padding: 9px 12px; font-size: 11px; text-align: center; color: #475569;">${formatDate(e.date)}</td>
-          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-weight: bold; color: #581c87;"><span style="display:inline-block; padding: 2px 8px; border-radius: 6px; background: #f3e8ff; border: 1px solid #d8b4fe;">${e.documentType}</span></td>
-          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-family: monospace; font-weight: 600; color: #334155;">${e.documentNo}</td>
-          <td style="padding: 9px 12px; font-size: 11px; color: #1e293b;">${e.description}</td>
-          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-weight: bold; font-family: monospace; color: #0f172a;">${e.debit > 0 ? "₺" + e.debit.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "—"}</td>
-          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-weight: bold; font-family: monospace; color: #0f172a;">${e.credit > 0 ? "₺" + e.credit.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "—"}</td>
-          <td style="padding: 9px 12px; font-size: 11px; text-align: center; font-weight: 800; font-family: monospace; color: ${e.runningBalance > 0 ? "#047857" : e.runningBalance < 0 ? "#b91c1c" : "#475569"};">₺${Math.abs(e.runningBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</td>
-        </tr>
-      `
-          )
-          .join("");
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="tr">
-      <head>
-        <meta charset="UTF-8">
-        <title>Cari Hesap Ekstresi - ${contact.name}</title>
-        <style>
-          @page { size: landscape; margin: 10mm; }
-          * { box-sizing: border-box; }
-          body { font-family: 'Inter', system-ui, -apple-system, sans-serif; padding: 24px; color: #131b2e; margin: 0; background: #ffffff; }
-          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #005289; padding-bottom: 16px; margin-bottom: 20px; page-break-inside: avoid; break-inside: avoid; }
-          .company-name { font-size: 20px; font-weight: 800; text-transform: uppercase; color: #005289; letter-spacing: -0.5px; }
-          .title-block { text-align: right; }
-          .title { font-size: 20px; font-weight: 800; color: #131b2e; letter-spacing: 0.5px; text-transform: uppercase; }
-          .info-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 1fr; gap: 16px; background: #faf8ff; padding: 16px; border-radius: 6px; border: 1.5px solid #dae2fd; margin-bottom: 20px; font-size: 12px; page-break-inside: avoid; break-inside: avoid; }
-          .info-box { display: flex; flex-direction: column; justify-content: center; }
-          .balance-box { background: #ffffff; border: 1.5px solid #c0c7d2; border-radius: 6px; padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1.5px solid #c0c7d2; border-radius: 6px; overflow: hidden; }
-          th { background: #005289; color: #ffffff; text-align: center; padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-right: 1px solid #0f6bae; }
-          th:last-child { border-right: none; }
-          tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-          thead { display: table-header-group; }
-          .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; page-break-inside: avoid; break-inside: avoid; }
-          .stat-box { background: #faf8ff; border: 1.5px solid #dae2fd; border-radius: 6px; padding: 12px; text-align: center; }
-          .stat-box.highlight { background: #eaedff; border-color: #0f6bae; }
-          .stat-label { font-size: 10px; font-weight: 700; color: #005289; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-          .stat-val { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
-          @media print {
-            body { padding: 0; }
-            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <div class="company-name">${compTitle}</div>
-            <div style="font-size:11px; color:#64748b; margin-top:2px;">${compSub}</div>
-            <div style="font-size:11px; color:#64748b;">${compTax} ${compPhone}</div>
-          </div>
-          <div class="title-block">
-            <div class="title">CARİ HESAP EKSTRESİ</div>
-            <div style="font-size:11px; font-weight:600; color:#6b21a8; margin-top:3px;">Düzenleme Tarihi: ${new Date().toLocaleDateString("tr-TR")}</div>
-          </div>
-        </div>
-
-        <div class="info-grid">
-          <div class="info-box">
-            <div style="margin-bottom: 4px;"><strong>HESAP NO:</strong> <span style="font-family:monospace; font-weight:bold; color:#581c87; background:#ede9fe; padding:2px 6px; border-radius:4px;">${getContactAccountCode(contact)}</span></div>
-            <div style="margin-bottom: 2px;"><strong>CARİ UNVANI:</strong> <span style="font-weight:700; color:#0f172a;">${contact.name}</span></div>
-            <div style="color:#64748b; font-size:11px;">${contact.companyTitle || ""}</div>
-            <div style="margin-top: 4px;"><strong>VKN / TCKN:</strong> ${contact.taxNumber || "-"} (${contact.taxOffice || "-"})</div>
-          </div>
-          <div class="info-box">
-            <div style="margin-bottom: 4px;"><strong>İLETİŞİM:</strong> ${contact.phone || "-"} &bull; ${contact.email || "-"}</div>
-            <div><strong>ADRES:</strong> ${contact.address || "-"}, ${contact.city || "-"}</div>
-          </div>
-          <div class="balance-box">
-            <div style="font-size:10px; font-weight:800; color:#6b21a8; text-transform:uppercase; letter-spacing:0.5px;">GÜNCEL NET BAKİYE</div>
-            <div style="font-size:20px; font-weight:900; font-family:monospace; margin: 4px 0; color: ${netBalance > 0 ? "#047857" : netBalance < 0 ? "#b91c1c" : "#475569"};">
-              ₺${Math.abs(netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-            </div>
-            <div style="font-size:11px; font-weight:bold; color:${netBalance > 0 ? "#047857" : netBalance < 0 ? "#b91c1c" : "#64748b"};">
-              ${netBalance > 0 ? "● Alacaklıyız" : netBalance < 0 ? "● Borçluyuz" : "● Bakiye Sıfır"}
-            </div>
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 100px;">Tarih</th>
-              <th style="width: 130px;">Belge Tipi</th>
-              <th style="width: 140px;">Belge No</th>
-              <th>Açıklama</th>
-              <th style="width: 130px;">Borç (₺)</th>
-              <th style="width: 130px;">Alacak (₺)</th>
-              <th style="width: 140px;">Bakiye (₺)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-
-        <div class="summary-grid">
-          <div class="stat-box">
-            <div class="stat-label">Toplam Borç Tutarı</div>
-            <div class="stat-val" style="color:#0f172a;">₺${totalDebit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Toplam Alacak Tutarı</div>
-            <div class="stat-val" style="color:#0f172a;">₺${totalCredit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</div>
-          </div>
-          <div class="stat-box highlight">
-            <div class="stat-label">Net Cari Bakiye</div>
-            <div class="stat-val" style="color: ${netBalance > 0 ? "#047857" : netBalance < 0 ? "#b91c1c" : "#475569"};">₺${Math.abs(netBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</div>
-          </div>
-        </div>
-
-        <script>
-          window.onload = function() {
-            window.print();
-          };
-        </script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
   };
 
   if (isModalOpen) {
@@ -2675,6 +2593,16 @@ export const Contacts: React.FC<ContactsProps> = ({
             <div className="flex items-center gap-2 flex-wrap justify-end">
               <button
                 type="button"
+                onClick={() => exportLedgerExcel(selectedLedgerContact)}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs active:scale-95"
+                title="Resmi Cari Hesap Ekstresi ve Muavin Defterini Excel (.xlsx) Olarak İndir"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>Excel İndir</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleExportLedgerPDFDirect}
                 disabled={isPdfGenerating}
                 className="bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
@@ -2686,12 +2614,13 @@ export const Contacts: React.FC<ContactsProps> = ({
 
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                title="Yazdır"
+                onClick={handlePrintLedgerPDFDirect}
+                disabled={isPrintingLedger || isPdfGenerating}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                title="Resmi Cari Hesap Ekstresi ve Muavin Defterini Yazdır (PDF Formatında)"
               >
                 <Printer className="w-4 h-4 text-slate-300" />
-                <span className="hidden sm:inline">Yazdır</span>
+                <span className="hidden sm:inline">{isPrintingLedger ? "Hazırlanıyor..." : "Yazdır"}</span>
               </button>
 
               <button
@@ -2950,10 +2879,10 @@ export const Contacts: React.FC<ContactsProps> = ({
                     </div>
                     <div className="space-y-1.5 text-xs">
                       <div
-                        className="flex justify-between items-center px-2.5 py-1.5 rounded-lg font-bold"
-                        style={{ backgroundColor: "#e0e7ff" }}
+                        className="flex justify-between items-center px-2.5 py-1.5 rounded-lg font-bold border border-[#60a5fa]"
+                        style={{ backgroundColor: "#83b8ff" }}
                       >
-                        <span style={{ color: "#1e1b4b" }}>Güncel Net Cari Bakiye:</span>
+                        <span style={{ color: "#0f172a" }}>Güncel Net Cari Bakiye:</span>
                         <span
                           className="font-mono text-sm sm:text-base font-black"
                           style={{
@@ -3074,15 +3003,15 @@ export const Contacts: React.FC<ContactsProps> = ({
                       <thead>
                         <tr
                           className="font-bold border-b uppercase text-[10px] tracking-wider"
-                          style={{ backgroundColor: "#f1f5f9", color: "#1e1b4b", borderBottomColor: "#cbd5e1" }}
+                          style={{ backgroundColor: "#1e1b4b", color: "#ffffff", borderBottomColor: "#1e1b4b" }}
                         >
                           <th className="py-2.5 px-3">Tarih</th>
                           <th className="py-2.5 px-3 text-center">Belge Türü</th>
-                          <th className="py-2.5 px-3 font-mono">Belge / Fatura No</th>
+                          <th className="py-2.5 px-3 font-mono">Evrak No</th>
                           <th className="py-2.5 px-3">Açıklama</th>
                           <th className="py-2.5 px-3 text-right">Borç (₺)</th>
                           <th className="py-2.5 px-3 text-right">Alacak (₺)</th>
-                          <th className="py-2.5 px-3 text-right" style={{ backgroundColor: "#e0e7ff" }}>Yürüyen Bakiye (₺)</th>
+                          <th className="py-2.5 px-3 text-right" style={{ backgroundColor: "#2e2a72", color: "#ffffff" }}>Bakiye (₺)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y" style={{ borderColor: "#f1f5f9" }}>
@@ -3143,7 +3072,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                         <tfoot>
                           <tr
                             className="font-bold border-t-2"
-                            style={{ backgroundColor: "#eaedff", color: "#131b2e", borderTopColor: "#005289" }}
+                            style={{ backgroundColor: "#e0e7ff", color: "#1e1b4b", borderTopColor: "#1e1b4b" }}
                           >
                             <td colSpan={4} className="py-2.5 px-3 uppercase text-[11px] tracking-wider">
                               Genel Toplam ({filteredLedgerEntries.length} Hareket)
@@ -3154,7 +3083,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                             <td className="py-2.5 px-3 text-right font-mono text-xs">
                               ₺{(filteredLedgerEntries.reduce((acc, curr) => acc + (curr.credit || 0), 0) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-xs" style={{ backgroundColor: "#dae2fd", color: "#005289" }}>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs" style={{ backgroundColor: "#c7d2fe", color: "#1e1b4b" }}>
                               ₺{Math.abs(ledgerSummary?.netBalance || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                             </td>
                           </tr>
@@ -3232,6 +3161,15 @@ export const Contacts: React.FC<ContactsProps> = ({
               <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
                 <button
                   type="button"
+                  onClick={() => exportLedgerExcel(selectedLedgerContact)}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-3.5 sm:px-4 py-2 rounded-xl cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs active:scale-95"
+                  title="Cari Hesap Ekstresi ve Muavin Defterini Excel (.xlsx) Olarak İndir"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>Excel İndir</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleExportLedgerPDFDirect}
                   disabled={isPdfGenerating}
                   className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold px-3.5 sm:px-4 py-2 rounded-xl cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50"
@@ -3239,6 +3177,16 @@ export const Contacts: React.FC<ContactsProps> = ({
                 >
                   <FileDown className="w-3.5 h-3.5" />
                   <span>{isPdfGenerating ? "Hazırlanıyor..." : "PDF İndir"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintLedgerPDFDirect}
+                  disabled={isPrintingLedger || isPdfGenerating}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold px-3.5 sm:px-4 py-2 rounded-xl cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                  title="Cari Hesap Ekstresi ve Muavin Defterini Yazdır (PDF Formatında)"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>{isPrintingLedger ? "Hazırlanıyor..." : "Yazdır"}</span>
                 </button>
                 <button
                   type="button"
@@ -4263,6 +4211,12 @@ export const Contacts: React.FC<ContactsProps> = ({
               </span>
             )}
           </button>
+          <ExportButtons
+            getExportData={getContactsExportData}
+            contacts={contacts}
+            companyName={companySettings?.companyName}
+            size="sm"
+          />
           <ColumnManagementDropdown
             columns={contactColumns}
             columnVisibility={contactColVisibility}
@@ -4270,12 +4224,6 @@ export const Contacts: React.FC<ContactsProps> = ({
             onSetAllColumns={setAllContactCols}
             onResetToDefaults={resetContactCols}
             hiddenCount={hiddenContactColsCount}
-          />
-          <ExportButtons
-            getExportData={getContactsExportData}
-            contacts={contacts}
-            companyName={companySettings?.companyName}
-            size="sm"
           />
           <button
             type="button"

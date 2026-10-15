@@ -29,7 +29,10 @@ function loadServerEnv() {
 loadServerEnv();
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+// AI Studio dev server must run on port 3000 in development per environment constraints.
+const PORT = process.env.NODE_ENV === "production"
+  ? (Number(process.env.PORT) || 8080)
+  : 3000;
 
 // High Performance Middleware Stack (Gzip/Deflate compression for all JSON and static assets)
 app.use(
@@ -1733,7 +1736,10 @@ async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: "custom",
     });
     app.use(vite.middlewares);
@@ -1756,7 +1762,12 @@ async function startServer() {
         const templatePath = path.join(process.cwd(), "index.html");
         let template = fs.readFileSync(templatePath, "utf-8");
         template = await vite.transformIndexHtml(req.originalUrl, template);
-        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+        res.status(200).set({
+          "Content-Type": "text/html",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0"
+        }).end(template);
       } catch (e) {
         vite.ssrFixStacktrace(e as Error);
         next(e);
@@ -1795,6 +1806,9 @@ async function startServer() {
   }
 
   const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`  VITE v6.2.3  ready in 200 ms`);
+    console.log(`  ➜  Local:   http://localhost:${PORT}/`);
+    console.log(`  ➜  Network: http://0.0.0.0:${PORT}/`);
     console.log(`Muavin Muhasebe sunucusu çalışıyor: http://0.0.0.0:${PORT}`);
 
     // WhatsApp otomatik yeniden bağlanma kontrolü
@@ -1810,6 +1824,31 @@ async function startServer() {
       console.warn("WhatsApp servisi başlatma kontrolü pas geçildi:", waErr);
     }
   });
+
+  server.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`[HATA] Port ${PORT} zaten başka bir süreç tarafından kullanılıyor (EADDRINUSE).`);
+      process.exit(1);
+    } else {
+      console.error("[HATA] Sunucu dinleme hatası:", err);
+      process.exit(1);
+    }
+  });
+
+  const gracefulShutdown = (signal: string) => {
+    console.log(`[INFO] ${signal} sinyali alındı, sunucu kapatılıyor...`);
+    server.close(() => {
+      console.log("[INFO] HTTP sunucusu başarıyla kapatıldı.");
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.warn("[UYARI] Zaman aşımı, zorla kapatılıyor.");
+      process.exit(0);
+    }, 2000);
+  };
+
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
   // Google Cloud Run / Load Balancer Keep-Alive Timeout Optimization (prevents 502 Bad Gateway)
   server.keepAliveTimeout = 65000;

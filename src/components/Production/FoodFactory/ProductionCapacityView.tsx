@@ -44,7 +44,7 @@ import {
   Server,
 } from "lucide-react";
 import { FoodProductionOrder, FoodRecipe, FoodMenuPlan } from "../../../types";
-import { formatCurrency, exportToExcel } from "../../../utils/exportUtils";
+import { formatCurrency, exportToExcel, exportToPDF, ExportData } from "../../../utils/exportUtils";
 
 export interface MachineWorkstation {
   id: string;
@@ -594,7 +594,7 @@ export const ProductionCapacityView: React.FC<ProductionCapacityViewProps> = ({
   }, [adjustedMachines, selectedMachineId]);
 
   // Export handler
-  const handleExportData = () => {
+  const getCapacityExportData = (): ExportData => {
     const headers = ["Tarih", "Gün", "Planlanan Hacim", "Fiili Hacim", "Fark", "Başarım (%)", "Fire / İade", "Ortalama Makine Doluluk (%)"];
     const rows = filteredDailyHistory.map((d) => [
       d.date,
@@ -607,14 +607,22 @@ export const ProductionCapacityView: React.FC<ProductionCapacityViewProps> = ({
       `%${d.avgMachineUtilization}`,
     ]);
 
-    exportToExcel({
-      filename: "Uretim_Kapasite_ve_Doluluk_Raporu",
+    return {
+      filename: `Uretim_Kapasite_ve_Doluluk_Raporu_${new Date().toISOString().split("T")[0]}`,
       sheetName: "Kapasite ve Doluluk",
-      title: "Üretim Kapasitesi & Makine Doluluk Analiz Raporu",
+      title: "ÜRETİM KAPASİTESİ & MAKİNE DOLULUK ANALİZ RAPORU",
       subtitle: "Günlük makine kullanım oranları ve planlanan vs gerçekleşen hacim dökümü",
       headers,
       rows,
-    });
+    };
+  };
+
+  const handleExportData = () => {
+    exportToExcel(getCapacityExportData());
+  };
+
+  const handleExportPDF = () => {
+    exportToPDF(getCapacityExportData());
   };
 
   // Color helper for utilization bar
@@ -661,10 +669,21 @@ export const ProductionCapacityView: React.FC<ProductionCapacityViewProps> = ({
             <button
               type="button"
               onClick={handleExportData}
-              className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-semibold rounded-xl text-xs flex items-center gap-2 transition-colors cursor-pointer"
+              className="px-3.5 py-2 bg-emerald-600/80 hover:bg-emerald-600 text-white border border-emerald-500/50 font-semibold rounded-xl text-xs flex items-center gap-2 transition-colors cursor-pointer active:scale-95"
+              title="Kapasite raporunu Excel (.xlsx) olarak indir"
             >
               <Download className="w-4 h-4" />
               <span>Excel Raporu</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportPDF}
+              className="px-3.5 py-2 bg-rose-600/80 hover:bg-rose-600 text-white border border-rose-500/50 font-semibold rounded-xl text-xs flex items-center gap-2 transition-colors cursor-pointer active:scale-95"
+              title="Kapasite raporunu aynı formatta PDF (.pdf) olarak indir"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>PDF Raporu</span>
             </button>
 
             <button

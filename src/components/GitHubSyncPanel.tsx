@@ -30,7 +30,16 @@ export interface GitHubStatusData {
   isClean: boolean;
   uncommittedCount: number;
   uncommittedFiles: string[];
+  aheadCount?: number;
+  behindCount?: number;
   lastCommit?: {
+    sha: string;
+    shortSha: string;
+    message: string;
+    author: string;
+    date: string;
+  };
+  remoteCommit?: {
     sha: string;
     shortSha: string;
     message: string;
@@ -59,6 +68,7 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
   const [status, setStatus] = useState<GitHubStatusData | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
@@ -82,6 +92,32 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
+          // If server lost token after container restart, restore from browser localStorage automatically
+          const savedLocalToken = localStorage.getItem("muavin_github_pat") || "";
+          const savedLocalRepo = localStorage.getItem("muavin_github_repo_url") || "";
+          if (!data.hasToken && savedLocalToken) {
+            try {
+              const cfgRes = await fetch("/api/github/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  token: savedLocalToken,
+                  repoUrl: savedLocalRepo || data.repoUrl,
+                }),
+              });
+              if (cfgRes.ok) {
+                const refreshed = await fetch("/api/github/status");
+                if (refreshed.ok) {
+                  const refreshedData = await refreshed.json();
+                  if (refreshedData.success) {
+                    setStatus(refreshedData);
+                    if (refreshedData.repoUrl) setRepoUrlInput(refreshedData.repoUrl);
+                    return;
+                  }
+                }
+              }
+            } catch {}
+          }
           setStatus(data);
           if (data.repoUrl) setRepoUrlInput(data.repoUrl);
         }
@@ -96,13 +132,66 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
   useEffect(() => {
     fetchStatus();
     setCommitMessage(
-      `Yayınlama & Senkronizasyon (${new Date().toLocaleDateString("tr-TR")} ${new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})`
+      `feat: GitHub senkronizasyonu, Mysoft seri no, Admin paneli ve gelir faturası güncellemeleri (${new Date().toLocaleDateString("tr-TR")} ${new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})`
     );
   }, []);
+
+  const handlePull = async () => {
+    setIsPulling(true);
+    setFeedback(null);
+    const effectiveToken = tokenInput.trim() || localStorage.getItem("muavin_github_pat") || undefined;
+    if (tokenInput.trim()) {
+      localStorage.setItem("muavin_github_pat", tokenInput.trim());
+    }
+    if (repoUrlInput.trim()) {
+      localStorage.setItem("muavin_github_repo_url", repoUrlInput.trim());
+    }
+    try {
+      const res = await fetch("/api/github/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: effectiveToken,
+          repoUrl: repoUrlInput.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFeedback({
+          type: "success",
+          message: data.message || "GitHub'dan en güncel değişiklikler başarıyla alındı!",
+          details: data.commitSha ? `Güncel Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main` : undefined,
+        });
+        if (onSuccessNotification) {
+          onSuccessNotification("GitHub deposundaki değişiklikler başarıyla alındı!");
+        }
+        await fetchStatus();
+      } else {
+        setFeedback({
+          type: "error",
+          message: data.error || "GitHub'dan değişiklikler alınırken bir hata oluştu.",
+        });
+      }
+    } catch (err: any) {
+      setFeedback({
+        type: "error",
+        message: err.message || "Ağ hatası: Sunucuya ulaşılamadı.",
+      });
+    } finally {
+      setIsPulling(false);
+    }
+  };
 
   const handlePublish = async () => {
     setIsPublishing(true);
     setFeedback(null);
+    const effectiveToken = tokenInput.trim() || localStorage.getItem("muavin_github_pat") || undefined;
+    if (tokenInput.trim()) {
+      localStorage.setItem("muavin_github_pat", tokenInput.trim());
+    }
+    if (repoUrlInput.trim()) {
+      localStorage.setItem("muavin_github_repo_url", repoUrlInput.trim());
+    }
 
     try {
       const res = await fetch("/api/github/publish", {
@@ -110,8 +199,9 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           commitMessage: commitMessage.trim() || undefined,
-          token: tokenInput.trim() || undefined,
+          token: effectiveToken,
           repoUrl: repoUrlInput.trim() || undefined,
+          pullFirst: true,
         }),
       });
 
@@ -120,18 +210,22 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
       if (res.ok && data.success) {
         setFeedback({
           type: "success",
-          message: data.message || "Proje başarıyla GitHub'a aktarıldı ve yayınlama tetiklendi!",
-          details: data.commitSha ? `Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main` : undefined,
+          message: data.message || "Proje başarıyla GitHub'dan alındı, gönderildi ve tallsoft.org yayını tetiklendi!",
+          details: data.commitSha ? `Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main | Hedef: tallsoft.org` : undefined,
         });
         if (onSuccessNotification) {
-          onSuccessNotification("GitHub senkronizasyonu ve tallsoft.org yayınlaması başarıyla başlatıldı!");
+          onSuccessNotification("GitHub (Al, Gönder & Yayınla) ve tallsoft.org yayınlaması başarıyla tamamlandı!");
         }
         await fetchStatus();
       } else {
+        if (data.code === "MISSING_TOKEN") {
+          setShowConfig(true);
+        }
         setFeedback({
           type: "error",
           message: data.error || "GitHub senkronizasyonu sırasında bir hata oluştu.",
         });
+        await fetchStatus();
       }
     } catch (err: any) {
       setFeedback({
@@ -146,19 +240,23 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
   const handleTestConnection = async () => {
     setIsTesting(true);
     setFeedback(null);
+    const effectiveToken = tokenInput.trim() || localStorage.getItem("muavin_github_pat") || undefined;
 
     try {
       const res = await fetch("/api/github/test-connection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token: tokenInput.trim() || undefined,
+          token: effectiveToken,
         }),
       });
 
       const data = await res.json();
 
       if (res.ok && data.success) {
+        if (tokenInput.trim()) {
+          localStorage.setItem("muavin_github_pat", tokenInput.trim());
+        }
         setFeedback({
           type: "success",
           message: `${data.message} (${data.repoName} - ${data.isPrivate ? "Özel / Private" : "Herkese Açık / Public"})`,
@@ -181,12 +279,18 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
 
   const handleSaveConfig = async () => {
     setIsSavingConfig(true);
+    if (tokenInput.trim()) {
+      localStorage.setItem("muavin_github_pat", tokenInput.trim());
+    }
+    if (repoUrlInput.trim()) {
+      localStorage.setItem("muavin_github_repo_url", repoUrlInput.trim());
+    }
     try {
       const res = await fetch("/api/github/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token: tokenInput.trim() || undefined,
+          token: tokenInput.trim() || localStorage.getItem("muavin_github_pat") || undefined,
           repoUrl: repoUrlInput.trim() || undefined,
         }),
       });
@@ -234,13 +338,13 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
               </div>
               <div>
                 <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider">
-                  Otomatik CI/CD Dağıtımı
+                  Çift Yönlü GitHub Senkronizasyonu & CI/CD
                 </span>
                 <h2 className="text-lg font-bold text-white mt-1">
-                  Yayınlama & GitHub Senkronizasyon Merkezi
+                  Yayınlama & GitHub Senkronizasyon Merkezi (Gönder & Al)
                 </h2>
                 <p className="text-xs text-slate-300 mt-0.5 max-w-xl">
-                  Tek tıkla tüm geliştirmelerinizi GitHub reponuza gönderin ve GitHub Actions üzerinden{" "}
+                  Tek tıkla tüm geliştirmelerinizi GitHub reponuza gönderin, uzak depodaki güncellemeleri alın ve{" "}
                   <strong className="text-emerald-400">tallsoft.org</strong> canlı ortamında yayınlayın.
                 </p>
               </div>
@@ -363,18 +467,18 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
               />
               <span className="font-semibold text-xs text-slate-900 dark:text-slate-100">
                 {status?.isClean
-                  ? "Tüm Dosyalar Eşitlendi"
-                  : `${status?.uncommittedCount || 0} Yerel Değişiklik`}
+                  ? "Yerel Çalışma Alanı Temiz (Commit Edildi)"
+                  : `${status?.uncommittedCount || 0} Değişen Dosya`}
               </span>
             </div>
             <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-              {status?.lastSyncedAt
-                ? `Son: ${new Date(status.lastSyncedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`
-                : "Hazır"}
+              {status?.aheadCount ? `${status.aheadCount} commit gönderilmeye hazır` : "GitHub ile eşit"}
+              {status?.behindCount ? ` • ${status.behindCount} uzak commit var` : ""}
             </div>
           </div>
           <div className="mt-3 text-[11px] font-mono text-slate-400 truncate">
-            {status?.lastCommit ? `SHA: ${status.lastCommit.shortSha}` : ""}
+            {status?.lastCommit ? `Yerel SHA: ${status.lastCommit.shortSha}` : ""}
+            {status?.remoteCommit ? ` | Uzak SHA: ${status.remoteCommit.shortSha}` : ""}
           </div>
         </div>
       </div>
@@ -386,10 +490,15 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
             <GitCommit className="w-4 h-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 border border-slate-700 font-semibold">
-                {status.lastCommit.shortSha}
+                Yerel: {status.lastCommit.shortSha}
               </span>
+              {status.remoteCommit && (
+                <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-indigo-400 border border-slate-700 font-semibold">
+                  GitHub (origin/main): {status.remoteCommit.shortSha}
+                </span>
+              )}
               <span className="text-slate-400 text-[11px]">
                 {status.lastCommit.author} •{" "}
                 {status.lastCommit.date ? new Date(status.lastCommit.date).toLocaleDateString("tr-TR") : ""}
@@ -402,7 +511,7 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
         </div>
       )}
 
-      {/* Main Action Block: Publish / Sync */}
+      {/* Main Action Block: Publish / Sync & Pull */}
       <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-linear-to-b from-white to-slate-50 dark:from-slate-900 dark:to-slate-850 space-y-4 shadow-2xs">
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -414,7 +523,7 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
               value={commitMessage}
               onChange={(e) => setCommitMessage(e.target.value)}
               placeholder="Yayınlama açıklaması girin..."
-              disabled={isPublishing}
+              disabled={isPublishing || isPulling}
               className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
             />
           </div>
@@ -423,26 +532,74 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
           </p>
         </div>
 
-        {/* Big Publish Button */}
-        <button
-          type="button"
-          onClick={handlePublish}
-          disabled={isPublishing || isLoadingStatus}
-          className="w-full py-3.5 px-4 rounded-xl text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ backgroundColor: theme.primaryColor }}
-        >
-          {isPublishing ? (
-            <>
-              <RefreshCw className="w-4 h-4 animate-spin text-white" />
-              <span>GitHub'a Aktarılıyor ve Yayınlanıyor...</span>
-            </>
-          ) : (
-            <>
-              <UploadCloud className="w-4 h-4 text-white" />
-              <span>Hemen GitHub'a Senkronize Et & Yayınla</span>
-            </>
-          )}
-        </button>
+        {/* Token Presence State Notice */}
+        {!status?.hasToken && !tokenInput.trim() ? (
+          <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <div>
+                <div className="font-semibold text-amber-900 dark:text-amber-100">GitHub Push İçin Token (PAT) Gerekli</div>
+                <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                  GitHub'dan alma (Pull) ve yerel commit işlemleri hazırdır. GitHub'a gönderim (Push) için Personal Access Token tanımlayın.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowConfig(true)}
+              className="px-2.5 py-1.5 text-[11px] font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors cursor-pointer shrink-0"
+            >
+              Token Tanımla
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium px-1">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>GitHub Kimlik Doğrulaması Hazır ({status?.maskedToken || "Token Girildi"})</span>
+          </div>
+        )}
+
+        {/* Action Buttons: Gönder & Al (Publish/Sync) + GitHub'dan Al (Pull) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <button
+            type="button"
+            onClick={handlePublish}
+            disabled={isPublishing || isPulling || isLoadingStatus}
+            className="sm:col-span-2 py-3.5 px-4 rounded-xl text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            {isPublishing ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                <span>Alınıyor, Gönderiliyor & Yayınlanıyor...</span>
+              </>
+            ) : (
+              <>
+                <UploadCloud className="w-4 h-4 text-white" />
+                <span>Al, Gönder & Yayınla (GitHub + tallsoft.org)</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePull}
+            disabled={isPulling || isPublishing || isLoadingStatus}
+            className="py-3.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isPulling ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+                <span>Alınıyor...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4 text-emerald-400" />
+                <span>GitHub'dan Al (Pull)</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Advanced Config Collapsible */}

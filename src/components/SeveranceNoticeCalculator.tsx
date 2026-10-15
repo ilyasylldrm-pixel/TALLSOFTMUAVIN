@@ -68,8 +68,16 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
   const [nakedGrossSalary, setNakedGrossSalary] = useState<number>(
     selectedEmp ? (selectedEmp.salaryType === "gross" ? selectedEmp.salaryAmount : Math.round(selectedEmp.salaryAmount * 1.38)) : 50000
   );
-  const [foodAllowance, setFoodAllowance] = useState<number>(selectedEmp?.foodAllowance || 4500);
-  const [roadAllowance, setRoadAllowance] = useState<number>(selectedEmp?.roadAllowance || 2500);
+  const applyAll = companySettings?.applyAllowancesToAllEmployees !== false;
+  const defaultFood = applyAll || !selectedEmp?.foodAllowance
+    ? (companySettings?.defaultFoodAllowance ?? 5500)
+    : (selectedEmp?.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500);
+  const defaultRoad = applyAll || !selectedEmp?.roadAllowance
+    ? (companySettings?.defaultRoadAllowance ?? 2500)
+    : (selectedEmp?.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500);
+
+  const [foodAllowance, setFoodAllowance] = useState<number>(defaultFood);
+  const [roadAllowance, setRoadAllowance] = useState<number>(defaultRoad);
   const [bonusAverage, setBonusAverage] = useState<number>(0);
   const [otherBenefits, setOtherBenefits] = useState<number>(0);
 
@@ -109,8 +117,16 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
 
     const gross = emp.salaryType === "gross" ? emp.salaryAmount : Math.round(emp.salaryAmount * 1.38);
     setNakedGrossSalary(gross);
-    setFoodAllowance(emp.foodAllowance || 0);
-    setRoadAllowance(emp.roadAllowance || 0);
+    const applyAllChange = companySettings?.applyAllowancesToAllEmployees !== false;
+    const effectiveFood = applyAllChange || !emp.foodAllowance
+      ? (companySettings?.defaultFoodAllowance ?? 5500)
+      : (emp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500);
+    const effectiveRoad = applyAllChange || !emp.roadAllowance
+      ? (companySettings?.defaultRoadAllowance ?? 2500)
+      : (emp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500);
+
+    setFoodAllowance(effectiveFood);
+    setRoadAllowance(effectiveRoad);
     setBonusAverage(0);
     setOtherBenefits(0);
 
@@ -779,11 +795,14 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
               </div>
             </div>
 
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 space-y-1">
-              <span className="text-[11px] font-bold text-emerald-300 block uppercase">
-                Personele Ödenecek Toplam Net Tazminat
+            <div
+              style={{ backgroundColor: "#83b8ff", color: "#0f172a" }}
+              className="rounded-2xl p-4 border border-[#60a5fa] space-y-1 shadow-md"
+            >
+              <span className="text-[11px] font-black text-slate-900 block uppercase">
+                İŞLEM TUTARI / PERSONELE ÖDENECEK NET TAZMİNAT
               </span>
-              <span className="text-2xl sm:text-3xl font-black text-emerald-400 tracking-tight">
+              <span className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight font-mono">
                 {formatTRY(calculation.grandNetPayable)}
               </span>
             </div>
@@ -934,7 +953,10 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
                       <td colSpan={3} className="p-2.5 border border-slate-300 text-right text-rose-800">
                         Toplam Kesinti: -{formatTRY(calculation.grandDeductionsTotal)}
                       </td>
-                      <td className="p-2.5 border border-slate-300 text-right text-sm text-emerald-800 bg-emerald-50">
+                      <td
+                        style={{ backgroundColor: "#83b8ff", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+                        className="p-2.5 border border-[#60a5fa] text-right text-sm text-slate-950 font-black font-mono print:bg-[#83b8ff]"
+                      >
                         {formatTRY(calculation.grandNetPayable)}
                       </td>
                     </tr>

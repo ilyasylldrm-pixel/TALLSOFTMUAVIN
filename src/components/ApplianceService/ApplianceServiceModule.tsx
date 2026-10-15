@@ -41,6 +41,8 @@ import {
   MessageCircle,
   Package,
   AlertTriangle,
+  Download,
+  Loader2,
 } from "lucide-react";
 import {
   ApplianceServiceRecord,
@@ -62,6 +64,9 @@ import { DetailPageLayout } from "../common/DetailPageLayout";
 import { useDetailNavigation } from "../../hooks/useDetailNavigation";
 import { useTheme } from "../../context/ThemeContext";
 import { triggerFormErrorNotification } from "../../context/FormErrorContext";
+import { exportElementToPDFWithPrintStyling } from "../../utils/pdfService";
+import { ExportButtons } from "../ExportButtons";
+import { ExportData, formatCurrency } from "../../utils/exportUtils";
 
 interface ApplianceServiceModuleProps {
   applianceServices: ApplianceServiceRecord[];
@@ -141,6 +146,38 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ApplianceServiceRecord | null>(null);
   const [printRecord, setPrintRecord] = useState<ApplianceServiceRecord | null>(null);
+  const [printDocType, setPrintDocType] = useState<"reception" | "work_order" | "quote" | "delivery">("delivery");
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (!printRecord) return;
+    setIsExportingPDF(true);
+    try {
+      const docTypeNames: Record<string, string> = {
+        reception: "Beyaz_Esya_Kabul_Fisi",
+        work_order: "Saha_Ve_Atolye_Is_Emri",
+        quote: "Fiyat_Ve_Parca_Teklifi",
+        delivery: "Servis_Teslim_Ve_Garanti_Belgesi",
+      };
+      const cleanBrand = `${printRecord.brand || "Cihaz"}_${printRecord.model || "Model"}`.replace(/[^a-zA-Z0-9]/g, "_");
+      const cleanNo = (printRecord.serviceNo || "Servis").replace(/[^a-zA-Z0-9]/g, "_");
+      const fileName = `${docTypeNames[printDocType] || "Servis_Formu"}_${cleanBrand}_${cleanNo}.pdf`;
+      const res = await exportElementToPDFWithPrintStyling("printable-service-slip", fileName, {
+        orientation: "p",
+        margin: 6,
+        scale: 2,
+        fitToSinglePage: true,
+      });
+      if (res?.pdf) {
+        res.pdf.save(res.fileName);
+      }
+    } catch (err) {
+      console.error("Appliance Service PDF download error:", err);
+      triggerFormErrorNotification("PDF oluşturulurken bir hata oluştu.", "İndirme Hatası");
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
   const [aiAssistantRecord, setAiAssistantRecord] = useState<ApplianceServiceRecord | null>(null);
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
 
@@ -717,7 +754,7 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
           brandModel: `${aiAssistantRecord.brand} ${aiAssistantRecord.model}`,
           issueDescription: aiCustomIssue || aiAssistantRecord.customerProblemDescription,
           operationsAndCost: partsAndLaborDesc || "Arıza onarımı ve periyodik bakım",
-          totalCost: `${aiAssistantRecord.grandTotal?.toLocaleString("tr-TR")} ₺`,
+          totalCost: `${aiAssistantRecord.grandTotal?.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺`,
         }),
       });
 
@@ -1049,32 +1086,99 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
     );
   }
 
-      {/* FULL-PAGE DETAIL VIEW: 🖨️ A4 / TERMAL YAZICI UYUMLU SERVİS & TESLİM FİŞİ */}
+      {/* FULL-PAGE DETAIL VIEW: 🖨️ A4 STANDART SERVİS & TESLİM TUTANAĞI */}
       {printRecord && (
         <DetailPageLayout
-          title="Teknik Servis & Teslim Tutanağı Yazdır"
-          subtitle={`${printRecord.serviceNo} • ${printRecord.customerName} • ${printRecord.brand} ${printRecord.model}`}
+          title="Resmi Servis Formu & Teslim Tutanağı"
+          subtitle={`${printRecord.serviceNo} • ${printRecord.contactName} • ${printRecord.brand} ${printRecord.model}`}
           breadcrumbs={[
             { label: "Beyaz Eşya & Klima Servis", onClick: () => setPrintRecord(null) },
-            { label: "Teslim Tutanağı", active: true },
+            { label: "A4 Belge & Yazdırma", active: true },
           ]}
           onBack={() => setPrintRecord(null)}
           statusBadge={
             <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl">
-              RESMİ TESLİM FORMU
+              A4 RESMİ FORM
             </span>
           }
           headerIcon={<Printer className="w-5 h-5 text-purple-600" />}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Document Type Switcher */}
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setPrintDocType("reception")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    printDocType === "reception"
+                      ? "bg-purple-700 text-white shadow-xs"
+                      : "text-slate-700 hover:text-slate-900"
+                  }`}
+                >
+                  Kabul Fişi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintDocType("work_order")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    printDocType === "work_order"
+                      ? "bg-purple-700 text-white shadow-xs"
+                      : "text-slate-700 hover:text-slate-900"
+                  }`}
+                >
+                  İş Emri
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintDocType("quote")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    printDocType === "quote"
+                      ? "bg-purple-700 text-white shadow-xs"
+                      : "text-slate-700 hover:text-slate-900"
+                  }`}
+                >
+                  Teklif
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintDocType("delivery")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    printDocType === "delivery"
+                      ? "bg-purple-700 text-white shadow-xs"
+                      : "text-slate-700 hover:text-slate-900"
+                  }`}
+                >
+                  Teslim / Garanti
+                </button>
+              </div>
+
+              {/* Print Dialog Button */}
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="px-4 py-2 rounded-xl bg-[#8252F6] hover:bg-[#703EE5] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 border border-slate-300 transition-all cursor-pointer shadow-xs active:scale-95"
+                title="Yazıcıdan Doğrudan Yazdır"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-4 h-4 text-slate-700" />
                 <span>Yazdır</span>
               </button>
+
+              {/* PDF Download Button */}
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                disabled={isExportingPDF}
+                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                title="A4 Formatında PDF Olarak İndir"
+              >
+                {isExportingPDF ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>{isExportingPDF ? "PDF Hazırlanıyor..." : "A4 PDF İndir"}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setPrintRecord(null)}
@@ -1085,156 +1189,330 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl w-full max-w-3xl mx-auto flex flex-col shadow-sm border border-slate-200 overflow-hidden">
-
-            {/* Yazdırma Belge Alanı */}
-            <div className="p-8 overflow-y-auto space-y-6 text-slate-900 bg-white font-sans text-xs" id="printable-service-slip">
+          <div className="w-full flex justify-center py-4 print:py-0">
+            {/* Yazdırma Belge Alanı - A4 Standart Format */}
+            <div
+              id="printable-service-slip"
+              className="printable-a4-document a4-sheet printable-content bg-white p-8 sm:p-10 rounded-2xl border border-slate-300 shadow-xl max-w-[210mm] w-full mx-auto text-slate-900 leading-normal"
+            >
               {/* Başlık ve Firma */}
-              <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
-                <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight">MUAVİN TEKNİK SERVİS</h2>
-                  <p className="text-[11px] text-slate-600">Beyaz Eşya, İklimlendirme ve Küçük Ev Aletleri Servisi</p>
-                  <p className="text-[10px] text-slate-500 mt-1">Tel: +90 (212) 444 0 999 | E-posta: servis@muavin.com.tr</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-black text-purple-900 bg-purple-100 px-3 py-1 rounded-md inline-block">
-                    {printRecord.serviceNo}
+              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-5 mb-5">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-xl bg-purple-900 text-white flex items-center justify-center font-black text-lg">
+                      <ThermometerSnowflake className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none uppercase">
+                        {companySettings?.name || "BEYAZ EŞYA, KLİMA & KOMBİ TEKNİK SERVİSİ"}
+                      </h2>
+                      <p className="text-[11px] font-bold text-purple-900 mt-0.5">
+                        İklimlendirme, Soğutma Sistemleri, Kombi & Küçük Ev Aletleri Servis Merkezi
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">Tarih: {printRecord.entryDate}</p>
-                  <p className="text-[10px] text-slate-500">Konum: {printRecord.serviceLocation === "on_site" ? "Saha / Adreste" : "Servis Atölyesi"}</p>
+                  <p className="text-[10px] text-slate-600">
+                    {companySettings?.address || "Merkez Mah. Teknik Servis Cad. No:18 / İstanbul"} • Tel: {companySettings?.phone || "0850 222 00 00"} • E-posta: {companySettings?.email || "servis@muavin.com.tr"}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Vergi Dairesi: {companySettings?.taxOffice || "Kadıköy"} • VKN: {companySettings?.taxNumber || "9870123456"} • Servis Sicil: BYZ-KLM-TR
+                  </p>
                 </div>
+
+                {/* Right Barcode & Service Identity */}
+                <div className="text-right space-y-1.5">
+                  <div className="inline-flex flex-col items-end">
+                    <svg className="w-36 h-7" viewBox="0 0 144 28" fill="currentColor">
+                      <rect x="0" y="0" width="3" height="28" />
+                      <rect x="5" y="0" width="1.5" height="28" />
+                      <rect x="9" y="0" width="4" height="28" />
+                      <rect x="15" y="0" width="2" height="28" />
+                      <rect x="19" y="0" width="1.5" height="28" />
+                      <rect x="23" y="0" width="3.5" height="28" />
+                      <rect x="29" y="0" width="2" height="28" />
+                      <rect x="33" y="0" width="4.5" height="28" />
+                      <rect x="40" y="0" width="1.5" height="28" />
+                      <rect x="44" y="0" width="3" height="28" />
+                      <rect x="49" y="0" width="2.5" height="28" />
+                      <rect x="54" y="0" width="1.5" height="28" />
+                      <rect x="58" y="0" width="4" height="28" />
+                      <rect x="64" y="0" width="2" height="28" />
+                      <rect x="68" y="0" width="3" height="28" />
+                      <rect x="73" y="0" width="1.5" height="28" />
+                      <rect x="77" y="0" width="4" height="28" />
+                      <rect x="83" y="0" width="2.5" height="28" />
+                      <rect x="88" y="0" width="1.5" height="28" />
+                      <rect x="92" y="0" width="3" height="28" />
+                      <rect x="97" y="0" width="4" height="28" />
+                      <rect x="103" y="0" width="2" height="28" />
+                      <rect x="107" y="0" width="1.5" height="28" />
+                      <rect x="111" y="0" width="3.5" height="28" />
+                      <rect x="117" y="0" width="2" height="28" />
+                      <rect x="121" y="0" width="4" height="28" />
+                      <rect x="127" y="0" width="1.5" height="28" />
+                      <rect x="131" y="0" width="3" height="28" />
+                      <rect x="136" y="0" width="2.5" height="28" />
+                      <rect x="141" y="0" width="3" height="28" />
+                    </svg>
+                    <span className="font-mono text-[11px] font-black tracking-wider text-purple-950 block">
+                      {printRecord.serviceNo}
+                    </span>
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-600">
+                    Tarih: <span className="font-semibold text-slate-900">{printRecord.entryDate}</span>
+                  </div>
+                  <div className="inline-block bg-purple-100 text-purple-950 font-bold text-[10px] px-2.5 py-0.5 rounded-md border border-purple-200">
+                    {printRecord.serviceLocation === "on_site" ? "SAHA / ADRESTE SERVİS" : "SERVİS ATÖLYESİ"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Title Banner */}
+              <div
+                className={`py-2 px-4 rounded-xl font-black text-center uppercase tracking-wider text-sm mb-5 border ${
+                  printDocType === "reception"
+                    ? "bg-purple-900 text-white border-purple-950"
+                    : printDocType === "work_order"
+                    ? "bg-slate-900 text-white border-slate-950"
+                    : printDocType === "quote"
+                    ? "bg-amber-600 text-white border-amber-700"
+                    : "bg-emerald-800 text-white border-emerald-900"
+                }`}
+              >
+                {printDocType === "reception" && "BEYAZ EŞYA & KLİMA SERVİS KABUL VE TESLİM ALMA FİŞİ"}
+                {printDocType === "work_order" && "ATÖLYE & SAHA TEKNİK SERVİS İŞ EMRİ FORMU"}
+                {printDocType === "quote" && "YEDEK PARÇA, İŞÇİLİK VE RESMİ FİYAT TEKLİFİ"}
+                {printDocType === "delivery" && "İŞ BİTİMİ, SERVİS RAPORU VE GARANTİ BELGESİ"}
               </div>
 
               {/* Müşteri ve Cihaz Bilgisi Grid */}
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <div className="space-y-1">
-                  <strong className="text-slate-900 block font-bold">MÜŞTERİ BİLGİLERİ</strong>
-                  <p>Ad Soyad / Firma: <strong>{printRecord.contactName}</strong></p>
-                  <p>Telefon: {printRecord.contactPhone}</p>
-                  <p>Adres: {printRecord.serviceAddress || "Servis Merkezine Getirildi"}</p>
+              <div className="grid grid-cols-2 gap-4 mb-5">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5 text-xs">
+                  <h4 className="font-black text-purple-950 uppercase border-b border-slate-200 pb-1 text-[11px] flex items-center justify-between">
+                    <span>CİHAZ BİLGİLERİ</span>
+                    <span className="font-mono text-purple-800">{categoryConfig[printRecord.category]?.label || "Beyaz Eşya"}</span>
+                  </h4>
+                  <div className="grid grid-cols-2 gap-y-1 text-[11px]">
+                    <span className="text-slate-500 font-medium">Cihaz / Tür:</span>
+                    <span className="font-bold text-slate-900">{deviceTypeLabels[printRecord.deviceType] || printRecord.deviceType}</span>
+                    <span className="text-slate-500 font-medium">Marka / Model:</span>
+                    <span className="font-bold text-slate-900">{printRecord.brand} {printRecord.model}</span>
+                    <span className="text-slate-500 font-medium">Seri No:</span>
+                    <span className="font-mono font-bold text-purple-950">{printRecord.serialNumber || "-"}</span>
+                    {printRecord.gasType && printRecord.gasType !== "none" && (
+                      <>
+                        <span className="text-slate-500 font-medium">Soğutucu Gaz:</span>
+                        <span className="font-bold text-cyan-800 font-mono">❄️ {printRecord.gasType}</span>
+                      </>
+                    )}
+                    <span className="text-slate-500 font-medium">Servis Konumu:</span>
+                    <span className="text-slate-800 font-semibold">{printRecord.serviceLocation === "on_site" ? "Saha / Adreste" : "Servis Atölyesi"}</span>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <strong className="text-slate-900 block font-bold">CİHAZ BİLGİLERİ</strong>
-                  <p>Kategori: {categoryConfig[printRecord.category]?.label}</p>
-                  <p>Cihaz / Tür: {deviceTypeLabels[printRecord.deviceType] || printRecord.deviceType}</p>
-                  <p>Marka / Model: <strong>{printRecord.brand} {printRecord.model}</strong></p>
-                  <p>Seri No: {printRecord.serialNumber || "-"}</p>
-                  {printRecord.gasType && printRecord.gasType !== "none" && <p>Gaz Türü: {printRecord.gasType}</p>}
+
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5 text-xs">
+                  <h4 className="font-black text-purple-950 uppercase border-b border-slate-200 pb-1 text-[11px] flex items-center justify-between">
+                    <span>MÜŞTERİ BİLGİLERİ</span>
+                    <span className="text-[10px] font-bold text-slate-500">MÜŞTERİ KAYDI</span>
+                  </h4>
+                  <div className="grid grid-cols-2 gap-y-1 text-[11px]">
+                    <span className="text-slate-500 font-medium">Müşteri / Cari:</span>
+                    <span className="font-bold text-slate-900">{printRecord.contactName}</span>
+                    <span className="text-slate-500 font-medium">İletişim Telefonu:</span>
+                    <span className="font-bold text-slate-900 font-mono">{printRecord.contactPhone}</span>
+                    <span className="text-slate-500 font-medium">Servis Adresi:</span>
+                    <span className="text-slate-800 font-medium">{printRecord.serviceAddress || "Servis Merkezine Getirildi"}</span>
+                    <span className="text-slate-500 font-medium">Sorumlu Teknisyen:</span>
+                    <span className="font-bold text-purple-950">{printRecord.assignedTechnicianName || "Atölye Teknisyeni"}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Arıza ve Yapılan İşlem */}
-              <div className="space-y-2">
-                {/* Teslim Alınan Aksesuarlar & Fiziksel Durum */}
-                <div className="grid grid-cols-2 gap-3 text-[11px]">
-                  <div className="bg-purple-50/50 p-2.5 rounded-lg border border-purple-200">
-                    <strong className="block text-purple-950 mb-0.5 font-bold uppercase text-[10px]">Teslim Alınan Aksesuar & Donanımlar:</strong>
-                    <p className="text-slate-800 font-medium">
-                      {printRecord.accessoriesReceived || "Harici aksesuar teslim alınmadı (Yalnız Cihaz)."}
-                    </p>
-                  </div>
-                  <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200">
-                    <strong className="block text-amber-950 mb-0.5 font-bold uppercase text-[10px]">Cihaz Fiziksel Durumu & Deformasyon:</strong>
-                    <p className="text-slate-800 font-medium">
-                      {printRecord.damagePhysicalCondition ? (
-                        <span className="text-amber-950 font-bold">{printRecord.damagePhysicalCondition}</span>
-                      ) : (
-                        <span className="text-emerald-800 font-bold">Belirgin çizik, kırık veya kusur bulunmamaktadır.</span>
-                      )}
-                    </p>
-                  </div>
+              {/* Aksesuarlar & Fiziksel Durum */}
+              <div className="grid grid-cols-2 gap-3 mb-4 text-xs">
+                <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200/90 space-y-1">
+                  <span className="text-[10px] font-black text-purple-950 uppercase block">
+                    Teslim Alınan Aksesuar & Donanımlar:
+                  </span>
+                  <p className="text-[11px] font-semibold text-slate-900">
+                    {printRecord.accessoriesReceived || "Harici aksesuar teslim alınmadı (Yalnız Cihaz)."}
+                  </p>
                 </div>
+                <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/90 space-y-1">
+                  <span className="text-[10px] font-black text-amber-950 uppercase block">
+                    Cihaz Fiziksel Durumu & Deformasyon:
+                  </span>
+                  <p className="text-[11px] font-semibold text-slate-900">
+                    {printRecord.damagePhysicalCondition ? (
+                      <span className="text-amber-950 font-bold">{printRecord.damagePhysicalCondition}</span>
+                    ) : (
+                      <span className="text-emerald-800 font-bold">Belirgin çizik, kırık veya kusur bulunmamaktadır.</span>
+                    )}
+                  </p>
+                </div>
+              </div>
 
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <strong className="block text-slate-900 mb-0.5">Bildirilen Şikayet / Arıza:</strong>
-                  <p className="text-slate-700">{printRecord.customerProblemDescription}</p>
+              {/* Şikayet ve Teknisyen Raporu */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mb-4 text-xs">
+                <div>
+                  <span className="text-[10px] font-black text-slate-600 uppercase block">Bildirilen Şikayet / Arıza:</span>
+                  <p className="text-[11px] font-semibold text-slate-900 mt-0.5">
+                    {printRecord.customerProblemDescription || "Genel kontrol ve periyodik bakım"}
+                  </p>
                 </div>
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <strong className="block text-slate-900 mb-0.5">Teknik Servis Teşhis ve Yapılan İşlemler:</strong>
-                  <p className="text-slate-700">{printRecord.technicianReport || "Bakım ve onarım işlemleri gerçekleştirildi."}</p>
-                </div>
+                {printRecord.technicianReport && (
+                  <div className="pt-1.5 border-t border-slate-200">
+                    <span className="text-[10px] font-black text-purple-950 uppercase block">Teknik Servis Teşhis ve Yapılan İşlemler:</span>
+                    <p className="text-[11px] font-semibold text-slate-900 mt-0.5">
+                      {printRecord.technicianReport}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Parça ve İşçilik Tablosu */}
-              <div className="space-y-1">
-                <strong className="block text-slate-900 font-bold">KULLANILAN YEDEK PARÇALAR & İŞÇİLİK</strong>
-                <table className="w-full border-collapse text-left border border-slate-300 text-[11px]">
+              <div className="border border-slate-300 rounded-xl overflow-hidden mb-4">
+                <div className="bg-slate-100 py-1.5 px-3 border-b border-slate-300 font-black text-slate-800 text-[11px] uppercase tracking-wide">
+                  KULLANILAN YEDEK PARÇALAR & TEKNİK SERVİS İŞÇİLİKLERİ
+                </div>
+                <table className="w-full text-left text-[11px] border-collapse">
                   <thead>
-                    <tr className="bg-slate-100 border-b border-slate-300 font-bold">
-                      <th className="p-1.5 border-r border-slate-300">İşlem / Parça Tanımı</th>
-                      <th className="p-1.5 border-r border-slate-300 text-center">Adet/Saat</th>
-                      <th className="p-1.5 border-r border-slate-300 text-right">Birim Fiyat</th>
-                      <th className="p-1.5 border-r border-slate-300 text-center">KDV</th>
-                      <th className="p-1.5 text-right">Toplam</th>
+                    <tr className="bg-slate-50 border-b border-slate-300 text-slate-700 font-bold">
+                      <th className="py-2 px-3">İşlem / Parça Tanımı</th>
+                      <th className="py-2 px-2">Kalem Türü</th>
+                      <th className="py-2 px-2 text-center">Adet/Saat</th>
+                      <th className="py-2 px-3 text-right">Birim Fiyat</th>
+                      <th className="py-2 px-2 text-center">KDV %</th>
+                      <th className="py-2 px-3 text-right">Toplam (₺)</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {printRecord.parts?.map((p) => (
-                      <tr key={p.id} className="border-b border-slate-200">
-                        <td className="p-1.5 border-r border-slate-300 font-medium">{p.partName} (Yedek Parça)</td>
-                        <td className="p-1.5 border-r border-slate-300 text-center">{p.quantity}</td>
-                        <td className="p-1.5 border-r border-slate-300 text-right">{p.unitPrice.toLocaleString("tr-TR")} ₺</td>
-                        <td className="p-1.5 border-r border-slate-300 text-center">%{p.vatRate}</td>
-                        <td className="p-1.5 text-right font-bold">{p.total.toLocaleString("tr-TR")} ₺</td>
+                  <tbody className="divide-y divide-slate-200">
+                    {(printRecord.parts || []).map((p) => (
+                      <tr key={p.id}>
+                        <td className="py-1.5 px-3 font-semibold text-slate-900">{p.partName}</td>
+                        <td className="py-1.5 px-2 text-slate-500">Yedek Parça</td>
+                        <td className="py-1.5 px-2 text-center font-mono">{p.quantity} Adet</td>
+                        <td className="py-1.5 px-3 text-right font-mono">₺{(Number(p.unitPrice) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="py-1.5 px-2 text-center font-mono">%{p.vatRate ?? 20}</td>
+                        <td className="py-1.5 px-3 text-right font-bold text-slate-900 font-mono">
+                          ₺{(Number(p.total) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
                       </tr>
                     ))}
-                    {printRecord.labors?.map((l) => (
-                      <tr key={l.id} className="border-b border-slate-200">
-                        <td className="p-1.5 border-r border-slate-300 font-medium">{l.operationName} (İşçilik)</td>
-                        <td className="p-1.5 border-r border-slate-300 text-center">{l.hours}</td>
-                        <td className="p-1.5 border-r border-slate-300 text-right">{l.hourlyRate.toLocaleString("tr-TR")} ₺</td>
-                        <td className="p-1.5 border-r border-slate-300 text-center">%{l.vatRate}</td>
-                        <td className="p-1.5 text-right font-bold">{l.total.toLocaleString("tr-TR")} ₺</td>
+                    {(printRecord.labors || []).map((l) => (
+                      <tr key={l.id}>
+                        <td className="py-1.5 px-3 font-semibold text-purple-900">İşçilik: {l.operationName}</td>
+                        <td className="py-1.5 px-2 text-slate-500">Teknisyen İşçilik</td>
+                        <td className="py-1.5 px-2 text-center font-mono">{l.hours} Saat</td>
+                        <td className="py-1.5 px-3 text-right font-mono">₺{(Number(l.hourlyRate) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="py-1.5 px-2 text-center font-mono">%{l.vatRate ?? 20}</td>
+                        <td className="py-1.5 px-3 text-right font-bold text-slate-900 font-mono">
+                          ₺{(Number(l.total) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
                       </tr>
                     ))}
+                    {(!printRecord.parts || printRecord.parts.length === 0) && (!printRecord.labors || printRecord.labors.length === 0) && (
+                      <tr>
+                        <td colSpan={6} className="py-3 px-3 text-center text-slate-400 italic">
+                          Kayıtlı yedek parça veya işçilik kalemi bulunmamaktadır (Yalnız Kontrol / Teslim).
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
 
               {/* Alt Toplamlar */}
-              <div className="flex justify-end">
-                <div className="w-56 space-y-1 text-right text-xs">
-                  <div className="flex justify-between text-slate-500">
-                    <span>Parça Tutarı:</span>
-                    <span>{printRecord.partsTotal.toLocaleString("tr-TR")} ₺</span>
+              <div className="flex justify-end mb-5">
+                <div className="w-72 bg-slate-50 p-3 rounded-xl border border-slate-300 space-y-1 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Yedek Parça Tutarı:</span>
+                    <span className="font-mono font-bold">₺{(Number(printRecord.partsTotal) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>İşçilik Tutarı:</span>
-                    <span>{printRecord.laborTotal.toLocaleString("tr-TR")} ₺</span>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Teknik İşçilik Tutarı:</span>
+                    <span className="font-mono font-bold">₺{(Number(printRecord.laborTotal) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>Toplam KDV:</span>
-                    <span>{printRecord.totalVat.toLocaleString("tr-TR")} ₺</span>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Hesaplanan KDV (%20):</span>
+                    <span className="font-mono font-bold">₺{(Number(printRecord.totalVat) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  <div className="flex justify-between font-black text-sm text-slate-900 pt-1 border-t border-slate-400">
-                    <span>GENEL TOPLAM:</span>
-                    <span>{printRecord.grandTotal.toLocaleString("tr-TR")} ₺</span>
+                  <div
+                    style={{
+                      backgroundColor: "#83b8ff",
+                      borderColor: "#60a5fa",
+                      WebkitPrintColorAdjust: "exact",
+                      printColorAdjust: "exact",
+                    }}
+                    className="flex justify-between items-center font-black text-sm text-slate-950 p-2.5 rounded-lg border mt-1 print:bg-[#83b8ff]"
+                  >
+                    <span className="text-[11px] font-black uppercase tracking-wide text-slate-900">İŞLEM TUTARI / BAKİYE:</span>
+                    <span className="font-mono text-base font-black text-slate-950">₺{(Number(printRecord.grandTotal) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>
 
               {/* Garanti & Güvenlik Şartları */}
-              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[10px] text-slate-500 space-y-0.5">
-                <p>• Değişen orijinal yedek parçalar montaj tarihinden itibaren 1 yıl garanti kapsamındadır.</p>
-                <p>• Kullanıcı hatası, elektrik voltaj dalgalanmaları veya yetkisiz müdahaleler garanti dışıdır.</p>
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[9.5px] text-slate-500 space-y-0.5 mb-6">
+                <p className="font-bold text-slate-700 uppercase">Garanti Koşulları & Servis Güvenlik Şartları:</p>
+                {printDocType === "reception" && (
+                  <>
+                    <p>1. Servise kabul edilen cihazın üzerindeki kozmetik deformasyonlar kabul anında tutanağa işlenmiştir.</p>
+                    <p>2. Müşteri onayı alınmadan ilave parça değişimi yapılmaz ve ücret talep edilmez.</p>
+                    <p>3. 90 gün içinde teslim alınmayan cihazlar için yasal tebligat prosedürü uygulanır.</p>
+                  </>
+                )}
+                {printDocType === "work_order" && (
+                  <>
+                    <p>1. Bu form teknik servis atölye / saha ekibi için resmi görev ve montaj protokolüdür.</p>
+                    <p>2. Soğutucu gaz şarjı ve elektrik izolasyon testleri fabrika standartlarına göre yapılmıştır.</p>
+                  </>
+                )}
+                {printDocType === "quote" && (
+                  <>
+                    <p>1. İşbu yedek parça ve onarım teklifi düzenlendiği tarihten itibaren 7 iş günü geçerlidir.</p>
+                    <p>2. Teklif edilen orijinal yedek parçalar üretici garantilidir.</p>
+                  </>
+                )}
+                {printDocType === "delivery" && (
+                  <>
+                    <p>1. Değişen orijinal yedek parçalar montaj tarihinden itibaren 1 yıl süreyle servisimiz garantisi altındadır.</p>
+                    <p>2. Elektrik voltaj dalgalanması, kullanıcı hatası veya harici yetkisiz müdahaleler garanti kapsamı dışındadır.</p>
+                    <p>3. Cihaz çalışır ve fonksiyon testleri tamamlanmış olarak müşteriye eksiksiz teslim edilmiştir.</p>
+                  </>
+                )}
               </div>
 
               {/* İmza Alanları */}
-              <div className="grid grid-cols-2 gap-8 pt-6 border-t border-slate-300 text-center">
-                <div className="space-y-8">
-                  <p className="font-bold text-slate-900">Teknisyen / Servis Yetkilisi</p>
-                  <p className="text-[10px] text-slate-400">İmza & Kaşe</p>
+              <div className="grid grid-cols-2 gap-8 pt-4 border-t-2 border-slate-300 text-xs avoid-break">
+                <div className="text-center space-y-1">
+                  <p className="font-black text-slate-800">Teknisyen / Servis Yetkilisi</p>
+                  <p className="text-[11px] text-slate-600 font-semibold">{printRecord.assignedTechnicianName || "Yetkili Servis Teknisyeni"}</p>
+                  <div className="h-14 flex items-end justify-center">
+                    <div className="border-b border-dashed border-slate-400 w-44 mx-auto" />
+                  </div>
+                  <span className="text-[10px] text-slate-400 block">İmza & Kaşe</span>
                 </div>
-                <div className="space-y-8">
-                  <p className="font-bold text-slate-900">Müşteri / Teslim Alan</p>
-                  <p className="text-[10px] text-slate-400">İmza</p>
+                <div className="text-center space-y-1">
+                  <p className="font-black text-slate-800">Müşteri / Teslim Alan</p>
+                  <p className="text-[11px] text-slate-600 font-semibold">{printRecord.contactName}</p>
+                  <div className="h-14 flex items-end justify-center">
+                    <div className="border-b border-dashed border-slate-400 w-44 mx-auto" />
+                  </div>
+                  <span className="text-[10px] text-slate-400 block">İmza</span>
                 </div>
+              </div>
+
+              {/* Bottom A4 Standard Sheet Footer */}
+              <div className="mt-6 pt-3 border-t border-slate-200 flex justify-between items-center text-[9px] text-slate-400">
+                <span>Muavin ERP • Beyaz Eşya & Klima Servis Yönetimi</span>
+                <span>Belge Doğrulama Kodu: {printRecord.serviceNo}-{printRecord.brand}</span>
+                <span>A4 Standart Formatı • Sayfa 1 / 1</span>
               </div>
             </div>
           </div>
         </DetailPageLayout>
-    );
-  }
+      )}
 
       {/* FULL-PAGE DETAIL VIEW: SERVİS KAYDI EKLEME / DÜZENLEME */}
       {isModalOpen && (
@@ -1703,22 +1981,22 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                   <div className="flex items-center gap-6">
                     <div>
                       <span className="text-slate-400 block text-[10px]">PARÇA TOPLAMI</span>
-                      <span className="font-bold text-sm">{(formData.partsTotal || 0).toLocaleString("tr-TR")} ₺</span>
+                      <span className="font-bold text-sm">{(formData.partsTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">İŞÇİLİK TOPLAMI</span>
-                      <span className="font-bold text-sm">{(formData.laborTotal || 0).toLocaleString("tr-TR")} ₺</span>
+                      <span className="font-bold text-sm">{(formData.laborTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">HESAPLANAN KDV</span>
-                      <span className="font-bold text-sm">{(formData.totalVat || 0).toLocaleString("tr-TR")} ₺</span>
+                      <span className="font-bold text-sm">{(formData.totalVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺</span>
                     </div>
                   </div>
 
                   <div className="text-right">
                     <span className="text-purple-300 block text-[10px] font-bold">GENEL TOPLAM (KDV DAHİL)</span>
                     <span className="text-xl font-black text-white">
-                      {(formData.grandTotal || 0).toLocaleString("tr-TR")} ₺
+                      {(formData.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                     </span>
                   </div>
                 </div>
@@ -1859,14 +2137,55 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
             </button>
           </div>
 
-          <button
-            onClick={handleOpenCreateModal}
-            className="text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all hover:opacity-90 active:scale-95"
-            style={{ backgroundColor: theme.primaryColor }}
-          >
-            <Plus className="w-4 h-4 font-bold" />
-            <span>Yeni Servis Kaydı</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ExportButtons
+              getExportData={() => {
+                const headers = [
+                  "Servis No",
+                  "Cihaz & Kategori",
+                  "Marka & Model",
+                  "Müşteri Adı",
+                  "Telefon",
+                  "Adres / Bölge",
+                  "Şikayet / Arıza",
+                  "Atanan Teknisyen",
+                  "Toplam Tutar",
+                  "Durum",
+                  "Kayıt Tarihi",
+                ];
+                const rows = filteredServices.map((r) => [
+                  r.serviceNo,
+                  r.category || "Beyaz Eşya",
+                  `${r.brand} ${r.model}`,
+                  r.customerName,
+                  r.customerPhone || "-",
+                  r.customerAddress || "-",
+                  r.customerComplaint || "-",
+                  r.technicianName || "Atanmadı",
+                  formatCurrency(r.totalAmount || 0, "TRY"),
+                  r.status || "Bekliyor",
+                  r.createdAt ? new Date(r.createdAt).toLocaleDateString("tr-TR") : "-",
+                ]);
+                return {
+                  filename: `Beyaz_Esya_Klima_Servis_Listesi_${new Date().toISOString().split("T")[0]}`,
+                  sheetName: "Servis Kayıtları",
+                  title: "BEYAZ EŞYA VE KLİMA SERVİS İŞ EMİRLERİ LİSTESİ",
+                  subtitle: `Toplam ${filteredServices.length} Servis Kaydı | Rapor Tarihi: ${new Date().toLocaleDateString("tr-TR")}`,
+                  headers,
+                  rows,
+                };
+              }}
+              size="sm"
+            />
+            <button
+              onClick={handleOpenCreateModal}
+              className="text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center gap-2 cursor-pointer shadow-xs transition-all hover:opacity-90 active:scale-95"
+              style={{ backgroundColor: theme.primaryColor }}
+            >
+              <Plus className="w-4 h-4 font-bold" />
+              <span>Yeni Servis Kaydı</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2435,10 +2754,10 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                     <div className="text-left lg:text-right">
                       <div className="text-xs text-slate-500 font-medium">Toplam Tutar (KDV Dahil)</div>
                       <div className="text-xl font-black text-slate-900">
-                        {record.grandTotal.toLocaleString("tr-TR")} ₺
+                        {(Number(record.grandTotal) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                       </div>
                       <div className="text-[11px] text-slate-400">
-                        Parça: {record.partsTotal.toLocaleString("tr-TR")} ₺ | İşçilik: {record.laborTotal.toLocaleString("tr-TR")} ₺
+                        Parça: {(Number(record.partsTotal) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺ | İşçilik: {(Number(record.laborTotal) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                       </div>
                     </div>
 
@@ -2561,11 +2880,11 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                                   <div>
                                     <p className="font-semibold text-slate-800">{part.partName}</p>
                                     <p className="text-[11px] text-slate-400">
-                                      {part.quantity} Adet × {part.unitPrice.toLocaleString("tr-TR")} ₺ | KDV: %{part.vatRate} | Garanti: {part.warrantyMonths || 12} Ay
+                                      {part.quantity} Adet × {(Number(part.unitPrice) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺ | KDV: %{part.vatRate} | Garanti: {part.warrantyMonths || 12} Ay
                                     </p>
                                   </div>
                                   <span className="font-bold text-slate-900">
-                                    {part.total.toLocaleString("tr-TR")} ₺
+                                    {(Number(part.total) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                                   </span>
                                 </div>
                               ))}
@@ -2587,11 +2906,11 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                                   <div>
                                     <p className="font-semibold text-slate-800">{labor.operationName}</p>
                                     <p className="text-[11px] text-slate-400">
-                                      {labor.hours} Saat × {labor.hourlyRate.toLocaleString("tr-TR")} ₺ {labor.technicianName && `(${labor.technicianName})`}
+                                      {labor.hours} Saat × {(Number(labor.hourlyRate) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺ {labor.technicianName && `(${labor.technicianName})`}
                                     </p>
                                   </div>
                                   <span className="font-bold text-slate-900">
-                                    {labor.total.toLocaleString("tr-TR")} ₺
+                                    {(Number(labor.total) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                                   </span>
                                 </div>
                               ))}

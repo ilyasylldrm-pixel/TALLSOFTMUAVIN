@@ -481,7 +481,7 @@ export const ManufacturingCostPackagesAnalysis: React.FC<
             m² Birim Maliyet
           </div>
           <div className="text-sm font-black text-emerald-900">
-            {stats.unitCostM2.toLocaleString("tr-TR")} TL / m²
+            {stats.unitCostM2.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL / m²
           </div>
           <div className="text-3xs text-emerald-700 font-medium">
             Toplam Brüt {totalArea.toLocaleString("tr-TR")} m²

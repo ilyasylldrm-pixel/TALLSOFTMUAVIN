@@ -10,6 +10,7 @@ import {
   Search,
   FileText,
   Eye,
+  EyeOff,
   Download,
   RefreshCw,
   Bell,
@@ -25,8 +26,11 @@ import {
   ChevronRight,
   Database,
   Building,
+  Building2,
   Mail,
   KeyRound,
+  Lock,
+  Copy,
   FileSpreadsheet,
   FileCheck,
   Check,
@@ -34,6 +38,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { UserProfileData, UserFileMetadata } from "../lib/firebase";
+import { CompanyItem } from "../types";
+import { getCompaniesList } from "../utils/storage";
 import {
   getActivePayrollParameters,
   PayrollYearlyParameters,
@@ -53,27 +59,43 @@ import {
 
 interface AdminOverviewPanelProps {
   users: UserProfileData[];
+  companies?: CompanyItem[];
   files: UserFileMetadata[];
-  onNavigateTab: (tab: "matrix" | "users" | "files" | "payroll" | "broadcast" | "audit") => void;
+  onNavigateTab: (tab: "matrix" | "users" | "companies" | "files" | "payroll" | "broadcast" | "audit") => void;
   onOpenAddUserModal: () => void;
+  onOpenAddCompanyModal?: () => void;
+  onEditCompany?: (comp: CompanyItem) => void;
   onPreviewFile: (file: UserFileMetadata) => void;
   onDeleteUser?: (user: UserProfileData) => void;
   currentUser: any;
 }
 
-type FilterCategory = "all" | "users" | "files" | "payroll" | "broadcasts" | "audit";
+type FilterCategory = "all" | "companies" | "users" | "files" | "payroll" | "broadcasts" | "audit";
 
 export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
   users,
+  companies: propCompanies,
   files,
   onNavigateTab,
   onOpenAddUserModal,
+  onOpenAddCompanyModal,
+  onEditCompany,
   onPreviewFile,
   onDeleteUser,
   currentUser,
 }) => {
+  const companies = useMemo(() => propCompanies || getCompaniesList(), [propCompanies]);
   const [filterCategory, setFilterCategory] = useState<FilterCategory>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [showPasswords, setShowPasswords] = useState(true);
+  const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, key: string) => {
+    if (!text) return;
+    navigator.clipboard?.writeText(text);
+    setCopiedCredentialKey(key);
+    setTimeout(() => setCopiedCredentialKey(null), 2000);
+  };
   const [payrollParams, setPayrollParams] = useState<PayrollYearlyParameters>(() => getActivePayrollParameters());
   const [announcements, setAnnouncements] = useState<BroadcastAnnouncement[]>([]);
   const [auditLogs, setAuditLogs] = useState<SystemAuditLogItem[]>([]);
@@ -341,14 +363,14 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
             </span>
           </div>
           <div className="text-2xl font-black text-slate-900">
-            {payrollParams.grossMinWage?.toLocaleString("tr-TR")} ₺
+            {payrollParams.grossMinWage?.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
           </div>
           <div className="text-xs font-bold text-slate-700 mt-1 flex items-center justify-between">
             <span>Brüt Asgari Ücret (Taban)</span>
             <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            Tavan: {payrollParams.sgkBaseCeiling?.toLocaleString("tr-TR")} ₺ • %{((payrollParams.sgkEmployerStandardRate || 0.205) * 100).toFixed(1)} İşveren
+            Tavan: {payrollParams.sgkBaseCeiling?.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺ • %{((payrollParams.sgkEmployerStandardRate || 0.205) * 100).toFixed(1)} İşveren
           </p>
         </div>
 
@@ -373,6 +395,285 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
           <p className="text-[11px] text-slate-500 mt-1">
             Tüm kullanıcılara dağıtılan mevzuat bildirimleri
           </p>
+        </div>
+      </div>
+
+      {/* 🔑 2.5. TANIMLANAN ŞİRKETLERİN VE KULLANICILARIN KULLANICI İSİMLERİ & ŞİFRELERİ TABLOSU */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="p-5 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#131b2e] text-white flex items-center justify-center shrink-0 border border-[#222a3d]">
+              <KeyRound className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Tanımlanan Şirketler ve Kullanıcıların Giriş Bilgileri (Kullanıcı Adı & Şifre)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Sistemde tanımlı tüm şirketlerin ({companies.length} şirket) ve kullanıcı/personel hesaplarının ({users.length} kullanıcı) giriş kullanıcı adları ve şifreleri aşağıda listelenmektedir.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowPasswords(!showPasswords)}
+              className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              {showPasswords ? <EyeOff className="w-4 h-4 text-slate-500" /> : <Eye className="w-4 h-4 text-[#0f6bae]" />}
+              <span>{showPasswords ? "Şifreleri Gizle" : "Şifreleri Göster"}</span>
+            </button>
+            {onOpenAddCompanyModal && (
+              <button
+                type="button"
+                onClick={onOpenAddCompanyModal}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Building2 className="w-4 h-4" />
+                <span>Yeni Şirket</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onOpenAddUserModal}
+              className="px-3.5 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Yeni Kullanıcı</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-5 grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {/* Sol Tablo: Tanımlanan Şirketler & Giriş Şifreleri */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden flex flex-col">
+            <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-sky-400" />
+                <span className="text-xs font-bold">Tanımlanan Şirketlerin Giriş Bilgileri ({companies.length})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateTab("companies")}
+                className="text-[11px] font-semibold text-sky-300 hover:text-white flex items-center gap-1 cursor-pointer"
+              >
+                <span>Şirket Yönetimi</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                    <th className="p-3">Şirket / İşletme Adı</th>
+                    <th className="p-3">Kullanıcı Adı</th>
+                    <th className="p-3">Giriş Şifresi</th>
+                    <th className="p-3 text-right">İşlem</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {companies.map((comp) => {
+                    const compUser = comp.loginUsername || "muavin_test";
+                    const compPass = comp.loginPasswordPlain || "Muavin2026!";
+                    const copyKey = `comp_cred_${comp.id}`;
+                    return (
+                      <tr key={comp.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3">
+                          <div className="font-bold text-slate-900">{comp.companyName}</div>
+                          <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                            {comp.vkn ? `VKN: ${comp.vkn}` : comp.tckn ? `TCKN: ${comp.tckn}` : `VKN/TCKN: ${comp.taxNumber}`}
+                            {comp.loginEmail ? ` · ${comp.loginEmail}` : ""}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="inline-flex items-center gap-1.5 font-mono font-bold text-[#0f6bae] bg-blue-50/70 px-2 py-1 rounded border border-blue-200/80">
+                            <span>{compUser}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(compUser, `${copyKey}_u`)}
+                              className="text-slate-400 hover:text-[#0f6bae] cursor-pointer"
+                              title="Kullanıcı Adını Kopyala"
+                            >
+                              {copiedCredentialKey === `${copyKey}_u` ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="inline-flex items-center gap-1.5 font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                            <span>{showPasswords ? compPass : "••••••••"}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(compPass, `${copyKey}_p`)}
+                              className="text-slate-400 hover:text-emerald-700 cursor-pointer"
+                              title="Şifreyi Kopyala"
+                            >
+                              {copiedCredentialKey === `${copyKey}_p` ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCopyText(
+                                  `Şirket: ${comp.companyName}\nKullanıcı Adı: ${compUser}\nŞifre: ${compPass}`,
+                                  copyKey
+                                )
+                              }
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Tüm Giriş Bilgilerini Kopyala"
+                            >
+                              {copiedCredentialKey === copyKey ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span>Kopyalandı</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span>Kopyala</span>
+                                </>
+                              )}
+                            </button>
+                            {onEditCompany && (
+                              <button
+                                type="button"
+                                onClick={() => onEditCompany(comp)}
+                                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-[#0f6bae] rounded text-[11px] font-semibold cursor-pointer transition-colors"
+                              >
+                                Düzenle
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Sağ Tablo: Tanımlanan Kullanıcılar & Giriş Şifreleri */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden flex flex-col">
+            <div className="px-4 py-3 bg-[#131b2e] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold">Tanımlanan Kullanıcıların Giriş Bilgileri ({users.length})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateTab("users")}
+                className="text-[11px] font-semibold text-amber-300 hover:text-white flex items-center gap-1 cursor-pointer"
+              >
+                <span>Kullanıcı Yönetimi</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                    <th className="p-3">Ad Soyad / Rol & Şirket</th>
+                    <th className="p-3">Kullanıcı Adı / E-Posta</th>
+                    <th className="p-3">Giriş Şifresi</th>
+                    <th className="p-3 text-right">İşlem</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {users.map((u, idx) => {
+                    const uname = u.username || (u.email ? u.email.split("@")[0] : "kullanici");
+                    const upass = u.passwordPlain || "Muavin2026!";
+                    const copyKey = `usr_cred_${u.userId || idx}`;
+                    return (
+                      <tr key={u.userId || idx} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3">
+                          <div className="font-bold text-slate-900">{u.name}</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">
+                            {u.role || "Personel"} · {u.companyName || "Genel Merkez"}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="inline-flex items-center gap-1.5 font-mono font-bold text-[#0f6bae] bg-blue-50/70 px-2 py-0.5 rounded border border-blue-200/80 w-fit">
+                              <span>{uname}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(uname, `${copyKey}_u`)}
+                                className="text-slate-400 hover:text-[#0f6bae] cursor-pointer"
+                                title="Kullanıcı Adını Kopyala"
+                              >
+                                {copiedCredentialKey === `${copyKey}_u` ? (
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-500">{u.email}</span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="inline-flex items-center gap-1.5 font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                            <span>{showPasswords ? upass : "••••••••"}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(upass, `${copyKey}_p`)}
+                              className="text-slate-400 hover:text-emerald-700 cursor-pointer"
+                              title="Şifreyi Kopyala"
+                            >
+                              {copiedCredentialKey === `${copyKey}_p` ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCopyText(
+                                `Ad Soyad: ${u.name}\nKullanıcı Adı: ${uname}\nE-Posta: ${u.email}\nŞifre: ${upass}`,
+                                copyKey
+                              )
+                            }
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Tüm Giriş Bilgilerini Kopyala"
+                          >
+                            {copiedCredentialKey === copyKey ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>Kopyalandı</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Kopyala</span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -457,7 +758,17 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                   : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
               }`}
             >
-              Tüm Eklenenler ({users.length + files.length + announcements.length + 5})
+              Tüm Eklenenler ({companies.length + users.length + files.length + announcements.length + 5})
+            </button>
+            <button
+              onClick={() => setFilterCategory("companies")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                filterCategory === "companies"
+                  ? "bg-sky-600 text-white shadow-xs"
+                  : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+              }`}
+            >
+              🏢 Şirketler ({companies.length})
             </button>
             <button
               onClick={() => setFilterCategory("users")}
@@ -517,7 +828,7 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Eklenenlerde ara..."
+              placeholder="Şirket, kullanıcı veya şifre ara..."
               className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-blue-500"
             />
           </div>
@@ -525,6 +836,89 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
 
         {/* 📋 LİSTE GÖRÜNÜMÜ */}
         <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+          {/* 0. ŞİRKETLER */}
+          {(filterCategory === "all" || filterCategory === "companies") && (
+            <div>
+              <div className="px-4 py-2 bg-sky-50/60 border-b border-sky-100 text-[11px] font-bold text-sky-900 uppercase tracking-wider flex items-center justify-between">
+                <span>Tanımlanan Şirketler & Giriş Şifreleri ({companies.length})</span>
+                <button
+                  onClick={() => onNavigateTab("companies")}
+                  className="text-sky-700 hover:underline flex items-center gap-1 font-semibold"
+                >
+                  <span>Şirket Yönetimine Git</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+              {companies
+                .filter(
+                  (c) =>
+                    !searchTerm ||
+                    c.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    c.loginUsername?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    c.vkn?.includes(searchTerm) ||
+                    c.tckn?.includes(searchTerm)
+                )
+                .map((comp) => (
+                  <div
+                    key={comp.id}
+                    className="p-3.5 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-800 font-bold flex items-center justify-center shrink-0 text-xs">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-xs text-slate-900 truncate">{comp.companyName}</span>
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            · {comp.vkn ? `VKN: ${comp.vkn}` : `TCKN: ${comp.tckn || comp.taxNumber}`}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 mt-1 text-[11px] font-mono">
+                          <span className="text-slate-600">
+                            Kullanıcı Adı: <strong className="text-[#0f6bae]">{comp.loginUsername || "muavin_test"}</strong>
+                          </span>
+                          <span className="text-slate-300">·</span>
+                          <span className="text-slate-600">
+                            Şifre: <strong className="text-emerald-700">{showPasswords ? (comp.loginPasswordPlain || "Muavin2026!") : "••••••••"}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCopyText(
+                            `Kullanıcı Adı: ${comp.loginUsername || "muavin_test"} | Şifre: ${comp.loginPasswordPlain || "Muavin2026!"}`,
+                            `list_comp_${comp.id}`
+                          )
+                        }
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        {copiedCredentialKey === `list_comp_${comp.id}` ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        <span>Şifreyi Kopyala</span>
+                      </button>
+                      {onEditCompany && (
+                        <button
+                          type="button"
+                          onClick={() => onEditCompany(comp)}
+                          className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#0f6bae] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                        >
+                          Düzenle
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+
           {/* 1. KULLANICILAR */}
           {(filterCategory === "all" || filterCategory === "users") && (
             <div>
@@ -543,63 +937,101 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                   (u) =>
                     !searchTerm ||
                     u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    u.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     u.role?.toLowerCase().includes(searchTerm.toLowerCase())
                 )
-                .map((u, uIdx) => (
-                  <div
-                    key={u.userId || (u as any).id || `user-${u.email || uIdx}`}
-                    className="p-3.5 hover:bg-slate-50 transition-colors flex items-center justify-between gap-4"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center shrink-0 text-xs">
-                        {u.name?.charAt(0).toUpperCase() || "K"}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs text-slate-900 truncate">{u.name}</span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                            {u.role || "Standart Kullanıcı"}
-                          </span>
-                          {(u.companyName || (u as any).company) && (
-                            <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
-                              • {u.companyName || (u as any).company}
+                .map((u, uIdx) => {
+                  const uname = u.username || (u.email ? u.email.split("@")[0] : "kullanici");
+                  const upass = u.passwordPlain || "Muavin2026!";
+                  return (
+                    <div
+                      key={u.userId || (u as any).id || `user-${u.email || uIdx}`}
+                      className="p-3.5 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center shrink-0 text-xs">
+                          {u.name?.charAt(0).toUpperCase() || "K"}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs text-slate-900 truncate">{u.name}</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                              {u.role || "Standart Kullanıcı"}
                             </span>
-                          )}
+                            {(u.companyName || (u as any).company) && (
+                              <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
+                                • {u.companyName || (u as any).company}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 mt-1 text-[11px] font-mono">
+                            <span className="text-slate-600">
+                              Kullanıcı Adı: <strong className="text-[#0f6bae]">{uname}</strong>
+                            </span>
+                            <span className="text-slate-300">·</span>
+                            <span className="text-slate-600">
+                              Şifre: <strong className="text-emerald-700">{showPasswords ? upass : "••••••••"}</strong>
+                            </span>
+                            <span className="text-slate-300">·</span>
+                            <span className="text-slate-500">{u.email}</span>
+                          </div>
                         </div>
-                        <p className="text-[11px] text-slate-500 truncate font-mono mt-0.5">{u.email}</p>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-right hidden sm:block">
-                        <span className="text-[11px] font-bold text-slate-700 font-mono">
-                          {u.allowedModules?.length || 0} Modül Yetkili
-                        </span>
-                        <div className="text-[10px] text-slate-400">
-                          {u.createdAt ? new Date(u.createdAt).toLocaleDateString("tr-TR") : "Kayıtlı"}
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right hidden sm:block">
+                          <span className="text-[11px] font-bold text-slate-700 font-mono">
+                            {u.allowedModules?.length || 19} Modül Yetkili
+                          </span>
+                          <div className="text-[10px] text-slate-400">
+                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString("tr-TR") : "Kayıtlı"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCopyText(
+                                `Kullanıcı Adı: ${uname} | E-Posta: ${u.email} | Şifre: ${upass}`,
+                                `list_usr_${u.userId || uIdx}`
+                              )
+                            }
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                            title="Giriş Bilgilerini Kopyala"
+                          >
+                            {copiedCredentialKey === `list_usr_${u.userId || uIdx}` ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            <span>Kopyala</span>
+                          </button>
+                          <button
+                            onClick={() => onNavigateTab("matrix")}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                          >
+                            Yetkileri Düzenle
+                          </button>
+                          {onDeleteUser && (u.userId !== currentUser?.id && u.email !== currentUser?.email ? (
+                            <button
+                              onClick={() => onDeleteUser(u)}
+                              className="px-2.5 py-1 text-xs font-bold text-rose-700 hover:text-white bg-rose-50 hover:bg-rose-600 rounded-lg border border-rose-200 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                              title="Kullanıcıyı Kalıcı Olarak Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Sil</span>
+                            </button>
+                          ) : (
+                            <span className="px-2 py-0.5 text-[10px] text-slate-400 bg-slate-100 rounded border border-slate-200 font-medium">
+                              Aktif
+                            </span>
+                          ))}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => onNavigateTab("matrix")}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                        >
-                          Yetkileri Düzenle
-                        </button>
-                        {onDeleteUser && u.userId !== currentUser?.id && u.email !== currentUser?.email && (
-                          <button
-                            onClick={() => onDeleteUser(u)}
-                            className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition-all cursor-pointer"
-                            title="Kullanıcıyı Sil"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           )}
 
@@ -697,19 +1129,19 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                     <div className="flex justify-between text-slate-600">
                       <span>Günlük Taban:</span>
                       <strong className="text-slate-900">
-                        {(payrollParams.dailyMinWage || 1101).toLocaleString("tr-TR")} ₺
+                        {(payrollParams.dailyMinWage || 1101).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                       </strong>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>Aylık Taban (Brüt):</span>
                       <strong className="text-slate-900">
-                        {(payrollParams.grossMinWage || 33030).toLocaleString("tr-TR")} ₺
+                        {(payrollParams.grossMinWage || 33030).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                       </strong>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>Aylık Tavan (7.5x):</span>
                       <strong className="text-purple-700">
-                        {(payrollParams.sgkBaseCeiling || 297270).toLocaleString("tr-TR")} ₺
+                        {(payrollParams.sgkBaseCeiling || 297270).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                       </strong>
                     </div>
                   </div>
@@ -755,19 +1187,19 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                     <div className="flex justify-between text-slate-600">
                       <span>1. Dilim (%15):</span>
                       <strong className="text-slate-900">
-                        {(payrollParams.taxBrackets?.[0]?.limit || 158000).toLocaleString("tr-TR")} ₺
+                        {(payrollParams.taxBrackets?.[0]?.limit || 158000).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                       </strong>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>2. Dilim (%20):</span>
                       <strong className="text-slate-900">
-                        {(payrollParams.taxBrackets?.[1]?.limit || 330000).toLocaleString("tr-TR")} ₺
+                        {(payrollParams.taxBrackets?.[1]?.limit || 330000).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                       </strong>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>Asgari Ücret Vergi İstisnası:</span>
                       <strong className="text-blue-700">
-                        {(payrollParams.minWageTaxExemption || 4211.33).toLocaleString("tr-TR")} ₺
+                        {(payrollParams.minWageTaxExemption || 4211.33).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                       </strong>
                     </div>
                   </div>

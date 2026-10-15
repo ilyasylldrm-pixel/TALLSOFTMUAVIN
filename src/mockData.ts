@@ -4,7 +4,7 @@ import { generateMonthlyIntegratedData } from "./utils/generateMonthlyDemoData";
 const generatedData = generateMonthlyIntegratedData();
 
 export const initialCompanySettings: CompanySettings = {
-  companyName: "Muavin Bilişim & Danışmanlık A.Ş.",
+  companyName: "MUAVİN BİLİŞİM TEKN.DAN.A.Ş.",
   companyTitle: "Muavin Bilişim Teknolojileri ve Danışmanlık Anonim Şirketi",
   taxpayerType: "Anonim Şirket",
   taxOffice: "Mecidiyeköy V.D.",
@@ -38,6 +38,15 @@ export const initialCompanySettings: CompanySettings = {
   defaultBankName: "Garanti BBVA - Levent Ticari Şubesi",
   defaultBankIban: "TR33 0006 2000 0000 0012 3456 78",
   currency: "₺",
+  defaultInvoicePrefix: "MUV2026",
+  defaultVatRate: 20,
+  defaultFoodAllowance: 5500,
+  defaultRoadAllowance: 2500,
+  dailyFoodAllowanceRate: 300,
+  dailyRoadAllowanceRate: 115,
+  foodAllowanceCalculationType: "monthly",
+  roadAllowanceCalculationType: "monthly",
+  applyAllowancesToAllEmployees: true,
   taxCredentials: {
     userCode: "3484702910",
     password: "••••••••",

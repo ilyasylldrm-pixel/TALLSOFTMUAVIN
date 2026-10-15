@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { ExportButtons } from "./ExportButtons";
 import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
-import { ExportData, formatCurrency, formatDate } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate, exportToExcel } from "../utils/exportUtils";
 import {
   Users,
   UserPlus,
@@ -82,13 +82,20 @@ import { PayrollPrintModal } from "./PayrollPrintModal";
 import { BulkPayrollModal } from "./BulkPayrollModal";
 import { AssetCustodyManagement } from "./AssetCustodyManagement";
 import { AdditionalPaymentsModal } from "./AdditionalPaymentsModal";
+import { PuantajScrollPicker } from "./PuantajScrollPicker";
 import { PayrollAdjustmentsTwinPanels } from "./PayrollAdjustmentsTwinPanels";
+import { EmployeeListPrintModal } from "./EmployeeListPrintModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
 import { getActivePayrollParameters } from "../data/payrollParametersData";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
+import {
+  loadPayrollCustomizationsStorage,
+  savePayrollCustomizationsStorage,
+} from "../utils/storage";
+import { getHrCompanyTitle } from "../utils/puantajUtils";
 
 const MONTH_NAMES = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -118,7 +125,10 @@ interface HRManagementProps {
   onAddAsset?: (asset: AssetCustody) => void;
   onUpdateAsset?: (asset: AssetCustody) => void;
   onDeleteAsset?: (assetId: string) => void;
+  transactions?: Transaction[];
   onAddTransaction?: (tx: Transaction) => void;
+  onUpdateTransaction?: (tx: Transaction) => void;
+  onSaveSettings?: (settings: CompanySettings) => void;
 }
 
 export const HRManagement: React.FC<HRManagementProps> = ({
@@ -144,10 +154,15 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   onAddAsset = () => {},
   onUpdateAsset = () => {},
   onDeleteAsset = () => {},
+  transactions = [],
   onAddTransaction,
+  onUpdateTransaction,
+  onSaveSettings,
 }) => {
   const { theme } = useTheme();
-  const [activeSubTab, setActiveSubTab] = useState<"employees" | "payroll" | "leaves" | "advances" | "sgk" | "severance" | "zimmet">("employees");
+  const [activeSubTab, setActiveSubTab] = useState<
+    "employees" | "payroll" | "leaves" | "advances" | "sgk" | "severance" | "zimmet" | "allowances"
+  >("employees");
   const [advanceInnerTab, setAdvanceInnerTab] = useState<"requests" | "legal_deductions">("requests");
 
   // Para Birimi Formatlayıcı (Lira ve Kuruş: ₺12.500,00)
@@ -162,6 +177,52 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
+
+  // Personel Yan Hakları & Ticari Ödenek Parametreleri State
+  const [allowanceForm, setAllowanceForm] = useState({
+    applyAllowancesToAllEmployees: companySettings?.applyAllowancesToAllEmployees ?? true,
+    defaultFoodAllowance: companySettings?.defaultFoodAllowance ?? 5500,
+    dailyFoodAllowanceRate: companySettings?.dailyFoodAllowanceRate ?? 300,
+    foodAllowanceCalculationType: (companySettings?.foodAllowanceCalculationType || "monthly") as "monthly" | "daily",
+    defaultRoadAllowance: companySettings?.defaultRoadAllowance ?? 2500,
+    dailyRoadAllowanceRate: companySettings?.dailyRoadAllowanceRate ?? 115,
+    roadAllowanceCalculationType: (companySettings?.roadAllowanceCalculationType || "monthly") as "monthly" | "daily",
+  });
+  const [isAllowanceSaved, setIsAllowanceSaved] = useState(false);
+  const [allowancePreviewSearch, setAllowancePreviewSearch] = useState("");
+  const [allowancePreviewDep, setAllowancePreviewDep] = useState("all");
+
+  useEffect(() => {
+    if (companySettings) {
+      setAllowanceForm({
+        applyAllowancesToAllEmployees: companySettings.applyAllowancesToAllEmployees ?? true,
+        defaultFoodAllowance: companySettings.defaultFoodAllowance ?? 5500,
+        dailyFoodAllowanceRate: companySettings.dailyFoodAllowanceRate ?? 300,
+        foodAllowanceCalculationType: (companySettings.foodAllowanceCalculationType || "monthly") as "monthly" | "daily",
+        defaultRoadAllowance: companySettings.defaultRoadAllowance ?? 2500,
+        dailyRoadAllowanceRate: companySettings.dailyRoadAllowanceRate ?? 115,
+        roadAllowanceCalculationType: (companySettings.roadAllowanceCalculationType || "monthly") as "monthly" | "daily",
+      });
+    }
+  }, [companySettings]);
+
+  const handleSaveAllowances = () => {
+    const updated: CompanySettings = {
+      ...companySettings,
+      applyAllowancesToAllEmployees: allowanceForm.applyAllowancesToAllEmployees,
+      defaultFoodAllowance: allowanceForm.defaultFoodAllowance,
+      dailyFoodAllowanceRate: allowanceForm.dailyFoodAllowanceRate,
+      foodAllowanceCalculationType: allowanceForm.foodAllowanceCalculationType,
+      defaultRoadAllowance: allowanceForm.defaultRoadAllowance,
+      dailyRoadAllowanceRate: allowanceForm.dailyRoadAllowanceRate,
+      roadAllowanceCalculationType: allowanceForm.roadAllowanceCalculationType,
+    };
+    if (onSaveSettings) {
+      onSaveSettings(updated);
+    }
+    setIsAllowanceSaved(true);
+    setTimeout(() => setIsAllowanceSaved(false), 4000);
+  };
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>("all");
   const [employeeSortBy, setEmployeeSortBy] = useState<
     "name_asc" | "name_desc" | "date_desc" | "date_asc" | "salary_desc" | "salary_asc"
@@ -179,9 +240,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [formsModalAdvanceRequest, setFormsModalAdvanceRequest] = useState<AdvanceRequest | undefined>(undefined);
   const [selectedEmployeeForDetail, setSelectedEmployeeForDetail] = useState<Employee | null>(null);
   const [selectedPayrollRecord, setSelectedPayrollRecord] = useState<PayrollRecord | null>(null);
+  const [isEmployeeListModalOpen, setIsEmployeeListModalOpen] = useState(false);
   const [isPayrollPrintModalOpen, setIsPayrollPrintModalOpen] = useState(false);
   const [payrollPrintSelectedEmpId, setPayrollPrintSelectedEmpId] = useState<string | undefined>(undefined);
   const [payrollPrintInitialMode, setPayrollPrintInitialMode] = useState<"month" | "year">("month");
+  const [payrollPrintAutoTrigger, setPayrollPrintAutoTrigger] = useState(false);
+  const [formsModalAutoTrigger, setFormsModalAutoTrigger] = useState(false);
 
   // Legal Deductions Modal & Form States
   const [isAddLegalDeductionOpen, setIsAddLegalDeductionOpen] = useState(false);
@@ -463,25 +527,42 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     let countR = 0;
     let countM = 0;
 
-    // Fazla mesai sayaçları (4857 Sayılı İş Kanunu)
-    let overtimeNormalHours = 0; // Hafta içi mesai (%50 zamlı saat)
-    let overtimeWeekendHours = 0; // Hafta tatili mesai (%100 zamlı saat)
-    let overtimeHolidayHours = 0; // Resmi tatilde saatlik mesai (%100 zamlı saat)
+    // Fazla mesai sayaçları (4857 Sayılı İş Kanunu ve Yasal Zam Oranları)
+    // 1. Fazla Çalışma (%50 Zamlı): Haftalık 45 saati aşan çalışmalar için saatlik ücret 1,5 katı ödenir
+    // 2. Fazla Sürelerle Çalışma (%25 Zamlı): 40 ile 45 saat arasındaki çalışmalar 1,25 katı ödenir
+    // 3. Hafta Tatili Çalışması: Hak edilen 1 günlük ücrete ek +1,5 yevmiye daha verilerek toplam 2,5 yevmiye ödenir
+    // 4. Genel Tatil / Bayram Çalışması (%100 Zamlı): Normal ücrete ilave +1 tam yevmiye (toplam 2 yevmiye) ödenir
+    let overtimeNormalHours = 0; // Hafta içi %50 zamlı mesai saati (1.5x)
+    let overtimeExtensionHours = 0; // Fazla sürelerle çalışma %25 zamlı mesai saati (1.25x)
+    let overtimeWeekendDays = 0; // Hafta tatili tam gün çalışma (+1.5 yevmiye)
+    let overtimeWeekendHours = 0; // Hafta tatili saatlik mesai (1.5x ek)
     let overtimeHolidayDays = 0; // Resmi tatilde tam gün çalışma (1 günlük tam yevmiye ilave)
+    let overtimeHolidayHours = 0; // Resmi tatilde saatlik mesai (%100 zamlı / 1.0x ek)
 
     for (let day = 1; day <= totalDays; day++) {
       const raw = puantaj[day];
       const code: PuantajCode = typeof raw === "string" ? raw : raw ? raw.code : "N";
       const otHours = typeof raw === "object" && raw ? (raw.overtimeHours || 0) : 0;
+      const otType = typeof raw === "object" && raw ? (raw as any).overtimeType : undefined;
       const isHolOt = typeof raw === "object" && raw ? Boolean(raw.isHolidayOvertime) : false;
 
       if (code === "N") {
         countN++;
-        if (otHours > 0) overtimeNormalHours += otHours;
+        if (otHours > 0) {
+          if (otType === "extension_25") {
+            overtimeExtensionHours += otHours;
+          } else {
+            overtimeNormalHours += otHours;
+          }
+        }
       } else if (code === "HT") {
         countHT++;
-        if (otHours > 0) overtimeWeekendHours += otHours;
-        if (isHolOt) overtimeWeekendHours += 7.5; // Hafta tatili tam gün çalışma 7.5 saat kabul edilir
+        if (isHolOt) {
+          overtimeWeekendDays += 1; // Hafta tatilinde tam gün çalışma (+1.5 yevmiye)
+        }
+        if (otHours > 0) {
+          overtimeWeekendHours += otHours;
+        }
       } else if (code === "RT") {
         countRT++;
         if (isHolOt) {
@@ -510,22 +591,30 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     const sgkDays = Math.max(0, Math.min(30, 30 - unpaidDays));
 
     // Türkiye Cumhuriyeti 4857 Sayılı İş Kanunu Mesai Ücreti Formülleri:
-    // Aylık çalışma saati standardı = 225 saat
-    // Saatlik Brüt Ücret = Brüt Ücret / 225
-    // Günlük Brüt Ücret (Yevmiye) = Brüt Ücret / 30
-    // 1. Hafta içi Fazla Mesai Saati = Saatlik Ücret * 1.5 * Saat (İş Kanunu Md. 41)
-    // 2. Hafta Tatili / Resmi Tatil Saatlik Mesai = Saatlik Ücret * 2.0 * Saat
-    // 3. Resmi Tatil Tam Gün Çalışma = Günlük Yevmiye (Brüt/30) * Gün Sayısı (İş Kanunu Md. 47)
+    // Aylık çalışma saati standardı = 225 saat, Günlük yevmiye standardı = 30 gün
     const hourlyGross = baseGross > 0 ? baseGross / 225 : 0;
     const dailyGross = baseGross > 0 ? baseGross / 30 : 0;
 
+    // 1. Fazla Çalışma (%50 Zamlı): Haftalık 45 saati aşan çalışmalar için saatlik ücret 1,5 katı ödenir
     const normalOvertimePay = Math.round(hourlyGross * 1.5 * overtimeNormalHours);
-    const weekendOvertimePay = Math.round(hourlyGross * 2.0 * overtimeWeekendHours);
-    const holidayHoursOvertimePay = Math.round(hourlyGross * 2.0 * overtimeHolidayHours);
-    const holidayDaysOvertimePay = Math.round(dailyGross * 1.0 * overtimeHolidayDays);
 
-    const calculatedOvertimePay = normalOvertimePay + weekendOvertimePay + holidayHoursOvertimePay + holidayDaysOvertimePay;
-    const totalOvertimeHours = overtimeNormalHours + overtimeWeekendHours + overtimeHolidayHours;
+    // 2. Fazla Sürelerle Çalışma (%25 Zamlı): 40-45 saat arası çalışmalar için 1,25 katı ödenir
+    const extensionOvertimePay = Math.round(hourlyGross * 1.25 * overtimeExtensionHours);
+
+    // 3. Hafta Tatili Çalışması (Toplam 2,5 Yevmiye):
+    // Hak edilen 1 günlük ücrete ek olarak, çalışılan gün için 1,5 yevmiye daha verilerek toplam 2,5 yevmiye ödenir
+    const weekendDaysOvertimePay = Math.round(dailyGross * 1.5 * overtimeWeekendDays);
+    const weekendHoursOvertimePay = Math.round(hourlyGross * 1.5 * overtimeWeekendHours);
+    const weekendOvertimePay = weekendDaysOvertimePay + weekendHoursOvertimePay;
+
+    // 4. Genel Tatil / Bayram Çalışması (%100 Zamlı):
+    // Resmi tatil veya bayram gününde normal günlük ücrete ilave olarak +1 tam yevmiye (toplam 2 yevmiye) ödenir
+    const holidayDaysOvertimePay = Math.round(dailyGross * 1.0 * overtimeHolidayDays);
+    const holidayHoursOvertimePay = Math.round(hourlyGross * 1.0 * overtimeHolidayHours);
+    const holidayOvertimePay = holidayDaysOvertimePay + holidayHoursOvertimePay;
+
+    const calculatedOvertimePay = normalOvertimePay + extensionOvertimePay + weekendOvertimePay + holidayOvertimePay;
+    const totalOvertimeHours = overtimeNormalHours + overtimeExtensionHours + overtimeWeekendHours + overtimeHolidayHours;
 
     return {
       countN,
@@ -542,6 +631,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       paidDays: countN + countHT + countRT + countYI + countUI + countDI + (countR <= 2 ? countR : 2),
       // Overtime Stats
       overtimeNormalHours,
+      overtimeExtensionHours,
+      overtimeWeekendDays,
       overtimeWeekendHours,
       overtimeHolidayHours,
       overtimeHolidayDays,
@@ -549,9 +640,13 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       hourlyGross,
       dailyGross,
       normalOvertimePay,
+      extensionOvertimePay,
       weekendOvertimePay,
+      weekendDaysOvertimePay,
+      weekendHoursOvertimePay,
       holidayHoursOvertimePay,
       holidayDaysOvertimePay,
+      holidayOvertimePay,
       calculatedOvertimePay,
     };
   };
@@ -563,6 +658,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     bonusAmount?: number;
     overtimePay?: number;
     overtimeNormalHours?: number;
+    overtimeExtensionHours?: number;
+    overtimeWeekendDays?: number;
     overtimeWeekendHours?: number;
     overtimeHolidayDays?: number;
     overtimeHolidayHours?: number;
@@ -589,7 +686,9 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     puantajDays?: Record<number, DayPuantajDetail>;
   };
 
-  const [payrollCustomizations, setPayrollCustomizations] = useState<Record<string, CustomPayrollAdjustment>>({});
+  const [payrollCustomizations, setPayrollCustomizations] = useState<Record<string, CustomPayrollAdjustment>>(() => {
+    return loadPayrollCustomizationsStorage();
+  });
   const [editingPayrollEmp, setEditingPayrollEmp] = useState<Employee | null>(null);
   const [editingPayrollForm, setEditingPayrollForm] = useState<CustomPayrollAdjustment>({});
   const [isPayrollFullscreen, setIsPayrollFullscreen] = useState(true);
@@ -614,7 +713,23 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     totalNet: number,
     totalCost: number
   ) => {
-    setPayrollCustomizations(updatedCustomizations);
+    setPayrollCustomizations((prev) => {
+      const next = { ...prev };
+      const monthObj = { ...((next[payrollMonth] as any) || {}) };
+      // Prevent recursive nesting of month key
+      delete monthObj[payrollMonth];
+
+      Object.entries(updatedCustomizations).forEach(([empId, adj]) => {
+        if (!empId || empId === payrollMonth || empId.includes("_")) return;
+        monthObj[empId] = adj;
+        next[`${payrollMonth}_${empId}`] = adj;
+        next[empId] = adj;
+      });
+
+      next[payrollMonth] = monthObj;
+      savePayrollCustomizationsStorage(next);
+      return next;
+    });
     setIsBulkPayrollModalOpen(false);
 
     // Toplu bordro kayıtlarını vergilendirme/giderler bölümüne masraf/gider işlemi olarak aktar
@@ -625,15 +740,24 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         const expenseDate = `${payrollMonth}-${String(lastDay).padStart(2, "0")}`;
         const monthName = MONTH_NAMES[Number(mo) - 1] || mo;
 
-        // Her güncellenen personel için gider kalemi oluştur
+        // Her güncellenen personel için gider kalemi oluştur / güncelle
         Object.keys(updatedCustomizations).forEach((empId) => {
           const emp = employees.find((e) => e.id === empId);
           if (emp) {
-            const calculated = calculatePayrollForEmployee(emp);
+            const calculated = calculatePayrollForEmployee(emp, updatedCustomizations[empId]);
             const cost = calculated.totalEmployerCost > 0 ? calculated.totalEmployerCost : (calculated.payableNetSalary || emp.salaryAmount || 0);
             if (cost > 0) {
+              const documentNo = `BDR-${payrollMonth.replace("-", "")}-${emp.id.slice(-4).toUpperCase()}`;
+              const existingTx = (transactions || []).find(
+                (t) => t.documentNo === documentNo || (t.id && t.id.startsWith(`tx_payroll_${emp.id}_${payrollMonth.replace("-", "_")}`))
+              );
+              const sgkPrimi = Math.round(((calculated.sgkEmployeeShare || 0) + (calculated.sgkEmployerShare || 0) + (calculated.unemploymentEmployeeShare || 0) + (calculated.unemploymentEmployerShare || 0)) * 100) / 100;
+              const gelirVergisi = Math.round((calculated.incomeTax || 0) * 100) / 100;
+              const damgaVergisi = Math.round((calculated.stampTax || 0) * 100) / 100;
+              const netMaas = Math.round((calculated.payableNetSalary || 0) * 100) / 100;
+
               const payrollTx: Transaction = {
-                id: `tx_payroll_${emp.id}_${payrollMonth.replace("-", "_")}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                id: existingTx ? existingTx.id : `tx_payroll_${emp.id}_${payrollMonth.replace("-", "_")}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
                 date: expenseDate,
                 type: "expense",
                 amount: Math.round(cost * 100) / 100,
@@ -643,12 +767,18 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 contactId: emp.id,
                 contactName: emp.fullName,
                 category: "Personel ve Maaş Giderleri",
-                description: `${emp.fullName} - ${monthName} ${yr} Bordro & Personel Gideri (Net: ${formatTRY(calculated.payableNetSalary)}, SGK/Vergi: ${formatTRY(calculated.totalEmployerCost - calculated.payableNetSalary)})`,
-                documentNo: `BDR-${payrollMonth.replace("-", "")}-${emp.id.slice(-4).toUpperCase()}`,
+                description: `${emp.fullName} - ${monthName} ${yr} Bordro & Personel Gideri (Net Maaş: ${formatTRY(netMaas)}, SGK: ${formatTRY(sgkPrimi)}, Stopaj: ${formatTRY(gelirVergisi)}, Damga: ${formatTRY(damgaVergisi)})`,
+                documentNo: documentNo,
                 subtotal: Math.round(cost * 100) / 100,
                 totalVat: 0,
+                notes: `Toplu Bordro | Dönem: ${payrollMonth} | Eksik Gün: ${calculated.unpaidLeaveDays || 0} Gün | Vergilendirmeye yansıtıldı`,
               };
-              onAddTransaction(payrollTx);
+
+              if (existingTx && onUpdateTransaction) {
+                onUpdateTransaction(payrollTx);
+              } else if (onAddTransaction) {
+                onAddTransaction(payrollTx);
+              }
             }
           }
         });
@@ -935,8 +1065,14 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   };
 
   // Helper Turkish Payroll Calculator (Standard SGK formulas with Leave & Advance & Legal Deductions Integration)
-  const calculatePayrollForEmployee = (emp: Employee): PayrollRecord => {
-    const custom = (payrollCustomizations[payrollMonth]?.[emp.id] || payrollCustomizations[emp.id]) || {};
+  const calculatePayrollForEmployee = (emp: Employee, overrideCustom?: CustomPayrollAdjustment): PayrollRecord => {
+    const custom = overrideCustom || (
+      (payrollCustomizations[payrollMonth] && (payrollCustomizations[payrollMonth] as any)[emp.id]) ||
+      payrollCustomizations[`${payrollMonth}_${emp.id}`] ||
+      (payrollCustomizations[emp.id]?.isCustomized && (payrollCustomizations[emp.id]?.month === payrollMonth || !payrollCustomizations[emp.id]?.month) ? payrollCustomizations[emp.id] : undefined) ||
+      payrollCustomizations[emp.id] ||
+      {}
+    );
     const autoAdv = getAutoAdvanceForEmployee(emp.id);
     const autoLvs = getAutoLeavesForEmployee(emp.id);
 
@@ -953,12 +1089,23 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
     let overtimePay = custom.overtimePay ?? 0;
     let overtimeNormalHours = custom.overtimeNormalHours ?? 0;
+    let overtimeExtensionHours = custom.overtimeExtensionHours ?? 0;
+    let overtimeWeekendDays = custom.overtimeWeekendDays ?? 0;
     let overtimeWeekendHours = custom.overtimeWeekendHours ?? 0;
     let overtimeHolidayDays = custom.overtimeHolidayDays ?? 0;
     let overtimeHolidayHours = custom.overtimeHolidayHours ?? 0;
 
-    const foodAllowance = custom.foodAllowance ?? (emp.foodAllowance || 0);
-    const roadAllowance = custom.roadAllowance ?? (emp.roadAllowance || 0);
+    const applyAllAllowances = companySettings?.applyAllowancesToAllEmployees !== false;
+    const defaultFood = (applyAllAllowances || !emp.foodAllowance)
+      ? (companySettings?.defaultFoodAllowance ?? 5500)
+      : (emp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500);
+
+    const defaultRoad = (applyAllAllowances || !emp.roadAllowance)
+      ? (companySettings?.defaultRoadAllowance ?? 2500)
+      : (emp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500);
+
+    const foodAllowance = custom.foodAllowance !== undefined ? custom.foodAllowance : defaultFood;
+    const roadAllowance = custom.roadAllowance !== undefined ? custom.roadAllowance : defaultRoad;
     const customPayments = custom.customPayments || [];
     const customPaymentsTotal = custom.customPaymentsTotal !== undefined
       ? custom.customPaymentsTotal
@@ -1053,6 +1200,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       bonusAmount,
       overtimePay,
       overtimeNormalHours,
+      overtimeExtensionHours,
+      overtimeWeekendDays,
       overtimeWeekendHours,
       overtimeHolidayDays,
       overtimeHolidayHours,
@@ -1096,7 +1245,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const sortedPayrollEmployees = [...employees].sort((a, b) =>
     a.fullName.localeCompare(b.fullName, "tr")
   );
-  const payrollRecords = sortedPayrollEmployees.map(calculatePayrollForEmployee);
+  const payrollRecords = sortedPayrollEmployees.map((emp) => calculatePayrollForEmployee(emp));
   const totalEmployerMonthlyCost = payrollRecords.reduce((sum, r) => sum + r.totalEmployerCost, 0);
 
   const handleOpenCreateEmployee = () => {
@@ -1121,8 +1270,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       email: "",
       salaryType: "net",
       salaryAmount: 50000,
-      foodAllowance: 4500,
-      roadAllowance: 2000,
+      foodAllowance: companySettings?.defaultFoodAllowance ?? 5500,
+      roadAllowance: companySettings?.defaultRoadAllowance ?? 2500,
       hasBes: true,
       isRetired: false,
       sgkOccupationCode: "2512.01",
@@ -1140,6 +1289,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
   const handleOpenEditEmployee = (emp: Employee) => {
     setEditingEmployee(emp);
+    const applyAll = companySettings?.applyAllowancesToAllEmployees !== false;
     setNewEmpForm({
       fullName: emp.fullName || "",
       tckn: emp.tckn || emp.tcNo || "",
@@ -1161,8 +1311,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       email: emp.email || "",
       salaryType: emp.salaryType || "net",
       salaryAmount: emp.salaryAmount || emp.salary || 50000,
-      foodAllowance: emp.foodAllowance ?? 4500,
-      roadAllowance: emp.roadAllowance ?? 2000,
+      foodAllowance: applyAll ? (companySettings?.defaultFoodAllowance ?? 5500) : (emp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500),
+      roadAllowance: applyAll ? (companySettings?.defaultRoadAllowance ?? 2500) : (emp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500),
       hasBes: emp.hasBes ?? true,
       isRetired: Boolean(emp.isRetired),
       sgkOccupationCode: emp.sgkOccupationCode || "2512.01",
@@ -1300,8 +1450,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       email: "",
       salaryType: "net",
       salaryAmount: 50000,
-      foodAllowance: 4500,
-      roadAllowance: 2000,
+      foodAllowance: companySettings?.defaultFoodAllowance ?? 5500,
+      roadAllowance: companySettings?.defaultRoadAllowance ?? 2500,
       hasBes: true,
       isRetired: false,
       sgkOccupationCode: "2512.01",
@@ -1570,7 +1720,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const handleOpenEditPayroll = (emp: Employee) => {
     const autoAdv = getAutoAdvanceForEmployee(emp.id);
     const autoLvs = getAutoLeavesForEmployee(emp.id);
-    const existing = payrollCustomizations[emp.id] || {};
+    const existing =
+      (payrollCustomizations[payrollMonth] && (payrollCustomizations[payrollMonth] as any)[emp.id]) ||
+      payrollCustomizations[`${payrollMonth}_${emp.id}`] ||
+      (payrollCustomizations[emp.id]?.isCustomized && (payrollCustomizations[emp.id]?.month === payrollMonth || !payrollCustomizations[emp.id]?.month) ? payrollCustomizations[emp.id] : undefined) ||
+      payrollCustomizations[emp.id] ||
+      {};
 
     const [yearStr, monthStr] = payrollMonth.split("-");
     const year = parseInt(yearStr, 10) || 2026;
@@ -1593,18 +1748,28 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       : Math.round(baseGrossVal * 0.71);
     const autoLegal = getAutoLegalDeductionsForEmployee(emp.id, approxNet);
 
+    const applyAllAllowances = companySettings?.applyAllowancesToAllEmployees !== false;
+    const fallbackFood = applyAllAllowances
+      ? (companySettings?.defaultFoodAllowance ?? 5500)
+      : (emp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500);
+    const fallbackRoad = applyAllAllowances
+      ? (companySettings?.defaultRoadAllowance ?? 2500)
+      : (emp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500);
+
     setEditingPayrollEmp(emp);
     setEditingPayrollForm({
       salaryType: existing.salaryType ?? emp.salaryType,
-      baseSalary: existing.baseSalary ?? emp.salaryAmount,
+      baseSalary: existing.baseSalary !== undefined ? existing.baseSalary : emp.salaryAmount,
       bonusAmount: existing.bonusAmount ?? 0,
       overtimePay: existing.overtimePay !== undefined ? existing.overtimePay : stats.calculatedOvertimePay,
       overtimeNormalHours: existing.overtimeNormalHours !== undefined ? existing.overtimeNormalHours : stats.overtimeNormalHours,
+      overtimeExtensionHours: existing.overtimeExtensionHours !== undefined ? existing.overtimeExtensionHours : stats.overtimeExtensionHours,
+      overtimeWeekendDays: existing.overtimeWeekendDays !== undefined ? existing.overtimeWeekendDays : stats.overtimeWeekendDays,
       overtimeWeekendHours: existing.overtimeWeekendHours !== undefined ? existing.overtimeWeekendHours : stats.overtimeWeekendHours,
       overtimeHolidayDays: existing.overtimeHolidayDays !== undefined ? existing.overtimeHolidayDays : stats.overtimeHolidayDays,
       overtimeHolidayHours: existing.overtimeHolidayHours !== undefined ? existing.overtimeHolidayHours : stats.overtimeHolidayHours,
-      foodAllowance: existing.foodAllowance ?? (emp.foodAllowance || 0),
-      roadAllowance: existing.roadAllowance ?? (emp.roadAllowance || 0),
+      foodAllowance: existing.foodAllowance !== undefined ? existing.foodAllowance : fallbackFood,
+      roadAllowance: existing.roadAllowance !== undefined ? existing.roadAllowance : fallbackRoad,
       advanceDeduction: existing.advanceDeduction !== undefined ? existing.advanceDeduction : autoAdv.totalAdvance,
       advanceReason: existing.advanceReason ?? (autoAdv.reasons.length > 0 ? autoAdv.reasons.join(", ") : "Personel maaş avansı mahsubu"),
       unpaidLeaveDays: existing.unpaidLeaveDays !== undefined ? existing.unpaidLeaveDays : (stats.unpaidDays > 0 ? stats.unpaidDays : autoLvs.unpaidDays),
@@ -1626,6 +1791,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       puantajDays: puantajMap,
       customPayments: existing.customPayments || [],
       customPaymentsTotal: existing.customPaymentsTotal || 0,
+      isCustomized: Boolean(existing.isCustomized),
     });
   };
 
@@ -1707,65 +1873,74 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       currentForm.deductionReason = reasonParts.join(" | ");
     }
 
-    // 4. Mevcut personelin bordro ve puantaj ayarlarını kaydet
-    setPayrollCustomizations((prev) => ({
-      ...prev,
-      [currentEmp.id]: {
-        ...currentForm,
-        isCustomized: true,
-      },
-    }));
+    // 4. Mevcut personelin bordro ve puantaj ayarlarını kaydet (Ay bazlı ve kalıcı)
+    const updatedCustomAdjustment: CustomPayrollAdjustment = {
+      ...currentForm,
+      month: payrollMonth,
+      isCustomized: true,
+    };
 
-    // 4.1 Bordro kaydını vergilendirme/giderler bölümüne masraf/gider işlemi olarak aktar
-    if (onAddTransaction) {
-      try {
-        const calculatedRec = calculatePayrollForEmployee(currentEmp);
-        const costAmount = calculatedRec.totalEmployerCost > 0 ? calculatedRec.totalEmployerCost : (calculatedRec.payableNetSalary || currentEmp.salaryAmount || 0);
-        if (costAmount > 0) {
-          const [yr, mo] = (payrollMonth || "2026-07").split("-");
-          const lastDay = new Date(Number(yr), Number(mo), 0).getDate();
-          const expenseDate = `${payrollMonth}-${String(lastDay).padStart(2, "0")}`;
-          const monthName = MONTH_NAMES[Number(mo) - 1] || mo;
+    setPayrollCustomizations((prev) => {
+      const next = { ...prev };
+      const prevMonthCustoms = { ...((next[payrollMonth] as any) || {}) };
+      delete prevMonthCustoms[payrollMonth];
 
-          const payrollTx: Transaction = {
-            id: `tx_payroll_${currentEmp.id}_${payrollMonth.replace("-", "_")}_${Date.now()}`,
-            date: expenseDate,
-            type: "expense",
-            amount: Math.round(costAmount * 100) / 100,
-            currency: "TRY",
-            accountId: "acc_1",
-            accountName: "Merkez TL Kasası",
-            contactId: currentEmp.id,
-            contactName: currentEmp.fullName,
-            category: "Personel ve Maaş Giderleri",
-            description: `${currentEmp.fullName} - ${monthName} ${yr} Bordro & Personel Gideri (Net: ${formatTRY(calculatedRec.payableNetSalary)}, SGK/Vergi: ${formatTRY(calculatedRec.totalEmployerCost - calculatedRec.payableNetSalary)})`,
-            documentNo: `BDR-${payrollMonth.replace("-", "")}-${currentEmp.id.slice(-4).toUpperCase()}`,
-            subtotal: Math.round(costAmount * 100) / 100,
-            totalVat: 0,
-          };
+      prevMonthCustoms[currentEmp.id] = updatedCustomAdjustment;
+      next[payrollMonth] = prevMonthCustoms;
+      next[`${payrollMonth}_${currentEmp.id}`] = updatedCustomAdjustment;
+      next[currentEmp.id] = updatedCustomAdjustment;
+
+      savePayrollCustomizationsStorage(next);
+      return next;
+    });
+
+    // 4.1 Bordro kaydını vergilendirme/giderler bölümüne masraf/gider işlemi olarak yansıt
+    try {
+      const calculatedRec = calculatePayrollForEmployee(currentEmp, updatedCustomAdjustment);
+      const costAmount = calculatedRec.totalEmployerCost > 0 ? calculatedRec.totalEmployerCost : (calculatedRec.payableNetSalary || currentEmp.salaryAmount || 0);
+      if (costAmount > 0) {
+        const [yr, mo] = (payrollMonth || "2026-07").split("-");
+        const lastDay = new Date(Number(yr), Number(mo), 0).getDate();
+        const expenseDate = `${payrollMonth}-${String(lastDay).padStart(2, "0")}`;
+        const monthName = MONTH_NAMES[Number(mo) - 1] || mo;
+
+        const sgkPrimi = Math.round(((calculatedRec.sgkEmployeeShare || 0) + (calculatedRec.sgkEmployerShare || 0) + (calculatedRec.unemploymentEmployeeShare || 0) + (calculatedRec.unemploymentEmployerShare || 0)) * 100) / 100;
+        const gelirVergisi = Math.round((calculatedRec.incomeTax || 0) * 100) / 100;
+        const damgaVergisi = Math.round((calculatedRec.stampTax || 0) * 100) / 100;
+        const netMaas = Math.round((calculatedRec.payableNetSalary || 0) * 100) / 100;
+
+        const documentNo = `BDR-${payrollMonth.replace("-", "")}-${currentEmp.id.slice(-4).toUpperCase()}`;
+        const existingTx = (transactions || []).find(
+          (t) => t.documentNo === documentNo || (t.id && t.id.startsWith(`tx_payroll_${currentEmp.id}_${payrollMonth.replace("-", "_")}`))
+        );
+
+        const payrollTx: Transaction = {
+          id: existingTx ? existingTx.id : `tx_payroll_${currentEmp.id}_${payrollMonth.replace("-", "_")}_${Date.now()}`,
+          date: expenseDate,
+          type: "expense",
+          amount: Math.round(costAmount * 100) / 100,
+          currency: "TRY",
+          accountId: "acc_1",
+          accountName: "Merkez TL Kasası",
+          contactId: currentEmp.id,
+          contactName: currentEmp.fullName,
+          category: "Personel ve Maaş Giderleri",
+          description: `${currentEmp.fullName} - ${monthName} ${yr} Bordro & Personel Gideri (Net Maaş: ${formatTRY(netMaas)}, SGK Primi: ${formatTRY(sgkPrimi)}, Stopaj: ${formatTRY(gelirVergisi)}, Damga: ${formatTRY(damgaVergisi)})`,
+          documentNo: documentNo,
+          subtotal: Math.round(costAmount * 100) / 100,
+          totalVat: 0,
+          notes: `Bordro Dönemi: ${payrollMonth} | Eksik Gün: ${calculatedRec.unpaidLeaveDays || 0} Gün | Fazla Mesai: ${calculatedRec.overtimeHours ?? ((calculatedRec.overtimeNormalHours || 0) + (calculatedRec.overtimeWeekendHours || 0) + (calculatedRec.overtimeHolidayHours || 0))} Saat | Vergilendirme ve Muhtasar beyannamesine yansıtıldı`,
+        };
+
+        if (existingTx && onUpdateTransaction) {
+          onUpdateTransaction(payrollTx);
+        } else if (onAddTransaction) {
           onAddTransaction(payrollTx);
         }
-      } catch (err) {
-        console.error("Bordro masraf aktarımı hatası:", err);
       }
+    } catch (err) {
+      console.error("Bordro masraf aktarımı hatası:", err);
     }
-
-    // 4.2 Doğrudan veya butonla hemen yazdırma istenmişse
-    if (openPrintAfterSave) {
-      setPayrollPrintSelectedEmpId(currentEmp.id);
-      setPayrollPrintInitialMode("month");
-      setIsPayrollPrintModalOpen(true);
-      showToast(`✅ ${currentEmp.fullName} bordrosu kaydedildi. Bordro ve ekli evraklar yazdırmaya hazır.`);
-      return;
-    }
-
-    // 5. Post-Save Print Dialog: Avans, İzin veya Kesinti varsa hemen yazdırma penceresi sun
-    const hasAdvance = advAmount > 0;
-    const hasUnpaidLeave = unpaidDays > 0;
-    const hasLegalDeductions =
-      (currentForm.executionDeduction ?? 0) > 0 ||
-      (currentForm.alimonyDeduction ?? 0) > 0 ||
-      (currentForm.otherDeductions ?? 0) > 0;
 
     // Personelleri Türkçe alfabeye göre sırala
     const sortedEmployeesAlphabetical = [...employees].sort((a, b) =>
@@ -1777,9 +1952,43 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         ? sortedEmployeesAlphabetical[currentIndex + 1]
         : null;
 
+    // 4.2 BUTON 1: "Kaydet & Sayfadan Ayrılmadan Yazdır"
+    if (openPrintAfterSave) {
+      // Sayfadan ayrılmadan yazdırma: editingPayrollEmp kapatılmaz!
+      setPayrollPrintSelectedEmpId(currentEmp.id);
+      setPayrollPrintInitialMode("month");
+      setPayrollPrintAutoTrigger(true);
+      setIsPayrollPrintModalOpen(true);
+      showToast(`✅ ${currentEmp.fullName} bordrosu kaydedildi, Vergilendirme bölümüne yansıtıldı ve yazdırılıyor...`);
+      return;
+    }
+
+    // 4.3 BUTON 2: "Kaydet & Sıradakine Geç"
+    if (shouldAdvanceToNext) {
+      if (nextEmployee) {
+        handleOpenEditPayroll(nextEmployee);
+        showToast(
+          `✅ ${currentEmp.fullName} bordrosu kaydedildi. Sıradaki personel (${nextEmployee.fullName}) açıldı (${currentIndex + 2}/${sortedEmployeesAlphabetical.length}).`
+        );
+      } else {
+        setEditingPayrollEmp(null);
+        showToast(`🎉 ${currentEmp.fullName} bordrosu kaydedildi. Listedeki tüm personellerin bordroları hazırlandı!`);
+      }
+      return;
+    }
+
+    // 4.4 BUTON 3: "Kaydet"
+    const hasAdvance = advAmount > 0;
+    const hasUnpaidLeave = unpaidDays > 0;
+    const hasLegalDeductions =
+      (currentForm.executionDeduction ?? 0) > 0 ||
+      (currentForm.alimonyDeduction ?? 0) > 0 ||
+      (currentForm.otherDeductions ?? 0) > 0;
+
+    setEditingPayrollEmp(null);
     setSavedPayrollForPrintModal({
       emp: currentEmp,
-      form: currentForm,
+      form: updatedCustomAdjustment,
       hasAdvance,
       hasUnpaidLeave,
       hasLegalDeductions,
@@ -1787,18 +1996,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       unpaidDays,
       nextEmp: nextEmployee,
     });
-
-    if (shouldAdvanceToNext && nextEmployee) {
-      handleOpenEditPayroll(nextEmployee);
-      showToast(
-        `✅ ${currentEmp.fullName} bordrosu kaydedildi. Alfabetik sıradaki sonraki personel (${nextEmployee.fullName}) açıldı (${currentIndex + 2}/${sortedEmployeesAlphabetical.length}).`
-      );
-    } else if (!shouldAdvanceToNext) {
-      showToast(`✅ ${currentEmp.fullName} bordrosu başarıyla kaydedildi. Belge ve yazdırma seçenekleri açıldı.`);
-    } else {
-      setEditingPayrollEmp(null);
-      showToast(`🎉 ${currentEmp.fullName} bordrosu kaydedildi. Listedeki tüm personellerin bordroları hazır!`);
-    }
+    showToast(`✅ ${currentEmp.fullName} bordrosu başarıyla kaydedildi.`);
   };
 
   if (isAddEmployeeOpen) {
@@ -2184,7 +2382,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   >
                     <option value="">-- SGK Meslek Seçin --</option>
                     {sgkOccupations.map((occ) => (
-                      <option key={occ.code} value={occ.code}>
+                      <option key={`${occ.code}-${occ.name}`} value={occ.code}>
                         {occ.code} - {occ.name}
                       </option>
                     ))}
@@ -2288,6 +2486,52 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     );
   }
 
+  // SAYFADAN AYRILMADAN BORDRO & İK FORMLARI YAZDIRMA PENCERELERİ (ÜST KATMAN)
+  if (isPayrollPrintModalOpen && editingPayrollEmp) {
+    return (
+      <PayrollPrintModal
+        isOpen={true}
+        onClose={() => {
+          setIsPayrollPrintModalOpen(false);
+          setPayrollPrintSelectedEmpId(undefined);
+          setPayrollPrintAutoTrigger(false);
+        }}
+        employees={employees}
+        companySettings={companySettings}
+        selectedMonth={payrollMonth}
+        initialEmployeeId={payrollPrintSelectedEmpId || editingPayrollEmp.id}
+        initialMode={payrollPrintInitialMode}
+        payrollCustomizations={payrollCustomizations}
+        advanceRequests={advanceRequests}
+        leaveRequests={leaveRequests}
+        legalDeductions={legalDeductions}
+        autoPrint={payrollPrintAutoTrigger}
+      />
+    );
+  }
+
+  if (isFormsModalOpen && editingPayrollEmp) {
+    return (
+      <HRDocumentFormsModal
+        isOpen={true}
+        onClose={() => {
+          setIsFormsModalOpen(false);
+          setFormsModalLeaveRequest(undefined);
+          setFormsModalAdvanceRequest(undefined);
+          setFormsModalAutoTrigger(false);
+        }}
+        employees={employees}
+        companySettings={companySettings}
+        advanceRequests={advanceRequests}
+        initialEmployeeId={formsModalEmployeeId || editingPayrollEmp.id}
+        initialFormType={formsModalType}
+        leaveRequest={formsModalLeaveRequest}
+        advanceRequest={formsModalAdvanceRequest}
+        autoPrint={formsModalAutoTrigger}
+      />
+    );
+  }
+
   // FULL-PAGE DETAIL VIEW: BORDRO & PUANTAJ HESAPLAMA
   if (editingPayrollEmp) {
     return (
@@ -2301,9 +2545,17 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           ]}
           onBack={handleBackToList}
           statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-              {payrollMonth} Dönemi
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+                {payrollMonth} Dönemi
+              </span>
+              {editingPayrollForm.isCustomized && (
+                <span className="px-2.5 py-1 text-xs font-black rounded-xl border bg-emerald-50 text-emerald-800 border-emerald-300 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Kayıtlı Bordro
+                </span>
+              )}
+            </div>
           }
           headerIcon={<Calculator className="w-5 h-5 text-purple-700" />}
           actions={
@@ -2357,33 +2609,73 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <button
                 type="button"
                 onClick={() => handleSaveEditPayroll(undefined, false, true)}
-                className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all hover:shadow-md"
-                title="Bordroyu kaydet ve hemen ardından Bordro, Avans ve Ek Formlar yazdırma penceresini aç"
+                className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all hover:shadow-md active:scale-95"
+                title="Bordroyu kaydet, vergilendirme bölümüne yansıt ve sayfadan ayrılmadan Bordro ve Varsa Eksik Gün Formlarını yazdır"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Kaydet &</span> Hemen Yazdır
+                <span>Sayfadan Ayrılmadan Yazdır</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleSaveEditPayroll(undefined, false, false)}
-                className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
+                className="px-4 py-2 border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
                 title="Bordroyu kaydet"
               >
-                <Check className="w-3.5 h-3.5" />
+                <Check className="w-3.5 h-3.5 text-purple-700" />
                 <span>Kaydet</span>
               </button>
+
+              {(() => {
+                const sortedAlphabetical = [...employees].sort((a, b) => a.fullName.localeCompare(b.fullName, "tr"));
+                const currIdx = sortedAlphabetical.findIndex((e) => e.id === editingPayrollEmp.id);
+                const nextEmp = currIdx !== -1 && currIdx + 1 < sortedAlphabetical.length ? sortedAlphabetical[currIdx + 1] : null;
+
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEditPayroll(undefined, true, false)}
+                    className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all active:scale-95"
+                    title={
+                      nextEmp
+                        ? `Kaydet ve sıradaki personel (${nextEmp.fullName}) için bordroyu aç`
+                        : "Bordroyu kaydet ve tamamla"
+                    }
+                  >
+                    <span>{nextEmp ? `Kaydet & Sıradakine Geç (${nextEmp.fullName.split(" ")[0]})` : "Kaydet ve Tamamla"}</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                );
+              })()}
             </div>
           }
         >
           <div className="bg-white rounded-3xl w-full p-4 sm:p-6 md:p-8 border border-purple-100 shadow-sm space-y-6 max-w-7xl mx-auto">
 
-            {/* Auto-Transfer Info Banners */}
+            {/* Auto-Transfer & Saved Payroll Info Banners */}
             {(() => {
               const autoAdv = getAutoAdvanceForEmployee(editingPayrollEmp.id);
               const autoLvs = getAutoLeavesForEmployee(editingPayrollEmp.id);
               return (
                 <div className="space-y-2">
+                  {editingPayrollForm.isCustomized && (
+                    <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3.5 text-xs text-emerald-950 flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                        <div>
+                          <span className="font-black text-emerald-900 block text-sm">
+                            {payrollMonth} dönemine ait daha önce kaydedilmiş bordro getirildi.
+                          </span>
+                          <span className="text-emerald-800 text-[11px]">
+                            Personele ait kayıtlı hakediş, puantaj günleri, ek ödenekler, avans ve yasal kesintiler tam olarak yüklendi. Değişiklik yapıp yeniden kaydedebilirsiniz.
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 shrink-0 uppercase tracking-wider">
+                        Kayıtlı Bordro
+                      </span>
+                    </div>
+                  )}
                   {autoAdv.totalAdvance > 0 && (
                     <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-900 flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -2462,6 +2754,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   unpaidLeaveDays: newStats.unpaidDays,
                   overtimePay: newStats.calculatedOvertimePay,
                   overtimeNormalHours: newStats.overtimeNormalHours,
+                  overtimeExtensionHours: newStats.overtimeExtensionHours,
+                  overtimeWeekendDays: newStats.overtimeWeekendDays,
                   overtimeWeekendHours: newStats.overtimeWeekendHours,
                   overtimeHolidayDays: newStats.overtimeHolidayDays,
                   overtimeHolidayHours: newStats.overtimeHolidayHours,
@@ -2484,6 +2778,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   puantajDays: updated,
                   overtimePay: newStats.calculatedOvertimePay,
                   overtimeNormalHours: newStats.overtimeNormalHours,
+                  overtimeExtensionHours: newStats.overtimeExtensionHours,
+                  overtimeWeekendDays: newStats.overtimeWeekendDays,
                   overtimeWeekendHours: newStats.overtimeWeekendHours,
                   overtimeHolidayDays: newStats.overtimeHolidayDays,
                   overtimeHolidayHours: newStats.overtimeHolidayHours,
@@ -2506,6 +2802,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   puantajDays: updated,
                   overtimePay: newStats.calculatedOvertimePay,
                   overtimeNormalHours: newStats.overtimeNormalHours,
+                  overtimeExtensionHours: newStats.overtimeExtensionHours,
+                  overtimeWeekendDays: newStats.overtimeWeekendDays,
                   overtimeWeekendHours: newStats.overtimeWeekendHours,
                   overtimeHolidayDays: newStats.overtimeHolidayDays,
                   overtimeHolidayHours: newStats.overtimeHolidayHours,
@@ -2529,6 +2827,8 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   unpaidLeaveDays: newStats.unpaidDays,
                   overtimePay: newStats.calculatedOvertimePay,
                   overtimeNormalHours: newStats.overtimeNormalHours,
+                  overtimeExtensionHours: newStats.overtimeExtensionHours,
+                  overtimeWeekendDays: newStats.overtimeWeekendDays,
                   overtimeWeekendHours: newStats.overtimeWeekendHours,
                   overtimeHolidayDays: newStats.overtimeHolidayDays,
                   overtimeHolidayHours: newStats.overtimeHolidayHours,
@@ -2557,7 +2857,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 return (
                   <div
                     key={dayNum}
-                    className={`group relative flex flex-col justify-between p-1.5 rounded-xl border transition-all hover:shadow-md ${cfg.bgClass} ${cfg.borderClass} min-w-[54px]`}
+                    className={`group relative flex flex-col justify-between p-1.5 rounded-xl border transition-all hover:shadow-md hover:z-20 ${cfg.bgClass} ${cfg.borderClass} min-w-[54px]`}
                   >
                     {/* Üst Kısım: Gün Adı & Gün Numarası */}
                     <div className="w-full flex items-center justify-between text-[10px] font-bold text-slate-500 border-b border-black/5 pb-0.5 mb-1">
@@ -2569,13 +2869,19 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       </span>
                     </div>
 
-                    {/* Orta Kısım: Kod Rozeti & Tıklama ile Değiştirme */}
-                    <div
-                      onClick={() => handleCycleDayCode(dayNum)}
-                      className={`w-full py-1 rounded-lg font-black text-xs flex items-center justify-center shadow-2xs cursor-pointer select-none transition-transform active:scale-95 hover:opacity-90 ${cfg.badgeClass}`}
-                      title={`${dayNum} ${monthNamesTr[pMonth - 1]} (${dayName}) - ${cfg.label}. Tıklayarak kodu değiştirin.`}
-                    >
-                      {code}
+                    {/* Orta Kısım: Aşağıdan Yukarı Kaydırılabilir (Scrollable) Puantaj Seçici */}
+                    <div className="my-0.5 w-full">
+                      <PuantajScrollPicker
+                        dayNum={dayNum}
+                        dayName={dayName}
+                        code={code}
+                        onChange={(newCode) => handleDayCodeChange(dayNum, newCode)}
+                        isWeekend={isWeekend}
+                        holidayName={holiday}
+                        monthName={monthNamesTr[pMonth - 1]}
+                        badgeSize="sm"
+                        placement={dayNum > halfCount ? "top" : "bottom"}
+                      />
                     </div>
 
                     {/* Tatil / Açıklama Metni */}
@@ -2625,25 +2931,6 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                         </button>
                       )}
                     </div>
-
-                    {/* Açılır Kod Seçici */}
-                    <select
-                      value={code}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleDayCodeChange(dayNum, e.target.value as PuantajCode);
-                      }}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full pointer-events-none"
-                      title="Puantaj Kodunu Değiştir"
-                      tabIndex={-1}
-                    >
-                      {(Object.keys(PUANTAJ_CODE_CONFIG) as PuantajCode[]).map((c) => (
-                        <option key={c} value={c}>
-                          {dayNum} {monthNamesTr[pMonth - 1]} ({dayName}) : {c} - {PUANTAJ_CODE_CONFIG[c].label}
-                        </option>
-                      ))}
-                    </select>
                   </div>
                 );
               };
@@ -2664,7 +2951,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                           </span>
                         </h4>
                         <p className="text-[11px] text-slate-600 font-medium">
-                          Kutucuğa tıklayarak puantaj kodunu değiştirebilir, altındaki kutudan o güne ait <strong>fazla mesai saatini</strong> girebilirsiniz.
+                          Puantaj kutucuğuna tıklayarak veya fare tekerleğiyle (scroll) <strong>Normal Çalışma (N), Resmi Tatil (RT), Ücretli İzin (Yİ+Üİ), Doğum İzni (Dİ), Eksik Gün (M+R)</strong> seçimlerini aşağıdan yukarı kaydırarak kolayca belirleyebilirsiniz.
                         </p>
                       </div>
                     </div>
@@ -2713,7 +3000,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                         Puantaj Kodları ve Renk Anlamları
                       </span>
                       <span className="text-[10px] font-bold text-slate-400 hidden sm:inline">
-                        Koda tıklayarak veya kart üzerinden tek tıkla değiştirebilirsiniz
+                        Koda tıklayarak açılan aşağıdan yukarı kaydırılabilir menüden veya fare tekerleğiyle hızlıca değiştirebilirsiniz
                       </span>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
@@ -2817,7 +3104,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               );
             })()}
 
-            <form onSubmit={handleSaveEditPayroll} className="space-y-4">
+            <form onSubmit={(e) => handleSaveEditPayroll(e, true, false)} className="space-y-4">
               {/* Form Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-semibold">
                 {/* Salary Type & Amount */}
@@ -2896,6 +3183,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       getAutoLeaves={getAutoLeavesForEmployee}
                       getAutoLegalDeductions={getAutoLegalDeductionsForEmployee}
                       otStats={otStats}
+                      companySettings={companySettings}
                     />
                   );
                 })()}
@@ -2979,9 +3267,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                         <span className="text-slate-400 block text-[10px]">SGK + Vergi Kesintisi</span>
                         <span className="font-bold text-amber-300 text-sm sm:text-base">{formatTRY(sgkEmp + unempEmp + incTax + stamp)}</span>
                       </div>
-                      <div>
-                        <span className="text-emerald-400 block text-[10px] font-bold">NET ÖDENECEK MAAŞ</span>
-                        <span className="font-black text-emerald-300 text-base sm:text-lg">{formatTRY(payableNet)}</span>
+                      <div
+                        style={{ backgroundColor: "#83b8ff", color: "#0f172a" }}
+                        className="p-2 rounded-lg border border-[#60a5fa]"
+                      >
+                        <span className="text-slate-900 block text-[10px] font-black uppercase">İŞLEM TUTARI / NET ÖDENECEK</span>
+                        <span className="font-black text-slate-950 text-base sm:text-lg font-mono">{formatTRY(payableNet)}</span>
                       </div>
                     </div>
                   </div>
@@ -3006,8 +3297,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                       baseSalary: editingPayrollEmp.salaryAmount,
                       bonusAmount: 0,
                       overtimePay: 0,
-                      foodAllowance: editingPayrollEmp.foodAllowance || 0,
-                      roadAllowance: editingPayrollEmp.roadAllowance || 0,
+                      foodAllowance: companySettings?.applyAllowancesToAllEmployees !== false
+                        ? (companySettings?.defaultFoodAllowance ?? 5500)
+                        : (editingPayrollEmp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500),
+                      roadAllowance: companySettings?.applyAllowancesToAllEmployees !== false
+                        ? (companySettings?.defaultRoadAllowance ?? 2500)
+                        : (editingPayrollEmp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500),
                       advanceDeduction: autoAdv.totalAdvance,
                       advanceReason: autoAdv.reasons.join(", "),
                       unpaidLeaveDays: freshStats.unpaidDays > 0 ? freshStats.unpaidDays : autoLvs.unpaidDays,
@@ -3031,17 +3326,17 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSaveEditPayroll(undefined, false, true)}
-                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black transition-all cursor-pointer flex items-center gap-2 shadow-md hover:shadow-lg"
-                    title="Bordroyu kaydet ve hemen ardından Bordro, Avans ve Ek Formlar yazdırma penceresini aç"
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black transition-all cursor-pointer flex items-center gap-2 shadow-md hover:shadow-lg active:scale-95"
+                    title="Bordroyu kaydet, vergilendirme bölümüne yansıt ve sayfadan ayrılmadan Bordro ve Varsa Eksik Gün Formlarını yazdır"
                   >
                     <Printer className="w-4 h-4" />
-                    <span>Kaydet & Hemen Yazdır</span>
+                    <span>Sayfadan Ayrılmadan Yazdır</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleBackToList}
-                    className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer shadow-2xs"
                   >
                     Vazgeç
                   </button>
@@ -3049,10 +3344,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSaveEditPayroll(undefined, false, false)}
-                    className="px-3.5 py-2 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-950 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                    className="px-4 py-2.5 rounded-xl border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-950 text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center gap-1.5"
                     title="Bu personeli kaydet ve evrak yazdırma seçeneklerini göster"
                   >
-                    Kaydet
+                    <Check className="w-4 h-4 text-purple-700" />
+                    <span>Kaydet</span>
                   </button>
 
                   {(() => {
@@ -3062,8 +3358,9 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
                     return (
                       <button
-                        type="submit"
-                        className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-md cursor-pointer transition-all flex items-center gap-2"
+                        type="button"
+                        onClick={() => handleSaveEditPayroll(undefined, true, false)}
+                        className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-md cursor-pointer transition-all flex items-center gap-2 active:scale-95"
                         title={
                           nextEmp
                             ? `Kaydet ve alfabetik sıradaki sonraki personel (${nextEmp.fullName}) için bordroyu aç`
@@ -3090,9 +3387,22 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   ? Object.values(editingPayrollForm.puantajDays as Record<string, { code?: string }>).filter((d) => d.code === "N").length || 22
                   : 22
               }
-              initialFoodAllowance={editingPayrollForm.foodAllowance ?? editingPayrollEmp.foodAllowance ?? 0}
-              initialRoadAllowance={editingPayrollForm.roadAllowance ?? editingPayrollEmp.roadAllowance ?? 0}
+              initialFoodAllowance={
+                editingPayrollForm.foodAllowance !== undefined
+                  ? editingPayrollForm.foodAllowance
+                  : (companySettings?.applyAllowancesToAllEmployees !== false
+                      ? (companySettings?.defaultFoodAllowance ?? 5500)
+                      : (editingPayrollEmp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500))
+              }
+              initialRoadAllowance={
+                editingPayrollForm.roadAllowance !== undefined
+                  ? editingPayrollForm.roadAllowance
+                  : (companySettings?.applyAllowancesToAllEmployees !== false
+                      ? (companySettings?.defaultRoadAllowance ?? 2500)
+                      : (editingPayrollEmp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500))
+              }
               initialCustomPayments={editingPayrollForm.customPayments ?? []}
+              companySettings={companySettings}
               onApply={({ foodAllowance, roadAllowance, customPayments, customPaymentsTotal, notesSummary }) => {
                 setEditingPayrollForm((prev) => ({
                   ...prev,
@@ -3114,6 +3424,36 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
   // FULL-PAGE DETAIL VIEW: BORDRO PUSULASI
   if (selectedPayrollRecord) {
+    const handleExportPayrollExcel = (p: PayrollRecord) => {
+      const headers = ["Kalem / Açıklama", "Tutar / Değer", "Birim"];
+      const rows: (string | number)[][] = [
+        ["Personel Adı Soyadı", p.employeeName, ""],
+        ["Departman", p.department, ""],
+        ["Bordro Dönemi", p.monthYear, ""],
+        ["Temel Brüt Ücret", p.grossSalary, "TRY"],
+        ["Prim / İkramiye", p.bonusAmount || 0, "TRY"],
+        ["Fazla Mesai Kazancı", p.overtimePay || 0, "TRY"],
+        ["SGK İşçi Payı (%14)", p.sgkEmployeeShare, "TRY"],
+        ["İşsizlik Sigortası İşçi (%1)", p.unemploymentEmployeeShare, "TRY"],
+        ["Gelir Vergisi", p.incomeTax, "TRY"],
+        ["Damga Vergisi", p.stampTax || 0, "TRY"],
+        ["Avans Kesintisi", p.advanceDeduction || 0, "TRY"],
+        ["Yasal Kesintiler (İcra/Nafaka)", p.legalDeductionsAmount || 0, "TRY"],
+        ["Ödenecek Net Ücret", p.payableNetSalary, "TRY"],
+        ["SGK İşveren Maliyeti", p.sgkEmployerShare || 0, "TRY"],
+        ["İşverene Toplam Maliyet", p.totalEmployerCost || 0, "TRY"],
+      ];
+
+      exportToExcel({
+        filename: `Ucret_Pusulasi_${p.employeeName.replace(/\s+/g, "_")}_${p.monthYear.replace(/\s+/g, "_")}`,
+        sheetName: "Ücret Hesap Pusulası",
+        title: `${companySettings?.companyName || "FİRMA"} - RESMİ ÜCRET HESAP PUSULASI`,
+        subtitle: `Personel: ${p.employeeName} | Dönem: ${p.monthYear} | Net Maaş: ${formatTRY(p.payableNetSalary)}`,
+        headers,
+        rows,
+      });
+    };
+
     return (
       <DetailPageLayout
           title={`Ücret Hesap Pusulası - ${selectedPayrollRecord.employeeName}`}
@@ -3134,8 +3474,22 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+                onClick={() => handleExportPayrollExcel(selectedPayrollRecord)}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                title="Ücret Hesap Pusulasını Excel (.xlsx) Olarak İndir"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>Excel İndir</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    window.focus();
+                    window.print();
+                  } catch (_) {}
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
               >
                 <Printer className="w-4 h-4" /> <span>Yazdır / PDF</span>
               </button>
@@ -3149,7 +3503,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           }
         >
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 md:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+          <div id="printable-payroll-slip" className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 md:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto printable-document">
 
             <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-semibold">
               <div className="flex justify-between py-1 border-b border-slate-200">
@@ -3179,32 +3533,43 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                     <span className="font-black">+{formatTRY(selectedPayrollRecord.overtimePay || 0)}</span>
                   </div>
                   {(Boolean(selectedPayrollRecord.overtimeNormalHours) ||
+                    Boolean(selectedPayrollRecord.overtimeExtensionHours) ||
+                    Boolean(selectedPayrollRecord.overtimeWeekendDays) ||
                     Boolean(selectedPayrollRecord.overtimeWeekendHours) ||
                     Boolean(selectedPayrollRecord.overtimeHolidayHours) ||
                     Boolean(selectedPayrollRecord.overtimeHolidayDays)) && (
-                    <div className="text-[10px] text-emerald-800 bg-emerald-50/70 p-1.5 rounded-lg space-y-0.5 font-semibold">
+                    <div className="text-[10px] text-emerald-800 bg-emerald-50/70 p-2 rounded-lg space-y-1 font-semibold">
                       {Boolean(selectedPayrollRecord.overtimeNormalHours) && (
                         <div className="flex justify-between">
-                          <span>· Hafta İçi (%50 zamlı):</span>
-                          <span>{selectedPayrollRecord.overtimeNormalHours} Saat</span>
+                          <span>· Fazla Çalışma (%50 Zamlı / 1,5 Kat):</span>
+                          <span className="font-bold">{selectedPayrollRecord.overtimeNormalHours} Saat</span>
                         </div>
                       )}
-                      {Boolean(selectedPayrollRecord.overtimeWeekendHours) && (
-                        <div className="flex justify-between">
-                          <span>· Hafta Tatili (%100 zamlı):</span>
-                          <span>{selectedPayrollRecord.overtimeWeekendHours} Saat</span>
+                      {Boolean(selectedPayrollRecord.overtimeExtensionHours) && (
+                        <div className="flex justify-between text-teal-800">
+                          <span>· Fazla Sürelerle Çalışma (%25 Zamlı / 1,25 Kat):</span>
+                          <span className="font-bold">{selectedPayrollRecord.overtimeExtensionHours} Saat</span>
                         </div>
                       )}
-                      {Boolean(selectedPayrollRecord.overtimeHolidayHours) && (
-                        <div className="flex justify-between">
-                          <span>· Resmi Tatil Saat (%100 zamlı):</span>
-                          <span>{selectedPayrollRecord.overtimeHolidayHours} Saat</span>
+                      {Boolean((selectedPayrollRecord.overtimeWeekendDays || 0) > 0 || (selectedPayrollRecord.overtimeWeekendHours || 0) > 0) && (
+                        <div className="flex justify-between text-purple-900">
+                          <span>· Hafta Tatili (Toplam 2,5 Yevmiye / +1,5 Ek):</span>
+                          <span className="font-bold">
+                            {selectedPayrollRecord.overtimeWeekendDays ? `${selectedPayrollRecord.overtimeWeekendDays} Gün ` : ""}
+                            {selectedPayrollRecord.overtimeWeekendHours ? `${selectedPayrollRecord.overtimeWeekendHours} Saat` : ""}
+                          </span>
                         </div>
                       )}
                       {Boolean(selectedPayrollRecord.overtimeHolidayDays) && (
-                        <div className="flex justify-between">
-                          <span>· Resmi Tatil Tam Gün (1 Yevmiye):</span>
-                          <span>{selectedPayrollRecord.overtimeHolidayDays} Gün</span>
+                        <div className="flex justify-between text-red-900">
+                          <span>· Genel Tatil Tam Gün (%100 Zamlı / Toplam 2 Yevmiye):</span>
+                          <span className="font-bold">{selectedPayrollRecord.overtimeHolidayDays} Gün</span>
+                        </div>
+                      )}
+                      {Boolean(selectedPayrollRecord.overtimeHolidayHours) && (
+                        <div className="flex justify-between text-amber-900">
+                          <span>· Genel Tatil Saatlik (%100 Zamlı):</span>
+                          <span className="font-bold">{selectedPayrollRecord.overtimeHolidayHours} Saat</span>
                         </div>
                       )}
                     </div>
@@ -3267,9 +3632,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 </div>
               )}
 
-              <div className="flex justify-between py-2 border-b border-slate-300 font-black text-sm text-emerald-800 bg-emerald-50 px-3 rounded-xl mt-2">
-                <span>NET ÖDENECEK MAAŞ:</span>
-                <span>{formatTRY(selectedPayrollRecord.payableNetSalary)}</span>
+              <div
+                style={{ backgroundColor: "#83b8ff", color: "#0f172a" }}
+                className="flex justify-between items-center py-2.5 px-3 rounded-xl border border-[#60a5fa] font-black text-sm text-slate-950 mt-2 shadow-xs"
+              >
+                <span className="text-xs uppercase tracking-wide">İŞLEM TUTARI / NET ÖDENECEK MAAŞ:</span>
+                <span className="font-mono text-base font-black text-slate-950">{formatTRY(selectedPayrollRecord.payableNetSalary)}</span>
               </div>
               <div className="flex justify-between py-1 pt-1">
                 <span className="text-slate-500">Toplam İşveren Maliyeti:</span>
@@ -3288,9 +3656,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  window.print();
+                  try {
+                    window.focus();
+                    window.print();
+                  } catch (_) {}
                 }}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
               >
                 <Printer className="w-4 h-4" /> Yazdır / PDF
               </button>
@@ -4414,6 +4785,18 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         badgeIcon={<UserCheck className="w-2.5 h-2.5 text-[#0f6bae]" />}
         title="Personel, Bordro ve Özlük Takibi"
         description="Çalışan özlük dosyaları, kanuni SGK bordro matrahları, yıllık izin hakkı ve masraf/avans taleplerini tek ekrandan yönetin."
+        stats={[
+          {
+            label: "Kısa Ünvan",
+            value: getHrCompanyTitle(companySettings),
+            tone: "info",
+          },
+          {
+            label: "SGK Sicil",
+            value: companySettings.sgkCredentials?.workplaceRegistrationNo || "2.8470.01.01.1029384.034.01-12",
+            tone: "default",
+          },
+        ]}
         actions={
           <>
             <button
@@ -4520,25 +4903,28 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           </div>
         </div>
 
-        {/* Card 4: SGK İşyeri Dosyası */}
+        {/* Card 4: SGK İşyeri Dosyası & Şirket Ünvanı */}
         <div
           className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
           style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
         >
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <span className="text-xs font-medium text-slate-400">SGK İşyeri Dosyası</span>
-              <div className="text-sm font-bold font-mono tracking-tight truncate max-w-[180px]" style={{ color: theme.pageText }}>
-                {companySettings.sgkCredentials?.workplaceRegistrationNo || "SGK Sicil Tanımlı"}
+              <span className="text-xs font-medium text-slate-400">İşveren / SGK Dosyası</span>
+              <div className="text-xs sm:text-sm font-bold font-mono tracking-tight" style={{ color: theme.pageText }} title={getHrCompanyTitle(companySettings)}>
+                {getHrCompanyTitle(companySettings)}
               </div>
             </div>
             <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
               <img src={ASSET_ICONS.alacak} alt="" className="w-6 h-6 object-contain" />
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs">
+          <div className="mt-3 flex items-center justify-between gap-1.5 text-xs">
             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
               5510 %5 Teşvik Aktif
+            </span>
+            <span className="text-[10.5px] font-mono text-slate-400 truncate" title={companySettings.sgkCredentials?.workplaceRegistrationNo || "SGK Sicil"}>
+              {companySettings.sgkCredentials?.workplaceRegistrationNo ? `Sicil: ${companySettings.sgkCredentials.workplaceRegistrationNo.substring(0, 10)}...` : "SGK Sicil Aktif"}
             </span>
           </div>
         </div>
@@ -4633,6 +5019,18 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             <Laptop className="w-4 h-4" />
             <span>Zimmet & Demirbaş Takibi</span>
           </button>
+
+          <button
+            onClick={() => setActiveSubTab("allowances")}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
+              activeSubTab === "allowances"
+                ? "bg-purple-700 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <Gift className="w-4 h-4" />
+            <span>Yan Haklar & Ödenekler</span>
+          </button>
         </div>
       </div>
 
@@ -4640,23 +5038,56 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       {activeSubTab === "employees" && (
         <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
           {/* Filters & Search Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full max-w-sm">
-              <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Ad Soyad, TCKN veya Unvan ile ara..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
-              />
+          <div className="space-y-3">
+            {/* Top Bar: Search, Stats & Primary Action */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="relative w-full max-w-sm">
+                  <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Ad Soyad, TCKN veya Unvan ile ara..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
+                  />
+                </div>
+                <div className="hidden sm:inline-flex text-xs text-purple-900/80 font-semibold bg-purple-50/60 px-3 py-2 rounded-xl border border-purple-200/50 whitespace-nowrap shrink-0">
+                  Toplam <span className="font-bold text-purple-950 ml-1">{filteredEmployees.length}</span> personel
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="sm:hidden text-xs text-purple-900/80 font-semibold bg-purple-50/60 px-2.5 py-1.5 rounded-xl border border-purple-200/50 whitespace-nowrap">
+                  <span className="font-bold text-purple-950">{filteredEmployees.length}</span> personel
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEmployeeListModalOpen(true)}
+                  className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/80 font-bold rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+                  title="Resmi Personel ve Kadro Listesi Dökümünü Görüntüle ve Yazdır"
+                >
+                  <Users className="w-3.5 h-3.5 text-purple-700" />
+                  <span>Personel Listesi</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateEmployee}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+                  title="Yeni Personel Kartı Oluştur"
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-purple-200" />
+                  <span>Yeni Personel Ekle</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3 w-full sm:w-auto">
+            {/* Bottom Bar: Filters & Sorting */}
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
+                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
               >
                 <option value="all">Tüm Departmanlar</option>
                 <option value="Yazılım & IT">Yazılım & IT</option>
@@ -4669,7 +5100,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <select
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
+                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
               >
                 <option value="all">Tüm Şubeler</option>
                 {branches.map((b) => (
@@ -4682,7 +5113,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <select
                 value={selectedWarehouse}
                 onChange={(e) => setSelectedWarehouse(e.target.value)}
-                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
+                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
               >
                 <option value="all">Tüm Depolar</option>
                 {warehouses.map((w) => (
@@ -4695,7 +5126,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
+                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
               >
                 <option value="all">Tüm Durumlar</option>
                 <option value="active">Aktif</option>
@@ -4703,7 +5134,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 <option value="terminated">Ayrıldı</option>
               </select>
 
-              <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 shadow-2xs">
+              <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 shadow-2xs ml-auto">
                 <ArrowUpDown className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                 <span className="text-[11px] font-bold text-slate-500 shrink-0 hidden md:inline">Sıralama:</span>
                 <select
@@ -4718,59 +5149,6 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   <option value="salary_desc">Maaş (Yüksekten Düşüğe)</option>
                   <option value="salary_asc">Maaş (Düşükten Yükseğe)</option>
                 </select>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleOpenCreateEmployee}
-                  className="px-3.5 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
-                  title="Yeni Personel Kartı Oluştur"
-                >
-                  <UserPlus className="w-3.5 h-3.5 text-purple-200" />
-                  <span>Yeni Personel Ekle</span>
-                </button>
-                <div className="text-xs text-purple-900/80 font-semibold bg-purple-50/60 px-3 py-2 rounded-xl border border-purple-200/50 whitespace-nowrap">
-                  Toplam <span className="font-bold text-purple-950">{filteredEmployees.length}</span> personel
-                </div>
-                <ExportButtons
-                  getExportData={() => ({
-                    filename: `Personel_Listesi_${new Date().toISOString().split("T")[0]}`,
-                    title: "İNSAN KAYNAKLARI - PERSONEL LİSTESİ",
-                    subtitle: `Toplam ${filteredEmployees.length} Çalışan Kaydı`,
-                    headers: [
-                      "TCKN",
-                      "Ad Soyad",
-                      "Departman",
-                      "Unvan / Görev",
-                      "SGK Meslek Kodu",
-                      "İşe Giriş Tarihi",
-                      "Telefon",
-                      "E-Posta",
-                      "Net Maaş",
-                      "Brüt Maaş",
-                      "Para Birimi",
-                      "SGK Sicil No",
-                      "Çalışma Durumu",
-                    ],
-                    rows: filteredEmployees.map((e) => [
-                      e.tcNo || "-",
-                      `${e.firstName} ${e.lastName}`,
-                      e.department || "-",
-                      e.title || "-",
-                      e.sgkOccupationCode || "-",
-                      e.startDate || "-",
-                      e.phone || "-",
-                      e.email || "-",
-                      formatCurrency(e.salary || 0, "TRY"),
-                      formatCurrency(e.grossSalary || 0, "TRY"),
-                      "TRY",
-                      e.sgkNo || "-",
-                      e.status === "active" ? "Aktif Çalışan" : e.status === "on_leave" ? "İzinli" : "Ayrıldı",
-                    ]),
-                  })}
-                  size="sm"
-                />
               </div>
             </div>
           </div>
@@ -4860,8 +5238,24 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                           ({emp.salaryType})
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-500 font-mono tabular-nums font-tabular-num-md">
-                        Yemek: {formatTRY(emp.foodAllowance || 0)} · Yol: {formatTRY(emp.roadAllowance || 0)}
+                      <div className="text-[11px] text-slate-500 font-mono tabular-nums font-tabular-num-md flex items-center gap-1.5 flex-wrap">
+                        {(() => {
+                          const applyAll = companySettings?.applyAllowancesToAllEmployees !== false;
+                          const f = applyAll ? (companySettings?.defaultFoodAllowance ?? 5500) : (emp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500);
+                          const r = applyAll ? (companySettings?.defaultRoadAllowance ?? 2500) : (emp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500);
+                          return (
+                            <>
+                              <span>Yemek: {formatTRY(f)}</span>
+                              <span>·</span>
+                              <span>Yol: {formatTRY(r)}</span>
+                              {applyAll && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-bold border border-purple-200" title="Firma Sistem Ayarları Ticari Parametrelerinden Otomatik Alınıyor">
+                                  Ticari Parametre
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
@@ -4959,12 +5353,15 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <span className="text-[11px] text-slate-400 font-medium">Bordro dönemindeki toplam brüt hakediş</span>
             </div>
 
-            <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200 shadow-xs">
-              <span className="text-[11px] font-bold text-emerald-800 uppercase block">Toplam Net Ödenecek Maaş</span>
-              <span className="text-xl font-black text-emerald-900 mt-1 block">
+            <div
+              style={{ backgroundColor: "#83b8ff" }}
+              className="p-4 rounded-2xl border border-[#60a5fa] shadow-xs text-slate-950"
+            >
+              <span className="text-[11px] font-black text-slate-900 uppercase block">Toplam Net Ödenecek Maaş (İşlem Tutarı)</span>
+              <span className="text-xl font-black text-slate-950 mt-1 block font-mono">
                 {formatTRY(payrollRecords.reduce((sum, r) => sum + r.payableNetSalary, 0))}
               </span>
-              <span className="text-[11px] text-emerald-700 font-medium">Avans & Kesintiler Düşülmüş Net Tutar</span>
+              <span className="text-[11px] text-slate-800 font-semibold">Avans & Kesintiler Düşülmüş Net Tutar</span>
             </div>
 
             <div className="bg-amber-50/80 p-4 rounded-2xl border border-amber-200 shadow-xs">
@@ -4997,6 +5394,17 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveSubTab("allowances")}
+                  className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/80 active:scale-95 font-bold px-2.5 sm:px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
+                  title="Personel Yan Hakları & Ticari Ödenek Parametrelerini Düzenle"
+                >
+                  <Gift className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                  <span className="hidden sm:inline">Yan Hak Parametreleri</span>
+                  <span className="sm:hidden">Yan Haklar</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setIsBulkPayrollModalOpen(true)}
@@ -6915,6 +7323,428 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         />
       )}
 
+      {/* SUB-TAB 8: PERSONEL YAN HAKLARI & TİCARİ ÖDENEK PARAMETRELERİ (YOL & YEMEK YARDIMI) */}
+      {activeSubTab === "allowances" && (
+        <div className="space-y-6">
+          {/* Main Card: Personel Yan Hakları & Ticari Ödenek Parametreleri */}
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-purple-200/60 shadow-2xs space-y-6 text-xs">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-200">
+                    <Utensils className="w-4 h-4" />
+                  </span>
+                  <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200">
+                    <Bus className="w-4 h-4" />
+                  </span>
+                  <span className="p-1.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-200">
+                    <Gift className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                    Personel Yan Hakları & Ticari Ödenek Parametreleri (Yol & Yemek Yardımı)
+                  </h3>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Şirket personellerinin bordro ve puantaj hesaplamalarında standart olarak kullanılacak yol ve yemek yardımı tutarları.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                  <Users className="w-3.5 h-3.5 text-purple-600" />
+                  <span>{employees.filter((e) => !e.status || e.status === "active").length} Aktif Personele Entegre</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Global Entegrasyon Anahtarı */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50/90 via-indigo-50/60 to-blue-50/90 border border-purple-200/80 flex items-start gap-3 shadow-2xs">
+              <input
+                type="checkbox"
+                id="hr-apply-allowances-all"
+                checked={allowanceForm.applyAllowancesToAllEmployees}
+                onChange={(e) =>
+                  setAllowanceForm({
+                    ...allowanceForm,
+                    applyAllowancesToAllEmployees: e.target.checked,
+                  })
+                }
+                className="mt-1 w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+              />
+              <div className="flex-1">
+                <label
+                  htmlFor="hr-apply-allowances-all"
+                  className="font-bold text-slate-900 text-xs cursor-pointer flex flex-wrap items-center gap-2"
+                >
+                  <span>Tüm Personeller İçin Yol ve Yemek Yardımını Buradan Al (Şirket Politikası)</span>
+                  {allowanceForm.applyAllowancesToAllEmployees && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                      <Check className="w-3 h-3 text-emerald-700" />
+                      Aktif - Otomatik Uygulanıyor
+                    </span>
+                  )}
+                </label>
+                <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                  Bu seçenek açık olduğunda, İnsan Kaynakları modülündeki tüm çalışanların aylık bordro ve puantaj hesaplamalarında doğrudan buradaki şirket standart yol ve yemek yardımı parametreleri baz alınır.
+                </p>
+              </div>
+            </div>
+
+            {/* Yol ve Yemek İki Kolon Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* 1. YEMEK YARDIMI KARTI */}
+              <div className="p-5 rounded-2xl bg-amber-50/50 border border-amber-200/90 space-y-4 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-amber-200/70 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                      <Utensils className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-xs">Yemek Yardımı Parametreleri</h4>
+                      <p className="text-[10px] text-slate-500">Nakit / Kart yemek ödeneği standartları</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                    2026 İstisna: 300 ₺/Gün
+                  </span>
+                </div>
+
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Varsayılan Aylık Yemek Yardımı (₺ / Ay)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        value={allowanceForm.defaultFoodAllowance}
+                        onChange={(e) =>
+                          setAllowanceForm({
+                            ...allowanceForm,
+                            defaultFoodAllowance: Math.max(0, Number(e.target.value)),
+                          })
+                        }
+                        className="w-full bg-white border border-amber-300 text-slate-900 rounded-xl p-2.5 pl-8 font-bold text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-2xs"
+                      />
+                      <span className="absolute left-3 top-2.5 font-bold text-amber-700 text-sm">₺</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Şirketteki her çalışanın aylık bordrosuna standart olarak eklenecek tutar.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Günlük İstisna / Birim Tutarı
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="10"
+                          value={allowanceForm.dailyFoodAllowanceRate}
+                          onChange={(e) =>
+                            setAllowanceForm({
+                              ...allowanceForm,
+                              dailyFoodAllowanceRate: Math.max(0, Number(e.target.value)),
+                            })
+                          }
+                          className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl p-2 pl-7 font-bold text-xs shadow-2xs focus:ring-2 focus:ring-amber-400"
+                        />
+                        <span className="absolute left-2.5 top-2 text-slate-500 font-bold">₺</span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mt-0.5">2026 SGK Nakit İstisnası: 300 ₺</p>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Hesaplama Esası
+                      </label>
+                      <select
+                        value={allowanceForm.foodAllowanceCalculationType}
+                        onChange={(e) =>
+                          setAllowanceForm({
+                            ...allowanceForm,
+                            foodAllowanceCalculationType: e.target.value as "monthly" | "daily",
+                          })
+                        }
+                        className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl p-2 font-bold text-xs cursor-pointer shadow-2xs focus:ring-2 focus:ring-amber-400"
+                      >
+                        <option value="monthly">Aylık Sabit Tutar</option>
+                        <option value="daily">Puantaja Göre (Fiili Gün x Günlük)</option>
+                      </select>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Bordroya yansıtılma şekli</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. YOL / ULAŞIM YARDIMI KARTI */}
+              <div className="p-5 rounded-2xl bg-blue-50/50 border border-blue-200/90 space-y-4 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-blue-200/70 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                      <Bus className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-xs">Yol / Ulaşım Yardımı Parametreleri</h4>
+                      <p className="text-[10px] text-slate-500">Personel yol ve ulaşım desteği standartları</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-blue-100 text-blue-900 border border-blue-300 shadow-2xs">
+                    Ulaşım Desteği
+                  </span>
+                </div>
+
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Varsayılan Aylık Yol Yardımı (₺ / Ay)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        value={allowanceForm.defaultRoadAllowance}
+                        onChange={(e) =>
+                          setAllowanceForm({
+                            ...allowanceForm,
+                            defaultRoadAllowance: Math.max(0, Number(e.target.value)),
+                          })
+                        }
+                        className="w-full bg-white border border-blue-300 text-slate-900 rounded-xl p-2.5 pl-8 font-bold text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs"
+                      />
+                      <span className="absolute left-3 top-2.5 font-bold text-blue-700 text-sm">₺</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Şirketteki her çalışanın aylık bordrosuna eklenecek yol/ulaşım tutarı.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Günlük Yol Birim Tutarı
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="5"
+                          value={allowanceForm.dailyRoadAllowanceRate}
+                          onChange={(e) =>
+                            setAllowanceForm({
+                              ...allowanceForm,
+                              dailyRoadAllowanceRate: Math.max(0, Number(e.target.value)),
+                            })
+                          }
+                          className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl p-2 pl-7 font-bold text-xs shadow-2xs focus:ring-2 focus:ring-blue-400"
+                        />
+                        <span className="absolute left-2.5 top-2 text-slate-500 font-bold">₺</span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Toplu taşıma / bilet emsali</p>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Hesaplama Esası
+                      </label>
+                      <select
+                        value={allowanceForm.roadAllowanceCalculationType}
+                        onChange={(e) =>
+                          setAllowanceForm({
+                            ...allowanceForm,
+                            roadAllowanceCalculationType: e.target.value as "monthly" | "daily",
+                          })
+                        }
+                        className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl p-2 font-bold text-xs cursor-pointer shadow-2xs focus:ring-2 focus:ring-blue-400"
+                      >
+                        <option value="monthly">Aylık Sabit Tutar</option>
+                        <option value="daily">Puantaja Göre (Fiili Gün x Günlük)</option>
+                      </select>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Bordroya yansıtılma şekli</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Yan Haklar Hızlı Bilgi & Özet Kutusu */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0">
+                  <Gift className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900 text-xs">
+                    Personel Başına Standart Aylık Yan Hak Paketi
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                    <span>
+                      Yemek: <strong className="text-amber-700">{formatTRY(allowanceForm.defaultFoodAllowance)}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Yol: <strong className="text-blue-700">{formatTRY(allowanceForm.defaultRoadAllowance)}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Kişi Başı Toplam: <strong className="text-purple-900">{formatTRY(allowanceForm.defaultFoodAllowance + allowanceForm.defaultRoadAllowance)}</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-2xs text-right">
+                  <span className="text-[10px] text-slate-500 font-semibold block uppercase">
+                    Şirket Toplam Aylık Yan Hak Yükü
+                  </span>
+                  <span className="text-sm sm:text-base font-black text-purple-900 font-mono">
+                    {formatTRY((allowanceForm.defaultFoodAllowance + allowanceForm.defaultRoadAllowance) * employees.filter((e) => !e.status || e.status === "active").length)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-purple-50/70 p-4 rounded-2xl border border-purple-200/80">
+              <div className="flex items-center gap-2">
+                {isAllowanceSaved ? (
+                  <span className="text-xs font-extrabold text-emerald-700 flex items-center gap-1.5 animate-fadeIn">
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    Yan haklar ve ticari ödenek parametreleri başarıyla kaydedildi ve personellere uygulandı!
+                  </span>
+                ) : (
+                  <span className="text-xs text-purple-950 font-medium">
+                    Parametreleri tüm çalışanların bordro ve puantaj hesaplamalarına yansıtmak için kaydedin.
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSaveAllowances}
+                className="px-5 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shrink-0"
+              >
+                <Check className="w-4 h-4 text-purple-200" />
+                <span>Değişiklikleri Kaydet & Uygula</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Section 2: Kadro Yan Hak Dağılımı ve Etki Önizlemesi */}
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-purple-200/60 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                  <Users className="w-4 h-4 text-purple-600" />
+                  <span>Kadro Yan Hak Dağılımı ve Etki Önizlemesi</span>
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Mevcut personellerin bordrolarına yansıyacak yol ve yemek yardımı tutarlarının canlı dökümü
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Personel ara..."
+                    value={allowancePreviewSearch}
+                    onChange={(e) => setAllowancePreviewSearch(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  />
+                </div>
+
+                <select
+                  value={allowancePreviewDep}
+                  onChange={(e) => setAllowancePreviewDep(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+                >
+                  <option value="all">Tüm Departmanlar</option>
+                  {Array.from(new Set(employees.map((e) => e.department).filter(Boolean))).map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left text-xs min-w-[650px]">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
+                    <th className="py-2.5 px-3">Personel</th>
+                    <th className="py-2.5 px-3">Departman & Unvan</th>
+                    <th className="py-2.5 px-3 text-right">Yemek Yardımı</th>
+                    <th className="py-2.5 px-3 text-right">Yol Yardımı</th>
+                    <th className="py-2.5 px-3 text-right">Toplam Yan Hak</th>
+                    <th className="py-2.5 px-3 text-center">Uygulama Modu</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {employees
+                    .filter((e) => {
+                      const matchesSearch =
+                        !allowancePreviewSearch ||
+                        e.fullName.toLowerCase().includes(allowancePreviewSearch.toLowerCase()) ||
+                        (e.title && e.title.toLowerCase().includes(allowancePreviewSearch.toLowerCase()));
+                      const matchesDep = allowancePreviewDep === "all" || e.department === allowancePreviewDep;
+                      return matchesSearch && matchesDep;
+                    })
+                    .map((emp) => {
+                      const applyPolicy = allowanceForm.applyAllowancesToAllEmployees;
+                      const food = applyPolicy ? allowanceForm.defaultFoodAllowance : (emp.foodAllowance ?? allowanceForm.defaultFoodAllowance);
+                      const road = applyPolicy ? allowanceForm.defaultRoadAllowance : (emp.roadAllowance ?? allowanceForm.defaultRoadAllowance);
+                      const total = food + road;
+
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2.5 px-3">
+                            <span className="font-bold text-slate-900 block">{emp.fullName}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">TC: {emp.tckn || "—"}</span>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="font-medium text-slate-800 block">{emp.department || "—"}</span>
+                            <span className="text-[10px] text-slate-400">{emp.title || "—"}</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-700">
+                            {formatTRY(food)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-700">
+                            {formatTRY(road)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-black text-purple-900">
+                            {formatTRY(total)}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            {applyPolicy ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                Şirket Standardı
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                Kişisel Tanım
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: RESMİ İZİN, DEVAMSIZLIK & AVANS FORMLARI YAZDIRMA & DÜZENLEME */}
       {isFormsModalOpen && (
         <HRDocumentFormsModal
@@ -6923,6 +7753,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             setIsFormsModalOpen(false);
             setFormsModalLeaveRequest(undefined);
             setFormsModalAdvanceRequest(undefined);
+            setFormsModalAutoTrigger(false);
           }}
           employees={employees}
           companySettings={companySettings}
@@ -6931,6 +7762,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           initialFormType={formsModalType}
           leaveRequest={formsModalLeaveRequest}
           advanceRequest={formsModalAdvanceRequest}
+          autoPrint={formsModalAutoTrigger}
         />
       )}
 
@@ -6941,6 +7773,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           onClose={() => {
             setIsPayrollPrintModalOpen(false);
             setPayrollPrintSelectedEmpId(undefined);
+            setPayrollPrintAutoTrigger(false);
           }}
           employees={employees}
           companySettings={companySettings}
@@ -6951,6 +7784,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           advanceRequests={advanceRequests}
           leaveRequests={leaveRequests}
           legalDeductions={legalDeductions}
+          autoPrint={payrollPrintAutoTrigger}
         />
       )}
 
@@ -7045,10 +7879,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const empId = savedPayrollForPrintModal.emp.id;
+                  const emp = savedPayrollForPrintModal.emp;
                   setSavedPayrollForPrintModal(null);
-                  setPayrollPrintSelectedEmpId(empId);
+                  setEditingPayrollEmp(emp);
+                  setPayrollPrintSelectedEmpId(emp.id);
                   setPayrollPrintInitialMode("month");
+                  setPayrollPrintAutoTrigger(true);
                   setIsPayrollPrintModalOpen(true);
                 }}
                 className="w-full p-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-sm flex items-center justify-between shadow-md hover:shadow-lg transition-all cursor-pointer"
@@ -7056,9 +7892,9 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 <div className="flex items-center gap-2.5">
                   <Printer className="w-5 h-5 text-emerald-100" />
                   <div className="text-left">
-                    <div className="font-black">Bordroyu ve Ekli Formları Hemen Yazdır</div>
+                    <div className="font-black">Bordroyu ve Ekli Formları Sayfadan Ayrılmadan Yazdır</div>
                     <div className="text-[11px] font-normal text-emerald-100">
-                      Bordro, {savedPayrollForPrintModal.hasAdvance ? "Avans Talep Formu, " : ""}{savedPayrollForPrintModal.hasUnpaidLeave ? "SGK Eksik Gün Bildirimi, " : ""}tek pencerede birlikte yazdırılır
+                      Bordro, {savedPayrollForPrintModal.hasAdvance ? "Avans Talep Formu, " : ""}{savedPayrollForPrintModal.hasUnpaidLeave ? "SGK Eksik Gün Bildirimi, " : ""}sayfadan ayrılmadan birlikte yazdırılır
                     </div>
                   </div>
                 </div>
@@ -7069,10 +7905,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const empId = savedPayrollForPrintModal.emp.id;
+                    const emp = savedPayrollForPrintModal.emp;
                     setSavedPayrollForPrintModal(null);
-                    setFormsModalEmployeeId(empId);
+                    setEditingPayrollEmp(emp);
+                    setFormsModalEmployeeId(emp.id);
                     setFormsModalType("advance_request");
+                    setFormsModalAutoTrigger(true);
                     setIsFormsModalOpen(true);
                   }}
                   className="w-full p-2.5 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 rounded-xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer"
@@ -7089,10 +7927,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const empId = savedPayrollForPrintModal.emp.id;
+                    const emp = savedPayrollForPrintModal.emp;
                     setSavedPayrollForPrintModal(null);
-                    setFormsModalEmployeeId(empId);
+                    setEditingPayrollEmp(emp);
+                    setFormsModalEmployeeId(emp.id);
                     setFormsModalType("unpaid_leave");
+                    setFormsModalAutoTrigger(true);
                     setIsFormsModalOpen(true);
                   }}
                   className="w-full p-2.5 bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-300 rounded-xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer"
@@ -7108,16 +7948,29 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
             {/* Footer Navigation */}
             <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setSavedPayrollForPrintModal(null);
-                  handleBackToList();
-                }}
-                className="px-3 py-2 text-slate-600 hover:text-slate-900 font-bold transition-colors cursor-pointer"
-              >
-                Kapat & Listeye Dön
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const emp = savedPayrollForPrintModal.emp;
+                    setSavedPayrollForPrintModal(null);
+                    setEditingPayrollEmp(emp);
+                  }}
+                  className="px-3 py-2 text-purple-700 hover:text-purple-900 font-bold bg-purple-50 rounded-xl transition-colors cursor-pointer"
+                >
+                  Sayfada Kal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSavedPayrollForPrintModal(null);
+                    handleBackToList();
+                  }}
+                  className="px-3 py-2 text-slate-600 hover:text-slate-900 font-bold transition-colors cursor-pointer"
+                >
+                  Listeye Dön
+                </button>
+              </div>
 
               {savedPayrollForPrintModal.nextEmp ? (
                 <button
@@ -7148,6 +8001,16 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL: RESMİ PERSONEL VE KADRO LİSTESİ DÖKÜMÜ & YAZDIRMA */}
+      <EmployeeListPrintModal
+        isOpen={isEmployeeListModalOpen}
+        onClose={() => setIsEmployeeListModalOpen(false)}
+        employees={employees}
+        companySettings={companySettings}
+        branches={branches}
+        warehouses={warehouses}
+      />
 
     </div>
   );

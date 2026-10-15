@@ -22,6 +22,8 @@ import {
 import { formatTRY } from "../../data/fixedAssetsData";
 import { useTheme } from "../../context/ThemeContext";
 import { ModuleEntranceHeader } from "../common/ModuleEntranceHeader";
+import { ExportButtons } from "../ExportButtons";
+import { ExportData, formatCurrency } from "../../utils/exportUtils";
 import { FixedAssetList } from "./FixedAssetList";
 import { FixedAssetFormModal } from "./FixedAssetFormModal";
 import { FixedAssetDetailModal } from "./FixedAssetDetailModal";
@@ -200,75 +202,63 @@ export const FixedAssetsModule: React.FC<FixedAssetsModuleProps> = ({
     onUpdateAssets(updated);
   };
 
-  // Export all assets to CSV
-  const handleExportAllCsv = () => {
+  const getFixedAssetsExportData = (): ExportData => {
     const headers = [
       "Demirbaş Kodu",
       "Demirbaş Adı",
       "Kategori",
-      "Marka",
-      "Model",
+      "Marka & Model",
       "Seri No / Plaka",
       "Alış Tarihi",
-      "Aktif Giriş Tarihi",
       "Fatura No",
       "Tedarikçi",
-      "Alış Bedeli (TL)",
-      "KDV Oranı (%)",
-      "Toplam Bedel (TL)",
+      "Alış Bedeli",
+      "KDV (%)",
+      "Toplam Bedel",
       "Amortisman Yöntemi",
-      "Faydalı Ömür (Yıl)",
-      "Amortisman Oranı (%)",
-      "Kıst Dönem",
-      "Birikmiş Amortisman (TL)",
-      "Net Defter Değeri (TL)",
-      "Lokasyon / Şube",
+      "Faydalı Ömür",
+      "Amortisman Oranı",
+      "Birikmiş Amortisman",
+      "Net Defter Değeri",
+      "Bulunduğu Lokasyon / Depo",
       "Zimmetli Personel",
       "Durum",
     ];
 
     const rows = assets.map((a) => [
       a.code,
-      `"${a.name.replace(/"/g, '""')}"`,
-      `"${a.categoryLabel || a.category}"`,
-      `"${a.brand || ""}"`,
-      `"${a.model || ""}"`,
-      a.plateNumber || a.serialNumber || "",
+      a.name,
+      a.categoryLabel || a.category,
+      `${a.brand || ""} ${a.model || ""}`.trim() || "-",
+      a.plateNumber || a.serialNumber || "-",
       a.acquisitionDate,
-      a.activatedDate || a.acquisitionDate,
-      a.invoiceNo || "",
-      `"${a.vendorName || ""}"`,
-      a.purchaseCost.toFixed(2),
-      a.vatRate,
-      a.totalCost.toFixed(2),
+      a.invoiceNo || "-",
+      a.vendorName || "-",
+      formatCurrency(a.purchaseCost, "TRY"),
+      `%${a.vatRate}`,
+      formatCurrency(a.totalCost, "TRY"),
       a.depreciationMethod === "normal"
-        ? "Normal"
+        ? "Normal Amortisman"
         : a.depreciationMethod === "declining_balance"
         ? "Azalan Bakiyeler"
         : "Muaf",
-      a.usefulLifeYears,
+      `${a.usefulLifeYears} Yıl`,
       `%${a.depreciationRate}`,
-      a.isPartialYear ? "Evet (Kıst)" : "Hayır",
-      a.accumulatedDepreciation.toFixed(2),
-      a.netBookValue.toFixed(2),
-      `"${a.location || a.branchName || ""}"`,
-      `"${a.custodyEmployeeName || ""}"`,
-      a.status,
+      formatCurrency(a.accumulatedDepreciation, "TRY"),
+      formatCurrency(a.netBookValue, "TRY"),
+      a.location || a.branchName || "Merkez Depo",
+      a.custodyEmployeeName || "Depoda",
+      a.status === "active" ? "Aktif" : a.status === "scrapped" ? "Hurda" : "Elden Çıkarıldı",
     ]);
 
-    const csvContent =
-      "data:text/csv;charset=utf-8,\uFEFF" +
-      [headers.join(";"), ...rows.map((e) => e.join(";"))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `Demirbas_Sabit_Kiymet_Envanteri_${new Date().toISOString().slice(0, 10)}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    return {
+      filename: `Sabit_Kiymet_Envanteri_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Sabit Kıymetler",
+      title: "SABİT KIYMET & DEMİRBAŞ ENVANTER LİSTESİ",
+      subtitle: `Toplam ${assets.length} Adet Sabit Kıymet | Rapor Tarihi: ${new Date().toLocaleDateString("tr-TR")}`,
+      headers,
+      rows,
+    };
   };
 
   return (
@@ -309,15 +299,7 @@ export const FixedAssetsModule: React.FC<FixedAssetsModuleProps> = ({
         ]}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportAllCsv}
-              className="px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-slate-800 shrink-0 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 active:scale-[0.98]"
-              title="Tüm sabit kıymet envanterini Excel/CSV olarak indir"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              <span>Excel İndir</span>
-            </button>
+            <ExportButtons getExportData={getFixedAssetsExportData} size="md" />
 
             <button
               type="button"

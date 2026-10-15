@@ -10,6 +10,7 @@ import {
   ProjectCostMultipliers,
   DEFAULT_COST_MULTIPLIERS,
   calculateDynamicTotals,
+  DetailedCostItem,
 } from "../../data/feasibilityDashboardData";
 import { formatCurrency } from "../../utils/exportUtils";
 import { safeSetStorageItem } from "../../utils/storage";
@@ -744,10 +745,10 @@ export const FeasibilityCostDashboard: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-3xs font-extrabold border border-slate-200 font-mono">
-                  m² Direkt: {dynamicTotals.directCostPerM2.toLocaleString("tr-TR")} TL
+                  m² Direkt: {dynamicTotals.directCostPerM2.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 text-3xs font-extrabold border border-emerald-200 font-mono">
-                  m² Genel Bütçe: {dynamicTotals.generalBudgetPerM2.toLocaleString("tr-TR")} TL
+                  m² Genel Bütçe: {dynamicTotals.generalBudgetPerM2.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL
                 </span>
               </div>
             </div>
@@ -777,7 +778,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
               {formatCurrency(dynamicTotals?.directCost ?? 0)}
             </div>
             <span className="text-2xs text-blue-600 mt-2 block font-medium">
-              11 Paket İmalat • {(dynamicTotals?.directCostPerM2 ?? 0).toLocaleString("tr-TR")} TL/m²
+              11 Paket İmalat • {(dynamicTotals?.directCostPerM2 ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m²
             </span>
           </div>
 
@@ -789,7 +790,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
               {formatCurrency(dynamicTotals?.generalBudgetExclVat ?? 0)}
             </div>
             <span className="text-2xs text-emerald-600 mt-2 block font-medium">
-              +%{dynamicTotals?.totalAdditionsPct ?? 28} Çarpan Dahil • {(dynamicTotals?.generalBudgetPerM2 ?? 0).toLocaleString("tr-TR")} TL/m²
+              +%{dynamicTotals?.totalAdditionsPct ?? 28} Çarpan Dahil • {(dynamicTotals?.generalBudgetPerM2 ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m²
             </span>
           </div>
 
@@ -813,7 +814,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
               {formatCurrency(dynamicTotals?.totalInvestmentWithVat ?? 0)}
             </div>
             <span className="text-2xs text-indigo-600 mt-2 block font-medium">
-              %{multipliers.vatRatePct} KDV Dahil • {(dynamicTotals?.totalInvestmentPerM2 ?? 0).toLocaleString("tr-TR")} TL/m²
+              %{multipliers.vatRatePct} KDV Dahil • {(dynamicTotals?.totalInvestmentPerM2 ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m²
             </span>
           </div>
         </div>
@@ -936,7 +937,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
                   const unitM2 = Math.round(
                     groupDynamicAmount / totalAreaSafe
                   );
-                  unitDesc = `${unitM2.toLocaleString("tr-TR")} TL/m² (%${sharePct})`;
+                  unitDesc = `${unitM2.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m² (%${sharePct})`;
                 }
 
                 return (
@@ -1591,7 +1592,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
                                           <td className="p-2 text-right">{c.areaM2.toLocaleString("tr-TR")} m²</td>
                                           <td className="p-2 text-center font-bold">{c.emsal}</td>
                                           <td className="p-2 text-right">{formatCurrency(c.price)}</td>
-                                          <td className="p-2 text-right font-black text-blue-700">{c.unitPrice.toLocaleString("tr-TR")} TL/m²</td>
+                                          <td className="p-2 text-right font-black text-blue-700">{c.unitPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m²</td>
                                         </tr>
                                       ))}
                                     </tbody>
@@ -1800,7 +1801,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
                   {formatCurrency(dynamicTotals.directCost)}
                 </td>
                 <td className="py-3 px-4 text-right text-amber-200/90 text-2xs font-mono">
-                  {dynamicTotals.directCostPerM2.toLocaleString("tr-TR")} TL/m² (%100.0)
+                  {dynamicTotals.directCostPerM2.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m² (%100.0)
                 </td>
                 <td className="py-3 px-4 text-center text-3xs text-slate-400">
                   Direkt İmalat
@@ -1814,7 +1815,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
                   +{formatCurrency(dynamicTotals.totalAdditionsAmount)}
                 </td>
                 <td className="py-2.5 px-4 text-right text-slate-400 font-mono">
-                  +{(dynamicTotals.generalBudgetPerM2 - dynamicTotals.directCostPerM2).toLocaleString("tr-TR")} TL/m²
+                  +{(dynamicTotals.generalBudgetPerM2 - dynamicTotals.directCostPerM2).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m²
                 </td>
                 <td className="py-2.5 px-4 text-center text-3xs text-emerald-400">
                   Çarpan Katsayısı: x{dynamicTotals.multiplierFactor}
@@ -1828,7 +1829,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
                   {formatCurrency(dynamicTotals.generalBudgetExclVat)}
                 </td>
                 <td className="py-3 px-4 text-right text-emerald-200 text-2xs font-mono">
-                  {dynamicTotals.generalBudgetPerM2.toLocaleString("tr-TR")} TL/m²
+                  {dynamicTotals.generalBudgetPerM2.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m²
                 </td>
                 <td className="py-3 px-4 text-center text-3xs text-emerald-400 font-bold">
                   Bütçe Tavanı
@@ -1842,7 +1843,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
                   +{formatCurrency(dynamicTotals.vatAmount)}
                 </td>
                 <td className="py-2.5 px-4 text-right text-slate-400 font-mono">
-                  +{(dynamicTotals.totalInvestmentPerM2 - dynamicTotals.generalBudgetPerM2).toLocaleString("tr-TR")} TL/m²
+                  +{(dynamicTotals.totalInvestmentPerM2 - dynamicTotals.generalBudgetPerM2).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m²
                 </td>
                 <td className="py-2.5 px-4 text-center text-3xs text-indigo-400">
                   KDV Yükü
@@ -1856,7 +1857,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
                   {formatCurrency(dynamicTotals.totalInvestmentWithVat)}
                 </td>
                 <td className="py-3.5 px-4 text-right text-amber-200 text-2xs font-mono font-black">
-                  {dynamicTotals.totalInvestmentPerM2.toLocaleString("tr-TR")} TL/m²
+                  {dynamicTotals.totalInvestmentPerM2.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL/m²
                 </td>
                 <td className="py-3.5 px-4 text-center text-3xs font-extrabold text-amber-300">
                   Net Kâr: {formatCurrency(dynamicTotals.netProfit)}

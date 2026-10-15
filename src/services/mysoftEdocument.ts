@@ -1253,6 +1253,161 @@ export class MysoftEdocumentClient {
   }
 
   /**
+   * Fetch all document prefixes and sequential consecutive invoice numbers for a tenant VKN/TCKN.
+   * Returns e-Fatura & e-Arşiv series, default prefixes, and computed next consecutive invoice numbers.
+   */
+  async getTenantDocumentNumbersWithSequence(vknTckn: string): Promise<{
+    vknTckn: string;
+    eFaturaPrefix: string;
+    eFaturaNextNumber: string;
+    eFaturaSequence: number;
+    eArsivPrefix: string;
+    eArsivNextNumber: string;
+    eArsivSequence: number;
+    prefixes: Array<Record<string, unknown>>;
+  }> {
+    const vkn = normalizeMysoftTenantIdentifier(vknTckn) || String(vknTckn || "").trim();
+    const [numSettled, setSettled, outboxSettled] = await Promise.allSettled([
+      this.getDocumentNumberList(vkn),
+      this.getNumeratorSetList(vkn),
+      this.listOutgoing({ tenantIdentifierNumber: vkn, limit: 50 }),
+    ]);
+
+    const prefixes: Array<Record<string, unknown>> =
+      numSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(numSettled.value)) : [];
+    const numeratorSets: Array<Record<string, unknown>> =
+      setSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(setSettled.value)) : [];
+    const outboxDocs: Array<Record<string, unknown>> =
+      outboxSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(outboxSettled.value)) : [];
+
+    const currentYear = new Date().getFullYear();
+
+    // Parse issued outgoing invoice docNo values to know highest sequence per prefix in currentYear
+    const maxOutboxSeqByPrefix: Record<string, number> = {};
+    let latestOutboxEFaturaPrefix = "";
+    let latestOutboxEArsivPrefix = "";
+
+    for (const doc of outboxDocs) {
+      const rawDocNo = String(doc.docNo ?? doc.documentNo ?? doc.invoiceNumber ?? "").trim();
+      const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(rawDocNo);
+      if (match) {
+        const pfx = match[1].toUpperCase();
+        const yr = Number(match[2]);
+        const seq = parseInt(match[3], 10);
+        if (yr === currentYear && !isNaN(seq)) {
+          if (!maxOutboxSeqByPrefix[pfx] || seq > maxOutboxSeqByPrefix[pfx]) {
+            maxOutboxSeqByPrefix[pfx] = seq;
+          }
+        }
+        const docTypeStr = String(
+          doc.eDocumentType ?? doc.edocumentType ?? doc.profile ?? doc.documentType ?? "",
+        ).toUpperCase();
+        const isEArsivDoc = docTypeStr.includes("ARSIV") || docTypeStr === "2";
+        if (isEArsivDoc) {
+          if (!latestOutboxEArsivPrefix) latestOutboxEArsivPrefix = pfx;
+        } else {
+          if (!latestOutboxEFaturaPrefix) latestOutboxEFaturaPrefix = pfx;
+        }
+      }
+    }
+
+    const isEArsivRow = (p: Record<string, unknown>): boolean => {
+      const typeVal = String(p.edocumentType ?? p.eDocumentType ?? p.documentType ?? "").toUpperCase();
+      return typeVal === "2" || typeVal.includes("ARSIV");
+    };
+
+    const isEFaturaRow = (p: Record<string, unknown>): boolean => {
+      const typeVal = String(p.edocumentType ?? p.eDocumentType ?? p.documentType ?? "").toUpperCase();
+      if (!typeVal) return true;
+      return (
+        typeVal === "1" ||
+        typeVal === "0" ||
+        (typeVal.includes("FATURA") && !typeVal.includes("ARSIV"))
+      );
+    };
+
+    // 1. e-Fatura prefixes
+    const eFaturaRows = prefixes.filter(isEFaturaRow);
+    const defaultEFatura =
+      eFaturaRows.find((r) => r.isDefault === true && r.isPassive !== true) ||
+      eFaturaRows.find((r) => r.isPassive !== true) ||
+      eFaturaRows[0] ||
+      numeratorSets.find((r) => isEFaturaRow(r) && typeof r.prefix === "string" && r.prefix.trim());
+
+    const eFaturaPrefix = (
+      (typeof defaultEFatura?.prefix === "string" && defaultEFatura.prefix.trim()) ||
+      latestOutboxEFaturaPrefix ||
+      "GIB"
+    )
+      .toUpperCase()
+      .slice(0, 3);
+
+    const apiEFatCurNum =
+      Number(
+        defaultEFatura?.currentNumber ??
+          defaultEFatura?.lastNumber ??
+          defaultEFatura?.sequenceNumber ??
+          0,
+      ) || 0;
+    const eFaturaCurNum = Math.max(apiEFatCurNum, maxOutboxSeqByPrefix[eFaturaPrefix] || 0);
+    const eFaturaSequence = eFaturaCurNum + 1;
+    const eFaturaNextNumber = `${eFaturaPrefix}${currentYear}${String(eFaturaSequence).padStart(9, "0")}`;
+
+    // 2. e-Arşiv prefixes
+    const eArsivRows = prefixes.filter(isEArsivRow);
+    const defaultEArsiv =
+      eArsivRows.find((r) => r.isDefault === true && r.isPassive !== true) ||
+      eArsivRows.find((r) => r.isPassive !== true) ||
+      eArsivRows[0] ||
+      numeratorSets.find((r) => isEArsivRow(r) && typeof r.prefix === "string" && r.prefix.trim());
+
+    const eArsivPrefix = (
+      (typeof defaultEArsiv?.prefix === "string" && defaultEArsiv.prefix.trim()) ||
+      latestOutboxEArsivPrefix ||
+      "EAR"
+    )
+      .toUpperCase()
+      .slice(0, 3);
+
+    const apiEArsCurNum =
+      Number(
+        defaultEArsiv?.currentNumber ??
+          defaultEArsiv?.lastNumber ??
+          defaultEArsiv?.sequenceNumber ??
+          0,
+      ) || 0;
+    const eArsivCurNum = Math.max(apiEArsCurNum, maxOutboxSeqByPrefix[eArsivPrefix] || 0);
+    const eArsivSequence = eArsivCurNum + 1;
+    const eArsivNextNumber = `${eArsivPrefix}${currentYear}${String(eArsivSequence).padStart(9, "0")}`;
+
+    const enrichedPrefixes = prefixes.map((p) => {
+      const pfx = typeof p.prefix === "string" ? p.prefix.trim().toUpperCase().slice(0, 3) : "";
+      const rowCur =
+        Math.max(
+          Number(p.currentNumber ?? p.lastNumber ?? p.sequenceNumber ?? 0) || 0,
+          pfx ? maxOutboxSeqByPrefix[pfx] || 0 : 0,
+        );
+      return {
+        ...p,
+        prefix: pfx || p.prefix,
+        currentNumber: rowCur,
+        nextNumber: pfx ? `${pfx}${currentYear}${String(rowCur + 1).padStart(9, "0")}` : undefined,
+      };
+    });
+
+    return {
+      vknTckn: vkn,
+      eFaturaPrefix,
+      eFaturaNextNumber,
+      eFaturaSequence,
+      eArsivPrefix,
+      eArsivNextNumber,
+      eArsivSequence,
+      prefixes: enrichedPrefixes,
+    };
+  }
+
+  /**
    * Belirtilen mükellef (tenant) için Mysoft giden faturalarını ve portal numaratörlerini
    * kontrol ederek bir sonraki fatura numarasını hesaplar.
    * Örn: Son fatura ABC2026000000206 ise sıradaki ABC2026000000207 olur.
@@ -1756,8 +1911,10 @@ export class MysoftEdocumentClient {
     if (!tenant) return body;
 
     const needsXslt = !stringOrEmpty(body.xsltName) && !stringOrEmpty(body.xsltSetCode);
+    const currentPrefix = stringOrEmpty(body.prefix).toUpperCase();
+    const isGenericFallbackPrefix = currentPrefix === "GIB" || currentPrefix === "EAR";
     const needsPrefix =
-      !stringOrEmpty(body.prefix) &&
+      (!currentPrefix || isGenericFallbackPrefix) &&
       !stringOrEmpty(body.numeratorSetCode) &&
       !stringOrEmpty(body.docNo);
     if (!needsXslt && !needsPrefix) return body;
@@ -1779,7 +1936,7 @@ export class MysoftEdocumentClient {
         }
       }
       if (needsPrefix) {
-        if (defaults.numeratorSetCode) {
+        if (!currentPrefix && defaults.numeratorSetCode) {
           body.numeratorSetCode = defaults.numeratorSetCode;
         } else if (defaults.prefix) {
           body.prefix = defaults.prefix;

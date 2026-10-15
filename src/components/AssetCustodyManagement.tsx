@@ -50,7 +50,8 @@ import { AssetCustodyModal } from "./AssetCustodyModal";
 import { AssetCustodyPrintModal } from "./AssetCustodyPrintModal";
 import { AssetReturnModal } from "./AssetReturnModal";
 import { exportAssetCustodyToPDF } from "../utils/assetCustodyPdf";
-import { exportToExcel } from "../utils/exportUtils";
+import { exportToExcel, ExportData } from "../utils/exportUtils";
+import { ExportButtons } from "./ExportButtons";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 
 interface AssetCustodyManagementProps {
@@ -172,8 +173,13 @@ export const AssetCustodyManagement: React.FC<AssetCustodyManagementProps> = ({
   }, [assets]);
 
   const formatTRY = (val?: number) => {
-    if (typeof val !== "number" || isNaN(val)) return "0 ₺";
-    return val.toLocaleString("tr-TR") + " ₺";
+    if (typeof val !== "number" || isNaN(val)) return "0,00 ₺";
+    return (
+      val.toLocaleString("tr-TR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }) + " ₺"
+    );
   };
 
   const formatTRDate = (dStr?: string) => {
@@ -354,11 +360,8 @@ export const AssetCustodyManagement: React.FC<AssetCustodyManagementProps> = ({
     onUpdateAsset(updated);
   };
 
-  const handleExportInventoryExcel = () => {
-    if (!assets || assets.length === 0) {
-      triggerFormErrorNotification("Dışa aktarılacak zimmet ve demirbaş kaydı bulunamadı.", "Dışa Aktarma Uyarısı");
-      return;
-    }
+  const getAssetCustodyExportData = (): ExportData => {
+    const compName = companySettings?.companyName || "Şirket";
 
     const headers = [
       "Sıra",
@@ -520,16 +523,14 @@ export const AssetCustodyManagement: React.FC<AssetCustodyManagementProps> = ({
     });
 
     const dateStr = new Date().toISOString().split("T")[0];
-    const compName = companySettings?.companyName || "Şirket";
-
-    exportToExcel({
+    return {
       filename: `Zimmet_ve_Demirbas_Envanter_Listesi_${dateStr}`,
       sheetName: "Zimmet Envanteri",
       title: `${compName} - TÜM ZİMMET & DEMİRBAŞ ENVANTER LİSTESİ`,
       subtitle: `Rapor Tarihi: ${new Date().toLocaleDateString("tr-TR")} ${new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })} | Toplam Envanter: ${assets.length} Adet | Toplam Rayiç Değeri: ₺${stats.totalValue.toLocaleString("tr-TR")}`,
       headers,
       rows,
-    });
+    };
   };
 
   return (
@@ -551,14 +552,7 @@ export const AssetCustodyManagement: React.FC<AssetCustodyManagementProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            onClick={handleExportInventoryExcel}
-            className="inline-flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-md transition-all cursor-pointer"
-            title="Tüm zimmet ve demirbaş listesini detaylı Excel (.xlsx) tablosu olarak indir"
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            Envanter Listesini Dışa Aktar
-          </button>
+          <ExportButtons getExportData={getAssetCustodyExportData} size="md" />
           <button
             onClick={handleOpenNewModal}
             className="inline-flex items-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-md transition-colors cursor-pointer"

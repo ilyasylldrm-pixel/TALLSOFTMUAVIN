@@ -22,6 +22,7 @@ import {
 } from "../utils/puantajUtils";
 import { formatCurrency, exportToExcel } from "../utils/exportUtils";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import { PuantajScrollPicker } from "./PuantajScrollPicker";
 import {
   X,
   Layers,
@@ -133,7 +134,11 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
   >(() => {
     const initial: Record<string, CustomPayrollAdjustment> = {};
     activeEmployees.forEach((emp) => {
-      const existing = payrollCustomizations[emp.id];
+      const existing =
+        (payrollCustomizations[selectedMonth] && (payrollCustomizations[selectedMonth] as any)[emp.id]) ||
+        payrollCustomizations[`${selectedMonth}_${emp.id}`] ||
+        (payrollCustomizations[emp.id]?.isCustomized && (payrollCustomizations[emp.id]?.month === selectedMonth || !payrollCustomizations[emp.id]?.month) ? payrollCustomizations[emp.id] : undefined) ||
+        payrollCustomizations[emp.id];
       if (existing) {
         initial[emp.id] = { ...existing };
       }
@@ -191,7 +196,12 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
   // Helper to compute / get effective adjustment for an employee
   const getEffectiveAdjustment = (emp: Employee): CustomPayrollAdjustment => {
     const userManual = manualAdjustments[emp.id] || {};
-    const existingCustom = payrollCustomizations[emp.id] || {};
+    const existingCustom =
+      (payrollCustomizations[selectedMonth] && (payrollCustomizations[selectedMonth] as any)[emp.id]) ||
+      payrollCustomizations[`${selectedMonth}_${emp.id}`] ||
+      (payrollCustomizations[emp.id]?.isCustomized && (payrollCustomizations[emp.id]?.month === selectedMonth || !payrollCustomizations[emp.id]?.month) ? payrollCustomizations[emp.id] : undefined) ||
+      payrollCustomizations[emp.id] ||
+      {};
 
     // Auto data
     const autoAdv = integrateAdvances ? getAutoAdvanceForEmployee(emp.id, advanceRequests) : { totalAdvance: 0, count: 0, items: [] };
@@ -234,8 +244,17 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
     const bonusAmount = userManual.bonusAmount ?? (existingCustom.bonusAmount !== undefined ? existingCustom.bonusAmount : bulkBonusAmount);
 
     // Food & Road
-    const foodAllowance = userManual.foodAllowance ?? existingCustom.foodAllowance ?? (emp.foodAllowance || 0);
-    const roadAllowance = userManual.roadAllowance ?? existingCustom.roadAllowance ?? (emp.roadAllowance || 0);
+    const applyAll = companySettings?.applyAllowancesToAllEmployees !== false;
+    const defaultFood = (applyAll || !emp.foodAllowance)
+      ? (companySettings?.defaultFoodAllowance ?? emp.foodAllowance ?? 5500)
+      : (emp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500);
+
+    const defaultRoad = (applyAll || !emp.roadAllowance)
+      ? (companySettings?.defaultRoadAllowance ?? emp.roadAllowance ?? 2500)
+      : (emp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500);
+
+    const foodAllowance = userManual.foodAllowance ?? existingCustom.foodAllowance ?? defaultFood;
+    const roadAllowance = userManual.roadAllowance ?? existingCustom.roadAllowance ?? defaultRoad;
 
     // Deductions
     const advanceDeduction = userManual.advanceDeduction !== undefined
@@ -458,6 +477,47 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
     });
   };
 
+  const handlePuantajDayCodeSet = (dayNum: number, newCode: PuantajCode) => {
+    if (!currentActiveEmp || !currentActiveData) return;
+    const currentMap = currentActiveData.customAdjustment.puantajDays || {};
+    const existingDay = currentMap[dayNum] || { code: "N" };
+
+    const updatedDay: DayPuantajDetail = {
+      ...existingDay,
+      code: newCode,
+    };
+
+    const newMap: Record<number, DayPuantajDetail> = {
+      ...currentMap,
+      [dayNum]: updatedDay,
+    };
+
+    const baseGrossVal =
+      currentActiveData.customAdjustment.salaryType === "gross"
+        ? currentActiveData.customAdjustment.baseSalary || currentActiveEmp.salaryAmount
+        : (currentActiveData.customAdjustment.baseSalary || currentActiveEmp.salaryAmount) * 1.38;
+
+    const stats = calculatePuantajStats(newMap, daysInMonth, baseGrossVal);
+
+    setManualAdjustments((prev) => {
+      const current = prev[currentActiveEmp.id] || getEffectiveAdjustment(currentActiveEmp);
+      return {
+        ...prev,
+        [currentActiveEmp.id]: {
+          ...current,
+          puantajDays: newMap,
+          unpaidLeaveDays: stats.unpaidDays,
+          overtimeNormalHours: stats.overtimeNormalHours,
+          overtimeWeekendHours: stats.overtimeWeekendHours,
+          overtimeHolidayHours: stats.overtimeHolidayHours,
+          overtimeHolidayDays: stats.overtimeHolidayDays,
+          overtimePay: stats.calculatedOvertimePay,
+          isCustomized: true,
+        },
+      };
+    });
+  };
+
   const handlePuantajDayOvertimeChange = (dayNum: number, hours: number) => {
     if (!currentActiveEmp || !currentActiveData) return;
     const currentMap = currentActiveData.customAdjustment.puantajDays || {};
@@ -645,19 +705,19 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
   const handleExecuteBatchGeneration = () => {
     if (selectedCalculations.length === 0) return;
 
-    const finalCustomizations: Record<string, CustomPayrollAdjustment> = {
-      ...payrollCustomizations,
-    };
+    const updatedEmployeeCustoms: Record<string, CustomPayrollAdjustment> = {};
 
     selectedCalculations.forEach((item) => {
-      finalCustomizations[item.employee.id] = {
+      const adj: CustomPayrollAdjustment = {
         ...item.customAdjustment,
+        month: selectedMonth,
         isCustomized: true,
       };
+      updatedEmployeeCustoms[item.employee.id] = adj;
     });
 
     onApplyBatchPayroll(
-      finalCustomizations,
+      updatedEmployeeCustoms,
       selectedCalculations.length,
       totals.net,
       totals.employerCost
@@ -797,8 +857,9 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Sliders className="w-3.5 h-3.5 text-purple-700" />
-              <span>Personel Puantaj & Bordro Hazırla</span>
+              <Sliders className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+              <span className="hidden sm:inline">Personel Puantaj & Bordro Hazırla</span>
+              <span className="sm:hidden">Puantaj & Bordro</span>
             </button>
             <button
               type="button"
@@ -809,8 +870,9 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-purple-700" />
-              <span>Toplu İcmal & Hakediş Listesi</span>
+              <FileSpreadsheet className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+              <span className="hidden sm:inline">Toplu İcmal & Hakediş Listesi</span>
+              <span className="sm:hidden">İcmal Listesi</span>
             </button>
           </div>
 
@@ -826,10 +888,11 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
             type="button"
             onClick={handleExecuteBatchGeneration}
             disabled={selectedCalculations.length === 0}
-            className="px-4 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
-            <Calculator className="w-4 h-4" />
-            <span>{selectedCalculations.length} Bordroyu Kaydet & Onayla</span>
+            <Calculator className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">{selectedCalculations.length} Bordroyu Kaydet & Onayla</span>
+            <span className="sm:hidden">{selectedCalculations.length} Bordroyu Onayla</span>
           </button>
         </div>
       }
@@ -1337,14 +1400,19 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
                             <span className="font-black text-slate-800">{dayNum}</span>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handlePuantajDayClick(dayNum)}
-                            className={`w-7 h-7 rounded-lg text-xs font-black transition-transform active:scale-90 cursor-pointer shadow-2xs flex items-center justify-center ${cfg.badgeClass}`}
-                            title={`${cfg.label} (Tıkla ve değiştir)`}
-                          >
-                            {code}
-                          </button>
+                          <div className="w-full my-0.5">
+                            <PuantajScrollPicker
+                              dayNum={dayNum}
+                              dayName={dayName}
+                              code={code}
+                              onChange={(newCode) => handlePuantajDayCodeSet(dayNum, newCode)}
+                              isWeekend={isWeekend}
+                              holidayName={holidayName}
+                              monthName={monthNames[month - 1] || ""}
+                              badgeSize="sm"
+                              placement="bottom"
+                            />
+                          </div>
 
                           {holidayName ? (
                             <span className="text-[8px] font-extrabold text-red-700 truncate w-full" title={holidayName}>
@@ -1421,14 +1489,19 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
                               <span className="font-black text-slate-800">{dayNum}</span>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() => handlePuantajDayClick(dayNum)}
-                              className={`w-7 h-7 rounded-lg text-xs font-black transition-transform active:scale-90 cursor-pointer shadow-2xs flex items-center justify-center ${cfg.badgeClass}`}
-                              title={`${cfg.label} (Tıkla ve değiştir)`}
-                            >
-                              {code}
-                            </button>
+                            <div className="w-full my-0.5">
+                              <PuantajScrollPicker
+                                dayNum={dayNum}
+                                dayName={dayName}
+                                code={code}
+                                onChange={(newCode) => handlePuantajDayCodeSet(dayNum, newCode)}
+                                isWeekend={isWeekend}
+                                holidayName={holidayName}
+                                monthName={monthNames[month - 1] || ""}
+                                badgeSize="sm"
+                                placement="top"
+                              />
+                            </div>
 
                             {holidayName ? (
                               <span className="text-[8px] font-extrabold text-red-700 truncate w-full" title={holidayName}>
@@ -1850,11 +1923,14 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
               </div>
 
               <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <span className="text-[10px] font-bold text-purple-900 block uppercase">
-                    Net Ödenecek Maaş
+                <div
+                  style={{ backgroundColor: "#83b8ff" }}
+                  className="text-right px-3 py-1.5 rounded-xl border border-[#60a5fa] shadow-2xs"
+                >
+                  <span className="text-[10px] font-black text-slate-900 block uppercase">
+                    İŞLEM TUTARI / NET ÖDENECEK
                   </span>
-                  <span className="text-2xl font-black text-emerald-700">
+                  <span className="text-2xl font-black text-slate-950 font-mono">
                     {formatCurrency(currentActiveData.record.payableNetSalary, "TRY")}
                   </span>
                 </div>
@@ -2198,14 +2274,19 @@ export const BulkPayrollModal: React.FC<BulkPayrollModalProps> = ({
           initialFoodAllowance={
             currentActiveData.customAdjustment.foodAllowance !== undefined
               ? currentActiveData.customAdjustment.foodAllowance
-              : (currentActiveData.employee.foodAllowance || 0)
+              : (companySettings?.applyAllowancesToAllEmployees !== false || !currentActiveData.employee.foodAllowance
+                  ? (companySettings?.defaultFoodAllowance ?? currentActiveData.employee.foodAllowance ?? 5500)
+                  : (currentActiveData.employee.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500))
           }
           initialRoadAllowance={
             currentActiveData.customAdjustment.roadAllowance !== undefined
               ? currentActiveData.customAdjustment.roadAllowance
-              : (currentActiveData.employee.roadAllowance || 0)
+              : (companySettings?.applyAllowancesToAllEmployees !== false || !currentActiveData.employee.roadAllowance
+                  ? (companySettings?.defaultRoadAllowance ?? currentActiveData.employee.roadAllowance ?? 2500)
+                  : (currentActiveData.employee.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500))
           }
           initialCustomPayments={currentActiveData.customAdjustment.customPayments ?? []}
+          companySettings={companySettings}
           onApply={({ foodAllowance, roadAllowance, customPayments, customPaymentsTotal, notesSummary }) => {
             setManualAdjustments((prev) => {
               const current = prev[currentActiveData.employee.id] || {};

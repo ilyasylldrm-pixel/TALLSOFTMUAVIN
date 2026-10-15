@@ -384,15 +384,15 @@ export const AIReportInsights: React.FC<AIReportInsightsProps> = ({
           <div className="flex items-center gap-4 text-xs font-bold">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md bg-emerald-500" />
-              <span style={{ color: theme.pageText }}>Gelir (₺{formatCurrency(totalIncome)})</span>
+              <span style={{ color: theme.pageText }}>Gelir ({formatCurrency(totalIncome)})</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md bg-rose-500" />
-              <span style={{ color: theme.pageText }}>Gider (₺{formatCurrency(totalExpense)})</span>
+              <span style={{ color: theme.pageText }}>Gider ({formatCurrency(totalExpense)})</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md bg-[#0f6bae]" />
-              <span style={{ color: theme.pageText }}>Net: ₺{formatCurrency(netProfit)}</span>
+              <span style={{ color: theme.pageText }}>Net: {formatCurrency(netProfit)}</span>
             </div>
           </div>
         </div>
@@ -441,14 +441,14 @@ export const AIReportInsights: React.FC<AIReportInsightsProps> = ({
                       <div
                         className="w-full bg-emerald-500 rounded-t-md transition-all duration-500 group-hover:brightness-110"
                         style={{ height: `${Math.max(incPct, 4)}%` }}
-                        title={`Gelir: ₺${formatCurrency(item.income)}`}
+                        title={`Gelir: ${formatCurrency(item.income)}`}
                       />
                     </div>
                     <div className="flex-1 flex flex-col justify-end h-full">
                       <div
                         className="w-full bg-rose-500 rounded-t-md transition-all duration-500 group-hover:brightness-110"
                         style={{ height: `${Math.max(expPct, 4)}%` }}
-                        title={`Gider: ₺${formatCurrency(item.expense)}`}
+                        title={`Gider: ${formatCurrency(item.expense)}`}
                       />
                     </div>
                   </div>
@@ -457,11 +457,11 @@ export const AIReportInsights: React.FC<AIReportInsightsProps> = ({
                 <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 font-mono text-[10px] space-y-0.5">
                   <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
                     <span>G:</span>
-                    <span>₺{formatCurrency(item.income)}</span>
+                    <span>{formatCurrency(item.income)}</span>
                   </div>
                   <div className="flex justify-between text-rose-600 dark:text-rose-400 font-bold">
                     <span>Ç:</span>
-                    <span>₺{formatCurrency(item.expense)}</span>
+                    <span>{formatCurrency(item.expense)}</span>
                   </div>
                   <div
                     className={`flex justify-between font-extrabold pt-0.5 border-t border-slate-200/40 dark:border-slate-700/40 ${
@@ -469,7 +469,7 @@ export const AIReportInsights: React.FC<AIReportInsightsProps> = ({
                     }`}
                   >
                     <span>Net:</span>
-                    <span>₺{formatCurrency(item.netProfit)}</span>
+                    <span>{formatCurrency(item.netProfit)}</span>
                   </div>
                 </div>
               </div>

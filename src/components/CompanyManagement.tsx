@@ -1,14 +1,33 @@
 import React, { useState } from "react";
-import { CompanySettings, Branch, Warehouse, AddressDetails, TAXPAYER_TYPES } from "../types";
+import {
+  CompanySettings,
+  CompanyItem,
+  Branch,
+  Warehouse,
+  AddressDetails,
+  TAXPAYER_TYPES,
+  isModuleOrSubModuleAllowed,
+} from "../types";
+import { UserProfile } from "./AuthModal";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData } from "../utils/exportUtils";
 import { AddressSelector } from "./AddressSelector";
 import { GibPortalModal } from "./GibPortalModal";
 import { MysoftTenantPicker } from "./MysoftTenantPicker";
+import { CompanyModal } from "./CompanyModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { Settings } from "./Settings";
 import { Logo } from "./Logo";
+import {
+  getCompaniesList,
+  getActiveCompanyId,
+  addCompanyItem,
+  updateCompanyItem,
+  deleteCompanyItem,
+  setActiveCompanyId,
+} from "../utils/storage";
+import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import {
   fetchCloudLogo,
   saveCloudLogo,
@@ -58,9 +77,11 @@ import {
   Image as ImageIcon,
   CheckCircle,
   Database as DatabaseIcon,
+  ArrowRight,
+  UserCheck,
 } from "lucide-react";
 
-export type CompanySubTab = "profile" | "branches" | "warehouses" | "settings";
+export type CompanySubTab = "profile" | "companies" | "mysoft" | "branches" | "warehouses" | "settings";
 
 interface CompanyManagementProps {
   settings: CompanySettings;
@@ -78,6 +99,13 @@ interface CompanyManagementProps {
   onResetDemoData?: () => void;
   activeSubTab?: CompanySubTab;
   onSelectSubTab?: (tab: CompanySubTab) => void;
+  companies?: CompanyItem[];
+  activeCompanyId?: string;
+  onSelectCompany?: (companyId: string) => void;
+  onAddCompany?: (comp: CompanyItem, makeActive?: boolean) => void;
+  onUpdateCompany?: (comp: CompanyItem) => void;
+  onDeleteCompany?: (companyId: string) => void;
+  currentUser?: UserProfile | null;
 }
 
 export const CompanyManagement: React.FC<CompanyManagementProps> = ({
@@ -96,6 +124,13 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   onResetDemoData,
   activeSubTab = "profile",
   onSelectSubTab,
+  companies,
+  activeCompanyId,
+  onSelectCompany,
+  onAddCompany,
+  onUpdateCompany,
+  onDeleteCompany,
+  currentUser,
 }) => {
   const [currentSubTab, setCurrentSubTab] = useState<CompanySubTab>(activeSubTab);
 
@@ -111,8 +146,92 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     if (onSelectSubTab) onSelectSubTab(tab);
   };
 
+  // Multi-Company Local State & Modal
+  const [localCompanies, setLocalCompanies] = useState<CompanyItem[]>(() => companies || getCompaniesList());
+  const effectiveCompanies = companies || localCompanies;
+  const currentActiveCompanyId = activeCompanyId || getActiveCompanyId();
+
+  React.useEffect(() => {
+    if (companies) setLocalCompanies(companies);
+  }, [companies]);
+
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<CompanyItem | null>(null);
+  const [companyModalMode, setCompanyModalMode] = useState<"create" | "edit" | "mysoft_match">("create");
+
+  // Selected company for Mysoft tab
+  const [selectedMysoftCompId, setSelectedMysoftCompId] = useState<string>(currentActiveCompanyId);
+
+  const handleOpenAddCompany = () => {
+    setEditingCompany(null);
+    setCompanyModalMode("create");
+    setIsCompanyModalOpen(true);
+  };
+
+  const handleOpenEditCompany = (comp: CompanyItem) => {
+    setEditingCompany(comp);
+    setCompanyModalMode("edit");
+    setIsCompanyModalOpen(true);
+  };
+
+  const handleOpenMysoftMatch = (comp: CompanyItem) => {
+    setEditingCompany(comp);
+    setCompanyModalMode("mysoft_match");
+    setIsCompanyModalOpen(true);
+  };
+
+  const handleSaveCompanyFromModal = (savedComp: CompanyItem, makeActiveImmediately = true) => {
+    if (editingCompany) {
+      if (onUpdateCompany) {
+        onUpdateCompany(savedComp);
+      } else {
+        const updated = updateCompanyItem(savedComp);
+        setLocalCompanies(updated);
+      }
+      setLocalCompanies(getCompaniesList());
+    } else {
+      if (onAddCompany) {
+        onAddCompany(savedComp, makeActiveImmediately);
+        setLocalCompanies(getCompaniesList());
+      } else {
+        const updated = addCompanyItem(savedComp);
+        setLocalCompanies(updated);
+        if (makeActiveImmediately) {
+          setActiveCompanyId(savedComp.id);
+          if (onSelectCompany) {
+            onSelectCompany(savedComp.id);
+          }
+        }
+      }
+      if (makeActiveImmediately && onSelectCompany) {
+        onSelectCompany(savedComp.id);
+      }
+    }
+  };
+
+  const handleDeleteCompanyItem = (id: string) => {
+    if (id === "comp_default") {
+      alert("Varsayılan ana şirket silinemez.");
+      return;
+    }
+    if (confirm("Bu şirketi ve şirket yapılandırmasını silmek istediğinize emin misiniz?")) {
+      if (onDeleteCompany) {
+        onDeleteCompany(id);
+      } else {
+        const updated = deleteCompanyItem(id);
+        setLocalCompanies(updated);
+      }
+    }
+  };
+
   // Profile Form State
   const [profileForm, setProfileForm] = useState<CompanySettings>(settings);
+
+  React.useEffect(() => {
+    if (settings) {
+      setProfileForm(settings);
+    }
+  }, [settings]);
   const [isSaved, setIsSaved] = useState(false);
   const [isCredSaved, setIsCredSaved] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -509,54 +628,117 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           </div>
         </div>
 
-        {/* Sub-tab Navigation */}
-        <div className="relative z-10 flex items-center gap-2 mt-6 pt-4 border-t border-[#283044] overflow-x-auto">
-          <button
-            onClick={() => handleTabChange("profile")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              currentSubTab === "profile"
-                ? "bg-[#0f6bae] text-white shadow-2xs"
-                : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
-            }`}
-          >
-            <Building className={`w-4 h-4 ${currentSubTab === "profile" ? "text-white" : "text-[#83b8ff]"}`} />
-            <span>Firma Profili & Adres</span>
-          </button>
+        {/* Sub-tab Navigation (Filtered by Sub-Module Authorization) */}
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mt-6 pt-4 border-t border-[#283044]">
+          <div className="flex items-center gap-2 overflow-x-auto">
+            {(() => {
+              const activeCompObj =
+                effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null;
+              const isSubTabAllowed = (subKey: string) =>
+                isModuleOrSubModuleAllowed(
+                  subKey,
+                  "companies",
+                  currentUser,
+                  activeCompObj
+                );
+              return (
+                <>
+                  {isSubTabAllowed("companies_profile") && (
+                    <button
+                      onClick={() => handleTabChange("profile")}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        currentSubTab === "profile"
+                          ? "bg-[#0f6bae] text-white shadow-2xs"
+                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
+                      }`}
+                    >
+                      <Building className={`w-4 h-4 ${currentSubTab === "profile" ? "text-white" : "text-[#83b8ff]"}`} />
+                      <span>Firma Profili & Adres</span>
+                    </button>
+                  )}
 
-          <button
-            onClick={() => handleTabChange("branches")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              currentSubTab === "branches"
-                ? "bg-[#0f6bae] text-white shadow-2xs"
-                : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
-            }`}
-          >
-            <Store className={`w-4 h-4 ${currentSubTab === "branches" ? "text-white" : "text-[#83b8ff]"}`} />
-            <span>Şubeler ({branches.length})</span>
-          </button>
+                  {isSubTabAllowed("companies_list") && (
+                    <button
+                      onClick={() => handleTabChange("companies")}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        currentSubTab === "companies"
+                          ? "bg-[#0f6bae] text-white shadow-2xs"
+                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
+                      }`}
+                    >
+                      <Building2 className={`w-4 h-4 ${currentSubTab === "companies" ? "text-white" : "text-[#83b8ff]"}`} />
+                      <span>Şirketler & Çoklu Şirket ({effectiveCompanies.length})</span>
+                    </button>
+                  )}
 
-          <button
-            onClick={() => handleTabChange("warehouses")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              currentSubTab === "warehouses"
-                ? "bg-[#0f6bae] text-white shadow-2xs"
-                : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
-            }`}
-          >
-            <WarehouseIcon className={`w-4 h-4 ${currentSubTab === "warehouses" ? "text-white" : "text-[#83b8ff]"}`} />
-            <span>Depolar ({warehouses.length})</span>
-          </button>
+                  {isSubTabAllowed("companies_mysoft") && (
+                    <button
+                      onClick={() => handleTabChange("mysoft")}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        currentSubTab === "mysoft"
+                          ? "bg-[#0f6bae] text-white shadow-2xs"
+                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
+                      }`}
+                    >
+                      <Globe className={`w-4 h-4 ${currentSubTab === "mysoft" ? "text-white" : "text-[#83b8ff]"}`} />
+                      <span>Mysoft VKN/TCKN Eşleştirme</span>
+                    </button>
+                  )}
 
+                  {isSubTabAllowed("companies_branches") && (
+                    <button
+                      onClick={() => handleTabChange("branches")}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        currentSubTab === "branches"
+                          ? "bg-[#0f6bae] text-white shadow-2xs"
+                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
+                      }`}
+                    >
+                      <Store className={`w-4 h-4 ${currentSubTab === "branches" ? "text-white" : "text-[#83b8ff]"}`} />
+                      <span>Şubeler ({branches.length})</span>
+                    </button>
+                  )}
+
+                  {isSubTabAllowed("companies_warehouses") && (
+                    <button
+                      onClick={() => handleTabChange("warehouses")}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        currentSubTab === "warehouses"
+                          ? "bg-[#0f6bae] text-white shadow-2xs"
+                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
+                      }`}
+                    >
+                      <WarehouseIcon className={`w-4 h-4 ${currentSubTab === "warehouses" ? "text-white" : "text-[#83b8ff]"}`} />
+                      <span>Depolar ({warehouses.length})</span>
+                    </button>
+                  )}
+
+                  {isSubTabAllowed("companies_settings") && (
+                    <button
+                      onClick={() => handleTabChange("settings")}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        currentSubTab === "settings"
+                          ? "bg-[#0f6bae] text-white shadow-2xs"
+                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
+                      }`}
+                    >
+                      <SettingsIcon className={`w-4 h-4 ${currentSubTab === "settings" ? "text-white" : "text-[#83b8ff]"}`} />
+                      <span>Sistem Ayarları</span>
+                    </button>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Quick Action: Yeni Şirket Ekle */}
           <button
-            onClick={() => handleTabChange("settings")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              currentSubTab === "settings"
-                ? "bg-[#0f6bae] text-white shadow-2xs"
-                : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
-            }`}
+            type="button"
+            onClick={handleOpenAddCompany}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0f6bae] hover:bg-[#005289] text-white rounded-md text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-98 shrink-0"
           >
-            <SettingsIcon className={`w-4 h-4 ${currentSubTab === "settings" ? "text-white" : "text-[#83b8ff]"}`} />
-            <span>Sistem Ayarları</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Yeni Şirket Ekle</span>
           </button>
         </div>
       </div>
@@ -1912,6 +2094,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         <div className="space-y-6">
           <Settings
             embedded={true}
+            initialTab="system"
             settings={profileForm}
             onSaveSettings={(newSettings) => {
               setProfileForm(newSettings);
@@ -1923,6 +2106,679 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           />
         </div>
       )}
+
+      {/* SUB-TAB: ŞİRKETLER & ÇOKLU ŞİRKET YÖNETİMİ */}
+      {currentSubTab === "companies" && (
+        <div className="space-y-6">
+          {/* Header Bar */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-[#0f6bae]" />
+                Kayıtlı Şirketler & Çoklu Şirket Yönetimi
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Tüm şirketlerinizi yönetin. Her yeni eklenen şirkete tüm modüller (Faturalar, Cariler, Bankalar, Stoklar vb.) <strong>tamamen boş ve izole</strong> olarak gelir.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenAddCompany}
+              className="px-4 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Yeni Şirket Ekle</span>
+            </button>
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {effectiveCompanies.map((comp) => {
+              const isActive = comp.id === currentActiveCompanyId;
+              return (
+                <div
+                  key={comp.id}
+                  className={`bg-white rounded-2xl border p-5 transition-all shadow-xs flex flex-col justify-between ${
+                    isActive
+                      ? "border-[#0f6bae] ring-2 ring-[#0f6bae]/20 bg-gradient-to-b from-[#f0f7fc] to-white"
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+                          isActive ? "bg-[#0f6bae] text-white" : "bg-slate-100 text-slate-600"
+                        }`}>
+                          <Building className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-slate-900 truncate">
+                            {comp.companyName}
+                          </h4>
+                          <span className="text-[10px] text-slate-400 capitalize">
+                            {comp.companyType === "anonim" ? "Anonim Şirket (A.Ş.)" : comp.companyType === "sahis" ? "Şahıs Firması" : "Limited Şirket (Ltd. Şti.)"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isActive ? (
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                          Aktif Şirket
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onSelectCompany) {
+                              onSelectCompany(comp.id);
+                            } else {
+                              setActiveCompanyId(comp.id);
+                              window.location.reload();
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-[#0f6bae] hover:text-white text-slate-700 text-[11px] font-bold rounded-lg transition-all cursor-pointer"
+                        >
+                          Bu Şirkete Geç
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-slate-600 line-clamp-2">
+                      {comp.companyTitle || comp.companyName}
+                    </div>
+
+                    {/* VKN & TCKN details */}
+                    <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-150 space-y-1 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 font-semibold">Vergi Dairesi:</span>
+                        <span className="font-bold text-slate-800">{comp.taxOffice || "Merkez"}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 font-semibold">VKN (10 hane):</span>
+                        <span className="font-mono font-bold text-slate-800">{comp.vkn || "—"}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 font-semibold">TCKN (11 hane):</span>
+                        <span className="font-mono font-bold text-slate-800">{comp.tckn || "—"}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-200">
+                        <span className="text-indigo-600 font-semibold">Mysoft Eşleşme:</span>
+                        <span className="font-mono text-indigo-700 font-bold">
+                          {comp.tenantIdentifierNumber || comp.vkn || comp.tckn || "Eşleşmedi"} ({comp.mysoftMatchedType?.toUpperCase() || "VKN"})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Modül Durumu Bilgisi */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      {comp.moduleRestrictionEnabled ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">
+                          🔒 Kısıtlı Modül ({comp.allowedModules?.length || 0} / 19)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-800">
+                          ✨ Tüm Modüller Açık (19)
+                        </span>
+                      )}
+                      {comp.id !== "comp_default" && (
+                        <span className="text-slate-500 flex items-center gap-1 text-[10px]">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          İzole Temiz Veri
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Giriş Bilgileri Rozeti */}
+                    {comp.loginUsername && (
+                      <div className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Key className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="font-semibold text-slate-600 dark:text-slate-400">Giriş:</span>
+                          <span className="font-mono font-bold">{comp.loginUsername}</span>
+                          {comp.loginPasswordPlain && (
+                            <span className="font-mono text-[10px] text-slate-500">({comp.loginPasswordPlain})</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-bold shrink-0">
+                          {comp.loginRole || "Giriş Yetkili"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-3">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenMysoftMatch(comp)}
+                        className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                        title="Mysoft VKN / TCKN Eşleştirmesini Düzenle"
+                      >
+                        <Globe className="w-3 h-3" />
+                        <span>Mysoft Eşle</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditCompany(comp)}
+                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        title="Şirketi Düzenle"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {comp.id !== "comp_default" && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCompanyItem(comp.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Şirketi Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* SUB-TAB: MYSOFT ENTEGRASYON & VKN/TCKN EŞLEŞTİRME MASASI */}
+      {currentSubTab === "mysoft" && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
+            <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-indigo-600" />
+                  Mysoft e-Belge Entegrasyonu — VKN / TCKN Eşleştirme Masası
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Yönetici (Admin) olarak sistemdeki şirketlerin Vergi Kimlik Numarası (VKN) ve T.C. Kimlik Numarası (TCKN) eşleştirmesini yapabilir, Mysoft portal mükellef kimliğiyle bağlayabilirsiniz.
+                </p>
+              </div>
+
+              {/* Company Selector */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-600 whitespace-nowrap">
+                  İşlem Yapılacak Şirket:
+                </label>
+                <select
+                  value={selectedMysoftCompId}
+                  onChange={(e) => setSelectedMysoftCompId(e.target.value)}
+                  className="h-9 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                >
+                  {effectiveCompanies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.companyName} {c.id === currentActiveCompanyId ? "(Aktif)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Selected Company Mapping Detail */}
+            {(() => {
+              const selectedComp = effectiveCompanies.find((c) => c.id === selectedMysoftCompId) || effectiveCompanies[0];
+              if (!selectedComp) return null;
+              return (
+                <div className="bg-gradient-to-br from-indigo-50/50 via-slate-50/70 to-blue-50/40 p-5 rounded-2xl border border-indigo-150 space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 block">
+                        Seçili Şirket
+                      </span>
+                      <h4 className="text-base font-bold text-slate-900">
+                        {selectedComp.companyTitle || selectedComp.companyName}
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Vergi Dairesi: {selectedComp.taxOffice || "Merkez"} • İl: {selectedComp.city || "İstanbul"}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenMysoftMatch(selectedComp)}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>VKN & TCKN Eşleştirmesini Düzenle</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                        Kurumsal VKN (10 Hane)
+                      </div>
+                      <div className="text-base font-mono font-bold text-slate-900">
+                        {selectedComp.vkn || "Girilmedi"}
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-1 block">Tüzel Kişi Vergi No</span>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                        Yetkili TCKN (11 Hane)
+                      </div>
+                      <div className="text-base font-mono font-bold text-slate-900">
+                        {selectedComp.tckn || "Girilmedi"}
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-1 block">Gerçek Kişi / Şahıs No</span>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-indigo-200">
+                      <div className="text-[11px] text-indigo-600 font-bold mb-1">
+                        Aktif Mysoft Eşleşmesi
+                      </div>
+                      <div className="text-base font-mono font-bold text-indigo-900">
+                        {selectedComp.tenantIdentifierNumber || selectedComp.vkn || selectedComp.tckn || "Eşleşmedi"}
+                      </div>
+                      <span className="text-[10px] text-indigo-500 mt-1 block font-semibold">
+                        Kullanılan Tip: {selectedComp.mysoftMatchedType?.toUpperCase() || "VKN"}
+                      </span>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-blue-200">
+                      <div className="text-[11px] text-blue-700 font-bold mb-1 flex items-center justify-between">
+                        <span>e-Fatura Ön Eki</span>
+                        <span className="text-[9px] bg-blue-100 text-blue-800 px-1 py-0.2 rounded font-mono font-bold">
+                          {selectedComp.eFaturaPrefix || "GIB"}
+                        </span>
+                      </div>
+                      <div className="text-xs font-mono font-bold text-blue-950 truncate mt-1">
+                        {selectedComp.eFaturaNextNumber || `${selectedComp.eFaturaPrefix || "GIB"}2026000000001`}
+                      </div>
+                      <span className="text-[10px] text-blue-600 mt-1 block">Sıradaki Ardışık No</span>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-purple-200">
+                      <div className="text-[11px] text-purple-700 font-bold mb-1 flex items-center justify-between">
+                        <span>e-Arşiv Ön Eki</span>
+                        <span className="text-[9px] bg-purple-100 text-purple-800 px-1 py-0.2 rounded font-mono font-bold">
+                          {selectedComp.eArsivPrefix || "EAR"}
+                        </span>
+                      </div>
+                      <div className="text-xs font-mono font-bold text-purple-950 truncate mt-1">
+                        {selectedComp.eArsivNextNumber || `${selectedComp.eArsivPrefix || "EAR"}2026000000001`}
+                      </div>
+                      <span className="text-[10px] text-purple-600 mt-1 block">Sıradaki Ardışık No</span>
+                    </div>
+                  </div>
+
+                  {/* Mysoft Tenant Picker for this company */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                    <h5 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Search className="w-3.5 h-3.5 text-indigo-600" />
+                      Mysoft Mükellef Rehberinden Seç veya Manuel Eşle
+                    </h5>
+                    <MysoftTenantPicker
+                      variant="compact"
+                      hintVkn={selectedComp.tenantIdentifierNumber || selectedComp.vkn || selectedComp.tckn}
+                      onSelect={(newVkn) => {
+                        if (newVkn) {
+                          const updated = {
+                            ...selectedComp,
+                            tenantIdentifierNumber: newVkn,
+                            mysoftStatus: "verified" as const,
+                            vkn: newVkn.length === 10 ? newVkn : selectedComp.vkn,
+                            tckn: newVkn.length === 11 ? newVkn : selectedComp.tckn,
+                          };
+                          handleSaveCompanyFromModal(updated, false);
+                          writeStoredMysoftTenantVkn(newVkn);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Şube Ekle / Düzenle Modal */}
+      {isBranchModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#131b2e] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#0f6bae] flex items-center justify-center">
+                  <Store className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">
+                    {editingBranch ? "Şube Bilgilerini Düzenle" : "Yeni Şube Tanımla"}
+                  </h3>
+                  <p className="text-[11px] text-slate-300">
+                    {settings.companyName || "İşletme"} bünyesine yeni şube kaydı ekleyin
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseBranch}
+                className="p-1.5 text-slate-300 hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitBranch} className="p-6 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Şube Kodu *</label>
+                  <input
+                    type="text"
+                    required
+                    value={branchForm.code || ""}
+                    onChange={(e) => setBranchForm({ ...branchForm, code: e.target.value })}
+                    placeholder="SUB-001"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Şube Adı *</label>
+                  <input
+                    type="text"
+                    required
+                    value={branchForm.name || ""}
+                    onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value })}
+                    placeholder="Örn: Merkez Şube, Kadıköy Şubesi..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Şube Sorumlusu</label>
+                  <input
+                    type="text"
+                    value={branchForm.managerName || ""}
+                    onChange={(e) => setBranchForm({ ...branchForm, managerName: e.target.value })}
+                    placeholder="Ad Soyad"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Telefon</label>
+                  <input
+                    type="text"
+                    value={branchForm.phone || ""}
+                    onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })}
+                    placeholder="+90 (212) 000 00 00"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">E-Posta</label>
+                  <input
+                    type="email"
+                    value={branchForm.email || ""}
+                    onChange={(e) => setBranchForm({ ...branchForm, email: e.target.value })}
+                    placeholder="sube@firma.com"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <label className="flex items-center gap-2 font-bold text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!branchForm.isMain}
+                    onChange={(e) => setBranchForm({ ...branchForm, isMain: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-300 text-[#0f6bae] focus:ring-[#0f6bae]"
+                  />
+                  <span>Ana / Merkez Şube Olarak İşaretle</span>
+                </label>
+
+                <div className="flex items-center justify-end gap-2">
+                  <span className="font-bold text-slate-700">Durum:</span>
+                  <select
+                    value={branchForm.status || "active"}
+                    onChange={(e) => setBranchForm({ ...branchForm, status: e.target.value as "active" | "passive" })}
+                    className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-bold text-slate-900"
+                  >
+                    <option value="active">Aktif</option>
+                    <option value="passive">Pasif</option>
+                  </select>
+                </div>
+              </div>
+
+              <AddressSelector
+                title="Şube Adres Bilgileri"
+                address={
+                  branchForm.address || {
+                    country: "Türkiye",
+                    city: "İstanbul",
+                    district: "Şişli",
+                    neighborhood: "Mecidiyeköy",
+                    street: "",
+                    buildingNo: "",
+                    doorNo: "",
+                    postalCode: "",
+                    fullAddress: "",
+                  }
+                }
+                onChange={(updatedAddress) => setBranchForm({ ...branchForm, address: updatedAddress })}
+              />
+
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseBranch}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-[#0f6bae] hover:bg-[#0a5287] text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{editingBranch ? "Şubeyi Güncelle" : "Şubeyi Kaydet"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Depo Ekle / Düzenle Modal */}
+      {isWarehouseModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#131b2e] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#0f6bae] flex items-center justify-center">
+                  <WarehouseIcon className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">
+                    {editingWarehouse ? "Depo Bilgilerini Düzenle" : "Yeni Depo Tanımla"}
+                  </h3>
+                  <p className="text-[11px] text-slate-300">
+                    {settings.companyName || "İşletme"} için yeni stok ve lojistik deposu ekleyin
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseWarehouse}
+                className="p-1.5 text-slate-300 hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitWarehouse} className="p-6 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Depo Kodu *</label>
+                  <input
+                    type="text"
+                    required
+                    value={warehouseForm.code || ""}
+                    onChange={(e) => setWarehouseForm({ ...warehouseForm, code: e.target.value })}
+                    placeholder="DEP-001"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Depo Adı *</label>
+                  <input
+                    type="text"
+                    required
+                    value={warehouseForm.name || ""}
+                    onChange={(e) => setWarehouseForm({ ...warehouseForm, name: e.target.value })}
+                    placeholder="Örn: Merkez Ana Depo, Gebze Lojistik Depo..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Depo Tipi</label>
+                  <select
+                    value={warehouseForm.type || "main"}
+                    onChange={(e) => setWarehouseForm({ ...warehouseForm, type: e.target.value as Warehouse["type"] })}
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-semibold text-slate-900"
+                  >
+                    <option value="main">Ana Depo</option>
+                    <option value="regional">Bölge Deposu</option>
+                    <option value="transit">Transit Lojistik</option>
+                    <option value="cold_storage">Soğuk Hava Deposu</option>
+                    <option value="bonded">Antrepo / Serbest Depo</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Bağlı Şube</label>
+                  <select
+                    value={warehouseForm.branchId || ""}
+                    onChange={(e) => {
+                      const b = branches.find((br) => br.id === e.target.value);
+                      setWarehouseForm({
+                        ...warehouseForm,
+                        branchId: e.target.value,
+                        branchName: b?.name || "Merkez Şube",
+                      });
+                    }}
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-semibold text-slate-900"
+                  >
+                    <option value="">Merkez / Genel</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Kapasite (m²)</label>
+                  <input
+                    type="number"
+                    value={warehouseForm.capacityM2 ?? 1000}
+                    onChange={(e) => setWarehouseForm({ ...warehouseForm, capacityM2: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-mono text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Depo Sorumlusu</label>
+                  <input
+                    type="text"
+                    value={warehouseForm.managerName || ""}
+                    onChange={(e) => setWarehouseForm({ ...warehouseForm, managerName: e.target.value })}
+                    placeholder="Ad Soyad"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">İletişim Telefonu</label>
+                  <input
+                    type="text"
+                    value={warehouseForm.phone || ""}
+                    onChange={(e) => setWarehouseForm({ ...warehouseForm, phone: e.target.value })}
+                    placeholder="+90 (212) 000 00 00"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Durum</label>
+                  <select
+                    value={warehouseForm.status || "active"}
+                    onChange={(e) => setWarehouseForm({ ...warehouseForm, status: e.target.value as "active" | "passive" })}
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900"
+                  >
+                    <option value="active">Aktif Depo</option>
+                    <option value="passive">Pasif</option>
+                  </select>
+                </div>
+              </div>
+
+              <AddressSelector
+                title="Depo Adres Bilgileri"
+                address={
+                  warehouseForm.address || {
+                    country: "Türkiye",
+                    city: "İstanbul",
+                    district: "Şişli",
+                    neighborhood: "Mecidiyeköy",
+                    street: "",
+                    buildingNo: "",
+                    doorNo: "",
+                    postalCode: "",
+                    fullAddress: "",
+                  }
+                }
+                onChange={(updatedAddress) => setWarehouseForm({ ...warehouseForm, address: updatedAddress })}
+              />
+
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseWarehouse}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-[#0f6bae] hover:bg-[#0a5287] text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{editingWarehouse ? "Depoyu Güncelle" : "Depoyu Kaydet"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal */}
+      <CompanyModal
+        isOpen={isCompanyModalOpen}
+        onClose={() => setIsCompanyModalOpen(false)}
+        onSave={handleSaveCompanyFromModal}
+        initialCompany={editingCompany}
+        mode={companyModalMode}
+        currentUser={currentUser}
+      />
 
     </div>
   );

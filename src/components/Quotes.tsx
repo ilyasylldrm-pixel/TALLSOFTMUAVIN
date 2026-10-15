@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { Quote, QuoteStatus, Contact, Product, Invoice, CompanySettings } from "../types";
 import { ExportButtons } from "./ExportButtons";
-import { ExportData, formatCurrency, formatDate, exportElementToPDF } from "../utils/exportUtils";
+import { ExportData, formatCurrency, formatDate, exportElementToPDF, exportToExcel, exportToPDF } from "../utils/exportUtils";
 import { formatQuoteWhatsAppMessage } from "../utils/whatsappTemplates";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
@@ -176,6 +176,46 @@ export const Quotes: React.FC<QuotesProps> = ({
     } finally {
       setIsDownloadingQuotePDF(false);
     }
+  };
+
+  const handleDownloadQuoteExcel = () => {
+    if (!printingQuote) return;
+    const q = printingQuote;
+    const headers = [
+      "Kalem No",
+      "Ürün / Hizmet Adı",
+      "Miktar",
+      "Birim",
+      "Birim Fiyat",
+      "İskonto (%)",
+      "KDV Oranı (%)",
+      "Toplam Tutar",
+    ];
+
+    const rows: (string | number)[][] = q.items.map((it, idx) => [
+      idx + 1,
+      it.productName,
+      it.quantity,
+      it.unit,
+      (it.unitPrice || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }),
+      it.discountRate ? `%${it.discountRate}` : "%0",
+      `%${it.vatRate || 0}`,
+      (it.total || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }),
+    ]);
+
+    rows.push([]);
+    rows.push(["", "", "", "", "", "Ara Toplam:", (q.subtotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }), q.currency || "TRY"]);
+    rows.push(["", "", "", "", "", "Hesaplanan KDV:", (q.totalVat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }), q.currency || "TRY"]);
+    rows.push(["", "", "", "", "", "Genel Toplam:", (q.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }), q.currency || "TRY"]);
+
+    exportToExcel({
+      filename: `${q.quoteNumber}_Teklif_Detayi_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Teklif Detayı",
+      title: `${companySettings?.companyName || "FİRMA"} - PROFORMA FATURA VE TEKLİF KALEM LİSTESİ`,
+      subtitle: `Teklif No: ${q.quoteNumber} | Cari: ${q.contactName} | Tarih: ${formatDate(q.issueDate)} | Geçerlilik: ${formatDate(q.validUntil)}`,
+      headers,
+      rows,
+    });
   };
 
   // Form State
@@ -374,6 +414,41 @@ export const Quotes: React.FC<QuotesProps> = ({
     return filteredQuotes.slice(start, start + pageSize);
   }, [filteredQuotes, currentPage, pageSize]);
 
+  const getQuotesExportData = useCallback((): ExportData => ({
+    filename: `Proforma_Faturalar_${new Date().toISOString().split("T")[0]}`,
+    sheetName: "Teklifler Listesi",
+    title: "PROFORMA FATURALAR VE TEKLİF LİSTESİ",
+    subtitle: `Toplam ${filteredQuotes.length} Adet Kayıt - Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
+    headers: [
+      "Belge No",
+      "Belge Türü",
+      "Cari / Müşteri",
+      "Tarih",
+      "Son Geçerlilik Tarihi",
+      "Ara Toplam",
+      "KDV Toplamı",
+      "Genel Toplam",
+      "Durum",
+      "Açıklama / Şartlar",
+    ],
+    rows: filteredQuotes.map((q) => [
+      q.quoteNumber,
+      q.quoteNumber.startsWith("TEK") ? "Fiyat Teklifi" : "Proforma Fatura",
+      q.contactName,
+      formatDate(q.issueDate),
+      formatDate(q.validUntil),
+      formatCurrency(q.subtotal || 0),
+      formatCurrency(q.taxTotal || 0),
+      formatCurrency(q.grandTotal),
+      q.status === "converted"
+        ? "Faturaya Dönüştü"
+        : q.status === "approved"
+        ? "Onaylandı"
+        : "Onay Bekliyor",
+      q.notes || "-",
+    ]),
+  }), [filteredQuotes]);
+
   if (isModalOpen) {
     return (
         <DetailPageLayout
@@ -504,7 +579,7 @@ export const Quotes: React.FC<QuotesProps> = ({
                                   <option value="">-- Stok / Hizmet Kataloğundan Seç --</option>
                                   {products.map((p) => (
                                     <option key={p.id} value={p.id}>
-                                      {p.stockType ? `[${p.stockType}] ` : ""}{p.name} {p.barcode ? `(Barkod: ${p.barcode})` : ""} - ₺{p.sellPrice.toLocaleString("tr-TR")}
+                                      {p.stockType ? `[${p.stockType}] ` : ""}{p.name} {p.barcode ? `(Barkod: ${p.barcode})` : ""} - ₺{p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </option>
                                   ))}
                                 </select>
@@ -695,6 +770,16 @@ export const Quotes: React.FC<QuotesProps> = ({
               </button>
               <button
                 type="button"
+                onClick={handleDownloadQuoteExcel}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+                title="Teklif Detaylarını ve Kalemlerini Excel (.xlsx) Olarak İndir"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>Excel İndir</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleDownloadQuotePDF}
                 disabled={isDownloadingQuotePDF}
                 style={{ backgroundColor: theme.primaryColor }}
@@ -843,8 +928,11 @@ export const Quotes: React.FC<QuotesProps> = ({
                       ₺{(printingQuote.items.reduce((s, i) => s + (i.vatAmount || (i.quantity * i.unitPrice * i.vatRate) / 100), 0)).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-300">
-                    <span>GENEL TOPLAM:</span>
+                  <div
+                    style={{ backgroundColor: "#83b8ff", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+                    className="flex justify-between items-center text-sm font-black text-slate-950 p-2 rounded-lg border border-[#60a5fa] mt-1 print:bg-[#83b8ff]"
+                  >
+                    <span className="text-xs uppercase">İŞLEM TUTARI / GENEL TOPLAM:</span>
                     <span>₺{printingQuote.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
@@ -1067,41 +1155,7 @@ export const Quotes: React.FC<QuotesProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <ExportButtons
-            getExportData={() => ({
-              filename: `Proforma_Faturalar_${new Date().toISOString().split("T")[0]}`,
-              title: "PROFORMA FATURALAR LİSTESİ",
-              subtitle: `Toplam ${filteredQuotes.length} Adet Kayıt`,
-              headers: [
-                "Belge No",
-                "Belge Türü",
-                "Cari / Müşteri",
-                "Tarih",
-                "Son Geçerlilik Tarihi",
-                "Ara Toplam",
-                "KDV Toplamı",
-                "Genel Toplam",
-                "Durum",
-                "Açıklama / Şartlar",
-              ],
-              rows: filteredQuotes.map((q) => [
-                q.quoteNumber,
-                q.quoteNumber.startsWith("TEK") ? "Fiyat Teklifi" : "Proforma Fatura",
-                q.contactName,
-                formatDate(q.issueDate),
-                formatDate(q.validUntil),
-                formatCurrency(q.subtotal || 0),
-                formatCurrency(q.taxTotal || 0),
-                formatCurrency(q.grandTotal),
-                q.status === "converted"
-                  ? "Faturaya Dönüştü"
-                  : q.status === "approved"
-                  ? "Onaylandı"
-                  : "Onay Bekliyor",
-                q.notes || "-",
-              ]),
-            })}
-          />
+          <ExportButtons getExportData={getQuotesExportData} size="sm" />
         </div>
       </div>
 

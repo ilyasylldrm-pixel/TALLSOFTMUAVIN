@@ -129,12 +129,12 @@ export const FixedAssetFormModal: React.FC<FixedAssetFormModalProps> = ({
     setCategoryLabel(tmpl.categoryLabel);
     setUsefulLifeYears(tmpl.usefulLifeYears);
     setDepreciationRate(tmpl.depreciationRate);
-    setAssetAccountCode(tmpl.accountCode);
-    setDepreciationAccountCode(tmpl.depreciationAccountCode);
-    setExpenseAccountCode(tmpl.expenseAccountCode);
-    setIsPartialYear(tmpl.isPartialYearAllowed);
+    setAssetAccountCode(tmpl.recommendedAssetAccount);
+    setDepreciationAccountCode(tmpl.recommendedDeprAccount);
+    setExpenseAccountCode(tmpl.recommendedExpenseAccount);
+    setIsPartialYear(tmpl.isPartialYear);
 
-    if (tmpl.isPartialYearAllowed) {
+    if (tmpl.isPartialYear) {
       setDepreciationMethod("normal");
     }
   };
