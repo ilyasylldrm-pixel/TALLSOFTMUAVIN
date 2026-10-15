@@ -57,4 +57,10 @@ jobs:
           fi
           echo "FTP baglantisi baslatiliyor: Kullanici: $FTP_USER -> Sunucu: $FTP_HOST"
           sudo apt-get update -qq && sudo apt-get install -y -qq lftp
-          lftp -u "$FTP_USER,$FTP_PASS" "$FTP_HOST" -e "set ftp:ssl-allow no; set ftp:passive-mode on; set net:max-retries 3; set net:timeout 30; mirror -R --delete --no-perms dist httpdocs/dist; put server.ts -o httpdocs/server.ts; put /tmp/muavin.env -o httpdocs/muavin.env; put /tmp/muavin.env -o httpdocs/dist/muavin.env; put /tmp/muavin.env -o muavin.env; get httpdocs/web.config -o /tmp/wc; printf '\n<!-- recycle %s -->\n' \"\$(date -u +%FT%TZ)\" >> /tmp/wc; put /tmp/wc -o httpdocs/web.config; bye"
+          lftp -u "$FTP_USER,$FTP_PASS" "$FTP_HOST" -e "set ftp:ssl-allow no; set ftp:passive-mode on; set net:max-retries 3; set net:timeout 30; mirror -R --delete --no-perms dist httpdocs/dist; put server.ts -o httpdocs/server.ts; put /tmp/muavin.env -o httpdocs/muavin.env; put /tmp/muavin.env -o httpdocs/dist/muavin.env; put /tmp/muavin.env -o muavin.env; get httpdocs/web.config -o /tmp/wc; bye"
+
+          if [ -f /tmp/wc ]; then
+            printf '\n<!-- recycle %s -->\n' "$(date -u +%FT%TZ)" >> /tmp/wc
+            lftp -u "$FTP_USER,$FTP_PASS" "$FTP_HOST" -e "set ftp:ssl-allow no; set ftp:passive-mode on; put /tmp/wc -o httpdocs/web.config; bye"
+          fi
+
