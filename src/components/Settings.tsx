@@ -41,6 +41,9 @@ import {
   Globe,
 } from "lucide-react";
 import { GitHubSyncPanel } from "./GitHubSyncPanel";
+import { Logo } from "./Logo";
+import { readAndOptimizeLogoFile } from "../utils/logoUpload";
+import { saveCloudLogo } from "../services/cloudBrandingService";
 
 interface SettingsProps {
   settings: CompanySettings;
@@ -81,6 +84,25 @@ export const Settings: React.FC<SettingsProps> = ({
   const [pingLatency, setPingLatency] = useState<number | null>(null);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
+  const settingsLogoInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleSettingsLogoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const optimizedDataUrl = await readAndOptimizeLogoFile(file);
+      const updated = { ...formData, logoUrl: optimizedDataUrl };
+      setFormData(updated);
+      onSaveSettings(updated);
+      saveCloudLogo(optimizedDataUrl, updated.companyName).catch(() => {});
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+    } catch (err: any) {
+      triggerFormErrorNotification(err?.message || "Logo yüklenirken hata oluştu.");
+    } finally {
+      e.target.value = "";
+    }
+  };
 
   const loadTelemetry = async () => {
     setIsLoadingCloud(true);
@@ -704,6 +726,52 @@ export const Settings: React.FC<SettingsProps> = ({
                   <option value="1">%1 (Temel Gıda / Tarım)</option>
                   <option value="0">%0 (KDV İstisnası)</option>
                 </select>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-center shrink-0">
+                  <Logo size="sm" src={formData.logoUrl || "/logo.svg"} />
+                </div>
+                <div>
+                  <span className="font-bold text-slate-900 block">
+                    Kurumsal Fatura & Sistem Logosu (Bilgisayardan Yükle)
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Fatura çıktılarında ve sol menüde yer alacak şirket logonuzu bilgisayarınızdan seçebilirsiniz (PNG, JPG, SVG, WEBP).
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <input
+                  ref={settingsLogoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
+                  onChange={handleSettingsLogoFileUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => settingsLogoInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-xl font-bold text-xs shadow-xs cursor-pointer transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Bilgisayardan Logo Yükle</span>
+                </button>
+                {formData.logoUrl && formData.logoUrl !== "/logo.svg" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const reset = { ...formData, logoUrl: "/logo.svg" };
+                      setFormData(reset);
+                      onSaveSettings(reset);
+                    }}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs border border-slate-200 cursor-pointer transition-all"
+                  >
+                    Sıfırla
+                  </button>
+                )}
               </div>
             </div>
           </div>
