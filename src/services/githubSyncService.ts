@@ -598,15 +598,51 @@ export class GitHubSyncService {
     };
   }
 
+  private async rebuildProductionBundles(cwd: string): Promise<boolean> {
+    try {
+      this.clearGitIndexLock(cwd);
+      await execPromise('NODE_OPTIONS="--max-old-space-size=2048" npm run build', {
+        cwd,
+        timeout: 180_000,
+        maxBuffer: 20 * 1024 * 1024,
+      });
+      return true;
+    } catch (err: any) {
+      console.warn("[GitHubSync] Build warning during sync:", err?.message || err);
+      await this.restoreDeletedBuildArtifacts(cwd);
+      return false;
+    }
+  }
+
+  private async triggerDeployWorkflow(owner: string, repo: string, branch: string, token?: string): Promise<void> {
+    if (!token || !token.trim()) return;
+    try {
+      await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/deploy.yml/dispatches`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token.trim()}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+          "User-Agent": "Muavin-ERP-Sync",
+        },
+        body: JSON.stringify({ ref: branch }),
+      });
+    } catch {
+      // ignore dispatch error if push already triggered workflow
+    }
+  }
+
   public async pullFromGitHub(params?: {
     token?: string;
     repoUrl?: string;
+    publishAfterPull?: boolean;
   }): Promise<{
     success: boolean;
     message: string;
     commitSha?: string;
     commitMessage?: string;
     syncedAt: string;
+    published?: boolean;
   }> {
     return this.withGitLock(async () => {
       const config = this.getConfig();
@@ -628,6 +664,7 @@ export class GitHubSyncService {
       const syncedAt = new Date().toISOString();
 
       const gitReady = await this.ensureGitInitialized(cleanUrl, branch);
+      let publishedAfterPull = false;
 
       if (gitReady) {
         try {
@@ -638,12 +675,20 @@ export class GitHubSyncService {
           }
 
           let hasHead = false;
+          let beforeSha = "";
+          let remoteSha = "";
           try {
-            await execPromise("git rev-parse --verify HEAD", { cwd });
+            const { stdout: headOut } = await execPromise("git rev-parse --verify HEAD", { cwd });
+            beforeSha = headOut.trim();
             hasHead = true;
           } catch {
             hasHead = false;
           }
+
+          try {
+            const { stdout: remOut } = await execPromise(`git rev-parse origin/${branch}`, { cwd });
+            remoteSha = remOut.trim();
+          } catch {}
 
           if (!hasHead) {
             this.clearGitIndexLock(cwd);
@@ -670,6 +715,31 @@ export class GitHubSyncService {
           ).catch(async () => {
             await execPromise("git merge --abort", { cwd }).catch(() => {});
           });
+
+          const hadNewRemoteChanges = Boolean(remoteSha && beforeSha !== remoteSha);
+          if (params?.publishAfterPull === true || (params?.publishAfterPull !== false && hadNewRemoteChanges)) {
+            await this.rebuildProductionBundles(cwd);
+            await this.safeGitAddAll(cwd);
+            try {
+              const { stdout: postBuildStatus } = await execPromise("git status --porcelain", { cwd });
+              if (postBuildStatus.trim().length > 0) {
+                await execPromise(
+                  `git commit -m "feat: GitHub değişiklikleri alındı, derlendi ve tüm şirket/kullanıcılara yayınlandı"`,
+                  { cwd }
+                );
+              }
+            } catch {}
+
+            if (token) {
+              try {
+                await execPromise(`git ${authArg} push -u origin ${branch} --force`, { cwd });
+                publishedAfterPull = true;
+              } catch {
+                // fallback to workflow dispatch below
+              }
+              await this.triggerDeployWorkflow(owner, repo, branch, token);
+            }
+          }
         } finally {
           await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {});
         }
@@ -702,7 +772,8 @@ export class GitHubSyncService {
 
       return {
         success: true,
-        message: `GitHub (${owner}/${repo}) deposundan en güncel değişiklikler başarıyla alındı ve yerel çalışma alanıyla eşitlendi.`,
+        published: publishedAfterPull,
+        message: `GitHub (${owner}/${repo}) deposundan en güncel değişiklikler başarıyla alındı, yayına hazırlandı ve tüm şirket/kullanıcılara gönderildi.`,
         commitSha: sha,
         commitMessage: lastMsg,
         syncedAt,
@@ -715,6 +786,7 @@ export class GitHubSyncService {
     token?: string;
     repoUrl?: string;
     pullFirst?: boolean;
+    rebuild?: boolean;
   }): Promise<{
     success: boolean;
     code?: string;
@@ -734,7 +806,7 @@ export class GitHubSyncService {
       const branch = config.branch || "main";
       const commitMsg =
         params?.commitMessage?.trim() ||
-        `feat: Sistem, modül ve arayüz güncellemeleri (${new Date().toLocaleString("tr-TR")})`;
+        `feat: GitHub değişiklikleri alındı, yayınlandı ve tüm şirket/kullanıcılara gönderildi (${new Date().toLocaleString("tr-TR")})`;
 
       let owner = config.owner || "ilyasylldrm-pixel";
       let repo = config.repo || "TALLSOFTMUAVIN";
@@ -771,6 +843,7 @@ export class GitHubSyncService {
         await execPromise("git merge --abort", { cwd }).catch(() => {});
         await execPromise(`git branch -M ${branch}`, { cwd }).catch(() => {});
 
+        let remoteBehindCount = 0;
         // 1. Fetch from remote first if pullFirst is enabled
         if (params?.pullFirst !== false) {
           try {
@@ -778,6 +851,13 @@ export class GitHubSyncService {
           } catch {
             await execPromise(`git fetch origin ${branch} --prune`, { cwd }).catch(() => {});
           }
+          try {
+            const { stdout: behindOut } = await execPromise(
+              `git rev-list HEAD..origin/${branch} --count`,
+              { cwd }
+            );
+            remoteBehindCount = parseInt(behindOut.trim(), 10) || 0;
+          } catch {}
         }
 
         // 2. Stage & commit local changes safely
@@ -794,16 +874,30 @@ export class GitHubSyncService {
           // ignore if nothing to commit
         }
 
-        // 3. Merge any remote commits if pullFirst is active
-        if (params?.pullFirst !== false) {
+        // 3. Merge any remote commits if pullFirst is active (use -X theirs so GitHub changes are preserved!)
+        if (params?.pullFirst !== false && remoteBehindCount > 0) {
           try {
             await execPromise(
-              `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
+              `git merge origin/${branch} --allow-unrelated-histories -X theirs --no-edit`,
               { cwd }
             );
           } catch {
             await execPromise("git merge --abort", { cwd }).catch(() => {});
           }
+        }
+
+        // 4. Rebuild dist/ and build/ if remote changes were merged or rebuild is requested
+        if (remoteBehindCount > 0 || params?.rebuild === true) {
+          await this.rebuildProductionBundles(cwd);
+          await this.safeGitAddAll(cwd);
+          try {
+            const { stdout: postBuildStatus } = await execPromise("git status --porcelain", { cwd });
+            if (postBuildStatus.trim().length > 0) {
+              const safeMsg = commitMsg.replace(/"/g, '\\"');
+              await execPromise(`git commit -m "${safeMsg}"`, { cwd });
+              committed = true;
+            }
+          } catch {}
         }
 
         try {
@@ -869,29 +963,14 @@ export class GitHubSyncService {
         };
       }
 
-      // Trigger workflow_dispatch when no new commit was pushed by git (or in serverless runtime without git push)
-      if (!committed || !pushedViaGit) {
-        try {
-          await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/deploy.yml/dispatches`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/vnd.github+json",
-              "Content-Type": "application/json",
-              "User-Agent": "Muavin-ERP-Sync",
-            },
-            body: JSON.stringify({ ref: branch }),
-          });
-        } catch {
-          // ignore dispatch error if push already succeeded
-        }
-      }
+      // Always trigger workflow_dispatch so tallsoft.org CI/CD pipeline runs
+      await this.triggerDeployWorkflow(owner, repo, branch, token);
 
       return {
         success: true,
         message: committed
-          ? `Tüm değişiklikler başarıyla alındı, commit edildi, GitHub (${owner}/${repo}) ile eşitlendi ve tallsoft.org canlı yayını tetiklendi.`
-          : `GitHub deposu (${owner}/${repo}) senkronize edildi. Mevcut commit (${sha ? sha.substring(0, 7) : "main"}) GitHub ile eşitlendi ve tallsoft.org yayını tetiklendi.`,
+          ? `GitHub (${owner}/${repo}) değişiklikleri alındı, derlendi, yayınlandı ve tüm şirketlere ve kullanıcılara gönderildi.`
+          : `GitHub deposu (${owner}/${repo}) senkronize edildi (${sha ? sha.substring(0, 7) : "main"}), tallsoft.org yayını tetiklendi ve tüm şirket/kullanıcılara gönderildi.`,
         commitSha: sha,
         commitMessage: commitMsg,
         syncedAt,
@@ -903,3 +982,4 @@ export class GitHubSyncService {
 }
 
 export const gitHubSyncService = new GitHubSyncService();
+

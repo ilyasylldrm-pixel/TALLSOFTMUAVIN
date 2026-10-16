@@ -1268,7 +1268,7 @@ export function syncAllCompaniesAndUsersData(): {
         tckn: isTckn ? cleanTax : withCreds.tckn || "",
         tenantIdentifierNumber: cleanTax || withCreds.tenantIdentifierNumber || "",
         mysoftMatchedType: isTckn ? "tckn" : cleanTax.length === 10 ? "vkn" : withCreds.mysoftMatchedType || "vkn",
-        mysoftStatus: cleanTax ? "verified" : withCreds.mysoftStatus || "unverified",
+        mysoftStatus: cleanTax ? "verified" : withCreds.mysoftStatus || "unmatched",
         eFaturaPrefix: (withCreds.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3),
         eArsivPrefix: (withCreds.eArsivPrefix || "EAR").toUpperCase().slice(0, 3),
       };

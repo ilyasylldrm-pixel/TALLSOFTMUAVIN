@@ -16,14 +16,20 @@ import {
   deleteDoc,
   updateDoc
 } from "firebase/firestore";
-import { db, sanitizeForFirestore } from "../lib/firebase";
+import { db, sanitizeForFirestore, getAllUsersProfiles } from "../lib/firebase";
 import {
   PayrollYearlyParameters,
   CURRENT_PAYROLL_PARAMS_2026,
   saveActivePayrollParameters,
   getActivePayrollParameters
 } from "../data/payrollParametersData";
-import { safeGetStorageItem, safeSetStorageItem, syncAllCompaniesAndUsersData } from "../utils/storage";
+import {
+  safeGetStorageItem,
+  safeSetStorageItem,
+  syncAllCompaniesAndUsersData,
+  getCompaniesList,
+  saveCompaniesList,
+} from "../utils/storage";
 
 export interface SystemAuditLogItem {
   id?: string;
@@ -399,17 +405,28 @@ export async function verifyAndSyncAllUsersLocalDb(
 ): Promise<LocalDbSyncReport> {
   const nowIso = new Date().toISOString();
 
-  // 1. Tüm kayıtlı şirketlerin ayar, VKN/TCKN ve Mysoft yapılandırmalarını senkronize et
-  const { syncedCompaniesCount } = syncAllCompaniesAndUsersData();
+  // 1. Tüm kayıtlı şirketlerin ayar, VKN/TCKN, açık adres ve Mysoft yapılandırmalarını senkronize et
+  const { syncedCompaniesCount, companies } = syncAllCompaniesAndUsersData();
 
-  // 2. Yerel önbellek ve merkezi Firestore parametrelerini tazele
+  // 2. Tüm şirket ve sistem kullanıcı profillerini doğrula ve senkronize et
+  let effectiveUsersCount = totalUsersCount;
+  try {
+    const allUsers = await getAllUsersProfiles();
+    if (allUsers.length > effectiveUsersCount) {
+      effectiveUsersCount = allUsers.length;
+    }
+  } catch {
+    if (effectiveUsersCount <= 0) effectiveUsersCount = Math.max(1, syncedCompaniesCount);
+  }
+
+  // 3. Yerel önbellek ve merkezi Firestore parametrelerini tazele
   try {
     await fetchCentralPayrollParameters();
   } catch (e) {
     console.warn("Merkezi parametre doğrulanırken hata:", e);
   }
 
-  // 3. Merkezi Firestore senkronizasyon durumunu güncelle (tüm aktif istemciler ve şirketler için)
+  // 4. Merkezi Firestore senkronizasyon durumunu ve şirket listesini güncelle (tüm aktif istemciler, şirketler ve kullanıcılar için)
   try {
     const syncDocRef = doc(db, "system_settings", "central_sync_state");
     await setDoc(
@@ -420,7 +437,8 @@ export async function verifyAndSyncAllUsersLocalDb(
         updatedBy: performedBy,
         actionName,
         syncedCompaniesCount,
-        totalUsersCount: totalUsersCount > 0 ? totalUsersCount : 1,
+        totalUsersCount: effectiveUsersCount > 0 ? effectiveUsersCount : 1,
+        companiesRegistry: companies,
         version: Date.now(),
       }),
       { merge: true }
@@ -432,9 +450,9 @@ export async function verifyAndSyncAllUsersLocalDb(
   const updatedReport = saveLocalDbSyncReport({
     lastUpdatedAt: nowIso,
     lastUpdatedBy: performedBy,
-    lastActionSummary: `${actionName} (${syncedCompaniesCount} Şirket)`,
-    syncedUsersCount: totalUsersCount > 0 ? totalUsersCount : 1,
-    totalUsersCount: totalUsersCount > 0 ? totalUsersCount : 1,
+    lastActionSummary: `${actionName} (${syncedCompaniesCount} Şirket / ${effectiveUsersCount > 0 ? effectiveUsersCount : 1} Kullanıcı)`,
+    syncedUsersCount: effectiveUsersCount > 0 ? effectiveUsersCount : 1,
+    totalUsersCount: effectiveUsersCount > 0 ? effectiveUsersCount : 1,
     syncPercentage: 100,
     isFullySynced: true,
     localDbStatus: "synced",
@@ -448,7 +466,7 @@ export async function verifyAndSyncAllUsersLocalDb(
         type: "system_full_sync",
         timestamp: nowIso,
         updatedBy: performedBy,
-        usersCount: totalUsersCount,
+        usersCount: effectiveUsersCount,
         companiesCount: syncedCompaniesCount,
       },
     })
@@ -467,7 +485,40 @@ export function subscribeToCentralSyncState(
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
-          syncAllCompaniesAndUsersData();
+          // Merkezi şirket kaydı geldiyse yerel şirket listesiyle birleştir
+          if (Array.isArray(data?.companiesRegistry) && data.companiesRegistry.length > 0) {
+            try {
+              const localCompanies = getCompaniesList();
+              const mergedMap = new Map<string, any>();
+              localCompanies.forEach((c) => mergedMap.set(c.id, c));
+              data.companiesRegistry.forEach((remoteComp: any) => {
+                if (remoteComp && remoteComp.id) {
+                  const existing = mergedMap.get(remoteComp.id);
+                  mergedMap.set(remoteComp.id, existing ? { ...existing, ...remoteComp } : remoteComp);
+                }
+              });
+              saveCompaniesList(Array.from(mergedMap.values()));
+            } catch {
+              // ignore merge warning
+            }
+          }
+
+          const { syncedCompaniesCount } = syncAllCompaniesAndUsersData();
+          const incomingUsersCount = Number(data?.totalUsersCount) || Math.max(1, syncedCompaniesCount);
+
+          saveLocalDbSyncReport({
+            lastUpdatedAt: data?.lastUpdated || new Date().toISOString(),
+            lastUpdatedBy: data?.updatedBy || "Sistem Yöneticisi",
+            lastActionSummary: data?.actionName
+              ? `${data.actionName} (${syncedCompaniesCount} Şirket / ${incomingUsersCount} Kullanıcı)`
+              : `Tüm Şirketler ve Kullanıcılar Senkronize Edildi (${syncedCompaniesCount} Şirket)`,
+            syncedUsersCount: incomingUsersCount,
+            totalUsersCount: incomingUsersCount,
+            syncPercentage: 100,
+            isFullySynced: true,
+            localDbStatus: "synced",
+          });
+
           if (onSyncReceived) {
             onSyncReceived({
               lastUpdated: data?.lastUpdated || new Date().toISOString(),
@@ -481,6 +532,8 @@ export function subscribeToCentralSyncState(
                 type: "system_full_sync",
                 timestamp: data?.lastUpdated || new Date().toISOString(),
                 updatedBy: data?.updatedBy || "Sistem Yöneticisi",
+                companiesCount: syncedCompaniesCount,
+                usersCount: incomingUsersCount,
               },
             })
           );

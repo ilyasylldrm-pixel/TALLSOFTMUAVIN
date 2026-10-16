@@ -236,6 +236,11 @@ export default function App() {
     if (makeActiveImmediately) {
       handleSelectCompany(newComp.id, updatedList);
     }
+    void verifyAndSyncAllUsersLocalDb(
+      0,
+      "Sistem Yöneticisi",
+      `Yeni Şirket Eklendi (${newComp.companyName}) ve Tüm Kullanıcılara Gönderildi`
+    );
   };
 
   const handleUpdateCompany = (comp: CompanyItem) => {
@@ -267,6 +272,11 @@ export default function App() {
       }));
       writeStoredMysoftTenantVkn(comp.tenantIdentifierNumber || comp.vkn || comp.tckn);
     }
+    void verifyAndSyncAllUsersLocalDb(
+      0,
+      "Sistem Yöneticisi",
+      `Şirket Bilgileri Güncellendi (${comp.companyName}) ve Tüm Kullanıcılara Gönderildi`
+    );
   };
 
   const handleDeleteCompany = (id: string) => {
@@ -276,6 +286,11 @@ export default function App() {
       const nextId = updatedList.length > 0 ? updatedList[0].id : DEFAULT_COMPANY.id;
       handleSelectCompany(nextId, updatedList);
     }
+    void verifyAndSyncAllUsersLocalDb(
+      0,
+      "Sistem Yöneticisi",
+      "Şirket Listesi Güncellendi ve Tüm Kullanıcılara Gönderildi"
+    );
   };
 
   // Quick Action Modal State

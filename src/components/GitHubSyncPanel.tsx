@@ -157,22 +157,29 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
         body: JSON.stringify({
           token: effectiveToken,
           repoUrl: repoUrlInput.trim() || undefined,
+          publishAfterPull: true,
         }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        await verifyAndSyncAllUsersLocalDb(
+        const syncReport = await verifyAndSyncAllUsersLocalDb(
           0,
           "Sistem Yöneticisi",
-          "GitHub Değişiklikleri Alındı ve Tüm Şirket/Kullanıcılara Uygulandı"
+          "GitHub Değişiklikleri Alındı, Yayınlandı ve Tüm Şirket/Kullanıcılara Gönderildi"
         );
         setFeedback({
           type: "success",
-          message: data.message || "GitHub'dan en güncel değişiklikler başarıyla alındı ve tüm şirket/kullanıcılara uygulandı!",
-          details: data.commitSha ? `Güncel Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main | Tüm Şirketler Senkronize` : undefined,
+          message:
+            data.message ||
+            "GitHub'dan en güncel değişiklikler başarıyla alındı, yayınlandı ve tüm şirketlere ve kullanıcılara gönderildi!",
+          details: data.commitSha
+            ? `Güncel Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main | ${syncReport.lastActionSummary}`
+            : undefined,
         });
         if (onSuccessNotification) {
-          onSuccessNotification("GitHub deposundaki değişiklikler alındı ve tüm şirket/kullanıcılara uygulandı!");
+          onSuccessNotification(
+            "GitHub üzerinden yapılan değişiklikler alındı, yayınlandı ve tüm şirket/kullanıcılara gönderildi!"
+          );
         }
         await fetchStatus();
       } else {
@@ -217,18 +224,24 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
       const data = await res.json();
 
       if (res.ok && data.success) {
-        await verifyAndSyncAllUsersLocalDb(
+        const syncReport = await verifyAndSyncAllUsersLocalDb(
           0,
           "Sistem Yöneticisi",
-          "GitHub Yayınlama ve Tüm Şirket/Kullanıcı Senkronizasyonu Tamamlandı"
+          "GitHub Değişiklikleri Alındı, Yayınlandı ve Tüm Şirket/Kullanıcılara Gönderildi"
         );
         setFeedback({
           type: "success",
-          message: data.message || "Proje başarıyla GitHub'a gönderildi, tüm şirket/kullanıcılara uygulandı ve tallsoft.org yayını tetiklendi!",
-          details: data.commitSha ? `Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main | Tüm Şirketler & Kullanıcılar Senkronize` : undefined,
+          message:
+            data.message ||
+            "GitHub değişiklikleri alındı, yayınlandı (tallsoft.org) ve tüm şirketlere ve kullanıcılara gönderildi!",
+          details: data.commitSha
+            ? `Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main | ${syncReport.lastActionSummary}`
+            : undefined,
         });
         if (onSuccessNotification) {
-          onSuccessNotification("Değişiklikler GitHub'a gönderildi ve tüm şirket/kullanıcılara başarıyla uygulandı!");
+          onSuccessNotification(
+            "GitHub değişiklikleri alındı, yayınlandı ve tüm şirketlere ve kullanıcılara gönderildi!"
+          );
         }
         await fetchStatus();
       } else {

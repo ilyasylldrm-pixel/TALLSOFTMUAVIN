@@ -4142,6 +4142,37 @@ var GitHubSyncService = class {
       deployUrl: "https://tallsoft.org"
     };
   }
+  async rebuildProductionBundles(cwd) {
+    try {
+      this.clearGitIndexLock(cwd);
+      await execPromise('NODE_OPTIONS="--max-old-space-size=2048" npm run build', {
+        cwd,
+        timeout: 18e4,
+        maxBuffer: 20 * 1024 * 1024
+      });
+      return true;
+    } catch (err) {
+      console.warn("[GitHubSync] Build warning during sync:", err?.message || err);
+      await this.restoreDeletedBuildArtifacts(cwd);
+      return false;
+    }
+  }
+  async triggerDeployWorkflow(owner, repo, branch, token) {
+    if (!token || !token.trim()) return;
+    try {
+      await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/deploy.yml/dispatches`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token.trim()}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+          "User-Agent": "Muavin-ERP-Sync"
+        },
+        body: JSON.stringify({ ref: branch })
+      });
+    } catch {
+    }
+  }
   async pullFromGitHub(params) {
     return this.withGitLock(async () => {
       const config = this.getConfig();
@@ -4160,6 +4191,7 @@ var GitHubSyncService = class {
       const authArg = buildGitAuthArg(token);
       const syncedAt = (/* @__PURE__ */ new Date()).toISOString();
       const gitReady = await this.ensureGitInitialized(cleanUrl, branch);
+      let publishedAfterPull = false;
       if (gitReady) {
         try {
           try {
@@ -4169,11 +4201,19 @@ var GitHubSyncService = class {
             });
           }
           let hasHead = false;
+          let beforeSha = "";
+          let remoteSha = "";
           try {
-            await execPromise("git rev-parse --verify HEAD", { cwd });
+            const { stdout: headOut } = await execPromise("git rev-parse --verify HEAD", { cwd });
+            beforeSha = headOut.trim();
             hasHead = true;
           } catch {
             hasHead = false;
+          }
+          try {
+            const { stdout: remOut } = await execPromise(`git rev-parse origin/${branch}`, { cwd });
+            remoteSha = remOut.trim();
+          } catch {
           }
           if (!hasHead) {
             this.clearGitIndexLock(cwd);
@@ -4203,6 +4243,29 @@ var GitHubSyncService = class {
             await execPromise("git merge --abort", { cwd }).catch(() => {
             });
           });
+          const hadNewRemoteChanges = Boolean(remoteSha && beforeSha !== remoteSha);
+          if (params?.publishAfterPull === true || params?.publishAfterPull !== false && hadNewRemoteChanges) {
+            await this.rebuildProductionBundles(cwd);
+            await this.safeGitAddAll(cwd);
+            try {
+              const { stdout: postBuildStatus } = await execPromise("git status --porcelain", { cwd });
+              if (postBuildStatus.trim().length > 0) {
+                await execPromise(
+                  `git commit -m "feat: GitHub de\u011Fi\u015Fiklikleri al\u0131nd\u0131, derlendi ve t\xFCm \u015Firket/kullan\u0131c\u0131lara yay\u0131nland\u0131"`,
+                  { cwd }
+                );
+              }
+            } catch {
+            }
+            if (token) {
+              try {
+                await execPromise(`git ${authArg} push -u origin ${branch} --force`, { cwd });
+                publishedAfterPull = true;
+              } catch {
+              }
+              await this.triggerDeployWorkflow(owner, repo, branch, token);
+            }
+          }
         } finally {
           await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {
           });
@@ -4233,7 +4296,8 @@ var GitHubSyncService = class {
       });
       return {
         success: true,
-        message: `GitHub (${owner}/${repo}) deposundan en g\xFCncel de\u011Fi\u015Fiklikler ba\u015Far\u0131yla al\u0131nd\u0131 ve yerel \xE7al\u0131\u015Fma alan\u0131yla e\u015Fitlendi.`,
+        published: publishedAfterPull,
+        message: `GitHub (${owner}/${repo}) deposundan en g\xFCncel de\u011Fi\u015Fiklikler ba\u015Far\u0131yla al\u0131nd\u0131, yay\u0131na haz\u0131rland\u0131 ve t\xFCm \u015Firket/kullan\u0131c\u0131lara g\xF6nderildi.`,
         commitSha: sha,
         commitMessage: lastMsg,
         syncedAt
@@ -4246,7 +4310,7 @@ var GitHubSyncService = class {
       const token = params?.token?.trim() || config.token;
       const repoUrl = params?.repoUrl?.trim() || config.repoUrl;
       const branch = config.branch || "main";
-      const commitMsg = params?.commitMessage?.trim() || `feat: Sistem, mod\xFCl ve aray\xFCz g\xFCncellemeleri (${(/* @__PURE__ */ new Date()).toLocaleString("tr-TR")})`;
+      const commitMsg = params?.commitMessage?.trim() || `feat: GitHub de\u011Fi\u015Fiklikleri al\u0131nd\u0131, yay\u0131nland\u0131 ve t\xFCm \u015Firket/kullan\u0131c\u0131lara g\xF6nderildi (${(/* @__PURE__ */ new Date()).toLocaleString("tr-TR")})`;
       let owner = config.owner || "ilyasylldrm-pixel";
       let repo = config.repo || "TALLSOFTMUAVIN";
       const match = repoUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/);
@@ -4279,12 +4343,21 @@ var GitHubSyncService = class {
         });
         await execPromise(`git branch -M ${branch}`, { cwd }).catch(() => {
         });
+        let remoteBehindCount = 0;
         if (params?.pullFirst !== false) {
           try {
             await execPromise(`git ${authArg} fetch origin ${branch} --prune`, { cwd });
           } catch {
             await execPromise(`git fetch origin ${branch} --prune`, { cwd }).catch(() => {
             });
+          }
+          try {
+            const { stdout: behindOut } = await execPromise(
+              `git rev-list HEAD..origin/${branch} --count`,
+              { cwd }
+            );
+            remoteBehindCount = parseInt(behindOut.trim(), 10) || 0;
+          } catch {
           }
         }
         await this.safeGitAddAll(cwd);
@@ -4297,15 +4370,28 @@ var GitHubSyncService = class {
           }
         } catch {
         }
-        if (params?.pullFirst !== false) {
+        if (params?.pullFirst !== false && remoteBehindCount > 0) {
           try {
             await execPromise(
-              `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
+              `git merge origin/${branch} --allow-unrelated-histories -X theirs --no-edit`,
               { cwd }
             );
           } catch {
             await execPromise("git merge --abort", { cwd }).catch(() => {
             });
+          }
+        }
+        if (remoteBehindCount > 0 || params?.rebuild === true) {
+          await this.rebuildProductionBundles(cwd);
+          await this.safeGitAddAll(cwd);
+          try {
+            const { stdout: postBuildStatus } = await execPromise("git status --porcelain", { cwd });
+            if (postBuildStatus.trim().length > 0) {
+              const safeMsg = commitMsg.replace(/"/g, '\\"');
+              await execPromise(`git commit -m "${safeMsg}"`, { cwd });
+              committed = true;
+            }
+          } catch {
           }
         }
         try {
@@ -4367,24 +4453,10 @@ var GitHubSyncService = class {
           error: missingMsg
         };
       }
-      if (!committed || !pushedViaGit) {
-        try {
-          await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/deploy.yml/dispatches`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/vnd.github+json",
-              "Content-Type": "application/json",
-              "User-Agent": "Muavin-ERP-Sync"
-            },
-            body: JSON.stringify({ ref: branch })
-          });
-        } catch {
-        }
-      }
+      await this.triggerDeployWorkflow(owner, repo, branch, token);
       return {
         success: true,
-        message: committed ? `T\xFCm de\u011Fi\u015Fiklikler ba\u015Far\u0131yla al\u0131nd\u0131, commit edildi, GitHub (${owner}/${repo}) ile e\u015Fitlendi ve tallsoft.org canl\u0131 yay\u0131n\u0131 tetiklendi.` : `GitHub deposu (${owner}/${repo}) senkronize edildi. Mevcut commit (${sha ? sha.substring(0, 7) : "main"}) GitHub ile e\u015Fitlendi ve tallsoft.org yay\u0131n\u0131 tetiklendi.`,
+        message: committed ? `GitHub (${owner}/${repo}) de\u011Fi\u015Fiklikleri al\u0131nd\u0131, derlendi, yay\u0131nland\u0131 ve t\xFCm \u015Firketlere ve kullan\u0131c\u0131lara g\xF6nderildi.` : `GitHub deposu (${owner}/${repo}) senkronize edildi (${sha ? sha.substring(0, 7) : "main"}), tallsoft.org yay\u0131n\u0131 tetiklendi ve t\xFCm \u015Firket/kullan\u0131c\u0131lara g\xF6nderildi.`,
         commitSha: sha,
         commitMessage: commitMsg,
         syncedAt,
@@ -4410,12 +4482,13 @@ function getGitHubRouter() {
   });
   router.post("/publish", async (req, res) => {
     try {
-      const { commitMessage, token, repoUrl, pullFirst } = req.body || {};
+      const { commitMessage, token, repoUrl, pullFirst, rebuild } = req.body || {};
       const result = await gitHubSyncService.publishOrSync({
         commitMessage,
         token,
         repoUrl,
-        pullFirst: pullFirst !== false
+        pullFirst: pullFirst !== false,
+        rebuild: Boolean(rebuild)
       });
       res.json(result);
     } catch (error) {
@@ -4429,10 +4502,11 @@ function getGitHubRouter() {
   });
   router.post("/pull", async (req, res) => {
     try {
-      const { token, repoUrl } = req.body || {};
+      const { token, repoUrl, publishAfterPull } = req.body || {};
       const result = await gitHubSyncService.pullFromGitHub({
         token,
-        repoUrl
+        repoUrl,
+        publishAfterPull: publishAfterPull !== false
       });
       res.json(result);
     } catch (error) {
@@ -4445,12 +4519,13 @@ function getGitHubRouter() {
   });
   router.post("/sync", async (req, res) => {
     try {
-      const { commitMessage, token, repoUrl } = req.body || {};
+      const { commitMessage, token, repoUrl, rebuild } = req.body || {};
       const result = await gitHubSyncService.publishOrSync({
         commitMessage,
         token,
         repoUrl,
-        pullFirst: true
+        pullFirst: true,
+        rebuild: Boolean(rebuild)
       });
       res.json(result);
     } catch (error) {

@@ -15,15 +15,16 @@ export function getGitHubRouter(): Router {
     }
   });
 
-  // Trigger publish / sync to GitHub (Pull + Commit + Push)
+  // Trigger publish / sync to GitHub (Pull + Rebuild + Commit + Push)
   router.post("/publish", async (req, res) => {
     try {
-      const { commitMessage, token, repoUrl, pullFirst } = req.body || {};
+      const { commitMessage, token, repoUrl, pullFirst, rebuild } = req.body || {};
       const result = await gitHubSyncService.publishOrSync({
         commitMessage,
         token,
         repoUrl,
         pullFirst: pullFirst !== false,
+        rebuild: Boolean(rebuild),
       });
       res.json(result);
     } catch (error: any) {
@@ -36,13 +37,14 @@ export function getGitHubRouter(): Router {
     }
   });
 
-  // Pull / Fetch from GitHub
+  // Pull / Fetch from GitHub (and optionally publish/rebuild)
   router.post("/pull", async (req, res) => {
     try {
-      const { token, repoUrl } = req.body || {};
+      const { token, repoUrl, publishAfterPull } = req.body || {};
       const result = await gitHubSyncService.pullFromGitHub({
         token,
         repoUrl,
+        publishAfterPull: publishAfterPull !== false,
       });
       res.json(result);
     } catch (error: any) {
@@ -54,15 +56,16 @@ export function getGitHubRouter(): Router {
     }
   });
 
-  // Bidirectional sync (Pull + Commit + Push)
+  // Bidirectional sync (Pull + Rebuild + Commit + Push)
   router.post("/sync", async (req, res) => {
     try {
-      const { commitMessage, token, repoUrl } = req.body || {};
+      const { commitMessage, token, repoUrl, rebuild } = req.body || {};
       const result = await gitHubSyncService.publishOrSync({
         commitMessage,
         token,
         repoUrl,
         pullFirst: true,
+        rebuild: Boolean(rebuild),
       });
       res.json(result);
     } catch (error: any) {
