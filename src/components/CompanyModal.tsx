@@ -28,6 +28,7 @@ import {
   FileText,
   RefreshCw,
   Trash2,
+  Upload,
 } from "lucide-react";
 import {
   CompanyItem,
@@ -39,6 +40,8 @@ import {
 } from "../types";
 import { saveUserProfile, UserProfileData } from "../lib/firebase";
 import { getMysoftTenant, getMysoftMappingDefaults } from "../services/mysoftEDocumentService";
+import { Logo } from "./Logo";
+import { readAndOptimizeLogoFile } from "../utils/logoUpload";
 
 interface CompanyModalProps {
   isOpen: boolean;
@@ -92,6 +95,21 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   const [address, setAddress] = useState(initialCompany?.address || "");
   const [city, setCity] = useState(initialCompany?.city || "İstanbul");
   const [district, setDistrict] = useState(initialCompany?.district || "");
+  const [logoUrl, setLogoUrl] = useState(initialCompany?.logoUrl || "/logo.svg");
+  const modalLogoInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleModalLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const optimized = await readAndOptimizeLogoFile(file);
+      setLogoUrl(optimized);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Logo yüklenirken hata oluştu.");
+    } finally {
+      e.target.value = "";
+    }
+  };
 
   // Modül Kısıtlaması State
   const [moduleRestrictionEnabled, setModuleRestrictionEnabled] = useState<boolean>(
@@ -409,6 +427,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       eArsivPrefix: (eArsivPrefix || "EAR").trim().toUpperCase(),
       eArsivNextNumber: (eArsivNextNumber || "").trim() || undefined,
       defaultInvoicePrefix: (eFaturaPrefix || "GIB").trim().toUpperCase(),
+      logoUrl: logoUrl || "/logo.svg",
       createdAt: initialCompany?.createdAt || new Date().toISOString(),
     };
 
@@ -430,7 +449,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
           taxNumber: selectedTenantNumber || "1234567890",
           selectedLogoId: 1,
           selectedLogoName: "E-MUAVİN Kurumsal Logo",
-          selectedLogoUrl: "/logo.svg",
+          selectedLogoUrl: logoUrl || "/logo.svg",
           role: loginRole || "Firma Yöneticisi",
           allowedModules: moduleRestrictionEnabled ? (targetModules as AppModuleKey[]) : undefined,
           passwordPlain: finalLoginPass,
@@ -551,6 +570,48 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                   onChange={(e) => setCompanyTitle(e.target.value)}
                   className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae] outline-none"
                 />
+              </div>
+
+              <div className="sm:col-span-2 p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 flex items-center justify-center shrink-0">
+                    <Logo size="sm" src={logoUrl || "/logo.svg"} />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      Şirket Logosu (Bilgisayardan Yükle)
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Fatura ve belgelerde kullanılacak şirket logosunu bilgisayarınızdan seçebilirsiniz.
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    ref={modalLogoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
+                    onChange={handleModalLogoUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => modalLogoInputRef.current?.click()}
+                    className="px-3 py-1.5 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Logo Yükle</span>
+                  </button>
+                  {logoUrl && logoUrl !== "/logo.svg" && (
+                    <button
+                      type="button"
+                      onClick={() => setLogoUrl("/logo.svg")}
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-[11px] font-semibold cursor-pointer"
+                    >
+                      Sıfırla
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

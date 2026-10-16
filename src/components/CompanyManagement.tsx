@@ -36,6 +36,7 @@ import {
   CloudBrandingConfig,
   DEFAULT_CLOUD_BRANDING,
 } from "../services/cloudBrandingService";
+import { readAndOptimizeLogoFile } from "../utils/logoUpload";
 import {
   Building2,
   Building,
@@ -81,6 +82,7 @@ import {
   Database as DatabaseIcon,
   ArrowRight,
   UserCheck,
+  Upload,
 } from "lucide-react";
 
 export type CompanySubTab = "profile" | "companies" | "mysoft" | "branches" | "warehouses" | "settings";
@@ -441,6 +443,33 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     } finally {
       setCloudLogoLoading(false);
       setTimeout(() => setCloudSyncStatus(null), 4000);
+    }
+  };
+
+  const companyLogoFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleUploadLogoFromComputer = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCloudLogoLoading(true);
+    setCloudSyncStatus(null);
+    try {
+      const optimizedDataUrl = await readAndOptimizeLogoFile(file);
+      const nextProfile = { ...profileForm, logoUrl: optimizedDataUrl };
+      setProfileForm(nextProfile);
+      onSaveSettings({ ...settings, ...nextProfile });
+      const saved = await saveCloudLogo(optimizedDataUrl, {
+        brandName: profileForm.companyName || "E-MUAVİN",
+        description: `Bilgisayardan yüklenen kurumsal logo (${file.name})`,
+      });
+      setCloudBranding(saved);
+      setCloudSyncStatus(`"${file.name}" bilgisayarınızdan başarıyla yüklendi ve tüm modüllere uygulandı!`);
+    } catch (err: any) {
+      setCloudSyncStatus("Logo yükleme hatası: " + (err?.message || "Geçersiz dosya formatı"));
+    } finally {
+      setCloudLogoLoading(false);
+      e.target.value = "";
+      setTimeout(() => setCloudSyncStatus(null), 5000);
     }
   };
 
@@ -1133,8 +1162,40 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 </div>
               </div>
 
-              {/* Logo URL ve Cloud İşlemleri */}
+              {/* Logo Bilgisayardan Yükleme, URL ve Cloud İşlemleri */}
               <div className="lg:col-span-7 space-y-4">
+                <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                        <Upload className="w-4 h-4 text-[#0f6bae]" />
+                        Bilgisayardan Kurumsal Logo Yükle
+                      </span>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        Bilgisayarınızdaki PNG, JPG, WEBP veya SVG formatındaki şirket logonuzu seçerek doğrudan yükleyin.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <input
+                        ref={companyLogoFileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
+                        onChange={handleUploadLogoFromComputer}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => companyLogoFileInputRef.current?.click()}
+                        disabled={cloudLogoLoading}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-lg font-bold text-xs shadow-xs cursor-pointer transition-all disabled:opacity-50"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Bilgisayardan Logo Seç & Yükle</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
                     Logo Dosya Yolu veya Cloud Depolama URL'si
@@ -1142,14 +1203,26 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      value={profileForm.logoUrl || "/logo.svg"}
-                      onChange={(e) => setProfileForm({ ...profileForm, logoUrl: e.target.value })}
+                      value={
+                        profileForm.logoUrl?.startsWith("data:")
+                          ? "Bilgisayardan Yüklenen Özel Logo (Base64 Görsel)"
+                          : profileForm.logoUrl || "/logo.svg"
+                      }
+                      onChange={(e) => {
+                        if (!e.target.value.startsWith("Bilgisayardan Yüklenen")) {
+                          setProfileForm({ ...profileForm, logoUrl: e.target.value });
+                        }
+                      }}
                       placeholder="/logo.svg veya https://storage.googleapis.com/..."
                       className="flex-1 bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono text-xs focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                     />
                     <button
                       type="button"
-                      onClick={() => setProfileForm({ ...profileForm, logoUrl: "/logo.svg" })}
+                      onClick={() => {
+                        const resetProfile = { ...profileForm, logoUrl: "/logo.svg" };
+                        setProfileForm(resetProfile);
+                        onSaveSettings({ ...settings, ...resetProfile });
+                      }}
                       className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-all border border-slate-200"
                       title="Varsayılan Kurumsal Vektör Logoyu Seç"
                     >
@@ -1157,7 +1230,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                     </button>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    Google Cloud Storage bucket URL'si, HTTPS adresi veya uygulama içi SVG vektör dosya yolunu girebilirsiniz.
+                    Bilgisayardan görsel yükleyebilir veya Google Cloud Storage bucket URL'si / SVG dosya yolu girebilirsiniz.
                   </p>
                 </div>
 

@@ -353,6 +353,8 @@ export interface CompanyItem {
   eFaturaNextNumber?: string;
   eArsivPrefix?: string;
   eArsivNextNumber?: string;
+  defaultInvoicePrefix?: string;
+  logoUrl?: string;
   createdAt: string;
 }
 
@@ -362,7 +364,7 @@ export interface MysoftCredentials {
 
 export type DocumentKind = "invoice" | "receipt"; // invoice = Fatura, receipt = Fiş (Gelir/Gider Fişi)
 
-export type InvoicePaymentMethod = "nakit" | "cari" | "kredi_karti";
+export type InvoicePaymentMethod = "nakit" | "cari" | "kredi_karti" | "eft_havale";
 
 export interface Invoice {
   id: string;
@@ -371,9 +373,10 @@ export interface Invoice {
   invoiceScenario?: InvoiceScenario; // "TICARIFATURA" | "TEMELFATURA" | "EARSIVFATURA" | "IHRACAT" | "KAMU" | "HAL"
   invoiceProfileType?: InvoiceProfileType; // "SATIS" | "TEVKIFAT" | "OZELMATRAH" | "ISTISNA" | "IADE" | "IHRACKAYITLI" | "SGK" | "KOMISYONCU"
   docKind?: DocumentKind; // "invoice" = Gelir/Gider Faturası, "receipt" = Gelir/Gider Fişi
-  paymentMethod?: InvoicePaymentMethod; // "nakit" = Nakit, "cari" = Cari (Açık Hesap), "kredi_karti" = Kredi Kartı
+  paymentMethod?: InvoicePaymentMethod; // "nakit" = Nakit, "cari" = Cari (Açık Hesap), "kredi_karti" = Kredi Kartı, "eft_havale" = EFT & Havale
   paymentAccountId?: string; // Tahsilat / Ödeme Kasa veya Banka/POS Hesabı ID
   paymentAccountName?: string; // Tahsilat / Ödeme Kasa veya Banka/POS Hesabı Adı
+  paymentIban?: string; // EFT & Havale için seçilen/girilen IBAN bilgisi
   expenseCategory?: string; // Ana Masraf / Gider Kalemi
   contactId: string;
   contactName: string;

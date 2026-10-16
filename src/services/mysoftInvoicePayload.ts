@@ -228,11 +228,13 @@ export function buildMysoftInvoiceOutboxPayload(
             ? "Nakit (Peşin Tahsilat)"
             : invoice.paymentMethod === "kredi_karti"
             ? "Kredi Kartı (POS Tahsilatı)"
+            : invoice.paymentMethod === "eft_havale"
+            ? "EFT / Havale (Banka Transferi)"
             : "Cari Hesap (Açık Hesap / Vadeli)";
         const rawNoteText = String(invoice.notes || "");
         if (!rawNoteText.includes("Ödeme Yöntemi:")) {
           noteList.push({
-            note: `Ödeme Yöntemi: ${pmLabel}${invoice.paymentAccountName && invoice.paymentMethod !== "cari" ? ` (${invoice.paymentAccountName})` : ""}`,
+            note: `Ödeme Yöntemi: ${pmLabel}${invoice.paymentAccountName && invoice.paymentMethod !== "cari" ? ` (${invoice.paymentAccountName})` : ""}${invoice.paymentIban && invoice.paymentMethod === "eft_havale" ? ` - IBAN: ${invoice.paymentIban}` : ""}`,
           });
         }
       }
