@@ -370,7 +370,29 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     run((req) => {
       const vknTckn = textParam(req.params.vknTckn);
       if (!vknTckn) throw new InvalidMysoftRequestError("vknTckn is required");
-      return client.checkRecipientTaxpayer(vknTckn);
+      const tenant = tenantFrom(req);
+      return client.checkRecipientTaxpayer(vknTckn, tenant);
+    }),
+  );
+
+  /** Official Mysoft Mükellef Detay Sorgula (VKN/TCKN) */
+  router.get(
+    "/taxpayer/:identifierNumber",
+    run((req) => {
+      const identifierNumber = textParam(req.params.identifierNumber);
+      if (!identifierNumber) throw new InvalidMysoftRequestError("identifierNumber is required");
+      const tenant = tenantFrom(req);
+      return client.getTaxPayerDetailInfo(identifierNumber, tenant);
+    }),
+  );
+
+  /** Official Mysoft GİB Hesap Sorgula */
+  router.get(
+    "/gib-account/:vknTckn",
+    run((req) => {
+      const vknTckn = textParam(req.params.vknTckn);
+      if (!vknTckn) throw new InvalidMysoftRequestError("vknTckn is required");
+      return client.getGibAccountModel(vknTckn);
     }),
   );
 

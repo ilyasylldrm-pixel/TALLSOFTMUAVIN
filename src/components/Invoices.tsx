@@ -270,6 +270,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [newContactTaxNo, setNewContactTaxNo] = useState<string>("");
   const [newContactPhone, setNewContactPhone] = useState<string>("");
   const [newContactType, setNewContactType] = useState<"customer" | "vendor" | "both">("both");
+  const [quickContactStatus, setQuickContactStatus] = useState<RecipientTaxpayerStatus | null>(null);
+  const [isQuickContactChecking, setIsQuickContactChecking] = useState<boolean>(false);
 
   const [isProductPickerOpen, setIsProductPickerOpen] = useState<boolean>(false);
   const [productPickerSearch, setProductPickerSearch] = useState<string>("");
@@ -528,13 +530,38 @@ export const Invoices: React.FC<InvoicesProps> = ({
             ? mergedCalc.nextDocNo
             : result.nextInvoiceNumber;
 
-        setInvoiceNumberInput(finalNextDocNo);
+        if (result.prefix) {
+          if (targetDocType === "e_arsiv") {
+            setSelectedEArsivPrefix(result.prefix);
+          } else {
+            setSelectedEFaturaPrefix(result.prefix);
+          }
+        }
+
         setMysoftNumberInfo({
           ...result,
           lastSequence: Math.max(result.lastSequence, mergedCalc.lastSequence),
           nextSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
           nextInvoiceNumber: finalNextDocNo,
         });
+
+        setInvoiceNumberInput(finalNextDocNo);
+
+        setMysoftMappingDefaults((prev) => ({
+          ...(prev || { vknTckn: targetTenant || "", prefixes: [] }),
+          ...(targetDocType === "e_arsiv"
+            ? {
+                eArsivPrefix: result.prefix,
+                eArsivNextNumber: finalNextDocNo,
+                eArsivSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
+              }
+            : {
+                eFaturaPrefix: result.prefix,
+                eFaturaNextNumber: finalNextDocNo,
+                eFaturaSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
+              }),
+        }));
+
         if (result.tenantIdentifierNumber && !mysoftTenantVkn) {
           setMysoftTenantVkn(result.tenantIdentifierNumber);
         }
@@ -587,7 +614,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     let isMounted = true;
     setIsCheckingRecipient(true);
-    checkRecipientTaxpayerStatus(taxNum)
+    checkRecipientTaxpayerStatus(taxNum, undefined, selectedTenantVkn)
       .then((status) => {
         if (isMounted) {
           setRecipientStatus(status);
@@ -604,6 +631,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
           } else {
             setInvoiceScenario("EARSIVFATURA");
           }
+          if (customerMode === "manual") {
+            if (!manualCustomerName.trim() && (status.companyTitle || status.title || status.name)) {
+              setManualCustomerName(status.companyTitle || status.title || status.name || "");
+            }
+            if (!manualTaxOffice.trim() && status.taxOffice) {
+              setManualTaxOffice(status.taxOffice);
+            }
+            if (!manualCity.trim() && status.city) {
+              setManualCity(status.city);
+            }
+            if (!manualDistrict.trim() && status.district) {
+              setManualDistrict(status.district);
+            }
+            if (!manualAddress.trim() && status.address) {
+              setManualAddress(status.address);
+            }
+          }
           void fetchAndApplyNextInvoiceNumber(undefined, nextType);
         }
       })
@@ -616,6 +660,27 @@ export const Invoices: React.FC<InvoicesProps> = ({
     };
   }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, fetchAndApplyNextInvoiceNumber]);
 
+  const handleQuickLookupVkn = async (overrideVkn?: string) => {
+    const rawVal = overrideVkn !== undefined ? overrideVkn : newContactTaxNo;
+    const clean = String(rawVal || "").replace(/\D/g, "").slice(0, 11);
+    if (clean.length !== 10 && clean.length !== 11) return;
+    setIsQuickContactChecking(true);
+    try {
+      const status = await checkRecipientTaxpayerStatus(clean, undefined, selectedTenantVkn);
+      setQuickContactStatus(status);
+      if (status.companyTitle || status.title || status.name) {
+        setNewContactName(status.companyTitle || status.title || status.name || "");
+      }
+      if (status.phone) {
+        setNewContactPhone(status.phone);
+      }
+    } catch (e) {
+      console.error("Hızlı cari sorgulama hatası:", e);
+    } finally {
+      setIsQuickContactChecking(false);
+    }
+  };
+
   const handleQuickCreateContact = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newContactName.trim()) return;
@@ -623,9 +688,27 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const createdContact: Contact = {
       id: "cnt_" + Date.now(),
       name: newContactName.trim(),
+      companyTitle: quickContactStatus?.companyTitle || quickContactStatus?.title || newContactName.trim(),
+      companyName: quickContactStatus?.companyTitle || quickContactStatus?.title || newContactName.trim(),
       taxNumber: newContactTaxNo.trim() || undefined,
-      phone: newContactPhone.trim() || undefined,
+      taxOffice: quickContactStatus?.taxOffice || undefined,
+      city: quickContactStatus?.city || undefined,
+      district: quickContactStatus?.district || undefined,
+      neighborhood: quickContactStatus?.neighborhood || undefined,
+      street: quickContactStatus?.street || undefined,
+      buildingNo: quickContactStatus?.buildingNo || undefined,
+      doorNo: quickContactStatus?.doorNo || undefined,
+      postalCode: quickContactStatus?.postalCode || undefined,
+      address: quickContactStatus?.address || undefined,
+      shippingAddress: quickContactStatus?.shippingAddress || quickContactStatus?.address || undefined,
+      phone: newContactPhone.trim() || quickContactStatus?.phone || undefined,
+      email: quickContactStatus?.email || undefined,
+      contactPerson: quickContactStatus?.contactPerson || undefined,
       contactType: newContactType,
+      isEFaturaUser: quickContactStatus?.isEFaturaUser,
+      pkAlias: quickContactStatus?.pkAlias,
+      gbAlias: quickContactStatus?.gbAlias,
+      activityStatus: quickContactStatus?.activityStatus,
       balance: 0,
       balanceType: "balanced",
       createdAt: new Date().toISOString().split("T")[0],
@@ -639,6 +722,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setNewContactName("");
     setNewContactTaxNo("");
     setNewContactPhone("");
+    setQuickContactStatus(null);
   };
 
   const handleSelectProductFromPicker = (prod: Product) => {
@@ -722,6 +806,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const computeMysoftSequentialNumber = useCallback(
     (docType: "e_fatura" | "e_arsiv", customPrefix?: string): string => {
       const isEArsiv = docType === "e_arsiv";
+
+      // 1. Canlı Mysoft giden faturalarından çekilen numara varsa öncelikli olarak onu kullan
+      if (mysoftNumberInfo && mysoftNumberInfo.nextInvoiceNumber) {
+        const isInfoEArsiv = mysoftNumberInfo.eDocumentType === "EARSIVFATURA";
+        if (isInfoEArsiv === isEArsiv) {
+          if (!customPrefix || customPrefix.toUpperCase().slice(0, 3) === mysoftNumberInfo.prefix) {
+            return mysoftNumberInfo.nextInvoiceNumber;
+          }
+        }
+      }
+
       const rawPrefix =
         customPrefix ||
         (isEArsiv
@@ -791,6 +886,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       selectedEArsivPrefix,
       selectedEFaturaPrefix,
       mysoftMappingDefaults,
+      mysoftNumberInfo,
       companySettings.eArsivPrefix,
       companySettings.eFaturaPrefix,
       companySettings.defaultInvoicePrefix,
@@ -2636,6 +2732,74 @@ export const Invoices: React.FC<InvoicesProps> = ({
           <div className="bg-white border border-slate-200 rounded-3xl max-w-lg mx-auto p-6 sm:p-8 shadow-sm space-y-4">
             <div className="space-y-3">
               <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">VKN / TCKN</label>
+                  {newContactTaxNo && (
+                    <span className="text-[10px] font-mono font-bold text-purple-600">
+                      {newContactTaxNo.length === 10 ? "10 Hane (VKN)" : newContactTaxNo.length === 11 ? "11 Hane (TCKN)" : `${newContactTaxNo.length}/11`}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    maxLength={11}
+                    placeholder="10 VKN veya 11 TCKN..."
+                    value={newContactTaxNo}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, "").slice(0, 11);
+                      setNewContactTaxNo(clean);
+                      setQuickContactStatus(null);
+                      if (clean.length === 10 || clean.length === 11) {
+                        void handleQuickLookupVkn(clean);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleQuickLookupVkn();
+                      }
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleQuickLookupVkn()}
+                    disabled={isQuickContactChecking || (!newContactTaxNo || (newContactTaxNo.length !== 10 && newContactTaxNo.length !== 11))}
+                    className="px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    title="Mysoft & GİB üzerinden firma bilgilerini otomatik çek"
+                  >
+                    {isQuickContactChecking ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+                    )}
+                    <span>Sorgula</span>
+                  </button>
+                </div>
+
+                {quickContactStatus && (
+                  <div
+                    className={`mt-2 p-2 rounded-xl border text-[11px] flex items-center justify-between gap-1.5 animate-fadeIn ${
+                      quickContactStatus.isEFaturaUser
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700"
+                        : "bg-sky-500/10 border-sky-500/20 text-sky-700"
+                    }`}
+                  >
+                    <span className="font-semibold truncate">
+                      {quickContactStatus.isEFaturaUser ? "🟢 GİB e-Fatura Mükellefi" : "🔵 e-Arşiv Alıcısı"}
+                      {quickContactStatus.activityStatus === "terminated" ? " (⚠️ Terk)" : ""}
+                    </span>
+                    {quickContactStatus.pkAlias && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white border border-emerald-500/30 truncate max-w-[150px]" title={quickContactStatus.pkAlias}>
+                        PK: {quickContactStatus.pkAlias.split("@")[0]}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Cari Ünvanı / Adı *</label>
                 <input
                   type="text"
@@ -2644,17 +2808,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   value={newContactName}
                   onChange={(e) => setNewContactName(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">VKN / TCKN</label>
-                <input
-                  type="text"
-                  maxLength={11}
-                  placeholder="10 VKN veya 11 TCKN..."
-                  value={newContactTaxNo}
-                  onChange={(e) => setNewContactTaxNo(e.target.value.replace(/\D/g, "").slice(0, 11))}
-                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                 />
               </div>
               <div>
@@ -3106,7 +3259,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           {sendToMysoft && invType === "sales" && !editingInvoiceId ? (
                             <button
                               type="button"
-                              onClick={() => void fetchAndApplyNextInvoiceNumber()}
+                              onClick={() => {
+                                setIsManualInvoiceNumber(false);
+                                void fetchAndApplyNextInvoiceNumber();
+                              }}
                               disabled={isFetchingNextDocNo}
                               title="İlgili tenanttan son faturayı çek ve sıradaki numarayı otomatik ata"
                               className="text-[10px] text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
@@ -3135,7 +3291,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           {sendToMysoft && invType === "sales" && !editingInvoiceId && (
                             <button
                               type="button"
-                              onClick={() => void fetchAndApplyNextInvoiceNumber()}
+                              onClick={() => {
+                                setIsManualInvoiceNumber(false);
+                                void fetchAndApplyNextInvoiceNumber();
+                              }}
                               disabled={isFetchingNextDocNo}
                               title="Mysoft'tan Sıradaki Fatura Numarasını Çek (Örn: 206 -> 207)"
                               className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition cursor-pointer"
@@ -3287,21 +3446,79 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             11111111111 (Nihai)
                           </button>
                         </div>
-                        <input
-                          type="text"
-                          maxLength={11}
-                          placeholder="10 VKN veya 11 TCKN..."
-                          value={manualTaxNumber}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, "").slice(0, 11);
-                            setManualTaxNumber(val);
-                            if (val === "11111111111") {
-                              setInvoiceScenario("EARSIVFATURA");
-                              setMysoftEDocType("e_arsiv");
-                            }
-                          }}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            maxLength={11}
+                            placeholder="10 VKN veya 11 TCKN..."
+                            value={manualTaxNumber}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, "").slice(0, 11);
+                              setManualTaxNumber(val);
+                              if (val === "11111111111") {
+                                setInvoiceScenario("EARSIVFATURA");
+                                setMysoftEDocType("e_arsiv");
+                              }
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const clean = manualTaxNumber.replace(/\D/g, "").trim();
+                              if (clean.length === 10 || clean.length === 11) {
+                                setIsCheckingRecipient(true);
+                                checkRecipientTaxpayerStatus(clean, undefined, selectedTenantVkn)
+                                  .then((status) => {
+                                    setRecipientStatus(status);
+                                    if (status.companyTitle || status.title || status.name) {
+                                      setManualCustomerName(status.companyTitle || status.title || status.name || "");
+                                    }
+                                    if (status.taxOffice) setManualTaxOffice(status.taxOffice);
+                                    if (status.city) setManualCity(status.city);
+                                    if (status.district) setManualDistrict(status.district);
+                                    if (status.address) setManualAddress(status.address);
+                                    const nextType = status.isEFaturaUser ? "e_fatura" : "e_arsiv";
+                                    setMysoftEDocType(nextType);
+                                    setInvoiceScenario(status.isEFaturaUser ? (status.suggestedProfile === "TEMELFATURA" ? "TEMELFATURA" : "TICARIFATURA") : "EARSIVFATURA");
+                                    void fetchAndApplyNextInvoiceNumber(undefined, nextType);
+                                  })
+                                  .finally(() => setIsCheckingRecipient(false));
+                              }
+                            }}
+                            disabled={isCheckingRecipient || !manualTaxNumber || (manualTaxNumber.length !== 10 && manualTaxNumber.length !== 11) || manualTaxNumber === "11111111111"}
+                            className="px-2.5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                            title="GİB & Mysoft'tan firma ünvanı, vergi dairesi ve adresini otomatik getir"
+                          >
+                            {isCheckingRecipient ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+                            )}
+                            <span className="hidden sm:inline">Sorgula</span>
+                          </button>
+                        </div>
+                        {customerMode === "manual" && recipientStatus && recipientStatus.vknTckn === manualTaxNumber && (
+                          <div
+                            className={`mt-1.5 p-1.5 rounded-lg border text-[11px] flex items-center justify-between gap-1.5 animate-fadeIn ${
+                              recipientStatus.isEFaturaUser
+                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700"
+                                : "bg-sky-500/10 border-sky-500/20 text-sky-700"
+                            }`}
+                          >
+                            <span className="font-semibold truncate">
+                              {recipientStatus.isEFaturaUser
+                                ? "🟢 GİB e-Fatura Mükellefi"
+                                : "🔵 e-Arşiv Alıcısı"}
+                              {recipientStatus.activityStatus === "terminated" ? " (⚠️ Terk/Kapalı)" : ""}
+                            </span>
+                            {recipientStatus.pkAlias && (
+                              <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-white/60 border border-emerald-500/30 truncate max-w-[140px]" title={recipientStatus.pkAlias}>
+                                PK: {recipientStatus.pkAlias.split("@")[0]}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Vergi Dairesi */}

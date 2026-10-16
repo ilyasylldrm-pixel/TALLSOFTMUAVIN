@@ -448,14 +448,16 @@ export class GitHubSyncService {
         await execPromise(`git remote add origin "${repoUrl}"`, { cwd }).catch(() => {});
       }
 
-      // If local HEAD does not exist yet, fetch origin/main and attach HEAD
+      // If local HEAD does not exist yet, fetch origin/main and attach HEAD cleanly
       try {
         await execPromise("git rev-parse --verify HEAD", { cwd });
       } catch {
         try {
           await execPromise(`git fetch origin ${branch} --prune`, { cwd });
-          await execPromise(`git reset --mixed origin/${branch}`, { cwd });
-          await execPromise(`git branch -M ${branch}`, { cwd });
+          await execPromise(`git checkout -f -B ${branch} origin/${branch}`, { cwd }).catch(async () => {
+            await execPromise(`git reset --mixed origin/${branch}`, { cwd });
+            await execPromise(`git branch -M ${branch}`, { cwd });
+          });
           await execPromise(`git branch --set-upstream-to=origin/${branch} ${branch}`, { cwd }).catch(() => {});
         } catch (e) {
           console.warn("[GitHubSync] Initial origin fetch/reset warning:", e);
@@ -663,7 +665,7 @@ export class GitHubSyncService {
           }
 
           await execPromise(
-            `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
+            `git merge origin/${branch} --allow-unrelated-histories -X theirs --no-edit`,
             { cwd }
           ).catch(async () => {
             await execPromise("git merge --abort", { cwd }).catch(() => {});

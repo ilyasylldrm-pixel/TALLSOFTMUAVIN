@@ -27,6 +27,10 @@ export interface Contact {
   addressDetails?: AddressDetails;
   balance: number; // Pozitif: Alacaklıyız (Müşteri bize borçlu), Negatif: Borçluyuz (Tedarikçiye borcumuz var)
   balanceType: "receivable" | "payable" | "balanced";
+  isEFaturaUser?: boolean;
+  pkAlias?: string;
+  gbAlias?: string;
+  activityStatus?: string;
   notes?: string;
   createdAt: string;
 }

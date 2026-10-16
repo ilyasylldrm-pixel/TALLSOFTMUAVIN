@@ -58,6 +58,27 @@ app is not an accountant product; do not use Mali Müşavir > Mükellefler.
 If the firm already uses Mysoft e-belge, Mysoft must attach it to this
 Application Access as a customer (partner activation), not as an SMMM mükellef.
 
+### Genel VKN / TCKN Mükellef Sorgulama (Taxpayer & GİB Account)
+
+İş ortağına bağlı olmayan üçüncü taraf müşterilerin (alıcıların) resmi unvan,
+vergi dairesi, faal/terk durumu, açık adres ve e-Fatura mükellefiyet bilgilerini
+sorgulamak için canlı Mysoft v8 API'sinde iki servis birlikte kullanılır:
+
+1. `GET /api/Taxpayer/getTaxPayerDetailInfo?identifierNumber={vkn}&tenantIdentifierNumber={tenant}`:
+   Türkiye geneli mükellef resmi unvanı (`identityTitle`), ticaret unvanı
+   (`tradeName`), şahıs adı/soyadı, vergi dairesi adı ve kodu, faal/terk durumu
+   (`activityTerminationStatus`: 1=Faal, 2=Terk), NACE kodları ve ayrıştırılmış
+   adres detayları (`taxpayerAddressList`: il, ilçe, mahalle, cadde, kapı no).
+2. `GET /api/GeneralCard/getGibAccountModel?vknTckn={vkn}`:
+   GİB e-Fatura / e-İrsaliye kayıtlı posta kutusu bilgisi, sisteme kayıt
+   tarihi ve resmi posta kutusu etiketleri (`gibAccountAliasList` -> `pkAlias`, `gbAlias`).
+
+Proxy tarafında `GET /api/mysoft/check-recipient/:vknTckn` çağrısı bu iki servisi
+paralel çalıştırarak birleştirir; Fatura Kesme (`Invoices.tsx`), Cari Hesaplar
+(`Contacts.tsx`) ve Şirket Yönetimi (`CompanyManagement.tsx`) ekranlarında
+tek tıkla resmi verilerin otomatik doldurulmasını sağlar.
+
+
 ### Mysoft Via uygulama kaydı
 
 Portal > **Uygulamalar** (`#/app/TenantApplication`) ekranında **Mysoft Via**
@@ -146,6 +167,9 @@ All paths are under `/api/mysoft`:
 | `GET /incoming/:invoiceETTN/xml` | `InvoiceInbox/getInvoiceInboxUBLXMLAsZip` | Incoming XML |
 | `GET /outgoing/:invoiceETTN/xml` | `InvoiceOutbox/getInvoiceOutboxXMLAsZip` | Outgoing XML |
 | `POST /incoming/:invoiceETTN/acknowledge` | `InvoiceInbox/invoiceInboxSavedByCustomer` | Mark incoming invoice as received |
+| `GET /check-recipient/:vknTckn` | `Taxpayer/getTaxPayerDetailInfo` + `GeneralCard/getGibAccountModel` | Consolidated taxpayer lookup (title, address, tax office, e-Invoice status, PK aliases) |
+| `GET /taxpayer/:identifierNumber` | `Taxpayer/getTaxPayerDetailInfo` | Detailed legal company/individual taxpayer profile, status, and parsed address |
+| `GET /gib-account/:vknTckn` | `GeneralCard/getGibAccountModel` | Registered GİB mailbox account, e-Invoice start date, and mailbox alias list (PK/GB) |
 
 The browser-facing compatibility routes are under `/api/mysoft/e-documents`:
 
