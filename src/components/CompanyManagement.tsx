@@ -214,7 +214,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   const [companyToDelete, setCompanyToDelete] = useState<CompanyItem | null>(null);
 
   const handleDeleteCompanyItem = (id: string) => {
-    const target = activeCompaniesList.find((c) => c.id === id);
+    const target = effectiveCompanies.find((c) => c.id === id);
     if (target) {
       setCompanyToDelete(target);
     } else {
