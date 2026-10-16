@@ -78,6 +78,7 @@ function buildGitAuthArg(token?: string): string {
 
 export class GitHubSyncService {
   private configCache: GitHubSyncConfig | null = null;
+  private gitLockPromise: Promise<any> = Promise.resolve();
   private lastTokenCheck: {
     token: string;
     owner: string;
@@ -87,11 +88,54 @@ export class GitHubSyncService {
   } | null = null;
 
   constructor() {
-    // Initialize Git and attach to origin/main in the background on startup
+    // Initialize Git and attach to origin/main in the background on startup (serialized via lock)
     const cfg = this.getConfig();
-    this.ensureGitInitialized(cfg.repoUrl, cfg.branch || "main").catch((err) => {
+    this.withGitLock(() => this.ensureGitInitialized(cfg.repoUrl, cfg.branch || "main")).catch((err) => {
       console.warn("[GitHubSync] Background git init warning:", err?.message || err);
     });
+  }
+
+  private async withGitLock<T>(fn: () => Promise<T>): Promise<T> {
+    const prev = this.gitLockPromise;
+    let release!: () => void;
+    this.gitLockPromise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await prev.catch(() => {});
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
+  private clearGitIndexLock(cwd: string): void {
+    try {
+      const lockPath = path.join(cwd, ".git", "index.lock");
+      if (fs.existsSync(lockPath)) {
+        fs.unlinkSync(lockPath);
+      }
+    } catch {
+      // ignore if already removed
+    }
+  }
+
+  private async safeGitAddAll(cwd: string): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      this.clearGitIndexLock(cwd);
+      try {
+        await execPromise("git add -A", { cwd });
+        return;
+      } catch (err: any) {
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          continue;
+        }
+        // Fallback: update tracked files if untracked/locked path causes git add -A warning
+        this.clearGitIndexLock(cwd);
+        await execPromise("git add -u", { cwd }).catch(() => {});
+      }
+    }
   }
 
   public getConfig(): GitHubSyncConfig {
@@ -468,95 +512,98 @@ export class GitHubSyncService {
     commitMessage?: string;
     syncedAt: string;
   }> {
-    const config = this.getConfig();
-    const token = params?.token?.trim() || config.token;
-    const repoUrl = params?.repoUrl?.trim() || config.repoUrl;
-    const branch = config.branch || "main";
+    return this.withGitLock(async () => {
+      const config = this.getConfig();
+      const token = params?.token?.trim() || config.token;
+      const repoUrl = params?.repoUrl?.trim() || config.repoUrl;
+      const branch = config.branch || "main";
 
-    let owner = config.owner || "ilyasylldrm-pixel";
-    let repo = config.repo || "TALLSOFTMUAVIN";
-    const match = repoUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/);
-    if (match) {
-      owner = match[1];
-      repo = match[2];
-    }
+      let owner = config.owner || "ilyasylldrm-pixel";
+      let repo = config.repo || "TALLSOFTMUAVIN";
+      const match = repoUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/);
+      if (match) {
+        owner = match[1];
+        repo = match[2];
+      }
 
-    const cwd = process.cwd();
-    const cleanUrl = `https://github.com/${owner}/${repo}.git`;
-    const authArg = buildGitAuthArg(token);
+      const cwd = process.cwd();
+      const cleanUrl = `https://github.com/${owner}/${repo}.git`;
+      const authArg = buildGitAuthArg(token);
 
-    await this.ensureGitInitialized(cleanUrl, branch);
+      await this.ensureGitInitialized(cleanUrl, branch);
 
-    try {
-      // Fetch latest from GitHub using extraHeader if token is available
       try {
-        await execPromise(`git ${authArg} fetch origin ${branch} --prune`, { cwd });
-      } catch {
-        // Fallback to unauthenticated fetch for public repository if token header fails
-        await execPromise(`git fetch origin ${branch} --prune`, { cwd });
-      }
+        // Fetch latest from GitHub using extraHeader if token is available
+        try {
+          await execPromise(`git ${authArg} fetch origin ${branch} --prune`, { cwd });
+        } catch {
+          // Fallback to unauthenticated fetch for public repository if token header fails
+          await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+        }
 
-      // Check if local HEAD exists
-      let hasHead = false;
-      try {
-        await execPromise("git rev-parse --verify HEAD", { cwd });
-        hasHead = true;
-      } catch {
-        hasHead = false;
-      }
+        // Check if local HEAD exists
+        let hasHead = false;
+        try {
+          await execPromise("git rev-parse --verify HEAD", { cwd });
+          hasHead = true;
+        } catch {
+          hasHead = false;
+        }
 
-      if (!hasHead) {
-        await execPromise(`git reset --mixed origin/${branch}`, { cwd });
-        await execPromise(`git branch -M ${branch}`, { cwd });
-        await execPromise(`git branch --set-upstream-to=origin/${branch} ${branch}`, { cwd }).catch(() => {});
-      }
+        if (!hasHead) {
+          this.clearGitIndexLock(cwd);
+          await execPromise(`git reset --mixed origin/${branch}`, { cwd });
+          await execPromise(`git branch -M ${branch}`, { cwd });
+          await execPromise(`git branch --set-upstream-to=origin/${branch} ${branch}`, { cwd }).catch(() => {});
+        }
 
-      // Check if there are uncommitted local changes; if so, commit them first so nothing is lost
-      const { stdout: statusOut } = await execPromise("git status --porcelain", { cwd });
-      if (statusOut.trim().length > 0) {
-        await execPromise("git add -A", { cwd });
+        // Check if there are uncommitted local changes; if so, commit them first so nothing is lost
+        const { stdout: statusOut } = await execPromise("git status --porcelain", { cwd });
+        if (statusOut.trim().length > 0) {
+          await this.safeGitAddAll(cwd);
+          await execPromise(
+            `git commit -m "chore: Yerel değişiklikler senkronizasyon öncesi kaydedildi"`,
+            { cwd }
+          ).catch(() => {});
+        }
+
+        // Merge remote changes favoring local work on conflict so local edits are never lost
         await execPromise(
-          `git commit -m "chore: Yerel değişiklikler senkronizasyon öncesi kaydedildi"`,
+          `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
           { cwd }
-        ).catch(() => {});
+        ).catch(async () => {
+          await execPromise("git merge --abort", { cwd }).catch(() => {});
+        });
+      } finally {
+        await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {});
       }
 
-      // Merge remote changes favoring local work on conflict so local edits are never lost
-      await execPromise(
-        `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
-        { cwd }
-      ).catch(async () => {
-        await execPromise("git merge --abort", { cwd }).catch(() => {});
+      let sha = "";
+      let lastMsg = "";
+      try {
+        const { stdout: shaOut } = await execPromise("git rev-parse HEAD", { cwd });
+        sha = shaOut.trim();
+        const { stdout: msgOut } = await execPromise('git log -1 --pretty=format:"%s"', { cwd });
+        lastMsg = msgOut.trim();
+      } catch {}
+
+      const syncedAt = new Date().toISOString();
+      this.saveConfig({
+        repoUrl: cleanUrl,
+        owner,
+        repo,
+        token: token || config.token,
+        lastSyncedAt: syncedAt,
       });
-    } finally {
-      await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {});
-    }
 
-    let sha = "";
-    let lastMsg = "";
-    try {
-      const { stdout: shaOut } = await execPromise("git rev-parse HEAD", { cwd });
-      sha = shaOut.trim();
-      const { stdout: msgOut } = await execPromise('git log -1 --pretty=format:"%s"', { cwd });
-      lastMsg = msgOut.trim();
-    } catch {}
-
-    const syncedAt = new Date().toISOString();
-    this.saveConfig({
-      repoUrl: cleanUrl,
-      owner,
-      repo,
-      token: token || config.token,
-      lastSyncedAt: syncedAt,
+      return {
+        success: true,
+        message: `GitHub (${owner}/${repo}) deposundan en güncel değişiklikler başarıyla alındı ve yerel çalışma alanıyla eşitlendi.`,
+        commitSha: sha,
+        commitMessage: lastMsg,
+        syncedAt,
+      };
     });
-
-    return {
-      success: true,
-      message: `GitHub (${owner}/${repo}) deposundan en güncel değişiklikler başarıyla alındı ve yerel çalışma alanıyla eşitlendi.`,
-      commitSha: sha,
-      commitMessage: lastMsg,
-      syncedAt,
-    };
   }
 
   public async publishOrSync(params?: {
@@ -576,80 +623,82 @@ export class GitHubSyncService {
     deployUrl: string;
     committedLocalOnly?: boolean;
   }> {
-    const config = this.getConfig();
-    const token = params?.token?.trim() || config.token;
-    const repoUrl = params?.repoUrl?.trim() || config.repoUrl;
-    const branch = config.branch || "main";
-    const commitMsg =
-      params?.commitMessage?.trim() ||
-      `feat: Admin paneli kimlik bilgileri, modül yetkilendirme ve gelir faturası arayüz güncellemeleri (${new Date().toLocaleString("tr-TR")})`;
+    return this.withGitLock(async () => {
+      const config = this.getConfig();
+      const token = params?.token?.trim() || config.token;
+      const repoUrl = params?.repoUrl?.trim() || config.repoUrl;
+      const branch = config.branch || "main";
+      const commitMsg =
+        params?.commitMessage?.trim() ||
+        `feat: Admin paneli kimlik bilgileri, modül yetkilendirme ve gelir faturası arayüz güncellemeleri (${new Date().toLocaleString("tr-TR")})`;
 
-    // Ensure owner and repo are correct
-    let owner = config.owner || "ilyasylldrm-pixel";
-    let repo = config.repo || "TALLSOFTMUAVIN";
-    const match = repoUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/);
-    if (match) {
-      owner = match[1];
-      repo = match[2];
-    }
+      // Ensure owner and repo are correct
+      let owner = config.owner || "ilyasylldrm-pixel";
+      let repo = config.repo || "TALLSOFTMUAVIN";
+      const match = repoUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/);
+      if (match) {
+        owner = match[1];
+        repo = match[2];
+      }
 
-    const cwd = process.cwd();
-    const cleanUrl = `https://github.com/${owner}/${repo}.git`;
-    const authArg = buildGitAuthArg(token);
-    const syncedAt = new Date().toISOString();
-    const actionsUrl = `https://github.com/${owner}/${repo}/actions`;
-    const deployUrl = "https://tallsoft.org";
+      const cwd = process.cwd();
+      const cleanUrl = `https://github.com/${owner}/${repo}.git`;
+      const authArg = buildGitAuthArg(token);
+      const syncedAt = new Date().toISOString();
+      const actionsUrl = `https://github.com/${owner}/${repo}/actions`;
+      const deployUrl = "https://tallsoft.org";
 
-    // 1. Ensure git is initialized and branch is main
-    await this.ensureGitInitialized(cleanUrl, branch);
-    await execPromise(`git branch -M ${branch}`, { cwd });
+      // 1. Ensure git is initialized and branch is main
+      await this.ensureGitInitialized(cleanUrl, branch);
+      this.clearGitIndexLock(cwd);
+      await execPromise(`git branch -M ${branch}`, { cwd }).catch(() => {});
 
-    // 2. Fetch from remote first if pullFirst is enabled (default true for bidirectional sync)
-    if (params?.pullFirst !== false) {
-      try {
-        await execPromise(`git ${authArg} fetch origin ${branch} --prune`, { cwd });
-      } catch {
+      // 2. Fetch from remote first if pullFirst is enabled (default true for bidirectional sync)
+      if (params?.pullFirst !== false) {
         try {
-          await execPromise(`git fetch origin ${branch} --prune`, { cwd });
-        } catch (e) {
-          console.warn("[GitHubSync] Remote fetch warning:", e);
+          await execPromise(`git ${authArg} fetch origin ${branch} --prune`, { cwd });
+        } catch {
+          try {
+            await execPromise(`git fetch origin ${branch} --prune`, { cwd });
+          } catch {
+            // ignore remote fetch warning
+          }
         }
       }
-    }
 
-    // 3. Stage & commit all local changes
-    await execPromise("git add -A", { cwd });
+      // 3. Stage & commit all local changes safely
+      await this.safeGitAddAll(cwd);
 
-    let committed = false;
-    try {
-      const { stdout: statusOut } = await execPromise("git status --porcelain", { cwd });
-      if (statusOut.trim().length > 0) {
-        const safeMsg = commitMsg.replace(/"/g, '\\"');
-        await execPromise(`git commit -m "${safeMsg}"`, { cwd });
-        committed = true;
-      }
-    } catch (e) {
-      console.warn("[GitHubSync] Commit step warning:", e);
-    }
-
-    // 4. Merge any remote commits if pullFirst is active
-    if (params?.pullFirst !== false) {
+      let committed = false;
       try {
-        await execPromise(
-          `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
-          { cwd }
-        );
+        const { stdout: statusOut } = await execPromise("git status --porcelain", { cwd });
+        if (statusOut.trim().length > 0) {
+          const safeMsg = commitMsg.replace(/"/g, '\\"');
+          await execPromise(`git commit -m "${safeMsg}"`, { cwd });
+          committed = true;
+        }
       } catch {
-        await execPromise("git merge --abort", { cwd }).catch(() => {});
+        // ignore if nothing to commit
       }
-    }
 
-    // Get latest commit SHA
-    let sha = "";
-    try {
-      const { stdout: shaOut } = await execPromise("git rev-parse HEAD", { cwd });
-      sha = shaOut.trim();
-    } catch {}
+      // 4. Merge any remote commits if pullFirst is active
+      if (params?.pullFirst !== false) {
+        try {
+          await execPromise(
+            `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
+            { cwd }
+          );
+        } catch {
+          await execPromise("git merge --abort", { cwd }).catch(() => {});
+        }
+      }
+
+      // Get latest commit SHA
+      let sha = "";
+      try {
+        const { stdout: shaOut } = await execPromise("git rev-parse HEAD", { cwd });
+        sha = shaOut.trim();
+      } catch {}
 
     if (!token) {
       const missingMsg = `Tüm değişiklikler yerel Git deposuna commit edildi (${sha.substring(0, 7)}) ve GitHub'dan güncel dal (origin/${branch}) alındı. GitHub'a push (gönderim) ve tallsoft.org yayını için GitHub Personal Access Token (PAT) gereklidir.`;
@@ -780,17 +829,18 @@ export class GitHubSyncService {
       // Push already triggers workflow on main branch
     }
 
-    return {
-      success: true,
-      message: committed
-        ? `Tüm değişiklikler başarıyla alındı, commit edildi, GitHub (${owner}/${repo}) ile eşitlendi ve tallsoft.org canlı yayını tetiklendi.`
-        : `GitHub deposu güncellendi (Al, Gönder & Yayınla tamamlandı). Mevcut commit (${sha.substring(0, 7)}) GitHub'a gönderildi ve tallsoft.org yayını tetiklendi.`,
-      commitSha: sha,
-      commitMessage: commitMsg,
-      syncedAt,
-      actionsUrl,
-      deployUrl,
-    };
+      return {
+        success: true,
+        message: committed
+          ? `Tüm değişiklikler başarıyla alındı, commit edildi, GitHub (${owner}/${repo}) ile eşitlendi ve tallsoft.org canlı yayını tetiklendi.`
+          : `GitHub deposu güncellendi (Al, Gönder & Yayınla tamamlandı). Mevcut commit (${sha.substring(0, 7)}) GitHub'a gönderildi ve tallsoft.org yayını tetiklendi.`,
+        commitSha: sha,
+        commitMessage: commitMsg,
+        syncedAt,
+        actionsUrl,
+        deployUrl,
+      };
+    });
   }
 }
 

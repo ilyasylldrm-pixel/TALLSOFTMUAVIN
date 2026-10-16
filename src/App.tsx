@@ -279,7 +279,11 @@ export default function App() {
   const [isGitHubPublishOpen, setIsGitHubPublishOpen] = useState(false);
 
   // Restore GitHub PAT from browser localStorage after container restarts and auto-push pending commits
+  const githubAutoSyncedRef = useRef(false);
   useEffect(() => {
+    if (githubAutoSyncedRef.current) return;
+    githubAutoSyncedRef.current = true;
+
     const savedToken = localStorage.getItem("muavin_github_pat")?.trim();
     const savedRepo = localStorage.getItem("muavin_github_repo_url")?.trim();
     if (!savedToken) return;
@@ -299,7 +303,7 @@ export default function App() {
             }),
           });
         }
-        if ((st.aheadCount && st.aheadCount > 0) || !st.isClean) {
+        if (st.aheadCount && st.aheadCount > 0) {
           await fetch("/api/github/publish", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
