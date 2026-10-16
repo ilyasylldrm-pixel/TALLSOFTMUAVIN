@@ -79,6 +79,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { checkRecipientTaxpayerStatus } from "../services/mysoftEDocumentService";
+import { readStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import {
   ALL_81_PROVINCES,
@@ -447,6 +448,10 @@ export const Contacts: React.FC<ContactsProps> = ({
     shippingAddress: string;
     isSameShippingAddress: boolean;
     notes: string;
+    isEFaturaUser?: boolean;
+    pkAlias?: string;
+    gbAlias?: string;
+    activityStatus?: string;
   }>({
     accountCode: "",
     isCustomAccountCode: false,
@@ -469,6 +474,10 @@ export const Contacts: React.FC<ContactsProps> = ({
     shippingAddress: "",
     isSameShippingAddress: true,
     notes: "",
+    isEFaturaUser: undefined,
+    pkAlias: undefined,
+    gbAlias: undefined,
+    activityStatus: undefined,
   });
 
   // Custom Input Toggles for Address/Tax Office
@@ -569,8 +578,9 @@ export const Contacts: React.FC<ContactsProps> = ({
     pkAlias?: string;
   } | null>(null);
 
-  const handleFetchTaxpayerInfo = async () => {
-    const clean = String(formData.taxNumber || "").replace(/\D/g, "").trim();
+  const handleFetchTaxpayerInfo = async (overrideVkn?: string) => {
+    const rawVal = overrideVkn !== undefined ? overrideVkn : formData.taxNumber;
+    const clean = String(rawVal || "").replace(/\D/g, "").trim();
     if (!clean || (clean.length !== 10 && clean.length !== 11)) {
       setTaxpayerFetchStatus({
         success: false,
@@ -583,7 +593,8 @@ export const Contacts: React.FC<ContactsProps> = ({
     setTaxpayerFetchStatus(null);
 
     try {
-      const res = await checkRecipientTaxpayerStatus(clean);
+      const tenantVkn = companySettings?.tenantIdentifierNumber || companySettings?.taxNumber || readStoredMysoftTenantVkn();
+      const res = await checkRecipientTaxpayerStatus(clean, undefined, tenantVkn);
       if (res) {
         const fullCity = res.city || "İstanbul";
         const fullDist = res.district || "Kadıköy";
@@ -600,6 +611,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
           return {
             ...prev,
+            taxNumber: clean,
             companyTitle: finalTitle,
             name: finalName,
             taxOffice: res.taxOffice || prev.taxOffice || "Kadıköy V.D.",
@@ -615,12 +627,17 @@ export const Contacts: React.FC<ContactsProps> = ({
             phone: res.phone || prev.phone || (res.isEFaturaUser ? "0216 444 0 123" : "0532 555 00 11"),
             email: res.email || prev.email || `muhasebe@firma${clean.slice(-4)}.com.tr`,
             contactPerson: res.contactPerson || prev.contactPerson || "Finans & Muhasebe Sorumlusu",
+            isEFaturaUser: res.isEFaturaUser,
+            pkAlias: res.pkAlias,
+            gbAlias: res.gbAlias,
+            activityStatus: res.activityStatus,
           };
         });
 
         setIsCustomTaxOffice(true);
         setIsCustomDistrict(true);
         setIsCustomNeighborhood(true);
+        setIsCustomStreet(true);
 
         const taxpayerTitle = res.companyTitle || res.title || "Mükellef";
         const isTerminated = res.activityStatus === "terminated";
@@ -804,13 +821,34 @@ export const Contacts: React.FC<ContactsProps> = ({
         shippingAddress: contact.shippingAddress || "",
         isSameShippingAddress: !contact.shippingAddress || contact.shippingAddress === contact.address,
         notes: contact.notes || "",
+        isEFaturaUser: contact.isEFaturaUser,
+        pkAlias: contact.pkAlias,
+        gbAlias: contact.gbAlias,
+        activityStatus: contact.activityStatus,
       });
+      if (contact.isEFaturaUser) {
+        setTaxpayerFetchStatus({
+          success: true,
+          message: `🟢 GİB e-Fatura Mükellefi (${contact.companyTitle || contact.name})`,
+          isEFatura: true,
+          pkAlias: contact.pkAlias,
+        });
+      } else if (contact.taxNumber) {
+        setTaxpayerFetchStatus({
+          success: true,
+          message: `🔵 e-Arşiv Fatura Alıcısı (${contact.companyTitle || contact.name})`,
+          isEFatura: false,
+        });
+      } else {
+        setTaxpayerFetchStatus(null);
+      }
       setIsCustomDistrict(false);
       setIsCustomNeighborhood(false);
       setIsCustomStreet(false);
       setIsCustomTaxOffice(false);
     } else {
       setEditingContact(null);
+      setTaxpayerFetchStatus(null);
       const defaultCity = "İstanbul";
       const defaultDist = "Kadıköy";
       const defaultNh = "Caferağa (Moda)";
@@ -841,6 +879,10 @@ export const Contacts: React.FC<ContactsProps> = ({
         shippingAddress: defaultAddr,
         isSameShippingAddress: true,
         notes: "",
+        isEFaturaUser: undefined,
+        pkAlias: undefined,
+        gbAlias: undefined,
+        activityStatus: undefined,
       });
       setIsCustomDistrict(false);
       setIsCustomNeighborhood(false);
@@ -882,6 +924,10 @@ export const Contacts: React.FC<ContactsProps> = ({
       buildingNo: formData.buildingNo,
       postalCode: formData.postalCode,
       notes: formData.notes,
+      isEFaturaUser: formData.isEFaturaUser,
+      pkAlias: formData.pkAlias,
+      gbAlias: formData.gbAlias,
+      activityStatus: formData.activityStatus,
     };
 
     if (editingContact) {
@@ -1915,6 +1961,104 @@ export const Contacts: React.FC<ContactsProps> = ({
               <form id="contact-form" onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-4 text-xs">
                   
+                  {/* HIZLI VKN / GİB SORGULAMA VE OTOMATİK DOLDURMA KARTI */}
+                  <div className="relative overflow-hidden rounded-2xl border border-purple-200/80 bg-gradient-to-br from-purple-50/90 via-indigo-50/50 to-white p-4 sm:p-5 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                          <Sparkles className="w-5 h-5 text-purple-100" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-black text-slate-900 tracking-tight">
+                              Mysoft &amp; GİB Canlı VKN / TCKN Sorgulama
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-700 border border-purple-200">
+                              Canlı Entegrasyon
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 font-medium">
+                            VKN veya TCKN girerek resmi şirket unvanı, vergi dairesi, adres ve e-Fatura mükellefiyet bilgilerini tek tıkla çekin.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          maxLength={11}
+                          placeholder="10 haneli VKN veya 11 haneli TCKN giriniz..."
+                          value={formData.taxNumber}
+                          onChange={(e) => {
+                            const cleanVal = e.target.value.replace(/\D/g, "").slice(0, 11);
+                            setFormData((prev) => ({ ...prev, taxNumber: cleanVal }));
+                            setTaxpayerFetchStatus(null);
+                            if (cleanVal.length === 10 || cleanVal.length === 11) {
+                              void handleFetchTaxpayerInfo(cleanVal);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void handleFetchTaxpayerInfo();
+                            }
+                          }}
+                          className="w-full bg-white rounded-xl p-2.5 text-xs font-mono font-bold border border-purple-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleFetchTaxpayerInfo()}
+                        disabled={isFetchingTaxpayer || !formData.taxNumber || (formData.taxNumber.length !== 10 && formData.taxNumber.length !== 11)}
+                        className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                      >
+                        {isFetchingTaxpayer ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-white" />
+                            <span>Mysoft'tan Çekiliyor...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 text-purple-200" />
+                            <span>Bilgileri Getir &amp; Doldur</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {taxpayerFetchStatus && (
+                      <div
+                        className={`mt-3 p-3 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2 animate-fadeIn ${
+                          taxpayerFetchStatus.success
+                            ? taxpayerFetchStatus.isEFatura
+                              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-800"
+                              : "bg-sky-500/10 border-sky-500/20 text-sky-800"
+                            : "bg-rose-500/10 border-rose-500/20 text-rose-800"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {taxpayerFetchStatus.success ? (
+                            taxpayerFetchStatus.isEFatura ? (
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                            ) : (
+                              <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
+                            )
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          )}
+                          <span className="font-semibold">{taxpayerFetchStatus.message}</span>
+                        </div>
+                        {taxpayerFetchStatus.pkAlias && (
+                          <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded border border-emerald-500/30 bg-white/80 text-emerald-700 shadow-2xs">
+                            Posta Kutusu: {taxpayerFetchStatus.pkAlias}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   {/* 1. CARİ HESAP TANIMI & TÜRÜ */}
                   <div
                     className="border rounded-2xl p-4 space-y-3"
@@ -2048,14 +2192,17 @@ export const Contacts: React.FC<ContactsProps> = ({
                             placeholder="10 haneli VKN veya 11 haneli TCKN"
                             value={formData.taxNumber}
                             onChange={(e) => {
-                              const cleanVal = e.target.value.replace(/\D/g, "");
-                              setFormData({ ...formData, taxNumber: cleanVal });
+                              const cleanVal = e.target.value.replace(/\D/g, "").slice(0, 11);
+                              setFormData((prev) => ({ ...prev, taxNumber: cleanVal }));
                               setTaxpayerFetchStatus(null);
+                              if (cleanVal.length === 10 || cleanVal.length === 11) {
+                                void handleFetchTaxpayerInfo(cleanVal);
+                              }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                handleFetchTaxpayerInfo();
+                                void handleFetchTaxpayerInfo();
                               }
                             }}
                             className="w-full rounded-xl p-2 text-xs font-mono font-bold border transition-colors shadow-2xs"
@@ -2065,7 +2212,7 @@ export const Contacts: React.FC<ContactsProps> = ({
 
                         <button
                           type="button"
-                          onClick={handleFetchTaxpayerInfo}
+                          onClick={() => void handleFetchTaxpayerInfo()}
                           disabled={isFetchingTaxpayer || !formData.taxNumber || (formData.taxNumber.length !== 10 && formData.taxNumber.length !== 11)}
                           className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                           title="GİB & Mysoft sisteminden cari ünvan ve vergi dairesini otomatik getir"

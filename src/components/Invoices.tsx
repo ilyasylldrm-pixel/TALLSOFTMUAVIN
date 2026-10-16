@@ -269,6 +269,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [newContactTaxNo, setNewContactTaxNo] = useState<string>("");
   const [newContactPhone, setNewContactPhone] = useState<string>("");
   const [newContactType, setNewContactType] = useState<"customer" | "vendor" | "both">("both");
+  const [quickContactStatus, setQuickContactStatus] = useState<RecipientTaxpayerStatus | null>(null);
+  const [isQuickContactChecking, setIsQuickContactChecking] = useState<boolean>(false);
 
   const [isProductPickerOpen, setIsProductPickerOpen] = useState<boolean>(false);
   const [productPickerSearch, setProductPickerSearch] = useState<string>("");
@@ -657,6 +659,27 @@ export const Invoices: React.FC<InvoicesProps> = ({
     };
   }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, fetchAndApplyNextInvoiceNumber]);
 
+  const handleQuickLookupVkn = async (overrideVkn?: string) => {
+    const rawVal = overrideVkn !== undefined ? overrideVkn : newContactTaxNo;
+    const clean = String(rawVal || "").replace(/\D/g, "").slice(0, 11);
+    if (clean.length !== 10 && clean.length !== 11) return;
+    setIsQuickContactChecking(true);
+    try {
+      const status = await checkRecipientTaxpayerStatus(clean, undefined, selectedTenantVkn);
+      setQuickContactStatus(status);
+      if (status.companyTitle || status.title || status.name) {
+        setNewContactName(status.companyTitle || status.title || status.name || "");
+      }
+      if (status.phone) {
+        setNewContactPhone(status.phone);
+      }
+    } catch (e) {
+      console.error("Hızlı cari sorgulama hatası:", e);
+    } finally {
+      setIsQuickContactChecking(false);
+    }
+  };
+
   const handleQuickCreateContact = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newContactName.trim()) return;
@@ -664,9 +687,27 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const createdContact: Contact = {
       id: "cnt_" + Date.now(),
       name: newContactName.trim(),
+      companyTitle: quickContactStatus?.companyTitle || quickContactStatus?.title || newContactName.trim(),
+      companyName: quickContactStatus?.companyTitle || quickContactStatus?.title || newContactName.trim(),
       taxNumber: newContactTaxNo.trim() || undefined,
-      phone: newContactPhone.trim() || undefined,
+      taxOffice: quickContactStatus?.taxOffice || undefined,
+      city: quickContactStatus?.city || undefined,
+      district: quickContactStatus?.district || undefined,
+      neighborhood: quickContactStatus?.neighborhood || undefined,
+      street: quickContactStatus?.street || undefined,
+      buildingNo: quickContactStatus?.buildingNo || undefined,
+      doorNo: quickContactStatus?.doorNo || undefined,
+      postalCode: quickContactStatus?.postalCode || undefined,
+      address: quickContactStatus?.address || undefined,
+      shippingAddress: quickContactStatus?.shippingAddress || quickContactStatus?.address || undefined,
+      phone: newContactPhone.trim() || quickContactStatus?.phone || undefined,
+      email: quickContactStatus?.email || undefined,
+      contactPerson: quickContactStatus?.contactPerson || undefined,
       contactType: newContactType,
+      isEFaturaUser: quickContactStatus?.isEFaturaUser,
+      pkAlias: quickContactStatus?.pkAlias,
+      gbAlias: quickContactStatus?.gbAlias,
+      activityStatus: quickContactStatus?.activityStatus,
       balance: 0,
       balanceType: "balanced",
       createdAt: new Date().toISOString().split("T")[0],
@@ -680,6 +721,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setNewContactName("");
     setNewContactTaxNo("");
     setNewContactPhone("");
+    setQuickContactStatus(null);
   };
 
   const handleSelectProductFromPicker = (prod: Product) => {
@@ -2619,6 +2661,74 @@ export const Invoices: React.FC<InvoicesProps> = ({
           <div className="bg-white border border-slate-200 rounded-3xl max-w-lg mx-auto p-6 sm:p-8 shadow-sm space-y-4">
             <div className="space-y-3">
               <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">VKN / TCKN</label>
+                  {newContactTaxNo && (
+                    <span className="text-[10px] font-mono font-bold text-purple-600">
+                      {newContactTaxNo.length === 10 ? "10 Hane (VKN)" : newContactTaxNo.length === 11 ? "11 Hane (TCKN)" : `${newContactTaxNo.length}/11`}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    maxLength={11}
+                    placeholder="10 VKN veya 11 TCKN..."
+                    value={newContactTaxNo}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, "").slice(0, 11);
+                      setNewContactTaxNo(clean);
+                      setQuickContactStatus(null);
+                      if (clean.length === 10 || clean.length === 11) {
+                        void handleQuickLookupVkn(clean);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleQuickLookupVkn();
+                      }
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleQuickLookupVkn()}
+                    disabled={isQuickContactChecking || (!newContactTaxNo || (newContactTaxNo.length !== 10 && newContactTaxNo.length !== 11))}
+                    className="px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    title="Mysoft & GİB üzerinden firma bilgilerini otomatik çek"
+                  >
+                    {isQuickContactChecking ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+                    )}
+                    <span>Sorgula</span>
+                  </button>
+                </div>
+
+                {quickContactStatus && (
+                  <div
+                    className={`mt-2 p-2 rounded-xl border text-[11px] flex items-center justify-between gap-1.5 animate-fadeIn ${
+                      quickContactStatus.isEFaturaUser
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700"
+                        : "bg-sky-500/10 border-sky-500/20 text-sky-700"
+                    }`}
+                  >
+                    <span className="font-semibold truncate">
+                      {quickContactStatus.isEFaturaUser ? "🟢 GİB e-Fatura Mükellefi" : "🔵 e-Arşiv Alıcısı"}
+                      {quickContactStatus.activityStatus === "terminated" ? " (⚠️ Terk)" : ""}
+                    </span>
+                    {quickContactStatus.pkAlias && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white border border-emerald-500/30 truncate max-w-[150px]" title={quickContactStatus.pkAlias}>
+                        PK: {quickContactStatus.pkAlias.split("@")[0]}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Cari Ünvanı / Adı *</label>
                 <input
                   type="text"
@@ -2627,17 +2737,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   value={newContactName}
                   onChange={(e) => setNewContactName(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">VKN / TCKN</label>
-                <input
-                  type="text"
-                  maxLength={11}
-                  placeholder="10 VKN veya 11 TCKN..."
-                  value={newContactTaxNo}
-                  onChange={(e) => setNewContactTaxNo(e.target.value.replace(/\D/g, "").slice(0, 11))}
-                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                 />
               </div>
               <div>
