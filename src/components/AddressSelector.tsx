@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useId } from "react";
 import { AddressDetails } from "../types";
+import { appendCityDistrictToAddress } from "../utils/storage";
 import {
   MapPin,
   Building,
@@ -424,6 +425,16 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
           placeholder="Tam adres metni..."
           value={address.fullAddress || ""}
           onChange={(e) => handleFieldChange("fullAddress", e.target.value)}
+          onBlur={() => {
+            const synced = appendCityDistrictToAddress(
+              address.fullAddress || "",
+              address.city,
+              address.district
+            );
+            if (synced !== (address.fullAddress || "")) {
+              handleFieldChange("fullAddress", synced);
+            }
+          }}
           className="w-full bg-white border border-slate-300 focus:border-indigo-500 rounded-xl p-2.5 text-slate-800 font-medium text-xs leading-relaxed"
         />
       </div>

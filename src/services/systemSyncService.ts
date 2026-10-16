@@ -457,4 +457,43 @@ export async function verifyAndSyncAllUsersLocalDb(
   return updatedReport;
 }
 
+export function subscribeToCentralSyncState(
+  onSyncReceived?: (meta: { lastUpdated: string; updatedBy: string; actionName?: string }) => void
+): () => void {
+  try {
+    const syncDocRef = doc(db, "system_settings", "central_sync_state");
+    const unsubscribe = onSnapshot(
+      syncDocRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          syncAllCompaniesAndUsersData();
+          if (onSyncReceived) {
+            onSyncReceived({
+              lastUpdated: data?.lastUpdated || new Date().toISOString(),
+              updatedBy: data?.updatedBy || "Sistem Yöneticisi",
+              actionName: data?.actionName,
+            });
+          }
+          window.dispatchEvent(
+            new CustomEvent("muavin:central-sync-broadcast", {
+              detail: {
+                type: "system_full_sync",
+                timestamp: data?.lastUpdated || new Date().toISOString(),
+                updatedBy: data?.updatedBy || "Sistem Yöneticisi",
+              },
+            })
+          );
+        }
+      },
+      () => {
+        // Ignore offline listener errors
+      }
+    );
+    return unsubscribe;
+  } catch {
+    return () => {};
+  }
+}
+
 

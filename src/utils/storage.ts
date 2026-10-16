@@ -1163,7 +1163,88 @@ export function importBackupJSON(jsonString: string): boolean {
 }
 
 /**
- * Synchronizes schema, Mysoft VKN/TCKN mappings, invoice prefixes, and settings
+ * Ensures that a manual or open address string includes the selected district and city
+ * (e.g., "Barbaros Mah. Çiğdem Sk. No: 14, Kadıköy / İstanbul") without duplicating them,
+ * and replaces any previous district/city suffix when province or district selection changes.
+ */
+export function appendCityDistrictToAddress(
+  rawAddress?: string,
+  city?: string,
+  district?: string,
+  prevCity?: string,
+  prevDistrict?: string
+): string {
+  const cleanCity = String(city || "").trim();
+  const cleanDistrict = String(district || "").trim();
+  const cleanPrevCity = String(prevCity || "").trim();
+  const cleanPrevDistrict = String(prevDistrict || "").trim();
+  const locationSuffix = [cleanDistrict, cleanCity].filter(Boolean).join(" / ");
+
+  let base = String(rawAddress || "").trim();
+
+  // Build candidate trailing suffixes to strip (from previous or current selections)
+  const candidates = Array.from(
+    new Set(
+      [
+        [cleanPrevDistrict, cleanPrevCity].filter(Boolean).join(" / "),
+        [cleanPrevDistrict, cleanPrevCity].filter(Boolean).join("/"),
+        [cleanDistrict, cleanPrevCity].filter(Boolean).join(" / "),
+        [cleanPrevDistrict, cleanCity].filter(Boolean).join(" / "),
+        [cleanDistrict, cleanCity].filter(Boolean).join(" / "),
+        [cleanDistrict, cleanCity].filter(Boolean).join("/"),
+        cleanPrevCity,
+        cleanPrevDistrict,
+        cleanCity,
+        cleanDistrict,
+      ].filter(Boolean)
+    )
+  ).sort((a, b) => b.length - a.length);
+
+  let stripped = true;
+  while (stripped && base) {
+    stripped = false;
+    const lowerBase = base.toLocaleLowerCase("tr-TR");
+    for (const cand of candidates) {
+      const lowerCand = cand.toLocaleLowerCase("tr-TR");
+      if (lowerBase === lowerCand) {
+        base = "";
+        stripped = true;
+        break;
+      }
+      const sepPatterns = [`, ${lowerCand}`, ` - ${lowerCand}`, ` / ${lowerCand}`, `,${lowerCand}`];
+      let matchedSep = false;
+      for (const pat of sepPatterns) {
+        if (lowerBase.endsWith(pat)) {
+          base = base.slice(0, base.length - pat.length).replace(/[\s,\-/]+$/, "").trim();
+          stripped = true;
+          matchedSep = true;
+          break;
+        }
+      }
+      if (matchedSep) break;
+    }
+  }
+
+  if (!locationSuffix) {
+    return base;
+  }
+
+  if (!base) {
+    return locationSuffix;
+  }
+
+  const lowerBase = base.toLocaleLowerCase("tr-TR");
+  const hasCity = !cleanCity || lowerBase.includes(cleanCity.toLocaleLowerCase("tr-TR"));
+  const hasDistrict = !cleanDistrict || lowerBase.includes(cleanDistrict.toLocaleLowerCase("tr-TR"));
+  if (hasCity && hasDistrict) {
+    return base;
+  }
+
+  return `${base}, ${locationSuffix}`;
+}
+
+/**
+ * Synchronizes schema, Mysoft VKN/TCKN mappings, invoice prefixes, open addresses, and settings
  * across all registered companies and their isolated storage slices.
  */
 export function syncAllCompaniesAndUsersData(): {
@@ -1176,8 +1257,12 @@ export function syncAllCompaniesAndUsersData(): {
       const { comp: withCreds } = ensureCompanyCredentials(comp);
       const cleanTax = String(withCreds.tenantIdentifierNumber || withCreds.vkn || withCreds.tckn || withCreds.taxNumber || "").replace(/\D/g, "");
       const isTckn = cleanTax.length === 11;
+      const syncedCompAddress = withCreds.address
+        ? appendCityDistrictToAddress(withCreds.address, withCreds.city, withCreds.district)
+        : withCreds.address;
       const normalizedComp: CompanyItem = {
         ...withCreds,
+        address: syncedCompAddress || withCreds.address,
         taxNumber: cleanTax || withCreds.taxNumber || "",
         vkn: !isTckn && cleanTax.length === 10 ? cleanTax : withCreds.vkn || "",
         tckn: isTckn ? cleanTax : withCreds.tckn || "",
@@ -1188,7 +1273,7 @@ export function syncAllCompaniesAndUsersData(): {
         eArsivPrefix: (withCreds.eArsivPrefix || "EAR").toUpperCase().slice(0, 3),
       };
 
-      // Sync isolated company settings slice for each company
+      // Sync isolated company settings, contacts, and invoices slice for each company
       try {
         const companyData = getStoredData(normalizedComp.id);
         const mergedSettings: CompanySettings = {
@@ -1209,6 +1294,44 @@ export function syncAllCompaniesAndUsersData(): {
           defaultInvoicePrefix: normalizedComp.eFaturaPrefix || companyData.settings.defaultInvoicePrefix || "GIB",
         };
         saveStoredData("SETTINGS", mergedSettings, normalizedComp.id);
+
+        if (Array.isArray(companyData.contacts) && companyData.contacts.length > 0) {
+          let contactsChanged = false;
+          const updatedContacts = companyData.contacts.map((c) => {
+            if (c.city || c.district) {
+              const nextAddr = appendCityDistrictToAddress(c.address, c.city, c.district);
+              if (nextAddr && nextAddr !== c.address) {
+                contactsChanged = true;
+                return { ...c, address: nextAddr };
+              }
+            }
+            return c;
+          });
+          if (contactsChanged) {
+            saveStoredData("CONTACTS", updatedContacts, normalizedComp.id);
+          }
+        }
+
+        if (Array.isArray(companyData.invoices) && companyData.invoices.length > 0) {
+          let invoicesChanged = false;
+          const updatedInvoices = companyData.invoices.map((inv) => {
+            if (inv.customerCity || inv.customerDistrict) {
+              const nextAddr = appendCityDistrictToAddress(
+                inv.customerAddress,
+                inv.customerCity,
+                inv.customerDistrict
+              );
+              if (nextAddr && nextAddr !== inv.customerAddress) {
+                invoicesChanged = true;
+                return { ...inv, customerAddress: nextAddr };
+              }
+            }
+            return inv;
+          });
+          if (invoicesChanged) {
+            saveStoredData("INVOICES", updatedInvoices, normalizedComp.id);
+          }
+        }
       } catch {
         // ignore individual slice error
       }

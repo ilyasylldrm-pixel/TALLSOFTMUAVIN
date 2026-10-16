@@ -111,7 +111,10 @@ import {
   DEFAULT_COMPANY,
   syncAllCompaniesAndUsersData,
 } from "./utils/storage";
-import { verifyAndSyncAllUsersLocalDb } from "./services/systemSyncService";
+import {
+  verifyAndSyncAllUsersLocalDb,
+  subscribeToCentralSyncState,
+} from "./services/systemSyncService";
 import { readStoredMysoftTenantVkn, writeStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
 import { CompanyModal } from "./components/CompanyModal";
 
@@ -290,6 +293,7 @@ export default function App() {
     if (synced.companies.length > 0) {
       setCompanies(synced.companies);
     }
+    setData(getStoredData(getActiveCompanyId()));
     void verifyAndSyncAllUsersLocalDb(
       0,
       "Sistem Yöneticisi",
@@ -303,6 +307,7 @@ export default function App() {
       setData(getStoredData(currentActive));
     };
     window.addEventListener("muavin:central-sync-broadcast", handleCentralSync);
+    const unsubscribeCentralSync = subscribeToCentralSyncState();
 
     const savedToken = localStorage.getItem("muavin_github_pat")?.trim();
     const savedRepo = localStorage.getItem("muavin_github_repo_url")?.trim();
@@ -325,6 +330,7 @@ export default function App() {
 
     return () => {
       window.removeEventListener("muavin:central-sync-broadcast", handleCentralSync);
+      unsubscribeCentralSync();
     };
   }, []);
 

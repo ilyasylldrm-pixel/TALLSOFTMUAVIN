@@ -62,7 +62,11 @@ import {
   calculateNextInvoiceNumber,
   parseInvoiceDocNo,
 } from "../services/mysoftInvoiceNumber";
-import { getCompaniesList, updateCompanyItem } from "../utils/storage";
+import {
+  getCompaniesList,
+  updateCompanyItem,
+  appendCityDistrictToAddress,
+} from "../utils/storage";
 import { Logo } from "./Logo";
 import { readAndOptimizeLogoFile } from "../utils/logoUpload";
 import { saveCloudLogo } from "../services/cloudBrandingService";
@@ -355,6 +359,177 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [manualPhone, setManualPhone] = useState<string>("");
   const [manualEmail, setManualEmail] = useState<string>("");
   const [saveManualAsContact, setSaveManualAsContact] = useState<boolean>(false);
+  const manualAddressInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleManualCitySelect = (newCity: string) => {
+    const prevCity = manualCity;
+    const prevDistrict = manualDistrict;
+    const prov = TURKEY_PROVINCES_DATA.find((p) => p.name === newCity);
+    const isDistrictValidForNewCity = Boolean(
+      prov?.districts?.some((d) => d.name === prevDistrict)
+    );
+    const nextDistrict = newCity ? (isDistrictValidForNewCity ? prevDistrict : "") : "";
+
+    setManualCity(newCity);
+    if (nextDistrict !== prevDistrict) {
+      setManualDistrict(nextDistrict);
+    }
+    if (prov && prov.taxOffices?.length > 0 && !manualTaxOffice) {
+      setManualTaxOffice(prov.taxOffices[0]);
+    }
+    setManualAddress((prevAddr) =>
+      appendCityDistrictToAddress(prevAddr, newCity, nextDistrict, prevCity, prevDistrict)
+    );
+  };
+
+  const handleManualDistrictSelect = (newDistrict: string) => {
+    const prevDistrict = manualDistrict;
+    setManualDistrict(newDistrict);
+    setManualAddress((prevAddr) =>
+      appendCityDistrictToAddress(prevAddr, manualCity, newDistrict, manualCity, prevDistrict)
+    );
+  };
+
+  const clampManualAddressCaret = () => {
+    const input = manualAddressInputRef.current;
+    if (!input) return;
+    const locSuffix = [manualDistrict.trim(), manualCity.trim()].filter(Boolean).join(" / ");
+    if (!locSuffix) return;
+    const currentVal = input.value;
+    if (currentVal === locSuffix) {
+      if (input.selectionStart === input.selectionEnd) {
+        input.setSelectionRange(0, 0);
+      }
+      return;
+    }
+    const suffixWithComma = `, ${locSuffix}`;
+    if (currentVal.endsWith(suffixWithComma)) {
+      const maxStreetPos = currentVal.length - suffixWithComma.length;
+      if (
+        input.selectionStart !== null &&
+        input.selectionStart === input.selectionEnd &&
+        input.selectionStart > maxStreetPos
+      ) {
+        input.setSelectionRange(maxStreetPos, maxStreetPos);
+      }
+    }
+  };
+
+  const handleManualAddressInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    const locSuffix = [manualDistrict.trim(), manualCity.trim()].filter(Boolean).join(" / ");
+    if (!locSuffix) {
+      setManualAddress(rawVal);
+      return;
+    }
+
+    const prevVal = manualAddress;
+    if (!rawVal) {
+      setManualAddress(locSuffix);
+      requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
+      return;
+    }
+
+    if (!prevVal || prevVal === locSuffix) {
+      if (rawVal.length <= locSuffix.length && prevVal === locSuffix) {
+        setManualAddress(locSuffix);
+        requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
+        return;
+      }
+      let streetPart = rawVal;
+      if (prevVal === locSuffix) {
+        let p = 0;
+        while (p < locSuffix.length && p < rawVal.length && rawVal[p] === locSuffix[p]) p++;
+        let s = 0;
+        while (
+          s < locSuffix.length - p &&
+          s < rawVal.length - p &&
+          rawVal[rawVal.length - 1 - s] === locSuffix[locSuffix.length - 1 - s]
+        ) {
+          s++;
+        }
+        streetPart =
+          p + s === locSuffix.length
+            ? rawVal.slice(p, rawVal.length - s)
+            : appendCityDistrictToAddress(rawVal, "", "", manualCity, manualDistrict);
+      } else {
+        streetPart = appendCityDistrictToAddress(rawVal, "", "", manualCity, manualDistrict);
+      }
+
+      if (!streetPart) {
+        setManualAddress(locSuffix);
+        requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
+        return;
+      }
+
+      const nextVal = `${streetPart}, ${locSuffix}`;
+      const caretPos = streetPart.length;
+      setManualAddress(nextVal);
+      requestAnimationFrame(() =>
+        manualAddressInputRef.current?.setSelectionRange(caretPos, caretPos)
+      );
+      return;
+    }
+
+    const suffixWithComma = `, ${locSuffix}`;
+    if (rawVal.endsWith(suffixWithComma)) {
+      const streetPart = rawVal.slice(0, rawVal.length - suffixWithComma.length);
+      if (!streetPart) {
+        setManualAddress(locSuffix);
+        requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
+        return;
+      }
+      const caretPos = Math.min(e.target.selectionStart ?? streetPart.length, streetPart.length);
+      setManualAddress(rawVal);
+      requestAnimationFrame(() =>
+        manualAddressInputRef.current?.setSelectionRange(caretPos, caretPos)
+      );
+      return;
+    }
+
+    const prevStreet = prevVal.endsWith(suffixWithComma)
+      ? prevVal.slice(0, prevVal.length - suffixWithComma.length)
+      : appendCityDistrictToAddress(prevVal, "", "", manualCity, manualDistrict);
+
+    if (rawVal.length < prevVal.length) {
+      const nextStreet = prevStreet.slice(0, -1);
+      if (!nextStreet) {
+        setManualAddress(locSuffix);
+        requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
+      } else {
+        setManualAddress(`${nextStreet}, ${locSuffix}`);
+        requestAnimationFrame(() =>
+          manualAddressInputRef.current?.setSelectionRange(nextStreet.length, nextStreet.length)
+        );
+      }
+      return;
+    }
+
+    let p = 0;
+    while (p < prevVal.length && p < rawVal.length && rawVal[p] === prevVal[p]) p++;
+    let s = 0;
+    while (
+      s < prevVal.length - p &&
+      s < rawVal.length - p &&
+      rawVal[rawVal.length - 1 - s] === prevVal[prevVal.length - 1 - s]
+    ) {
+      s++;
+    }
+    const inserted = p + s === prevVal.length ? rawVal.slice(p, rawVal.length - s) : "";
+    const nextStreet = inserted
+      ? `${prevStreet}${inserted}`
+      : appendCityDistrictToAddress(rawVal, "", "", manualCity, manualDistrict);
+
+    if (!nextStreet) {
+      setManualAddress(locSuffix);
+      requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
+    } else {
+      setManualAddress(`${nextStreet}, ${locSuffix}`);
+      requestAnimationFrame(() =>
+        manualAddressInputRef.current?.setSelectionRange(nextStreet.length, nextStreet.length)
+      );
+    }
+  };
 
   const [contactId, setContactId] = useState<string>(
     initialContactIdForNewInvoice || contacts[0]?.id || ""
@@ -690,14 +865,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
             if (!manualTaxOffice.trim() && status.taxOffice) {
               setManualTaxOffice(status.taxOffice);
             }
+            const nextCity = !manualCity.trim() && status.city ? status.city : manualCity;
+            const nextDistrict = !manualDistrict.trim() && status.district ? status.district : manualDistrict;
             if (!manualCity.trim() && status.city) {
               setManualCity(status.city);
             }
             if (!manualDistrict.trim() && status.district) {
               setManualDistrict(status.district);
             }
-            if (!manualAddress.trim() && status.address) {
-              setManualAddress(status.address);
+            if ((!manualAddress.trim() && status.address) || nextCity || nextDistrict) {
+              setManualAddress((prevAddr) =>
+                appendCityDistrictToAddress(
+                  prevAddr.trim() ? prevAddr : (status.address || ""),
+                  nextCity,
+                  nextDistrict
+                )
+              );
             }
           }
           void fetchAndApplyNextInvoiceNumber(undefined, nextType);
@@ -1109,7 +1292,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
       setManualCustomerName(inv.contactName || "");
       setManualTaxNumber(inv.taxNumber || "");
       setManualTaxOffice(inv.taxOffice || "");
-      setManualAddress(inv.customerAddress || "");
+      setManualAddress(
+        appendCityDistrictToAddress(inv.customerAddress || "", inv.customerCity || "", inv.customerDistrict || "")
+      );
       setManualCity(inv.customerCity || "");
       setManualDistrict(inv.customerDistrict || "");
       setManualPhone(inv.customerPhone || "");
@@ -1389,7 +1574,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
         ? (manualTaxNumber.trim() || vknSearchInput.trim() || "")
         : (contact?.taxNumber || vknSearchInput.trim() || ""),
       taxOffice: customerMode === "manual" ? manualTaxOffice.trim() : (contact?.taxOffice || ""),
-      customerAddress: customerMode === "manual" ? manualAddress.trim() : (contact?.address || ""),
+      customerAddress:
+        customerMode === "manual"
+          ? appendCityDistrictToAddress(manualAddress, manualCity, manualDistrict)
+          : appendCityDistrictToAddress(contact?.address || "", contact?.city || "", contact?.district || ""),
       customerCity: customerMode === "manual" ? manualCity.trim() : (contact?.city || ""),
       customerDistrict: customerMode === "manual" ? manualDistrict.trim() : (contact?.district || ""),
       customerPhone: customerMode === "manual" ? manualPhone.trim() : (contact?.phone || ""),
@@ -1428,7 +1616,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
           name: manualCustomerName.trim(),
           taxNumber: manualTaxNumber.trim() || vknSearchInput.trim() || undefined,
           taxOffice: manualTaxOffice.trim() || undefined,
-          address: manualAddress.trim() || undefined,
+          address: appendCityDistrictToAddress(manualAddress, manualCity, manualDistrict) || undefined,
           city: manualCity.trim() || undefined,
           district: manualDistrict.trim() || undefined,
           phone: manualPhone.trim() || undefined,
@@ -1679,9 +1867,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
       ? (manualTaxNumber.trim() || vknSearchInput.trim() || "")
       : (contact?.taxNumber || vknSearchInput.trim() || "");
     const effectiveTaxOffice = isManual ? manualTaxOffice.trim() : (contact?.taxOffice || "");
-    const effectiveAddress = isManual ? manualAddress.trim() : (contact?.address || "");
     const effectiveCity = isManual ? manualCity.trim() : (contact?.city || "");
     const effectiveDistrict = isManual ? manualDistrict.trim() : (contact?.district || "");
+    const effectiveAddress = isManual
+      ? appendCityDistrictToAddress(manualAddress, effectiveCity, effectiveDistrict)
+      : appendCityDistrictToAddress(contact?.address || "", effectiveCity, effectiveDistrict);
     const effectivePhone = isManual ? manualPhone.trim() : (contact?.phone || "");
     const effectiveEmail = isManual ? manualEmail.trim() : (contact?.email || "");
 
@@ -3759,13 +3949,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         </label>
                         <select
                           value={manualCity}
-                          onChange={(e) => {
-                            setManualCity(e.target.value);
-                            const prov = TURKEY_PROVINCES_DATA.find((p) => p.name === e.target.value);
-                            if (prov && prov.taxOffices?.length > 0 && !manualTaxOffice) {
-                              setManualTaxOffice(prov.taxOffices[0]);
-                            }
-                          }}
+                          onChange={(e) => handleManualCitySelect(e.target.value)}
                           className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         >
                           <option value="">İl Seçin...</option>
@@ -3788,7 +3972,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             return (
                               <select
                                 value={manualDistrict}
-                                onChange={(e) => setManualDistrict(e.target.value)}
+                                onChange={(e) => handleManualDistrictSelect(e.target.value)}
                                 className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                               >
                                 <option value="">İlçe Seçin...</option>
@@ -3805,7 +3989,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               type="text"
                               placeholder="Örn: Kadıköy"
                               value={manualDistrict}
-                              onChange={(e) => setManualDistrict(e.target.value)}
+                              onChange={(e) => handleManualDistrictSelect(e.target.value)}
                               className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                             />
                           );
@@ -3845,15 +4029,30 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                     {/* Açık Adres Satırı */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-purple-600" />
-                        <span>Müşteri Açık Adresi</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Müşteri Açık Adresi</span>
+                        </label>
+                        {(manualCity || manualDistrict) && (
+                          <span className="text-[10px] font-semibold text-purple-700">
+                            Seçilen İl/İlçe: {[manualDistrict, manualCity].filter(Boolean).join(" / ")}
+                          </span>
+                        )}
+                      </div>
                       <input
+                        ref={manualAddressInputRef}
                         type="text"
                         placeholder="Örn: Barbaros Mah. Çiğdem Sk. No: 14 D: 6"
                         value={manualAddress}
-                        onChange={(e) => setManualAddress(e.target.value)}
+                        onFocus={clampManualAddressCaret}
+                        onClick={clampManualAddressCaret}
+                        onChange={handleManualAddressInputChange}
+                        onBlur={() =>
+                          setManualAddress((prev) =>
+                            appendCityDistrictToAddress(prev, manualCity, manualDistrict)
+                          )
+                        }
                         className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                       />
                     </div>

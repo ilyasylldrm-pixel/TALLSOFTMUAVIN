@@ -129,8 +129,28 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   const contactName = invoice.contactName || contact?.name || "Belirtilmemiş Müşteri / Tedarikçi";
   const contactTaxOffice = invoice.taxOffice || contact?.taxOffice || "-";
   const contactTaxNo = invoice.taxNumber || contact?.taxNumber || "-";
-  const contactAddress = invoice.customerAddress || contact?.address || "Adres Belirtilmemiş";
-  const contactCity = invoice.customerCity || contact?.city || "";
+  const rawContactAddress = (invoice.customerAddress || contact?.address || "").trim();
+  const contactCity = (invoice.customerCity || contact?.city || "").trim();
+  const contactDistrict = (invoice.customerDistrict || contact?.district || "").trim();
+  const contactLocationTag = [contactDistrict, contactCity].filter(Boolean).join(" / ");
+  const contactAddress = (() => {
+    if (!rawContactAddress) {
+      return contactLocationTag || "Adres Belirtilmemiş";
+    }
+    const lowerAddr = rawContactAddress.toLocaleLowerCase("tr-TR");
+    const hasCity = contactCity && lowerAddr.includes(contactCity.toLocaleLowerCase("tr-TR"));
+    const hasDistrict = contactDistrict && lowerAddr.includes(contactDistrict.toLocaleLowerCase("tr-TR"));
+    if (hasCity && (hasDistrict || !contactDistrict)) {
+      return rawContactAddress;
+    }
+    if (!hasCity && !hasDistrict && contactLocationTag) {
+      return `${rawContactAddress}, ${contactLocationTag}`;
+    }
+    if (!hasCity && contactCity) {
+      return `${rawContactAddress} / ${contactCity}`;
+    }
+    return rawContactAddress;
+  })();
   const contactPhone = invoice.customerPhone || contact?.phone || "-";
   const contactEmail = invoice.customerEmail || contact?.email || "-";
   const isManualCustomer = invoice.isManualCustomer || (!contact && !invoice.contactId?.startsWith("cnt_"));
@@ -546,7 +566,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   VKN / TCKN: <strong>{contactTaxNo}</strong>
                 </p>
                 <p className="text-slate-500">
-                  {contactAddress}{contactCity ? `, ${contactCity}` : ""}
+                  {contactAddress}
                 </p>
                 <p className="text-slate-500">
                   Tel: {contactPhone} {contactEmail && contactEmail !== "-" ? `| E-posta: ${contactEmail}` : ""}

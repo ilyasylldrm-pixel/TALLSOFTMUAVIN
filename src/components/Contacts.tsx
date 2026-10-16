@@ -17,6 +17,7 @@ import { DataImportModal } from "./common/DataImportModal";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, generateAccountStatementAutoTablePDF, printAccountStatementPDF, printHtmlElement, exportElementToPDFWithPrintStyling, LedgerSummaryData, exportToExcel, exportToPDF } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
+import { appendCityDistrictToAddress } from "../utils/storage";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -898,9 +899,14 @@ export const Contacts: React.FC<ContactsProps> = ({
     if (!finalName) return;
 
     const accountCode = currentComputedAccountCode;
+    const effectiveOpenAddress = appendCityDistrictToAddress(
+      formData.address || compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode),
+      formData.city,
+      formData.district !== "Diğer" ? formData.district : ""
+    );
     const finalShippingAddress = formData.isSameShippingAddress
-      ? (formData.address || compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode))
-      : (formData.shippingAddress || formData.address);
+      ? effectiveOpenAddress
+      : (formData.shippingAddress || effectiveOpenAddress);
 
     const contactPayload: Partial<Contact> = {
       name: finalName,
@@ -915,7 +921,7 @@ export const Contacts: React.FC<ContactsProps> = ({
       phone: formData.phone,
       mobile: formData.phone,
       email: formData.email,
-      address: formData.address,
+      address: effectiveOpenAddress,
       shippingAddress: finalShippingAddress,
       city: formData.city,
       district: formData.district,
@@ -2550,6 +2556,20 @@ export const Contacts: React.FC<ContactsProps> = ({
                             address: val,
                             shippingAddress: prev.isSameShippingAddress ? val : prev.shippingAddress,
                           }));
+                        }}
+                        onBlur={() => {
+                          setFormData(prev => {
+                            const syncedAddr = appendCityDistrictToAddress(
+                              prev.address,
+                              prev.city,
+                              prev.district !== "Diğer" ? prev.district : ""
+                            );
+                            return {
+                              ...prev,
+                              address: syncedAddr,
+                              shippingAddress: prev.isSameShippingAddress ? syncedAddr : prev.shippingAddress,
+                            };
+                          });
                         }}
                         className="w-full rounded-xl p-2 text-xs border"
                         style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
