@@ -614,7 +614,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     let isMounted = true;
     setIsCheckingRecipient(true);
-    checkRecipientTaxpayerStatus(taxNum, undefined, selectedTenantVkn)
+    checkRecipientTaxpayerStatus(taxNum, undefined, mysoftTenantVkn)
       .then((status) => {
         if (isMounted) {
           setRecipientStatus(status);
@@ -658,7 +658,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, fetchAndApplyNextInvoiceNumber]);
+  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, fetchAndApplyNextInvoiceNumber, mysoftTenantVkn]);
 
   const handleQuickLookupVkn = async (overrideVkn?: string) => {
     const rawVal = overrideVkn !== undefined ? overrideVkn : newContactTaxNo;
@@ -666,7 +666,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     if (clean.length !== 10 && clean.length !== 11) return;
     setIsQuickContactChecking(true);
     try {
-      const status = await checkRecipientTaxpayerStatus(clean, undefined, selectedTenantVkn);
+      const status = await checkRecipientTaxpayerStatus(clean, undefined, mysoftTenantVkn);
       setQuickContactStatus(status);
       if (status.companyTitle || status.title || status.name) {
         setNewContactName(status.companyTitle || status.title || status.name || "");
@@ -3468,7 +3468,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               const clean = manualTaxNumber.replace(/\D/g, "").trim();
                               if (clean.length === 10 || clean.length === 11) {
                                 setIsCheckingRecipient(true);
-                                checkRecipientTaxpayerStatus(clean, undefined, selectedTenantVkn)
+                                checkRecipientTaxpayerStatus(clean, undefined, mysoftTenantVkn)
                                   .then((status) => {
                                     setRecipientStatus(status);
                                     if (status.companyTitle || status.title || status.name) {
