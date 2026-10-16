@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { Sidebar, NavItem } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Dashboard } from "./components/Dashboard";
