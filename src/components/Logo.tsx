@@ -40,6 +40,9 @@ export const Logo: React.FC<LogoProps> = ({
   onClick,
 }) => {
   const [imageError, setImageError] = useState(false);
+  React.useEffect(() => {
+    setImageError(false);
+  }, [src, imageUrl]);
   const isLight = variant === "light";
   const mainColor = isLight ? "#FFFFFF" : "#0A192F";
   const barColor = "#EAA728";

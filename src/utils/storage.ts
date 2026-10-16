@@ -517,9 +517,9 @@ export function cleanupOversizedStorage(aggressive = false) {
       else if (key.startsWith("muavin_company_settings")) {
         try {
           const raw = window.localStorage.getItem(key);
-          if (raw && raw.length > 60000) {
+          if (raw && raw.length > 400000) {
             const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === "object" && typeof parsed.logoUrl === "string" && parsed.logoUrl.length > 40000) {
+            if (parsed && typeof parsed === "object" && typeof parsed.logoUrl === "string" && parsed.logoUrl.length > 350000) {
               parsed.logoUrl = "/logo.svg";
               window.localStorage.setItem(key, JSON.stringify(parsed));
             }
@@ -1061,7 +1061,7 @@ export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any, target
 
   let payloadToSave = data;
   if (key === "SETTINGS" && data && typeof data === "object") {
-    if (typeof data.logoUrl === "string" && data.logoUrl.startsWith("data:") && data.logoUrl.length > 50000) {
+    if (typeof data.logoUrl === "string" && data.logoUrl.startsWith("data:") && data.logoUrl.length > 350000) {
       payloadToSave = { ...data, logoUrl: "/logo.svg" };
     }
   } else if (key === "EDOCUMENTS" && Array.isArray(data)) {

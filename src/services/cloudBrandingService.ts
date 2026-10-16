@@ -54,10 +54,10 @@ function safeSaveBrandingToStorage(config: CloudBrandingConfig) {
 
   // Aşırı büyük data URL/base64 logolar varsa önbellek için hafifletilmiş kopya üret
   let configToCache: CloudBrandingConfig = config;
-  if (config.logoUrl && config.logoUrl.startsWith("data:") && config.logoUrl.length > 50000) {
+  if (config.logoUrl && config.logoUrl.startsWith("data:") && config.logoUrl.length > 350000) {
     configToCache = {
       ...config,
-      logoUrl: config.logoUrl.length > 100000 ? "/logo.svg" : config.logoUrl
+      logoUrl: "/logo.svg"
     };
   }
 

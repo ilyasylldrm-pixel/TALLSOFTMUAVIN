@@ -752,7 +752,7 @@ function asObjectArray(value) {
 function stringOrEmpty(value) {
   return typeof value === "string" ? value.trim() : "";
 }
-function positiveInt2(value) {
+function positiveInt(value) {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : void 0;
 }
@@ -768,8 +768,8 @@ function parseTokenIdentity(accessToken) {
     return {
       defaultTenantId: Number.isInteger(defaultTenantId) ? defaultTenantId : void 0,
       hasDefaultTenant: Number.isInteger(defaultTenantId) && defaultTenantId > 0,
-      businessPartnerId: positiveInt2(raw.BusinessPartnerId),
-      applicationAccessId: positiveInt2(raw.ApplicationAccessId)
+      businessPartnerId: positiveInt(raw.BusinessPartnerId),
+      applicationAccessId: positiveInt(raw.ApplicationAccessId)
     };
   } catch {
     return void 0;
@@ -1809,6 +1809,7 @@ var MysoftEdocumentClient = class {
   async enrichInvoiceOutboxDefaults(payload) {
     if (!isObject(payload) || Array.isArray(payload)) return payload;
     const body = { ...payload };
+    body.isCalculateByApi = false;
     let tenant = typeof body.tenantIdentifierNumber === "string" ? normalizeMysoftTenantIdentifier(body.tenantIdentifierNumber) || body.tenantIdentifierNumber.trim() : "";
     if (!tenant) {
       const resolved = await this.resolveEffectiveTenant();
@@ -2182,6 +2183,11 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
     return trimmed || void 0;
   };
   const queryText = (req, name) => textParam(req.query[name]);
+  const positiveInt2 = (value) => {
+    if (value === void 0 || value === null || value === "") return void 0;
+    const n = Number(value);
+    return Number.isInteger(n) && n > 0 ? n : void 0;
+  };
   const idFrom = (req) => textParam(req.params.invoiceETTN);
   const requireEttn = (req, res) => {
     const value = idFrom(req);
@@ -2566,7 +2572,7 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
       const tenant = tenantFrom(req);
       const eDocumentType = queryText(req, "eDocumentType") || queryText(req, "docType");
       const prefix = queryText(req, "prefix");
-      const year = positiveInt(queryText(req, "year"));
+      const year = positiveInt2(queryText(req, "year"));
       return client.getNextInvoiceNumber({
         tenantIdentifierNumber: tenant,
         eDocumentType,
@@ -2581,7 +2587,7 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
       const tenant = tenantFrom(req);
       const eDocumentType = queryText(req, "eDocumentType") || queryText(req, "docType");
       const prefix = queryText(req, "prefix");
-      const year = positiveInt(queryText(req, "year"));
+      const year = positiveInt2(queryText(req, "year"));
       return client.getNextInvoiceNumber({
         tenantIdentifierNumber: tenant,
         eDocumentType,
@@ -2596,7 +2602,7 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
       const tenant = normalizeMysoftTenantIdentifier(req.params.vkn) || tenantFrom(req);
       const eDocumentType = queryText(req, "eDocumentType") || queryText(req, "docType");
       const prefix = queryText(req, "prefix");
-      const year = positiveInt(queryText(req, "year"));
+      const year = positiveInt2(queryText(req, "year"));
       return client.getNextInvoiceNumber({
         tenantIdentifierNumber: tenant,
         eDocumentType,

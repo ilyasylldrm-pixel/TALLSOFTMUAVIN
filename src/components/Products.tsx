@@ -1070,9 +1070,10 @@ export const Products: React.FC<ProductsProps> = ({
   const totalConsolidatedValue = products.reduce((acc, p) => acc + (p.stockQuantity || 0) * (p.buyPrice || 0), 0);
 
   // Analytics for selected Ekstre Product
-  const ekstreAnalytics = selectedEkstreProduct
-    ? getProductAnalytics(selectedEkstreProduct, invoices)
-    : null;
+  const ekstreAnalytics = useMemo(
+    () => (selectedEkstreProduct ? getProductAnalytics(selectedEkstreProduct, invoices) : null),
+    [selectedEkstreProduct, invoices]
+  );
 
   const filteredEkstreMovements = ekstreAnalytics
     ? ekstreAnalytics.movements.filter((m) => {

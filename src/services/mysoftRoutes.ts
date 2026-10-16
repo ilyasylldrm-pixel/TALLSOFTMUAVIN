@@ -94,6 +94,12 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
 
   const queryText = (req: Request, name: string): string | undefined => textParam(req.query[name]);
 
+  const positiveInt = (value: unknown): number | undefined => {
+    if (value === undefined || value === null || value === "") return undefined;
+    const n = Number(value);
+    return Number.isInteger(n) && n > 0 ? n : undefined;
+  };
+
   const idFrom = (req: Request): string | undefined => textParam(req.params.invoiceETTN);
 
   const requireEttn = (req: Request, res: Response): string | undefined => {

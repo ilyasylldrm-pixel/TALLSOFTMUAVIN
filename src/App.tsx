@@ -374,6 +374,14 @@ export default function App() {
     fetchCloudLogo().then((branding) => {
       if (branding?.logoUrl) {
         setData((prev) => {
+          // Kullanıcının bilgisayardan yüklediği özel logo varsa, varsayılan "/logo.svg" ile ezme
+          if (
+            branding.logoUrl === "/logo.svg" &&
+            prev.settings?.logoUrl &&
+            prev.settings.logoUrl !== "/logo.svg"
+          ) {
+            return prev;
+          }
           if (prev.settings?.logoUrl !== branding.logoUrl) {
             return {
               ...prev,
@@ -392,6 +400,13 @@ export default function App() {
     const unsubscribe = subscribeToCloudLogo((branding) => {
       if (branding?.logoUrl) {
         setData((prev) => {
+          if (
+            branding.logoUrl === "/logo.svg" &&
+            prev.settings?.logoUrl &&
+            prev.settings.logoUrl !== "/logo.svg"
+          ) {
+            return prev;
+          }
           if (prev.settings?.logoUrl !== branding.logoUrl) {
             return {
               ...prev,
@@ -1244,6 +1259,8 @@ export default function App() {
         ? "Nakit"
         : invoice.paymentMethod === "kredi_karti"
         ? "Kredi Kartı"
+        : invoice.paymentMethod === "eft_havale"
+        ? "EFT / Havale"
         : "";
 
     const newTx: Transaction = {
@@ -2361,6 +2378,7 @@ export default function App() {
               initialContactIdForNewInvoice={initialContactIdForInvoice}
               onSelectTab={setCurrentTab}
               onAddContact={handleAddContact}
+              onSaveCompanySettings={handleSaveSettings}
             />
           )}
 

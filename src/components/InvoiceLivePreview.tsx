@@ -76,6 +76,29 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
           <span className="inline-block bg-slate-900 text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase">
             {docBadge}
           </span>
+          {invoice.paymentMethod && (
+            <div className="mt-1">
+              <span
+                className={`inline-block text-[8px] font-extrabold px-1.5 py-0.2 rounded border uppercase ${
+                  invoice.paymentMethod === "nakit"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : invoice.paymentMethod === "kredi_karti"
+                    ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                    : invoice.paymentMethod === "eft_havale"
+                    ? "bg-sky-50 text-sky-800 border-sky-200"
+                    : "bg-amber-50 text-amber-800 border-amber-200"
+                }`}
+              >
+                {invoice.paymentMethod === "nakit"
+                  ? "Nakit"
+                  : invoice.paymentMethod === "kredi_karti"
+                  ? "Kredi Kartı"
+                  : invoice.paymentMethod === "eft_havale"
+                  ? "EFT / Havale"
+                  : "Cari Hesap"}
+              </span>
+            </div>
+          )}
           <p className="font-mono font-bold mt-1">{invNumber}</p>
           <p className="text-slate-500">{formatDate(invoice.issueDate || new Date().toISOString())}</p>
         </div>

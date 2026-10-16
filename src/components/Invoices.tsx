@@ -63,6 +63,9 @@ import {
   parseInvoiceDocNo,
 } from "../services/mysoftInvoiceNumber";
 import { getCompaniesList, updateCompanyItem } from "../utils/storage";
+import { Logo } from "./Logo";
+import { readAndOptimizeLogoFile } from "../utils/logoUpload";
+import { saveCloudLogo } from "../services/cloudBrandingService";
 import {
   FileText,
   FileSpreadsheet,
@@ -114,6 +117,8 @@ import {
   Banknote,
   Wallet,
   Save,
+  Upload,
+  Landmark,
 } from "lucide-react";
 import { TURKEY_PROVINCES_DATA } from "../data/locationAndTaxData";
 
@@ -178,6 +183,7 @@ interface InvoicesProps {
   onCollectAllInvoices?: (targetAccountId?: string) => void;
   onSelectTab?: (tab: NavItem) => void;
   onAddContact?: (contact: Contact) => void;
+  onSaveCompanySettings?: (settings: CompanySettings) => void;
 }
 
 const INVOICE_TABLE_COLUMNS: ColumnDef[] = [
@@ -207,6 +213,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   onCollectAllInvoices,
   onSelectTab,
   onAddContact,
+  onSaveCompanySettings,
 }) => {
   const { theme } = useTheme();
   const selection = useTableSelection();
@@ -287,6 +294,50 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const cashAcc = accounts.find((a) => a.type === "cash");
     return cashAcc?.id || accounts[0]?.id || "";
   });
+  const [paymentIban, setPaymentIban] = useState<string>(() => {
+    const bankAcc = accounts.find((a) => a.type === "bank");
+    return bankAcc?.iban || companySettings.defaultBankIban || companySettings.iban || "";
+  });
+  const [includeIbanInNotes, setIncludeIbanInNotes] = useState<boolean>(true);
+  const invoiceLogoInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [logoUploadNotice, setLogoUploadNotice] = useState<string | null>(null);
+
+  const handleInvoiceLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const optimizedDataUrl = await readAndOptimizeLogoFile(file);
+      if (onSaveCompanySettings) {
+        onSaveCompanySettings({
+          ...companySettings,
+          logoUrl: optimizedDataUrl,
+        });
+      }
+      try {
+        const compList = getCompaniesList();
+        const activeComp = compList.find(
+          (c) =>
+            c.id === companySettings.id ||
+            (companySettings.taxNumber && c.taxNumber === companySettings.taxNumber)
+        );
+        if (activeComp) {
+          updateCompanyItem({ ...activeComp, logoUrl: optimizedDataUrl });
+        }
+      } catch {}
+      void saveCloudLogo(optimizedDataUrl, {
+        brandName: companySettings.companyName || "E-MUAVİN",
+        description: "Fatura hazırlama ekranından bilgisayardan yüklenen kurumsal logo",
+      });
+      setLogoUploadNotice("Logo bilgisayardan başarıyla yüklendi ve faturaya uygulandı.");
+      setTimeout(() => setLogoUploadNotice(null), 4000);
+    } catch (err) {
+      setLogoUploadNotice(
+        err instanceof Error ? err.message : "Logo yüklenirken hata oluştu."
+      );
+    } finally {
+      e.target.value = "";
+    }
+  };
   const [taxModalItem, setTaxModalItem] = useState<InvoiceItem | null>(null);
   const [taxModalInitialTab, setTaxModalInitialTab] = useState<"tevkifat" | "ozel_matrah" | "istisna" | "ek_vergiler" | undefined>(undefined);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState<string>("");
@@ -398,6 +449,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       normalizeMysoftTenantIdentifier(companySettings.mysoftCredentials?.tenantIdentifierNumber)
     );
   });
+  const selectedTenantVkn = mysoftTenantVkn;
   const [isFetchingNextDocNo, setIsFetchingNextDocNo] = useState<boolean>(false);
   const [mysoftNumberInfo, setMysoftNumberInfo] = useState<MysoftNextInvoiceNumberResult | null>(null);
   const [recipientStatus, setRecipientStatus] = useState<RecipientTaxpayerStatus | null>(null);
@@ -658,7 +710,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, fetchAndApplyNextInvoiceNumber, mysoftTenantVkn]);
+  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, mysoftTenantVkn, fetchAndApplyNextInvoiceNumber]);
 
   const handleQuickLookupVkn = async (overrideVkn?: string) => {
     const rawVal = overrideVkn !== undefined ? overrideVkn : newContactTaxNo;
@@ -1036,6 +1088,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
     } else if (accounts[0]?.id) {
       setPaymentAccountId(accounts[0].id);
     }
+    if (inv.paymentIban) {
+      setPaymentIban(inv.paymentIban);
+    } else {
+      const acc = accounts.find((a) => a.id === inv.paymentAccountId) || accounts.find((a) => a.type === "bank");
+      setPaymentIban(acc?.iban || companySettings.defaultBankIban || companySettings.iban || "");
+    }
     setTaxModalItem(null);
     setTaxModalInitialTab(undefined);
     setFormDocKind(inv.docKind || "invoice");
@@ -1298,7 +1356,19 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const primaryExpenseCategory = computedItems.find((i) => i.expenseCategory)?.expenseCategory || computedItems[0]?.expenseCategory;
 
     const selectedPaymentAccount = accounts.find((a) => a.id === paymentAccountId);
-    const isImmediatePayment = paymentMethod === "nakit" || paymentMethod === "kredi_karti";
+    const isImmediatePayment =
+      paymentMethod === "nakit" ||
+      paymentMethod === "kredi_karti" ||
+      paymentMethod === "eft_havale";
+    const effectiveIban =
+      paymentMethod === "eft_havale"
+        ? (paymentIban.trim() || selectedPaymentAccount?.iban || companySettings.defaultBankIban || companySettings.iban || "")
+        : undefined;
+    let draftNotes = finalNotes;
+    if (paymentMethod === "eft_havale" && includeIbanInNotes && effectiveIban && !draftNotes.includes(effectiveIban)) {
+      const bankNote = `EFT / Havale Banka Bilgisi: ${selectedPaymentAccount?.name ? `${selectedPaymentAccount.name} - ` : ""}IBAN: ${effectiveIban}`;
+      draftNotes = draftNotes ? `${draftNotes} | ${bankNote}` : bankNote;
+    }
 
     return {
       invoiceNumber: customNum ? `${customNum} (TASLAK)` : `${defaultNumber} (TASLAK)`,
@@ -1309,6 +1379,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       paymentMethod,
       paymentAccountId: isImmediatePayment ? paymentAccountId : undefined,
       paymentAccountName: isImmediatePayment ? selectedPaymentAccount?.name : undefined,
+      paymentIban: effectiveIban || undefined,
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       contactId: customerMode === "manual" ? "manual_draft" : contactId,
       contactName: customerMode === "manual"
@@ -1341,7 +1412,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       remainingAmount: isImmediatePayment ? 0 : payableAmount,
       status: "draft",
       currency: "TRY",
-      notes: finalNotes,
+      notes: draftNotes,
     };
   };
 
@@ -1742,7 +1813,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const selectedPaymentAccount =
       accounts.find((a) => a.id === paymentAccountId) || accounts[0];
     const isImmediatePayment =
-      paymentMethod === "nakit" || paymentMethod === "kredi_karti";
+      paymentMethod === "nakit" ||
+      paymentMethod === "kredi_karti" ||
+      paymentMethod === "eft_havale";
+    const effectiveIban =
+      paymentMethod === "eft_havale"
+        ? (paymentIban.trim() || selectedPaymentAccount?.iban || companySettings.defaultBankIban || companySettings.iban || "")
+        : undefined;
+    if (paymentMethod === "eft_havale" && includeIbanInNotes && effectiveIban && !finalNotes.includes(effectiveIban)) {
+      const bankNote = `EFT / Havale Banka Bilgisi: ${selectedPaymentAccount?.name ? `${selectedPaymentAccount.name} - ` : ""}IBAN: ${effectiveIban}`;
+      finalNotes = finalNotes ? `${finalNotes} | ${bankNote}` : bankNote;
+    }
 
     let baseInvoice: Invoice = {
       id: editingInvoiceId || "inv_" + Date.now(),
@@ -1757,6 +1838,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       paymentMethod,
       paymentAccountId: isImmediatePayment ? selectedPaymentAccount?.id : undefined,
       paymentAccountName: isImmediatePayment ? selectedPaymentAccount?.name : undefined,
+      paymentIban: effectiveIban || undefined,
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       contactId: finalContactId,
       contactName: effectiveContactName,
@@ -2635,6 +2717,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
             handleSaveInvoice(dummyEvent);
           }}
           onSelectTab={onSelectTab}
+          onSaveCompanySettings={onSaveCompanySettings}
         />
       );
     }
@@ -3106,6 +3189,71 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   </button>
                 </div>
               )}
+
+              {/* Fatura & Firma Logosu (Bilgisayardan Yükleme / Önizleme) */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 flex items-center justify-center shrink-0">
+                    <Logo size="sm" src={companySettings?.logoUrl || "/logo.svg"} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-extrabold text-slate-900 truncate">
+                        {companySettings?.companyName || "Firma Logosu & Başlığı"}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                        Fatura Logosu
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Bilgisayarınızdan yüklediğiniz logo fatura şablonunda, PDF çıktısında ve sistem genelinde kullanılır.
+                    </p>
+                    {logoUploadNotice && (
+                      <p className="text-[11px] font-bold text-emerald-700 mt-1 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>{logoUploadNotice}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    ref={invoiceLogoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
+                    onChange={handleInvoiceLogoUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => invoiceLogoInputRef.current?.click()}
+                    className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Bilgisayardan Logo Yükle</span>
+                  </button>
+                  {companySettings?.logoUrl && companySettings.logoUrl !== "/logo.svg" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onSaveCompanySettings) {
+                          onSaveCompanySettings({ ...companySettings, logoUrl: "/logo.svg" });
+                        }
+                        void saveCloudLogo("/logo.svg", {
+                          brandName: companySettings.companyName || "E-MUAVİN",
+                          description: "Varsayılan kurumsal logo",
+                        });
+                        setLogoUploadNotice("Varsayılan kurumsal logoya dönüldü.");
+                        setTimeout(() => setLogoUploadNotice(null), 3000);
+                      }}
+                      className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold border border-slate-200 transition-all cursor-pointer"
+                      title="Varsayılan logoya dön"
+                    >
+                      Varsayılan
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {/* Top Controls & Selected Cari / Müşteri Information */}
               <div className="space-y-3.5 bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -4408,7 +4556,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
               </div>
 
               <div className="pt-3 flex flex-col gap-3 border-t border-slate-200">
-                {/* Ödeme Yöntemi Seçimi (Nakit, Cari, Kredi Kartı) - Resmi e-fatura / e-arşiv olarak kes (Mysoft) Bölümünün Üstünde */}
+                {/* Ödeme Yöntemi Seçimi (Nakit, Cari, Kredi Kartı, EFT & Havale) - Resmi e-fatura / e-arşiv olarak kes (Mysoft) Bölümünün Üstünde */}
                 <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
@@ -4421,6 +4569,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                           : paymentMethod === "kredi_karti"
                           ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                          : paymentMethod === "eft_havale"
+                          ? "bg-sky-50 text-sky-800 border-sky-200"
                           : "bg-amber-50 text-amber-800 border-amber-200"
                       }`}
                     >
@@ -4428,11 +4578,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         ? "Nakit (Peşin / Kasa Tahsilatı)"
                         : paymentMethod === "kredi_karti"
                         ? "Kredi Kartı (POS / Banka Tahsilatı)"
+                        : paymentMethod === "eft_havale"
+                        ? "EFT & Havale (Banka Transferi)"
                         : "Cari (Açık Hesap / Vadeli)"}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                     {/* 1. NAKİT */}
                     <button
                       type="button"
@@ -4543,9 +4695,54 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         </p>
                       </div>
                     </button>
+
+                    {/* 4. EFT & HAVALE */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod("eft_havale");
+                        setDueDate(issueDate);
+                        const bankAcc =
+                          accounts.find((a) => a.type === "bank") || accounts[0];
+                        if (bankAcc) {
+                          setPaymentAccountId(bankAcc.id);
+                          if (bankAcc.iban) {
+                            setPaymentIban(bankAcc.iban);
+                          } else if (!paymentIban) {
+                            setPaymentIban(companySettings.defaultBankIban || companySettings.iban || "");
+                          }
+                        }
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                        paymentMethod === "eft_havale"
+                          ? "bg-sky-50/90 border-sky-400 ring-2 ring-sky-500/20 shadow-xs"
+                          : "bg-slate-50/70 hover:bg-white border-slate-200 hover:border-sky-300"
+                      }`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          paymentMethod === "eft_havale"
+                            ? "bg-sky-600 text-white shadow-2xs"
+                            : "bg-white text-sky-600 border border-slate-200"
+                        }`}
+                      >
+                        <Landmark className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-extrabold text-slate-900">EFT & Havale</span>
+                          {paymentMethod === "eft_havale" && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
+                          Banka transferi • Seçilen banka/IBAN hesabına işlenir ve ödendi kapatılır
+                        </p>
+                      </div>
+                    </button>
                   </div>
 
-                  {/* Seçilen Ödeme Yöntemine Göre Kasa / Banka / Vade Detay Alanı */}
+                  {/* Seçilen Ödeme Yöntemine Göre Kasa / Banka / EFT-Havale / Vade Detay Alanı */}
                   {paymentMethod === "nakit" || paymentMethod === "kredi_karti" ? (
                     <div
                       className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
@@ -4598,6 +4795,82 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         </strong>{" "}
                         olarak tahsil edilmiş sayılır ve fatura durumu{" "}
                         <strong>Ödendi</strong> olarak kaydedilir.
+                      </div>
+                    </div>
+                  ) : paymentMethod === "eft_havale" ? (
+                    <div className="p-3.5 rounded-xl border bg-sky-50/70 border-sky-200 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-200/70 pb-2">
+                        <div className="flex items-center gap-1.5 text-xs font-extrabold text-sky-950">
+                          <Landmark className="w-4 h-4 text-sky-600" />
+                          <span>EFT & Havale Yönetimi (Banka Transferi & IBAN)</span>
+                        </div>
+                        <label className="flex items-center gap-1.5 text-[11px] font-bold text-sky-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={includeIbanInNotes}
+                            onChange={(e) => setIncludeIbanInNotes(e.target.checked)}
+                            className="rounded border-sky-300 text-sky-600 focus:ring-sky-500"
+                          />
+                          <span>IBAN bilgisini fatura açıklamasına otomatik ekle</span>
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-sky-950 mb-1">
+                            EFT / Havale Tahsilatının İşleneceği Banka Hesabı *
+                          </label>
+                          {accounts.length > 0 ? (
+                            <select
+                              value={paymentAccountId}
+                              onChange={(e) => {
+                                const nextId = e.target.value;
+                                setPaymentAccountId(nextId);
+                                const selectedAcc = accounts.find((a) => a.id === nextId);
+                                if (selectedAcc?.iban) {
+                                  setPaymentIban(selectedAcc.iban);
+                                }
+                              }}
+                              className="w-full bg-white border border-sky-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
+                            >
+                              {accounts.map((acc) => (
+                                <option key={acc.id} value={acc.id}>
+                                  {acc.name} ({acc.type === "bank" ? "Banka" : acc.type === "cash" ? "Kasa" : "POS / Kart"}
+                                  {acc.iban ? ` • ${acc.iban}` : ""} • Bakiye: ₺
+                                  {acc.balance.toLocaleString("tr-TR", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                  )
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className="text-xs font-semibold text-slate-600 bg-white px-3 py-2 rounded-xl border border-slate-200">
+                              Varsayılan Banka Hesabı (Otomatik Ödendi Olarak İşlenir)
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-sky-950 mb-1">
+                            Faturada Görünecek Banka / IBAN Numarası
+                          </label>
+                          <input
+                            type="text"
+                            value={paymentIban}
+                            onChange={(e) => setPaymentIban(e.target.value)}
+                            placeholder="TR00 0000 0000 0000 0000 0000 00"
+                            className="w-full bg-white border border-sky-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] font-semibold text-sky-900 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                        <span>
+                          Fatura kesildiğinde <strong>EFT & Havale</strong> olarak seçilen banka hesabına tahsil edilmiş sayılır ve fatura durumu <strong>Ödendi</strong> olarak kaydedilir.
+                        </span>
                       </div>
                     </div>
                   ) : (
@@ -5020,6 +5293,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
           handleOpenEditInvoiceModal(invToEdit);
         }}
         onSelectTab={onSelectTab}
+        onSaveCompanySettings={onSaveCompanySettings}
       />
     );
   }
@@ -5934,6 +6208,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                           : inv.paymentMethod === "kredi_karti"
                                           ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                          : inv.paymentMethod === "eft_havale"
+                                          ? "bg-sky-50 text-sky-700 border-sky-200"
                                           : "bg-amber-50 text-amber-800 border-amber-200"
                                       }`}
                                     >
@@ -5941,6 +6217,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                         ? "Nakit"
                                         : inv.paymentMethod === "kredi_karti"
                                         ? "Kredi Kartı"
+                                        : inv.paymentMethod === "eft_havale"
+                                        ? "EFT / Havale"
                                         : "Cari"}
                                     </span>
                                   )}
@@ -6256,6 +6534,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                             ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                                             : inv.paymentMethod === "kredi_karti"
                                             ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                                            : inv.paymentMethod === "eft_havale"
+                                            ? "bg-sky-50 text-sky-800 border-sky-200"
                                             : "bg-amber-50 text-amber-800 border-amber-200"
                                         }`}
                                       >
@@ -6263,6 +6543,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                           ? "Nakit"
                                           : inv.paymentMethod === "kredi_karti"
                                           ? "Kredi Kartı"
+                                          : inv.paymentMethod === "eft_havale"
+                                          ? "EFT & Havale"
                                           : "Cari Hesap"}
                                       </span>
                                     )}
