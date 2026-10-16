@@ -2125,6 +2125,8 @@ export class MysoftEdocumentClient {
   private async enrichInvoiceOutboxDefaults(payload: unknown): Promise<unknown> {
     if (!isObject(payload) || Array.isArray(payload)) return payload;
     const body = { ...payload } as Record<string, unknown>;
+    // Mysoft v8 requirement: "isCalculateByApi Geliştirme aşamasındadır. Lütfen bu alanı false olarak geçiniz."
+    body.isCalculateByApi = false;
     let tenant =
       typeof body.tenantIdentifierNumber === "string"
         ? normalizeMysoftTenantIdentifier(body.tenantIdentifierNumber) ||

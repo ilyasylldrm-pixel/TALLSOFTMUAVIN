@@ -1,5 +1,5 @@
 {
-  "isCalculateByApi": true,
+  "isCalculateByApi": false,
   "id": 0,
   "eDocumentType": "EFATURA",
   "profile": "TEMELFATURA",
