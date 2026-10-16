@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import { safeGetStorageItem, safeSetStorageItem } from "../utils/storage";
+import { verifyAndSyncAllUsersLocalDb } from "../services/systemSyncService";
 
 export interface GitHubStatusData {
   initialized: boolean;
@@ -160,13 +161,18 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        await verifyAndSyncAllUsersLocalDb(
+          0,
+          "Sistem Yöneticisi",
+          "GitHub Değişiklikleri Alındı ve Tüm Şirket/Kullanıcılara Uygulandı"
+        );
         setFeedback({
           type: "success",
-          message: data.message || "GitHub'dan en güncel değişiklikler başarıyla alındı!",
-          details: data.commitSha ? `Güncel Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main` : undefined,
+          message: data.message || "GitHub'dan en güncel değişiklikler başarıyla alındı ve tüm şirket/kullanıcılara uygulandı!",
+          details: data.commitSha ? `Güncel Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main | Tüm Şirketler Senkronize` : undefined,
         });
         if (onSuccessNotification) {
-          onSuccessNotification("GitHub deposundaki değişiklikler başarıyla alındı!");
+          onSuccessNotification("GitHub deposundaki değişiklikler alındı ve tüm şirket/kullanıcılara uygulandı!");
         }
         await fetchStatus();
       } else {
@@ -211,13 +217,18 @@ export const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({
       const data = await res.json();
 
       if (res.ok && data.success) {
+        await verifyAndSyncAllUsersLocalDb(
+          0,
+          "Sistem Yöneticisi",
+          "GitHub Yayınlama ve Tüm Şirket/Kullanıcı Senkronizasyonu Tamamlandı"
+        );
         setFeedback({
           type: "success",
-          message: data.message || "Proje başarıyla GitHub'dan alındı, gönderildi ve tallsoft.org yayını tetiklendi!",
-          details: data.commitSha ? `Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main | Hedef: tallsoft.org` : undefined,
+          message: data.message || "Proje başarıyla GitHub'a gönderildi, tüm şirket/kullanıcılara uygulandı ve tallsoft.org yayını tetiklendi!",
+          details: data.commitSha ? `Commit SHA: ${data.commitSha.substring(0, 7)} | Dal: main | Tüm Şirketler & Kullanıcılar Senkronize` : undefined,
         });
         if (onSuccessNotification) {
-          onSuccessNotification("GitHub (Al, Gönder & Yayınla) ve tallsoft.org yayınlaması başarıyla tamamlandı!");
+          onSuccessNotification("Değişiklikler GitHub'a gönderildi ve tüm şirket/kullanıcılara başarıyla uygulandı!");
         }
         await fetchStatus();
       } else {

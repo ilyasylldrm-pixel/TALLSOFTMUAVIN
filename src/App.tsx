@@ -109,7 +109,9 @@ import {
   updateCompanyItem,
   deleteCompanyItem,
   DEFAULT_COMPANY,
+  syncAllCompaniesAndUsersData,
 } from "./utils/storage";
+import { verifyAndSyncAllUsersLocalDb } from "./services/systemSyncService";
 import { readStoredMysoftTenantVkn, writeStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
 import { CompanyModal } from "./components/CompanyModal";
 
@@ -278,30 +280,52 @@ export default function App() {
   const [initialContactIdForInvoice, setInitialContactIdForInvoice] = useState<string | null>(null);
   const [isGitHubPublishOpen, setIsGitHubPublishOpen] = useState(false);
 
-  // Restore GitHub PAT from browser localStorage after container restarts
+  // Restore GitHub PAT from browser localStorage after container restarts & sync all companies/users
   const githubAutoSyncedRef = useRef(false);
   useEffect(() => {
     if (githubAutoSyncedRef.current) return;
     githubAutoSyncedRef.current = true;
 
+    const synced = syncAllCompaniesAndUsersData();
+    if (synced.companies.length > 0) {
+      setCompanies(synced.companies);
+    }
+    void verifyAndSyncAllUsersLocalDb(
+      0,
+      "Sistem Yöneticisi",
+      "Tüm Şirketler ve Kullanıcılar Senkronize Edildi"
+    );
+
+    const handleCentralSync = () => {
+      const freshCompanies = getCompaniesList();
+      setCompanies(freshCompanies);
+      const currentActive = getActiveCompanyId();
+      setData(getStoredData(currentActive));
+    };
+    window.addEventListener("muavin:central-sync-broadcast", handleCentralSync);
+
     const savedToken = localStorage.getItem("muavin_github_pat")?.trim();
     const savedRepo = localStorage.getItem("muavin_github_repo_url")?.trim();
-    if (!savedToken) return;
+    if (savedToken) {
+      (async () => {
+        try {
+          await fetch("/api/github/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: savedToken,
+              repoUrl: savedRepo || undefined,
+            }),
+          });
+        } catch {
+          // Ignore background config sync errors
+        }
+      })();
+    }
 
-    (async () => {
-      try {
-        await fetch("/api/github/config", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token: savedToken,
-            repoUrl: savedRepo || undefined,
-          }),
-        });
-      } catch {
-        // Ignore background config sync errors
-      }
-    })();
+    return () => {
+      window.removeEventListener("muavin:central-sync-broadcast", handleCentralSync);
+    };
   }, []);
 
   // Auth & Profile State

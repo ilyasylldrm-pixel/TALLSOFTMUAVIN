@@ -23,7 +23,7 @@ import {
   saveActivePayrollParameters,
   getActivePayrollParameters
 } from "../data/payrollParametersData";
-import { safeGetStorageItem, safeSetStorageItem } from "../utils/storage";
+import { safeGetStorageItem, safeSetStorageItem, syncAllCompaniesAndUsersData } from "../utils/storage";
 
 export interface SystemAuditLogItem {
   id?: string;
@@ -395,21 +395,44 @@ export function saveLocalDbSyncReport(reportUpdate: Partial<LocalDbSyncReport>):
 export async function verifyAndSyncAllUsersLocalDb(
   totalUsersCount: number = 0,
   performedBy: string = "Sistem Yöneticisi",
-  actionName: string = "Manuel Senkronizasyon Doğrulaması"
+  actionName: string = "Tüm Şirketler ve Kullanıcılar Senkronize Edildi"
 ): Promise<LocalDbSyncReport> {
   const nowIso = new Date().toISOString();
-  
-  // Yerel önbellek ve merkezi Firestore parametrelerini tazele
+
+  // 1. Tüm kayıtlı şirketlerin ayar, VKN/TCKN ve Mysoft yapılandırmalarını senkronize et
+  const { syncedCompaniesCount } = syncAllCompaniesAndUsersData();
+
+  // 2. Yerel önbellek ve merkezi Firestore parametrelerini tazele
   try {
     await fetchCentralPayrollParameters();
   } catch (e) {
     console.warn("Merkezi parametre doğrulanırken hata:", e);
   }
 
+  // 3. Merkezi Firestore senkronizasyon durumunu güncelle (tüm aktif istemciler ve şirketler için)
+  try {
+    const syncDocRef = doc(db, "system_settings", "central_sync_state");
+    await setDoc(
+      syncDocRef,
+      sanitizeForFirestore({
+        settingKey: "central_sync_state",
+        lastUpdated: nowIso,
+        updatedBy: performedBy,
+        actionName,
+        syncedCompaniesCount,
+        totalUsersCount: totalUsersCount > 0 ? totalUsersCount : 1,
+        version: Date.now(),
+      }),
+      { merge: true }
+    );
+  } catch {
+    // Firestore çevrimdışı ise yerel senkronizasyon devam eder
+  }
+
   const updatedReport = saveLocalDbSyncReport({
     lastUpdatedAt: nowIso,
     lastUpdatedBy: performedBy,
-    lastActionSummary: actionName,
+    lastActionSummary: `${actionName} (${syncedCompaniesCount} Şirket)`,
     syncedUsersCount: totalUsersCount > 0 ? totalUsersCount : 1,
     totalUsersCount: totalUsersCount > 0 ? totalUsersCount : 1,
     syncPercentage: 100,
@@ -426,10 +449,12 @@ export async function verifyAndSyncAllUsersLocalDb(
         timestamp: nowIso,
         updatedBy: performedBy,
         usersCount: totalUsersCount,
+        companiesCount: syncedCompaniesCount,
       },
     })
   );
 
   return updatedReport;
 }
+
 

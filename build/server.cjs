@@ -440,7 +440,11 @@ var MYSOFT_ENDPOINTS = {
   /** Current v8 draft signing endpoint (legacy Outbox route remains fallback). */
   invoiceDraftSignAndSend: "/api/Invoice/invoiceDraftSignAndSend",
   invoiceDraftSendToGib: "/api/Invoice/invoiceDraftSendToGib",
-  invoiceDraftSendToGibUblXml: "/api/Invoice/invoiceDraftSendToGibUblXml"
+  invoiceDraftSendToGibUblXml: "/api/Invoice/invoiceDraftSendToGibUblXml",
+  /** Official Mysoft Mükellef Detay Sorgula (VKN/TCKN) */
+  taxpayerDetailInfo: "/api/Taxpayer/getTaxPayerDetailInfo",
+  /** Official Mysoft GİB Hesap Sorgula */
+  gibAccountModel: "/api/GeneralCard/getGibAccountModel"
 };
 var MYSOFT_DOCUMENT_OPERATIONS = {
   // Invoice inbox (the specialised /incoming routes below use the same
@@ -478,6 +482,9 @@ var MYSOFT_DOCUMENT_OPERATIONS = {
   "tenant.document-numbers": { path: "/api/Tenant/getDocumentNumberList", method: "GET" },
   "tenant.numerator-sets": { path: "/api/Tenant/getNumaratorSetList", method: "GET" },
   "tenant.xslt": { path: "/api/Tenant/getTenantXslt", method: "POST" },
+  "taxpayer.detail": { path: "/api/Taxpayer/getTaxPayerDetailInfo", method: "GET" },
+  "generalcard.gib-account": { path: "/api/GeneralCard/getGibAccountModel", method: "GET" },
+  "generalcard.user-company-info": { path: "/api/GeneralCard/getUserCompanyInfo", method: "GET" },
   "invoice.outgoing.send-draft": { path: "/api/InvoiceOutbox/sendDraftInvoiceToGIB", method: "POST" },
   "invoice.outgoing.delete-draft": { path: "/api/InvoiceOutbox/deleteDraftInvoiceOutbox", method: "GET" },
   "invoice.outgoing.cancel-earchive": { path: "/api/InvoiceOutbox/cancelEArchiveInvoice", method: "GET" },
@@ -1221,6 +1228,35 @@ var MysoftEdocumentClient = class {
       query: { identifierNumber: identifierNumber.trim() }
     });
   }
+  /**
+   * Official VKN/TCKN taxpayer detail lookup (Mükellef Detay Sorgula).
+   * Returns official legal title, tax office name/code, activity status, full address components and NACE list.
+   * Swagger: GET /api/Taxpayer/getTaxPayerDetailInfo
+   */
+  getTaxPayerDetailInfo(identifierNumber, tenantIdentifierNumber) {
+    const clean = String(identifierNumber || "").replace(/\D/g, "").trim();
+    const query = { identifierNumber: clean };
+    const effectiveTenant = this.effectiveTenant(tenantIdentifierNumber);
+    if (effectiveTenant) {
+      query.tenantIdentifierNumber = effectiveTenant;
+    }
+    return this.request(MYSOFT_ENDPOINTS.taxpayerDetailInfo, {
+      method: "GET",
+      query
+    });
+  }
+  /**
+   * Official GİB Account model lookup (Gib Hesap Sorgula).
+   * Checks if firm is a registered GİB e-Fatura / e-İrsaliye user and retrieves official mailbox (PK) and sender (GB) aliases.
+   * Swagger: GET /api/GeneralCard/getGibAccountModel
+   */
+  getGibAccountModel(vknTckn) {
+    const clean = String(vknTckn || "").replace(/\D/g, "").trim();
+    return this.request(MYSOFT_ENDPOINTS.gibAccountModel, {
+      method: "GET",
+      query: { vknTckn: clean }
+    });
+  }
   /** Portal document-number / prefix list for a customer VKN. */
   getDocumentNumberList(vknTckn) {
     return this.request(MYSOFT_ENDPOINTS.tenantDocumentNumbers, {
@@ -1471,7 +1507,7 @@ var MysoftEdocumentClient = class {
    * Check if a recipient VKN/TCKN is a registered GİB e-Fatura taxpayer.
    * Returns whether the invoice should be e-Fatura vs e-Arşiv, along with default pkAlias / gbAlias.
    */
-  async checkRecipientTaxpayer(vknTckn) {
+  async checkRecipientTaxpayer(vknTckn, tenantIdentifierNumber) {
     const clean = String(vknTckn || "").replace(/\D/g, "").trim();
     if (!clean || clean.length !== 10 && clean.length !== 11) {
       return {
@@ -1583,6 +1619,138 @@ var MysoftEdocumentClient = class {
     const defaultDoor = known?.doorNo || "D: 4";
     const defaultPc = known?.postalCode || "34710";
     const defaultFullAddr = known ? `${known.neighborhood} ${known.street} ${known.buildingNo} ${known.doorNo}, ${known.district} / ${known.city} (PK: ${known.postalCode})` : `${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor}, ${defaultDist} / ${defaultCity} (PK: ${defaultPc})`;
+    if (!this.config.mockMode) {
+      try {
+        const [taxpayerRes, gibRes] = await Promise.allSettled([
+          this.getTaxPayerDetailInfo(clean, tenantIdentifierNumber),
+          this.getGibAccountModel(clean)
+        ]);
+        const taxpayerRaw = taxpayerRes.status === "fulfilled" && taxpayerRes.value?.succeed !== false ? taxpayerRes.value?.data || taxpayerRes.value?.result : null;
+        const gibRaw = gibRes.status === "fulfilled" && gibRes.value?.succeed !== false ? gibRes.value?.data || gibRes.value?.result : null;
+        if (taxpayerRaw || gibRaw) {
+          const identityTitle = String(taxpayerRaw?.identityTitle || "").trim();
+          const tradeName = String(taxpayerRaw?.tradeName || "").trim();
+          const personName = [taxpayerRaw?.firstName, taxpayerRaw?.lastName].filter(Boolean).join(" ").trim();
+          const gibName = String(gibRaw?.gibAccountName || "").trim();
+          const officialTitle = identityTitle || tradeName || gibName || personName || (isCorporate ? "G\u0130B Kay\u0131tl\u0131 e-Fatura M\xFCkellefi" : "\u015Eah\u0131s / Bireysel M\xFC\u015Fteri");
+          const shortName = tradeName || identityTitle || personName || gibName || (isCorporate ? "G\u0130B M\xFCkellefi" : "M\xFC\u015Fteri");
+          const taxOffice = String(taxpayerRaw?.taxOfficeName || "").trim() || "Kad\u0131k\xF6y V.D.";
+          const taxOfficeCode = taxpayerRaw?.taxOfficeCode ? String(taxpayerRaw.taxOfficeCode).trim() : void 0;
+          const addressList = Array.isArray(taxpayerRaw?.taxpayerAddressList) ? taxpayerRaw.taxpayerAddressList : [];
+          const primaryAddr = addressList.find((a) => a?.addressType === 3) || addressList.find((a) => a?.addressType === 2) || addressList[0] || {};
+          const liveCity = String(primaryAddr?.cityName || "").trim() || defaultCity;
+          const liveDistrict = String(primaryAddr?.townName || primaryAddr?.district || "").trim() || defaultDist;
+          const liveNeighborhood = String(primaryAddr?.township || "").trim() || defaultNh;
+          const liveStreet = String(primaryAddr?.streetName || "").trim() || defaultSt;
+          const bldRaw = String(primaryAddr?.buildingNumber || "").trim();
+          const liveBuildingNo = bldRaw ? bldRaw.toLowerCase().startsWith("no") ? bldRaw : `No: ${bldRaw}` : defaultBld;
+          const roomRaw = String(primaryAddr?.room || "").trim();
+          const liveDoorNo = roomRaw ? roomRaw.toLowerCase().startsWith("d") || roomRaw.toLowerCase().startsWith("kat") ? roomRaw : `D: ${roomRaw}` : defaultDoor;
+          const addrParts = [
+            liveNeighborhood,
+            liveStreet,
+            liveBuildingNo,
+            liveDoorNo,
+            primaryAddr?.district && primaryAddr.district !== liveDistrict ? primaryAddr.district : "",
+            liveDistrict && liveCity ? `${liveDistrict} / ${liveCity}` : liveDistrict || liveCity || ""
+          ].filter(Boolean);
+          const liveFullAddress = addrParts.join(" ") || `${liveNeighborhood} ${liveStreet} ${liveBuildingNo} ${liveDoorNo}, ${liveDistrict} / ${liveCity}`;
+          const hasEInvoice = Boolean(gibRaw?.eInvoiceStartDate) && gibRaw?.isPassive !== true;
+          const isEFatura = gibRaw ? hasEInvoice : isCorporate;
+          const aliasList = Array.isArray(gibRaw?.gibAccountAliasList) ? gibRaw.gibAccountAliasList : [];
+          const activeAliases = aliasList.filter((a) => !a?.deletionTime);
+          const foundPk = activeAliases.find(
+            (a) => a?.role === 1 || String(a?.alias || "").toLowerCase().includes("pk") || String(a?.alias || "").startsWith("urn:mail:defaultpk") || String(a?.alias || "").startsWith("urn:mail:")
+          );
+          const foundGb = activeAliases.find(
+            (a) => a?.role === 2 || String(a?.alias || "").toLowerCase().includes("gb") || String(a?.alias || "").startsWith("urn:mail:defaultgb")
+          );
+          const pkAlias = foundPk?.alias || (isEFatura ? `urn:mail:defaultpk@${clean}.com.tr` : void 0);
+          const gbAlias = foundGb?.alias || (isEFatura ? `urn:mail:defaultgb@${clean}.com.tr` : void 0);
+          const activityStatus = taxpayerRaw?.activityTerminationStatus === 1 ? "active" : taxpayerRaw?.activityTerminationStatus === 2 ? "terminated" : "unknown";
+          const activityStatusDescription = taxpayerRaw?.activityTerminationStatus === 1 ? "Faal M\xFCkellef" : taxpayerRaw?.activityTerminationStatus === 2 ? "Terk (Kapal\u0131)" : void 0;
+          return {
+            vknTckn: clean,
+            isEFaturaUser: isEFatura,
+            documentType: isEFatura ? "EFATURA" : "EARSIVFATURA",
+            suggestedProfile: isEFatura ? "TICARIFATURA" : "EARSIVFATURA",
+            title: officialTitle,
+            companyTitle: officialTitle,
+            name: shortName.slice(0, 45).trim(),
+            pkAlias,
+            gbAlias,
+            taxOffice,
+            taxOfficeCode,
+            city: liveCity,
+            district: liveDistrict,
+            neighborhood: liveNeighborhood,
+            street: liveStreet,
+            buildingNo: liveBuildingNo,
+            doorNo: liveDoorNo,
+            postalCode: defaultPc,
+            address: liveFullAddress,
+            shippingAddress: liveFullAddress,
+            phone: isCorporate ? "0216 444 0 123" : "0532 555 00 11",
+            email: isCorporate ? `muhasebe@firma${clean.slice(-4)}.com.tr` : `iletisim@kisi${clean.slice(-4)}.com`,
+            contactPerson: isCorporate ? "Finans & Muhasebe Sorumlusu" : "M\xFC\u015Fteri Yetkilisi",
+            activityStatus,
+            activityStatusDescription,
+            eInvoiceStartDate: gibRaw?.eInvoiceStartDate,
+            eWaybillStartDate: gibRaw?.eWaybillStartDate,
+            isLiveTaxpayer: true
+          };
+        }
+      } catch (liveErr) {
+      }
+      try {
+        let info = await this.getTenantInfo(clean);
+        if (!info || info.succeed === false || !info.data && !info.title && !info.unvan) {
+          info = await this.getTenantWithIdentifier(clean);
+        }
+        if (info && info.succeed !== false) {
+          const data = info.data || info.result || info || {};
+          const title = typeof data.title === "string" ? data.title : typeof data.unvan === "string" ? data.unvan : typeof data.companyName === "string" ? data.companyName : typeof data.name === "string" ? data.name : void 0;
+          const pkAlias = typeof data.pkAlias === "string" ? data.pkAlias : typeof data.postboxAlias === "string" ? data.postboxAlias : typeof data.mailbox === "string" ? data.mailbox : `urn:mail:defaultpk@${clean}.com.tr`;
+          const gbAlias = typeof data.gbAlias === "string" ? data.gbAlias : typeof data.senderAlias === "string" ? data.senderAlias : `urn:mail:defaultgb@${clean}.com.tr`;
+          const taxOffice = typeof data.taxOffice === "string" ? data.taxOffice : typeof data.taxOfficeName === "string" ? data.taxOfficeName : typeof data.vergiDairesi === "string" ? data.vergiDairesi : "Kad\u0131k\xF6y V.D.";
+          const city = typeof data.city === "string" ? data.city : typeof data.cityName === "string" ? data.cityName : defaultCity;
+          const district = typeof data.district === "string" ? data.district : typeof data.districtName === "string" ? data.districtName : defaultDist;
+          const neighborhood = typeof data.neighborhood === "string" ? data.neighborhood : defaultNh;
+          const street = typeof data.street === "string" ? data.street : defaultSt;
+          const buildingNo = typeof data.buildingNumber === "string" ? data.buildingNumber : defaultBld;
+          const doorNo = typeof data.doorNumber === "string" ? data.doorNumber : defaultDoor;
+          const postalCode = typeof data.postalCode === "string" ? data.postalCode : defaultPc;
+          const address = typeof data.address === "string" ? data.address : typeof data.adres === "string" ? data.adres : typeof data.fullAddress === "string" ? data.fullAddress : `${neighborhood} ${street} ${buildingNo} ${doorNo}, ${district} / ${city} (PK: ${postalCode})`;
+          const isEFatura = data.isEFaturaUser === true || data.isTaxPayer === true || data.isGibUser === true || isCorporate;
+          return {
+            vknTckn: clean,
+            isEFaturaUser: isEFatura,
+            documentType: isEFatura ? "EFATURA" : "EARSIVFATURA",
+            suggestedProfile: isEFatura ? "TICARIFATURA" : "EARSIVFATURA",
+            title,
+            companyTitle: title,
+            name: title ? title.split(" - ")[0].slice(0, 45).trim() : "G\u0130B M\xFCkellefi",
+            pkAlias,
+            gbAlias,
+            taxOffice,
+            city,
+            district,
+            neighborhood,
+            street,
+            buildingNo,
+            doorNo,
+            postalCode,
+            address,
+            shippingAddress: address,
+            phone: isCorporate ? "0216 444 0 123" : "0532 555 00 11",
+            email: isCorporate ? `muhasebe@firma${clean.slice(-4)}.com.tr` : `iletisim@kisi${clean.slice(-4)}.com`,
+            contactPerson: isCorporate ? "Finans & Muhasebe Sorumlusu" : "M\xFC\u015Fteri Yetkilisi",
+            isLiveTaxpayer: true
+          };
+        }
+      } catch {
+      }
+    }
     if (this.config.mockMode || known) {
       return {
         vknTckn: clean,
@@ -1595,69 +1763,19 @@ var MysoftEdocumentClient = class {
         pkAlias: known?.pkAlias || (isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : void 0),
         gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : void 0,
         taxOffice: known?.taxOffice || (isCorporate ? "Kad\u0131k\xF6y V.D." : "Kad\u0131k\xF6y V.D."),
-        city: defaultCity,
-        district: defaultDist,
-        neighborhood: defaultNh,
-        street: defaultSt,
-        buildingNo: defaultBld,
-        doorNo: defaultDoor,
-        postalCode: defaultPc,
+        city: known?.city || defaultCity,
+        district: known?.district || defaultDist,
+        neighborhood: known?.neighborhood || defaultNh,
+        street: known?.street || defaultSt,
+        buildingNo: known?.buildingNo || defaultBld,
+        doorNo: known?.doorNo || defaultDoor,
+        postalCode: known?.postalCode || defaultPc,
         address: defaultFullAddr,
         shippingAddress: defaultFullAddr,
         phone: known?.phone || (isCorporate ? "0216 444 0 123" : "0532 555 00 11"),
         email: known?.email || (isCorporate ? `muhasebe@firma${clean.slice(-4)}.com.tr` : `iletisim@kisi${clean.slice(-4)}.com`),
         contactPerson: known?.contactPerson || (isCorporate ? "Finans & Muhasebe M\xFCd\xFCr\xFC" : "M\xFC\u015Fteri Yetkilisi")
       };
-    }
-    try {
-      let info = await this.getTenantInfo(clean);
-      if (!info || info.succeed === false || !info.data && !info.title && !info.unvan) {
-        info = await this.getTenantWithIdentifier(clean);
-      }
-      if (info && info.succeed !== false) {
-        const data = info.data || info.result || info || {};
-        const title = typeof data.title === "string" ? data.title : typeof data.unvan === "string" ? data.unvan : typeof data.companyName === "string" ? data.companyName : typeof data.name === "string" ? data.name : void 0;
-        const pkAlias = typeof data.pkAlias === "string" ? data.pkAlias : typeof data.postboxAlias === "string" ? data.postboxAlias : typeof data.mailbox === "string" ? data.mailbox : `urn:mail:defaultpk@${clean}.com.tr`;
-        const gbAlias = typeof data.gbAlias === "string" ? data.gbAlias : typeof data.senderAlias === "string" ? data.senderAlias : `urn:mail:defaultgb@${clean}.com.tr`;
-        const taxOffice = typeof data.taxOffice === "string" ? data.taxOffice : typeof data.taxOfficeName === "string" ? data.taxOfficeName : typeof data.vergiDairesi === "string" ? data.vergiDairesi : "Kad\u0131k\xF6y V.D.";
-        const city = typeof data.city === "string" ? data.city : typeof data.cityName === "string" ? data.cityName : typeof data.il === "string" ? data.il : typeof data.sehir === "string" ? data.sehir : defaultCity;
-        const district = typeof data.district === "string" ? data.district : typeof data.districtName === "string" ? data.districtName : typeof data.ilce === "string" ? data.ilce : defaultDist;
-        const neighborhood = typeof data.neighborhood === "string" ? data.neighborhood : typeof data.neighborhoodName === "string" ? data.neighborhoodName : typeof data.mahalle === "string" ? data.mahalle : defaultNh;
-        const street = typeof data.street === "string" ? data.street : typeof data.streetName === "string" ? data.streetName : typeof data.caddeSokak === "string" ? data.caddeSokak : typeof data.cadde === "string" ? data.cadde : typeof data.sokak === "string" ? data.sokak : defaultSt;
-        const buildingNo = typeof data.buildingNumber === "string" ? data.buildingNumber : typeof data.buildingNo === "string" ? data.buildingNo : typeof data.binaNo === "string" ? data.binaNo : typeof data.kapiNo === "string" ? data.kapiNo : defaultBld;
-        const doorNo = typeof data.doorNumber === "string" ? data.doorNumber : typeof data.doorNo === "string" ? data.doorNo : typeof data.daireNo === "string" ? data.daireNo : typeof data.icKapiNo === "string" ? data.icKapiNo : defaultDoor;
-        const postalCode = typeof data.postalCode === "string" ? data.postalCode : typeof data.postaKodu === "string" ? data.postaKodu : typeof data.zipCode === "string" ? data.zipCode : defaultPc;
-        const address = typeof data.address === "string" ? data.address : typeof data.adres === "string" ? data.adres : typeof data.fullAddress === "string" ? data.fullAddress : typeof data.acikAdres === "string" ? data.acikAdres : `${neighborhood} ${street} ${buildingNo} ${doorNo}, ${district} / ${city} (PK: ${postalCode})`;
-        const phone = typeof data.phoneNumber === "string" ? data.phoneNumber : typeof data.phone === "string" ? data.phone : typeof data.telefon === "string" ? data.telefon : typeof data.tel === "string" ? data.tel : typeof data.mobileNumber === "string" ? data.mobileNumber : typeof data.cepTel === "string" ? data.cepTel : "0216 444 0 123";
-        const email = typeof data.email === "string" ? data.email : typeof data.eMail === "string" ? data.eMail : typeof data.eposta === "string" ? data.eposta : typeof data.ePosta === "string" ? data.ePosta : typeof data.emailAddress === "string" ? data.emailAddress : `muhasebe@firma${clean.slice(-4)}.com.tr`;
-        const contactPerson = typeof data.contactPerson === "string" ? data.contactPerson : typeof data.authorizedPerson === "string" ? data.authorizedPerson : typeof data.contactName === "string" ? data.contactName : typeof data.yetkili === "string" ? data.yetkili : "Finans & Muhasebe Sorumlusu";
-        const isEFatura = data.isEFaturaUser === true || data.isTaxPayer === true || data.isGibUser === true || isCorporate;
-        return {
-          vknTckn: clean,
-          isEFaturaUser: isEFatura,
-          documentType: isEFatura ? "EFATURA" : "EARSIVFATURA",
-          suggestedProfile: isEFatura ? "TICARIFATURA" : "EARSIVFATURA",
-          title,
-          companyTitle: title,
-          name: title ? title.split(" - ")[0].slice(0, 45).trim() : "G\u0130B M\xFCkellefi",
-          pkAlias,
-          gbAlias,
-          taxOffice,
-          city,
-          district,
-          neighborhood,
-          street,
-          buildingNo,
-          doorNo,
-          postalCode,
-          address,
-          shippingAddress: address,
-          phone,
-          email,
-          contactPerson
-        };
-      }
-    } catch {
     }
     return {
       vknTckn: clean,
@@ -2257,7 +2375,25 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
     run((req) => {
       const vknTckn = textParam(req.params.vknTckn);
       if (!vknTckn) throw new InvalidMysoftRequestError("vknTckn is required");
-      return client.checkRecipientTaxpayer(vknTckn);
+      const tenant = tenantFrom(req);
+      return client.checkRecipientTaxpayer(vknTckn, tenant);
+    })
+  );
+  router.get(
+    "/taxpayer/:identifierNumber",
+    run((req) => {
+      const identifierNumber = textParam(req.params.identifierNumber);
+      if (!identifierNumber) throw new InvalidMysoftRequestError("identifierNumber is required");
+      const tenant = tenantFrom(req);
+      return client.getTaxPayerDetailInfo(identifierNumber, tenant);
+    })
+  );
+  router.get(
+    "/gib-account/:vknTckn",
+    run((req) => {
+      const vknTckn = textParam(req.params.vknTckn);
+      if (!vknTckn) throw new InvalidMysoftRequestError("vknTckn is required");
+      return client.getGibAccountModel(vknTckn);
     })
   );
   router.get(
@@ -3866,8 +4002,10 @@ var GitHubSyncService = class {
       } catch {
         try {
           await execPromise(`git fetch origin ${branch} --prune`, { cwd });
-          await execPromise(`git reset --mixed origin/${branch}`, { cwd });
-          await execPromise(`git branch -M ${branch}`, { cwd });
+          await execPromise(`git checkout -f -B ${branch} origin/${branch}`, { cwd }).catch(async () => {
+            await execPromise(`git reset --mixed origin/${branch}`, { cwd });
+            await execPromise(`git branch -M ${branch}`, { cwd });
+          });
           await execPromise(`git branch --set-upstream-to=origin/${branch} ${branch}`, { cwd }).catch(() => {
           });
         } catch (e) {
@@ -4053,7 +4191,7 @@ var GitHubSyncService = class {
             });
           }
           await execPromise(
-            `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
+            `git merge origin/${branch} --allow-unrelated-histories -X theirs --no-edit`,
             { cwd }
           ).catch(async () => {
             await execPromise("git merge --abort", { cwd }).catch(() => {

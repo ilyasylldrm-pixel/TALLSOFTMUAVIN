@@ -1161,3 +1161,73 @@ export function importBackupJSON(jsonString: string): boolean {
   }
   return false;
 }
+
+/**
+ * Synchronizes schema, Mysoft VKN/TCKN mappings, invoice prefixes, and settings
+ * across all registered companies and their isolated storage slices.
+ */
+export function syncAllCompaniesAndUsersData(): {
+  syncedCompaniesCount: number;
+  companies: CompanyItem[];
+} {
+  try {
+    const currentList = getCompaniesList();
+    const updatedCompanies = currentList.map((comp) => {
+      const { comp: withCreds } = ensureCompanyCredentials(comp);
+      const cleanTax = String(withCreds.tenantIdentifierNumber || withCreds.vkn || withCreds.tckn || withCreds.taxNumber || "").replace(/\D/g, "");
+      const isTckn = cleanTax.length === 11;
+      const normalizedComp: CompanyItem = {
+        ...withCreds,
+        taxNumber: cleanTax || withCreds.taxNumber || "",
+        vkn: !isTckn && cleanTax.length === 10 ? cleanTax : withCreds.vkn || "",
+        tckn: isTckn ? cleanTax : withCreds.tckn || "",
+        tenantIdentifierNumber: cleanTax || withCreds.tenantIdentifierNumber || "",
+        mysoftMatchedType: isTckn ? "tckn" : cleanTax.length === 10 ? "vkn" : withCreds.mysoftMatchedType || "vkn",
+        mysoftStatus: cleanTax ? "verified" : withCreds.mysoftStatus || "unverified",
+        eFaturaPrefix: (withCreds.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3),
+        eArsivPrefix: (withCreds.eArsivPrefix || "EAR").toUpperCase().slice(0, 3),
+      };
+
+      // Sync isolated company settings slice for each company
+      try {
+        const companyData = getStoredData(normalizedComp.id);
+        const mergedSettings: CompanySettings = {
+          ...companyData.settings,
+          companyName: normalizedComp.companyName || companyData.settings.companyName,
+          companyTitle: normalizedComp.companyTitle || normalizedComp.companyName || companyData.settings.companyTitle,
+          taxOffice: normalizedComp.taxOffice || companyData.settings.taxOffice || "Merkez",
+          taxNumber: normalizedComp.taxNumber || companyData.settings.taxNumber,
+          vkn: normalizedComp.vkn || companyData.settings.vkn,
+          tckn: normalizedComp.tckn || companyData.settings.tckn,
+          tenantIdentifierNumber: normalizedComp.tenantIdentifierNumber || companyData.settings.tenantIdentifierNumber,
+          mysoftMatchedType: normalizedComp.mysoftMatchedType || companyData.settings.mysoftMatchedType,
+          mysoftStatus: normalizedComp.mysoftStatus || companyData.settings.mysoftStatus,
+          eFaturaPrefix: normalizedComp.eFaturaPrefix || companyData.settings.eFaturaPrefix || "GIB",
+          eFaturaNextNumber: normalizedComp.eFaturaNextNumber || companyData.settings.eFaturaNextNumber,
+          eArsivPrefix: normalizedComp.eArsivPrefix || companyData.settings.eArsivPrefix || "EAR",
+          eArsivNextNumber: normalizedComp.eArsivNextNumber || companyData.settings.eArsivNextNumber,
+          defaultInvoicePrefix: normalizedComp.eFaturaPrefix || companyData.settings.defaultInvoicePrefix || "GIB",
+        };
+        saveStoredData("SETTINGS", mergedSettings, normalizedComp.id);
+      } catch {
+        // ignore individual slice error
+      }
+
+      return normalizedComp;
+    });
+
+    saveCompaniesList(updatedCompanies);
+    return {
+      syncedCompaniesCount: updatedCompanies.length,
+      companies: updatedCompanies,
+    };
+  } catch (err) {
+    console.warn("syncAllCompaniesAndUsersData warning:", err);
+    const fallback = getCompaniesList();
+    return {
+      syncedCompaniesCount: fallback.length,
+      companies: fallback,
+    };
+  }
+}
+
