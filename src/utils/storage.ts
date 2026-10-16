@@ -165,9 +165,174 @@ export const DEFAULT_INDIVIDUAL_COMPANY: CompanyItem = {
   createdAt: "2025-01-15T00:00:00.000Z",
 };
 
+export const DELETED_COMPANIES_STORAGE_KEY = "muavin_deleted_companies_registry_v1";
+export const DELETED_USERS_STORAGE_KEY = "muavin_deleted_users_registry_v1";
+
+export function getDeletedCompanyIds(): string[] {
+  try {
+    const raw = safeGetStorageItem(DELETED_COMPANIES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string" && x.trim().length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDeletedCompanyIds(ids: string[]): void {
+  const unique = Array.from(new Set(ids.map((x) => String(x || "").trim()).filter(Boolean)));
+  safeSetStorageItem(DELETED_COMPANIES_STORAGE_KEY, JSON.stringify(unique));
+}
+
+export function isCompanyMarkedDeleted(companyId?: string | null): boolean {
+  if (!companyId) return false;
+  const cleanId = String(companyId).trim();
+  if (!cleanId) return false;
+  return getDeletedCompanyIds().includes(cleanId);
+}
+
+export function getDeletedUserKeys(): string[] {
+  try {
+    const raw = safeGetStorageItem(DELETED_USERS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDeletedUserKeys(keys: string[]): void {
+  const unique = Array.from(
+    new Set(keys.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean))
+  );
+  safeSetStorageItem(DELETED_USERS_STORAGE_KEY, JSON.stringify(unique));
+}
+
+export function isUserMarkedDeleted(
+  user?: { userId?: string; id?: string; email?: string; username?: string } | null
+): boolean {
+  if (!user) return false;
+  const deletedSet = new Set(getDeletedUserKeys());
+  if (deletedSet.size === 0) return false;
+  const uid = (user.userId || user.id || "").trim().toLowerCase();
+  const email = (user.email || "").trim().toLowerCase();
+  const uname = (user.username || "").trim().toLowerCase();
+  if (uid && deletedSet.has(uid)) return true;
+  if (email && deletedSet.has(email)) return true;
+  if (uname && (deletedSet.has(uname) || deletedSet.has(`usr_${uname}`))) return true;
+  return false;
+}
+
+export function markUserAsDeleted(identifiers: {
+  userId?: string;
+  email?: string;
+  username?: string;
+  companyId?: string;
+}): void {
+  const keys = new Set(getDeletedUserKeys());
+  const uid = (identifiers.userId || "").trim().toLowerCase();
+  const email = (identifiers.email || "").trim().toLowerCase();
+  const uname = (identifiers.username || "").trim().toLowerCase();
+  if (uid) keys.add(uid);
+  if (email) keys.add(email);
+  if (uname) {
+    keys.add(uname);
+    keys.add(`usr_${uname}`);
+  }
+  saveDeletedUserKeys(Array.from(keys));
+
+  // If this user corresponds to a company's login account, mark loginUserDeleted on that company so it never regenerates
+  try {
+    const raw = safeGetStorageItem(STORAGE_KEYS.COMPANIES_LIST);
+    if (raw) {
+      const list: CompanyItem[] = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        let modified = false;
+        const nextList = list.map((c) => {
+          const cUser = (c.loginUsername || "").trim().toLowerCase();
+          const cEmail = (c.loginEmail || "").trim().toLowerCase();
+          const matchesCompanyUser =
+            (cUser && (cUser === uname || `usr_${cUser}` === uid)) ||
+            (cEmail && cEmail === email) ||
+            (uid && uid === `usr_comp_${c.id}`);
+          if (matchesCompanyUser) {
+            modified = true;
+            return {
+              ...c,
+              loginUserDeleted: true,
+              loginUsername: undefined,
+              loginPasswordPlain: undefined,
+              loginEmail: undefined,
+            };
+          }
+          return c;
+        });
+        if (modified) {
+          safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(nextList));
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function unmarkUserAsDeleted(identifiers: {
+  userId?: string;
+  email?: string;
+  username?: string;
+}): void {
+  const uid = (identifiers.userId || "").trim().toLowerCase();
+  const email = (identifiers.email || "").trim().toLowerCase();
+  const uname = (identifiers.username || "").trim().toLowerCase();
+  const toRemove = new Set<string>();
+  if (uid) toRemove.add(uid);
+  if (email) toRemove.add(email);
+  if (uname) {
+    toRemove.add(uname);
+    toRemove.add(`usr_${uname}`);
+  }
+  if (toRemove.size === 0) return;
+  const remaining = getDeletedUserKeys().filter((k) => !toRemove.has(k));
+  saveDeletedUserKeys(remaining);
+}
+
+export function markCompanyAsDeleted(companyId: string, comp?: Partial<CompanyItem> | null): void {
+  const cleanId = String(companyId || "").trim();
+  if (!cleanId) return;
+  const current = new Set(getDeletedCompanyIds());
+  current.add(cleanId);
+  saveDeletedCompanyIds(Array.from(current));
+
+  if (comp) {
+    const uname = (comp.loginUsername || "").trim().toLowerCase();
+    const email = (comp.loginEmail || (uname ? `${uname}@muavin.com` : "")).trim().toLowerCase();
+    markUserAsDeleted({
+      userId: uname ? `usr_${uname}` : `usr_comp_${cleanId}`,
+      username: uname || undefined,
+      email: email || undefined,
+      companyId: cleanId,
+    });
+  }
+}
+
+export function unmarkCompanyAsDeleted(companyId: string): void {
+  const cleanId = String(companyId || "").trim();
+  if (!cleanId) return;
+  const remaining = getDeletedCompanyIds().filter((id) => id !== cleanId);
+  saveDeletedCompanyIds(remaining);
+}
+
 function ensureCompanyCredentials(comp: CompanyItem): { comp: CompanyItem; changed: boolean } {
   let changed = false;
   const copy = { ...comp };
+
+  if (copy.loginUserDeleted) {
+    return { comp: copy, changed: false };
+  }
 
   if (copy.id === DEFAULT_COMPANY.id) {
     if (!copy.loginUsername) { copy.loginUsername = DEFAULT_COMPANY.loginUsername; changed = true; }
@@ -226,24 +391,34 @@ function ensureCompanyCredentials(comp: CompanyItem): { comp: CompanyItem; chang
 }
 
 export function getCompaniesList(): CompanyItem[] {
+  const deletedIds = new Set(getDeletedCompanyIds());
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.COMPANIES_LIST);
-    const seededFlag = localStorage.getItem("muavin_companies_seeded_v2");
+    const raw = safeGetStorageItem(STORAGE_KEYS.COMPANIES_LIST);
+    const seededFlag = safeGetStorageItem("muavin_companies_seeded_v2");
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         let updated = false;
-        let list = [...parsed];
+        let list = parsed.filter((c) => c && c.id && !deletedIds.has(c.id));
+        if (list.length !== parsed.length) {
+          updated = true;
+        }
         if (!seededFlag) {
-          if (!list.some((c) => c.id === DEFAULT_COMPANY.id)) {
+          if (!deletedIds.has(DEFAULT_COMPANY.id) && !list.some((c) => c.id === DEFAULT_COMPANY.id)) {
             list.unshift(DEFAULT_COMPANY);
             updated = true;
           }
-          if (!list.some((c) => c.id === DEFAULT_CORPORATE_COMPANY.id || (c.id !== DEFAULT_COMPANY.id && (c.companyType === "limited" || c.companyType === "anonim")))) {
+          if (
+            !deletedIds.has(DEFAULT_CORPORATE_COMPANY.id) &&
+            !list.some((c) => c.id === DEFAULT_CORPORATE_COMPANY.id || (c.id !== DEFAULT_COMPANY.id && (c.companyType === "limited" || c.companyType === "anonim")))
+          ) {
             list.push(DEFAULT_CORPORATE_COMPANY);
             updated = true;
           }
-          if (!list.some((c) => c.id === DEFAULT_INDIVIDUAL_COMPANY.id || c.companyType === "sahis")) {
+          if (
+            !deletedIds.has(DEFAULT_INDIVIDUAL_COMPANY.id) &&
+            !list.some((c) => c.id === DEFAULT_INDIVIDUAL_COMPANY.id || c.companyType === "sahis")
+          ) {
             list.push(DEFAULT_INDIVIDUAL_COMPANY);
             updated = true;
           }
@@ -259,28 +434,32 @@ export function getCompaniesList(): CompanyItem[] {
         }
         return list;
       }
-      if (Array.isArray(parsed) && parsed.length === 0 && seededFlag) {
-        return [];
-      }
     }
   } catch (e) {
     console.error("Error reading companies list", e);
   }
-  const defaultList = [DEFAULT_COMPANY, DEFAULT_CORPORATE_COMPANY, DEFAULT_INDIVIDUAL_COMPANY];
+  const defaultList = [DEFAULT_COMPANY, DEFAULT_CORPORATE_COMPANY, DEFAULT_INDIVIDUAL_COMPANY].filter(
+    (c) => !deletedIds.has(c.id)
+  );
   safeSetStorageItem("muavin_companies_seeded_v2", "1");
   safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(defaultList));
   return defaultList;
 }
 
 export function saveCompaniesList(list: CompanyItem[]): void {
+  const deletedIds = new Set(getDeletedCompanyIds());
+  const filtered = (Array.isArray(list) ? list : []).filter((c) => c && c.id && !deletedIds.has(c.id));
   safeSetStorageItem("muavin_companies_seeded_v2", "1");
-  safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(list));
+  safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(filtered));
 }
 
 export function getActiveCompanyId(): string {
   try {
-    const active = localStorage.getItem(STORAGE_KEYS.ACTIVE_COMPANY_ID);
-    if (active) return active;
+    const active = safeGetStorageItem(STORAGE_KEYS.ACTIVE_COMPANY_ID);
+    const deletedIds = new Set(getDeletedCompanyIds());
+    if (active && !deletedIds.has(active)) return active;
+    const companies = getCompaniesList();
+    if (companies.length > 0) return companies[0].id;
   } catch (e) {
     // fallback
   }
@@ -292,22 +471,53 @@ export function setActiveCompanyId(id: string): void {
 }
 
 export function addCompanyItem(comp: CompanyItem): CompanyItem[] {
+  unmarkCompanyAsDeleted(comp.id);
+  if (comp.loginUsername) {
+    unmarkUserAsDeleted({
+      userId: `usr_${comp.loginUsername.trim().toLowerCase()}`,
+      username: comp.loginUsername,
+      email: comp.loginEmail,
+    });
+  }
   const current = getCompaniesList();
-  const exists = current.some((c) => c.id === comp.id);
-  const updated = exists ? current.map((c) => (c.id === comp.id ? comp : c)) : [...current, comp];
+  const normalizedComp: CompanyItem = {
+    ...comp,
+    loginUserDeleted: comp.loginUsername ? false : comp.loginUserDeleted,
+  };
+  const exists = current.some((c) => c.id === normalizedComp.id);
+  const updated = exists
+    ? current.map((c) => (c.id === normalizedComp.id ? normalizedComp : c))
+    : [...current, normalizedComp];
   saveCompaniesList(updated);
   return updated;
 }
 
 export function updateCompanyItem(comp: CompanyItem): CompanyItem[] {
+  unmarkCompanyAsDeleted(comp.id);
+  if (comp.loginUsername) {
+    unmarkUserAsDeleted({
+      userId: `usr_${comp.loginUsername.trim().toLowerCase()}`,
+      username: comp.loginUsername,
+      email: comp.loginEmail,
+    });
+  }
   const current = getCompaniesList();
-  const updated = current.map((c) => (c.id === comp.id ? comp : c));
+  const normalizedComp: CompanyItem = {
+    ...comp,
+    loginUserDeleted: comp.loginUsername ? false : comp.loginUserDeleted,
+  };
+  const exists = current.some((c) => c.id === normalizedComp.id);
+  const updated = exists
+    ? current.map((c) => (c.id === normalizedComp.id ? normalizedComp : c))
+    : [...current, normalizedComp];
   saveCompaniesList(updated);
   return updated;
 }
 
 export function deleteCompanyItem(id: string): CompanyItem[] {
   const current = getCompaniesList();
+  const targetComp = current.find((c) => c.id === id);
+  markCompanyAsDeleted(id, targetComp);
   const updated = current.filter((c) => c.id !== id);
   saveCompaniesList(updated);
 
@@ -315,7 +525,8 @@ export function deleteCompanyItem(id: string): CompanyItem[] {
   try {
     Object.values(STORAGE_KEYS).forEach((baseKey) => {
       if (baseKey !== STORAGE_KEYS.COMPANIES_LIST && baseKey !== STORAGE_KEYS.ACTIVE_COMPANY_ID) {
-        localStorage.removeItem(`${baseKey}__${id}`);
+        safeRemoveStorageItem(`${baseKey}__${id}`);
+        safeRemoveStorageItem(`${baseKey}_${id}`);
       }
     });
   } catch (e) {
@@ -565,8 +776,7 @@ export function cleanupOversizedStorage(aggressive = false) {
           key.startsWith("tradres_") ||
           key.startsWith("construction_custom_cost_groups_") ||
           key.startsWith("construction_cost_packages_") ||
-          key.startsWith("construction_site_summary_") ||
-          key === "muavin_local_users_backup"
+          key.startsWith("construction_site_summary_")
         ) {
           keysToRemove.push(key);
         } else if (
@@ -615,6 +825,9 @@ function evictLargestNonCriticalKeys(protectedKey: string) {
       "muavin_active_company_id",
       "muavin_mysoft_tenant_vkn",
       "muavin_custom_app_modules",
+      "muavin_deleted_companies_registry",
+      "muavin_deleted_users_registry",
+      "muavin_local_users_backup",
     ];
     const entries: { key: string; size: number; priority: number }[] = [];
     for (let i = 0; i < window.localStorage.length; i++) {

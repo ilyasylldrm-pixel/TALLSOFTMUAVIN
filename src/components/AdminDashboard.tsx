@@ -62,6 +62,10 @@ import {
   setActiveCompanyId,
   safeGetStorageItem,
   safeSetStorageItem,
+  isCompanyMarkedDeleted,
+  isUserMarkedDeleted,
+  markCompanyAsDeleted,
+  markUserAsDeleted,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import {
@@ -91,7 +95,11 @@ import { AdminOverviewPanel } from "./AdminOverviewPanel";
 import { AdminBroadcastPanel } from "./AdminBroadcastPanel";
 import { AdminAuditPanel } from "./AdminAuditPanel";
 import { AdminSyncStatusBar } from "./AdminSyncStatusBar";
-import { logSystemAction, saveLocalDbSyncReport } from "../services/systemSyncService";
+import {
+  logSystemAction,
+  saveLocalDbSyncReport,
+  verifyAndSyncAllUsersLocalDb,
+} from "../services/systemSyncService";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 
 interface AdminDashboardProps {
@@ -213,7 +221,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (activeCompanyId) setLocalActiveCompId(activeCompanyId);
   }, [activeCompanyId]);
 
-  const adminCompanies = companies || localCompanies;
+  const adminCompanies = (companies || localCompanies).filter(
+    (c) => c && !isCompanyMarkedDeleted(c.id)
+  );
   const adminActiveCompId = activeCompanyId || localActiveCompId;
 
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
@@ -239,8 +249,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsCompModalOpen(true);
   };
 
-  const handleSaveCompany = (savedComp: CompanyItem, makeActiveImmediately = true) => {
-    if (compToEdit) {
+  const handleSaveCompany = async (savedComp: CompanyItem, makeActiveImmediately = true) => {
+    const isEditing = Boolean(compToEdit);
+    if (isEditing) {
       if (onUpdateCompany) {
         onUpdateCompany(savedComp);
       } else {
@@ -268,7 +279,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onSelectCompany(savedComp.id);
       }
     }
-    fetchData();
+
+    await logSystemAction({
+      action: isEditing
+        ? `Şirket Tanımı Güncellendi ve Kaydedildi: ${savedComp.companyName}`
+        : `Yeni Şirket Tanımlandı ve Kaydedildi: ${savedComp.companyName}`,
+      category: "Şirket & Yapılandırma",
+      details: `${savedComp.companyName} (${savedComp.vkn || savedComp.tckn || savedComp.taxNumber || "—"}) şirketi yönetici panelinde kaydedildi.`,
+      performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      timestamp: new Date().toISOString(),
+    });
+
+    saveLocalDbSyncReport({
+      lastUpdatedAt: new Date().toISOString(),
+      lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      lastActionSummary: isEditing
+        ? `Şirket Güncellendi ve Kaydedildi: ${savedComp.companyName}`
+        : `Yeni Şirket Tanımlandı ve Kaydedildi: ${savedComp.companyName}`,
+      totalUsersCount: users.length,
+      syncedUsersCount: users.length,
+    });
+
+    void verifyAndSyncAllUsersLocalDb(
+      users.length,
+      currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      isEditing
+        ? `Şirket Güncellendi ve Kaydedildi: ${savedComp.companyName}`
+        : `Yeni Şirket Tanımlandı ve Kaydedildi: ${savedComp.companyName}`
+    );
+
+    setDeleteUserSuccessMessage(
+      `"${savedComp.companyName}" şirketi yönetici panelinde başarıyla kaydedildi.`
+    );
+    setTimeout(() => setDeleteUserSuccessMessage(null), 4000);
+    await fetchData();
   };
 
   const [companyToDelete, setCompanyToDelete] = useState<CompanyItem | null>(null);
@@ -281,12 +325,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (targetComp) {
       setCompanyToDelete(targetComp);
     } else {
+      markCompanyAsDeleted(id);
       const updated = deleteCompanyItem(id);
       setLocalCompanies(updated);
       setLocalActiveCompId(getActiveCompanyId());
       if (onDeleteCompany) {
         onDeleteCompany(id);
       }
+      void verifyAndSyncAllUsersLocalDb(
+        users.length,
+        currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        "Şirket Kalıcı Olarak Silindi ve Kaydedildi"
+      );
       fetchData();
     }
   };
@@ -297,6 +347,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const targetId = companyToDelete.id;
       const targetName = companyToDelete.companyName;
+
+      // 1. Kalıcı silinen şirketler ve kullanıcılar kaydına ekle (bir daha gösterilmemesi için)
+      markCompanyAsDeleted(targetId);
+      markUserAsDeleted({
+        userId: `usr_comp_${targetId}`,
+        username: companyToDelete.loginUsername,
+        email: companyToDelete.loginEmail || companyToDelete.email,
+        companyId: targetId,
+      });
 
       if (onDeleteCompany) {
         onDeleteCompany(targetId);
@@ -314,29 +373,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       );
       for (const lu of linkedUsers) {
         try {
+          markUserAsDeleted({
+            userId: lu.userId,
+            username: lu.username,
+            email: lu.email,
+            companyId: targetId,
+          });
           await deleteUserProfile(lu.userId);
         } catch (err) {
           console.warn("Şirket kullanıcısı silinirken uyarı:", err);
         }
       }
-      if (linkedUsers.length > 0) {
-        setUsers((prev) =>
-          prev.filter((u) => u.companyId !== targetId && u.userId !== `usr_comp_${targetId}`)
-        );
-      }
+      try {
+        await deleteUserProfile(`usr_comp_${targetId}`);
+      } catch {}
 
+      setUsers((prev) =>
+        prev.filter((u) => u.companyId !== targetId && u.userId !== `usr_comp_${targetId}`)
+      );
+
+      await logSystemAction({
+        action: `Şirket Kalıcı Olarak Silindi ve Kaydedildi: ${targetName}`,
+        category: "Şirket & Yapılandırma",
+        details: `${targetName} şirketi ve bağlı kullanıcı hesapları yönetici (${currentUser?.name || currentUser?.email || "Sistem Yöneticisi"}) tarafından kalıcı olarak silindi ve kaydedildi.`,
+        performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        timestamp: new Date().toISOString(),
+      });
+
+      const remainingCount = Math.max(0, users.length - linkedUsers.length);
       saveLocalDbSyncReport({
         lastUpdatedAt: new Date().toISOString(),
         lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-        lastActionSummary: `Şirket Silindi: ${targetName}`,
-        totalUsersCount: Math.max(0, users.length - linkedUsers.length),
-        syncedUsersCount: Math.max(0, users.length - linkedUsers.length),
+        lastActionSummary: `Şirket Kalıcı Olarak Silindi ve Kaydedildi: ${targetName}`,
+        totalUsersCount: remainingCount,
+        syncedUsersCount: remainingCount,
       });
 
-      setDeleteUserSuccessMessage(`"${targetName}" şirketi ve bağlı yapılandırma kayıtları başarıyla silindi.`);
+      await verifyAndSyncAllUsersLocalDb(
+        remainingCount,
+        currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        `Şirket Kalıcı Olarak Silindi ve Kaydedildi: ${targetName}`
+      );
+
+      setDeleteUserSuccessMessage(
+        `"${targetName}" şirketi kalıcı olarak silindi ve yönetici panelinde kaydedildi (bir daha gösterilmeyecek).`
+      );
       setTimeout(() => setDeleteUserSuccessMessage(null), 4000);
       setCompanyToDelete(null);
-      fetchData();
+      await fetchData();
     } catch (err: any) {
       console.error("Company deletion error:", err);
       triggerFormErrorNotification("Şirket silinirken bir hata oluştu: " + (err?.message || err), "Şirket Silme Hatası");
@@ -762,6 +846,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const targetUserEmail = userToDelete.email;
 
     try {
+      // 0. Kalıcı silinen kullanıcılar kaydına ekle (bir daha gösterilmemesi için)
+      markUserAsDeleted({
+        userId: targetUserId,
+        username: userToDelete.username,
+        email: targetUserEmail,
+        companyId: userToDelete.companyId,
+      });
+
       // 1. Firebase Firestore üzerinden profil ve isteğe bağlı evrakları sil
       await deleteUserProfileAndData(targetUserId, deleteUserFilesToo);
 
@@ -781,30 +873,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       // 3. Merkezi Denetim & Aktivite Günlüğü
       await logSystemAction({
-        action: `Kullanıcı Sistemden Silindi: ${targetUserName}`,
+        action: `Kullanıcı Sistemden Silindi ve Kaydedildi: ${targetUserName}`,
         category: "Kullanıcı & Yetki",
-        details: `${targetUserName} (${targetUserEmail}) kullanıcısının hesabı ve tüm modül yetkileri yönetici (${currentUser?.name || currentUser?.email || "Sistem Yöneticisi"}) tarafından kalıcı olarak silindi.${deleteUserFilesToo ? " (İlişkili tüm evraklar da arşivden temizlendi)" : ""}`,
+        details: `${targetUserName} (${targetUserEmail}) kullanıcısının hesabı ve tüm modül yetkileri yönetici (${currentUser?.name || currentUser?.email || "Sistem Yöneticisi"}) tarafından kalıcı olarak silindi ve kaydedildi.${deleteUserFilesToo ? " (İlişkili tüm evraklar da arşivden temizlendi)" : ""}`,
         performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
         timestamp: new Date().toISOString(),
       });
 
       // 4. Yerel state güncellemesi
-      setUsers((prev) => prev.filter((u) => u.userId !== targetUserId));
+      setUsers((prev) =>
+        prev.filter(
+          (u) =>
+            u.userId !== targetUserId &&
+            (!targetUserEmail || u.email?.toLowerCase() !== targetUserEmail.toLowerCase()) &&
+            !isUserMarkedDeleted(u)
+        )
+      );
+      setLocalCompanies(getCompaniesList());
       if (deleteUserFilesToo) {
         setAllFiles((prev) => prev.filter((f) => f.userId !== targetUserId));
       }
       handleCancelUserDraft(targetUserId);
 
-      // 5. Yerel senkronizasyon raporunu tazele
+      // 5. Yerel senkronizasyon raporunu ve merkezi durumu tazele
+      const remainingUsersCount = Math.max(0, users.length - 1);
       saveLocalDbSyncReport({
         lastUpdatedAt: new Date().toISOString(),
         lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-        lastActionSummary: `Kullanıcı Sistemden Silindi: ${targetUserName}`,
-        totalUsersCount: Math.max(0, users.length - 1),
-        syncedUsersCount: Math.max(0, users.length - 1),
+        lastActionSummary: `Kullanıcı Kalıcı Olarak Silindi ve Kaydedildi: ${targetUserName}`,
+        totalUsersCount: remainingUsersCount,
+        syncedUsersCount: remainingUsersCount,
       });
 
-      setDeleteUserSuccessMessage(`"${targetUserName}" kullanıcısı ve sisteme ait yetkileri başarıyla silindi.`);
+      await verifyAndSyncAllUsersLocalDb(
+        remainingUsersCount,
+        currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        `Kullanıcı Kalıcı Olarak Silindi ve Kaydedildi: ${targetUserName}`
+      );
+
+      setDeleteUserSuccessMessage(
+        `"${targetUserName}" kullanıcısı kalıcı olarak silindi ve yönetici panelinde kaydedildi (bir daha gösterilmeyecek).`
+      );
       setTimeout(() => setDeleteUserSuccessMessage(null), 4000);
       setUserToDelete(null);
 
@@ -833,11 +942,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewUserUsername("");
     setNewUserEmail("");
     setNewUserPassword(generateRandomPassword());
-    setNewUserCompany(currentUser.companyName || "Muavin Finans & ERP");
-    setNewUserPhone("+90 (212) 555 0100");
-    setNewUserTaxNumber("1234567890");
+    const activeComp = adminCompanies.find((c) => c.id === adminActiveCompId) || adminCompanies[0];
+    setNewUserCompany(activeComp?.companyName || currentUser.companyName || "Muavin Finans & ERP");
+    setNewUserPhone(activeComp?.phone || "+90 (212) 555 0100");
+    setNewUserTaxNumber(activeComp?.vkn || activeComp?.tckn || activeComp?.taxNumber || "1234567890");
     setNewUserRole("Ön Muhasebe Görevlisi");
-    setNewUserAllowedModules(ALL_APP_MODULES.map((m) => m.key));
+    setNewUserAllowedModules(getAllAppModulesWithCustom().map((m) => m.key));
     setCreateUserError("");
     setCreatedSuccessInfo(null);
     setIsAddUserModalOpen(true);
@@ -847,41 +957,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     setCreateUserError("");
 
-    if (!newUserName.trim() || !newUserEmail.trim() || !newUserPassword.trim()) {
-      setCreateUserError("Lütfen ad soyad, e-posta ve şifre alanlarını eksiksiz doldurunuz.");
+    const cleanName = newUserName.trim() || newUserUsername.trim();
+    if (!cleanName || !newUserPassword.trim()) {
+      setCreateUserError("Lütfen ad soyad (veya kullanıcı adı) ve şifre alanlarını doldurunuz.");
       return;
     }
 
     setCreatingUser(true);
     try {
       const generatedUserId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const cleanEmail = newUserEmail.trim().toLowerCase();
-      const finalUsername = (newUserUsername.trim() || cleanEmail.split("@")[0] || "kullanici").toLowerCase();
+      const slugFromName = cleanName
+        .toLowerCase()
+        .replace(/ğ/g, "g")
+        .replace(/ü/g, "u")
+        .replace(/ş/g, "s")
+        .replace(/ı/g, "i")
+        .replace(/ö/g, "o")
+        .replace(/ç/g, "c")
+        .replace(/[^a-z0-9_]/g, "");
+      const finalUsername = (
+        newUserUsername.trim() ||
+        (newUserEmail.includes("@") ? newUserEmail.split("@")[0] : "") ||
+        slugFromName ||
+        "kullanici"
+      ).toLowerCase();
+      const cleanEmail = (newUserEmail.trim() || `${finalUsername}@muavin.com`).toLowerCase();
+      const matchedComp = adminCompanies.find(
+        (c) => c.companyName.toLowerCase() === newUserCompany.trim().toLowerCase()
+      );
+
       const newUserProfile: UserProfileData = {
         userId: generatedUserId,
-        name: newUserName.trim(),
+        name: cleanName,
         username: finalUsername,
         email: cleanEmail,
-        companyName: newUserCompany.trim() || "Muavin Bilişim A.Ş.",
-        phone: newUserPhone.trim(),
-        taxNumber: newUserTaxNumber.trim(),
+        companyName: newUserCompany.trim() || matchedComp?.companyName || "Muavin Bilişim A.Ş.",
+        companyId: matchedComp?.id,
+        phone: newUserPhone.trim() || "+90 (212) 555 0100",
+        taxNumber: newUserTaxNumber.trim() || matchedComp?.vkn || matchedComp?.tckn || "1234567890",
         selectedLogoId: BRAND_LOGOS[0].id,
         selectedLogoName: BRAND_LOGOS[0].title,
         selectedLogoUrl: BRAND_LOGOS[0].imageUrl,
         role: newUserRole,
         allowedModules: newUserAllowedModules,
-        passwordPlain: newUserPassword,
+        passwordPlain: newUserPassword.trim(),
         createdByAdmin: true,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
       await saveUserProfile(newUserProfile);
-      setUsers((prev) => [newUserProfile, ...prev]);
+      setUsers((prev) => [newUserProfile, ...prev.filter((u) => u.userId !== newUserProfile.userId)]);
+
+      await logSystemAction({
+        action: `Yeni Kullanıcı Tanımlandı ve Kaydedildi: ${newUserProfile.name}`,
+        category: "Kullanıcı & Yetki",
+        details: `${newUserProfile.name} (${finalUsername} / ${cleanEmail}) kullanıcısı ${newUserAllowedModules.length} modül yetkisi ile tanımlandı ve kaydedildi.`,
+        performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        timestamp: new Date().toISOString(),
+      });
+
+      saveLocalDbSyncReport({
+        lastUpdatedAt: new Date().toISOString(),
+        lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        lastActionSummary: `Yeni Kullanıcı Tanımlandı ve Kaydedildi: ${newUserProfile.name}`,
+        totalUsersCount: users.length + 1,
+        syncedUsersCount: users.length + 1,
+      });
+
+      void verifyAndSyncAllUsersLocalDb(
+        users.length + 1,
+        currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        `Yeni Kullanıcı Tanımlandı ve Kaydedildi: ${newUserProfile.name}`
+      );
+
+      setDeleteUserSuccessMessage(
+        `"${newUserProfile.name}" kullanıcısı yönetici panelinde başarıyla tanımlandı ve kaydedildi.`
+      );
+      setTimeout(() => setDeleteUserSuccessMessage(null), 4000);
+
       setCreatedSuccessInfo({
         name: newUserProfile.name,
         username: finalUsername,
         email: newUserProfile.email,
-        passwordPlain: newUserPassword,
+        passwordPlain: newUserPassword.trim(),
         allowedModulesCount: newUserAllowedModules.length,
       });
     } catch (err) {
@@ -938,11 +1097,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         totalUsersCount: users.length,
         syncedUsersCount: users.length,
       });
+
+      void verifyAndSyncAllUsersLocalDb(
+        users.length,
+        currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        `Personel Yetki & Şifre Bilgileri Kaydedildi: ${editingPermissionsUser.name}`
+      );
+
       setUsers((prev) =>
         prev.map((u) => (u.userId === editingPermissionsUser.userId ? updatedUser : u))
       );
       handleCancelUserDraft(editingPermissionsUser.userId);
       setEditingPermissionsUser(null);
+      setDeleteUserSuccessMessage(
+        `"${editingPermissionsUser.name}" kullanıcısının yetki ve şifre bilgileri başarıyla kaydedildi.`
+      );
+      setTimeout(() => setDeleteUserSuccessMessage(null), 4000);
     } catch (err) {
       console.error("Save permissions error:", err);
       triggerFormErrorNotification("Yetki güncellenirken hata oluştu.", "Yetki Kayıt Hatası");
@@ -951,8 +1121,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Filtered users list
-  const filteredUsers = users.filter((u) => {
+  // Filtered users list (silinen kullanıcıları ve silinen şirketlerin kullanıcılarını kesinlikle gösterme)
+  const activeUsers = users.filter(
+    (u) =>
+      u &&
+      !isUserMarkedDeleted(u) &&
+      !(u.companyId && isCompanyMarkedDeleted(u.companyId))
+  );
+
+  const filteredUsers = activeUsers.filter((u) => {
     const q = searchTerm.toLowerCase();
     return (
       (u.name && u.name.toLowerCase().includes(q)) ||
@@ -1221,11 +1398,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ========================================================================= */}
       {activeTab === "overview" && (
         <AdminOverviewPanel
-          users={users}
+          users={activeUsers}
           files={allFiles}
           companies={adminCompanies}
           onNavigateTab={(tab) => setActiveTab(tab)}
-          onOpenAddUserModal={() => setIsAddUserModalOpen(true)}
+          onOpenAddUserModal={handleOpenAddUser}
+          onOpenAddCompanyModal={handleOpenAddCompany}
           onPreviewFile={(file) => setPreviewFile(file)}
           onDeleteUser={handleOpenDeleteUserModal}
           onEditCompany={handleOpenEditCompany}
@@ -1516,7 +1694,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {users
+                  {activeUsers
                     .filter((u) => {
                       if (!credentialSearch.trim()) return true;
                       const q = credentialSearch.toLowerCase();
@@ -2745,11 +2923,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        E-posta Adresi <span className="text-[#b91c1c]">*</span>
+                        E-posta Adresi
                       </label>
                       <input
                         type="email"
-                        required
                         value={newUserEmail}
                         onChange={(e) => {
                           setNewUserEmail(e.target.value);
@@ -2757,7 +2934,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setNewUserUsername(e.target.value.split("@")[0].toLowerCase());
                           }
                         }}
-                        placeholder="personel@sirketiniz.com"
+                        placeholder="Otomatik veya personel@sirketiniz.com"
                         className="w-full px-3 py-1.5 bg-[#faf8ff] border border-[#e2e7ff] rounded text-xs text-slate-800 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae] focus:outline-none"
                       />
                     </div>
@@ -2803,6 +2980,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <option value="Teknik Servis Müdürü">Teknik Servis Müdürü</option>
                         <option value="Depo & Stok Sorumlusu">Depo & Stok Sorumlusu</option>
                         <option value="Yönetici">Yönetici</option>
+                        <option value="Sistem Kullanıcısı">Sistem Kullanıcısı</option>
                       </select>
                     </div>
                   </div>
@@ -2812,10 +2990,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">Şirket Adı</label>
                       <input
                         type="text"
+                        list="admin-company-datalist"
                         value={newUserCompany}
-                        onChange={(e) => setNewUserCompany(e.target.value)}
+                        onChange={(e) => {
+                          setNewUserCompany(e.target.value);
+                          const matched = adminCompanies.find((c) => c.companyName === e.target.value);
+                          if (matched) {
+                            setNewUserTaxNumber(matched.vkn || matched.tckn || matched.taxNumber || "1234567890");
+                          }
+                        }}
                         className="w-full px-3 py-1.5 bg-[#faf8ff] border border-[#e2e7ff] rounded text-xs text-slate-800 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae] focus:outline-none"
                       />
+                      <datalist id="admin-company-datalist">
+                        {adminCompanies.map((c) => (
+                          <option key={c.id} value={c.companyName} />
+                        ))}
+                      </datalist>
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">Telefon Numarası</label>
@@ -2832,12 +3022,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="pt-2 border-t border-[#e2e7ff] space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-semibold text-slate-800 uppercase tracking-wider label-caps">
-                        Erişebileceği Modüller ({newUserAllowedModules.length}/{ALL_APP_MODULES.length})
+                        Erişebileceği Modüller ({newUserAllowedModules.length}/{allAppModules.length})
                       </label>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => setNewUserAllowedModules(ALL_APP_MODULES.map((m) => m.key))}
+                          onClick={() => setNewUserAllowedModules(allAppModules.map((m) => m.key))}
                           className="text-[10px] text-[#0f6bae] font-semibold hover:underline"
                         >
                           Tümünü Seç
@@ -2897,17 +3087,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsAddUserModalOpen(false)}
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded transition-colors cursor-pointer"
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
                     >
                       İptal
                     </button>
                     <button
                       type="submit"
                       disabled={creatingUser}
-                      className="px-4 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white font-semibold text-xs rounded shadow-2xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
                     >
                       {creatingUser ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      <span>{creatingUser ? "Kaydediliyor..." : "Kullanıcıyı Kaydet"}</span>
+                      <span>{creatingUser ? "Kaydediliyor..." : "Kaydet"}</span>
                     </button>
                   </div>
                 </form>
@@ -3181,10 +3371,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="button"
                   onClick={handleSaveEditedPermissions}
                   disabled={savingPermissions}
-                  className="px-4 py-1.5 bg-[#0f6bae] hover:bg-[#005289] text-white font-semibold text-xs rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {savingPermissions ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  <span>{savingPermissions ? "Kaydediliyor..." : "Şifre & Yetkileri Güncelle"}</span>
+                  <span>{savingPermissions ? "Kaydediliyor..." : "Kaydet"}</span>
                 </button>
               </div>
             </div>
@@ -3466,12 +3656,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {isDeletingUser ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Siliniyor...</span>
+                    <span>Siliniyor & Kaydediliyor...</span>
                   </>
                 ) : (
                   <>
-                    <Trash2 className="w-4 h-4" />
-                    <span>Evet, Kullanıcıyı Sil</span>
+                    <Save className="w-4 h-4" />
+                    <span>Evet, Kullanıcıyı Sil ve Kaydet</span>
                   </>
                 )}
               </button>
@@ -3523,7 +3713,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* User List */}
             <div className="p-4 overflow-y-auto space-y-2.5 flex-1 custom-scrollbar">
               {(() => {
-                const filtered = users.filter((u) => {
+                const filtered = activeUsers.filter((u) => {
                   if (!quickDeleteSearchTerm.trim()) return true;
                   const term = quickDeleteSearchTerm.toLowerCase();
                   return (
@@ -3606,15 +3796,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* Modal Footer */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium">
-                Toplam Kayıtlı: {users.length} Kullanıcı
+                Toplam Kayıtlı: {activeUsers.length} Kullanıcı
               </span>
-              <button
-                type="button"
-                onClick={() => setIsQuickDeleteUserModalOpen(false)}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
-              >
-                Kapat
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickDeleteUserModalOpen(false)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
+                >
+                  Kapat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void verifyAndSyncAllUsersLocalDb(
+                      activeUsers.length,
+                      currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+                      "Kullanıcı Listesi Yönetici Panelinde Kaydedildi"
+                    );
+                    setIsQuickDeleteUserModalOpen(false);
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Kaydet</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -3632,7 +3839,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div>
                   <h3 className="text-base font-bold text-white">Şirket Silme Onayı</h3>
                   <p className="text-xs text-rose-100 font-medium">
-                    Seçili şirket ve yapılandırma bilgileri silinecek
+                    Seçili şirket kalıcı olarak silinecek ve bir daha gösterilmeyecek
                   </p>
                 </div>
               </div>
@@ -3679,9 +3886,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                 <div className="text-xs text-rose-900 space-y-1">
-                  <p className="font-bold">Bu şirketi silmek istediğinize emin misiniz?</p>
+                  <p className="font-bold">Bu şirketi kalıcı olarak silmek istediğinize emin misiniz?</p>
                   <p className="text-rose-700 leading-relaxed text-[11px]">
-                    Şirket kaydı, giriş kimlik bilgileri ve eşleştirme ayarları sistemden kaldırılacaktır.
+                    Şirket kaydı, giriş kimlik bilgileri ve eşleştirme ayarları yönetici panelinden kalıcı olarak silinip kaydedilecek ve bir daha gösterilmeyecektir.
                   </p>
                 </div>
               </div>
@@ -3705,12 +3912,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {isDeletingCompany ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Siliniyor...</span>
+                    <span>Siliniyor & Kaydediliyor...</span>
                   </>
                 ) : (
                   <>
-                    <Trash2 className="w-4 h-4" />
-                    <span>Evet, Şirketi Sil</span>
+                    <Save className="w-4 h-4" />
+                    <span>Evet, Şirketi Sil ve Kaydet</span>
                   </>
                 )}
               </button>
@@ -3830,13 +4037,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span className="text-xs text-slate-500 font-medium">
                 Toplam Kayıtlı: {adminCompanies.length} Şirket
               </span>
-              <button
-                type="button"
-                onClick={() => setIsQuickDeleteCompanyModalOpen(false)}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
-              >
-                Kapat
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickDeleteCompanyModalOpen(false)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
+                >
+                  Kapat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void verifyAndSyncAllUsersLocalDb(
+                      activeUsers.length,
+                      currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+                      "Şirket Listesi Yönetici Panelinde Kaydedildi"
+                    );
+                    setIsQuickDeleteCompanyModalOpen(false);
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Kaydet</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -29,6 +29,10 @@ import {
   syncAllCompaniesAndUsersData,
   getCompaniesList,
   saveCompaniesList,
+  getDeletedCompanyIds,
+  saveDeletedCompanyIds,
+  getDeletedUserKeys,
+  saveDeletedUserKeys,
 } from "../utils/storage";
 
 export interface SystemAuditLogItem {
@@ -426,7 +430,7 @@ export async function verifyAndSyncAllUsersLocalDb(
     console.warn("Merkezi parametre doğrulanırken hata:", e);
   }
 
-  // 4. Merkezi Firestore senkronizasyon durumunu ve şirket listesini güncelle (tüm aktif istemciler, şirketler ve kullanıcılar için)
+  // 4. Merkezi Firestore senkronizasyon durumunu, silinen şirket/kullanıcı kayıtlarını ve şirket listesini güncelle
   try {
     const syncDocRef = doc(db, "system_settings", "central_sync_state");
     await setDoc(
@@ -439,6 +443,8 @@ export async function verifyAndSyncAllUsersLocalDb(
         syncedCompaniesCount,
         totalUsersCount: effectiveUsersCount > 0 ? effectiveUsersCount : 1,
         companiesRegistry: companies,
+        deletedCompanyIds: getDeletedCompanyIds(),
+        deletedUserKeys: getDeletedUserKeys(),
         version: Date.now(),
       }),
       { merge: true }
@@ -485,14 +491,33 @@ export function subscribeToCentralSyncState(
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
-          // Merkezi şirket kaydı geldiyse yerel şirket listesiyle birleştir
-          if (Array.isArray(data?.companiesRegistry) && data.companiesRegistry.length > 0) {
+          // 1. Önce silinen şirket ve kullanıcı kayıtlarını birleştir (silinenler bir daha gösterilmesin)
+          if (Array.isArray(data?.deletedCompanyIds) && data.deletedCompanyIds.length > 0) {
+            const mergedDeletedComps = Array.from(
+              new Set([...getDeletedCompanyIds(), ...data.deletedCompanyIds])
+            );
+            saveDeletedCompanyIds(mergedDeletedComps);
+          }
+          if (Array.isArray(data?.deletedUserKeys) && data.deletedUserKeys.length > 0) {
+            const mergedDeletedUsers = Array.from(
+              new Set([...getDeletedUserKeys(), ...data.deletedUserKeys])
+            );
+            saveDeletedUserKeys(mergedDeletedUsers);
+          }
+
+          // 2. Merkezi şirket kaydı geldiyse silinenleri hariç tutarak yerel şirket listesiyle birleştir
+          const deletedCompSet = new Set(getDeletedCompanyIds());
+          if (Array.isArray(data?.companiesRegistry)) {
             try {
               const localCompanies = getCompaniesList();
               const mergedMap = new Map<string, any>();
-              localCompanies.forEach((c) => mergedMap.set(c.id, c));
+              localCompanies.forEach((c) => {
+                if (c && c.id && !deletedCompSet.has(c.id)) {
+                  mergedMap.set(c.id, c);
+                }
+              });
               data.companiesRegistry.forEach((remoteComp: any) => {
-                if (remoteComp && remoteComp.id) {
+                if (remoteComp && remoteComp.id && !deletedCompSet.has(remoteComp.id)) {
                   const existing = mergedMap.get(remoteComp.id);
                   mergedMap.set(remoteComp.id, existing ? { ...existing, ...remoteComp } : remoteComp);
                 }

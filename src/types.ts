@@ -348,6 +348,7 @@ export interface CompanyItem {
   loginEmail?: string;
   loginFullName?: string;
   loginRole?: string;
+  loginUserDeleted?: boolean;
   // Mysoft e-Belge Ön Ekleri ve Ardışık Devam Eden Fatura Numaraları
   eFaturaPrefix?: string;
   eFaturaNextNumber?: string;
@@ -1870,13 +1871,16 @@ export function isAdminOrSysAdmin(
     role.includes("admin") ||
     role.includes("sistem yöneticisi") ||
     role.includes("sistem yoneticisi") ||
+    role.includes("sistem kullanıcısı") ||
+    role.includes("sistem kullanicisi") ||
     role === "yönetici (admin)" ||
     role === "süper admin" ||
     email === "ilyasyildirim@outlook.com.tr" ||
     email === "ilyasylldrm@gmail.com" ||
     email.includes("admin") ||
     username === "admin" ||
-    username === "sistem_yoneticisi"
+    username === "sistem_yoneticisi" ||
+    username === "sistem_kullanicisi"
   );
 }
 
@@ -1956,11 +1960,20 @@ export function isModuleOrSubModuleAllowed(
  * yeni allowedModules dizisini hesaplar.
  */
 export function toggleModuleSelectionWithSubModules(
-  currentAllowed: string[],
-  targetKey: string,
+  arg1: string[] | string,
+  arg2: string | string[],
   parentKey?: string
 ): string[] {
+  const currentAllowed = Array.isArray(arg1) ? arg1 : Array.isArray(arg2) ? arg2 : [];
+  const targetKey = typeof arg1 === "string" ? arg1 : typeof arg2 === "string" ? arg2 : "";
   const set = new Set(currentAllowed);
+
+  if (!parentKey) {
+    const modDef = getAllAppModulesWithCustom().find((m) => m.key === targetKey);
+    if (modDef?.isSubModule && modDef.parentKey) {
+      parentKey = modDef.parentKey;
+    }
+  }
 
   if (!parentKey) {
     const subKeys = getSubModuleKeysOf(targetKey);

@@ -35,7 +35,16 @@ import {
 } from "firebase/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
 import { InvoiceTaxItem, AppModuleKey } from "../types";
-import { safeGetStorageItem, safeSetStorageItem, getCompaniesList } from "../utils/storage";
+import {
+  safeGetStorageItem,
+  safeSetStorageItem,
+  getCompaniesList,
+  getDeletedCompanyIds,
+  getDeletedUserKeys,
+  isUserMarkedDeleted,
+  markUserAsDeleted,
+  unmarkUserAsDeleted,
+} from "../utils/storage";
 
 // Initialize Firebase App lazily/safely
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -237,7 +246,14 @@ function getLocalUsersBackup(): UserProfileData[] {
     const raw = safeGetStorageItem(LOCAL_USERS_BACKUP_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const deletedCompIds = new Set(getDeletedCompanyIds());
+    return parsed.filter(
+      (u) =>
+        u &&
+        !isUserMarkedDeleted(u) &&
+        !(u.companyId && deletedCompIds.has(u.companyId))
+    );
   } catch {
     return [];
   }
@@ -245,17 +261,36 @@ function getLocalUsersBackup(): UserProfileData[] {
 
 function saveLocalUsersBackup(usersList: UserProfileData[]): void {
   try {
-    safeSetStorageItem(LOCAL_USERS_BACKUP_KEY, JSON.stringify(usersList));
+    const deletedCompIds = new Set(getDeletedCompanyIds());
+    const filtered = (Array.isArray(usersList) ? usersList : []).filter(
+      (u) =>
+        u &&
+        !isUserMarkedDeleted(u) &&
+        !(u.companyId && deletedCompIds.has(u.companyId))
+    );
+    safeSetStorageItem(LOCAL_USERS_BACKUP_KEY, JSON.stringify(filtered));
   } catch (err) {
     console.warn("Local users backup save warning:", err);
   }
 }
 
 export async function saveUserProfile(user: UserProfileData): Promise<void> {
+  // Unmark from deleted registry when explicitly saved/created by Admin
+  unmarkUserAsDeleted({
+    userId: user.userId,
+    email: user.email,
+    username: user.username,
+  });
+
   // Always update local persistent backup first for immediate offline resilience
   try {
     const existing = getLocalUsersBackup();
-    const index = existing.findIndex((u) => u.userId === user.userId || (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase()));
+    const index = existing.findIndex(
+      (u) =>
+        u.userId === user.userId ||
+        (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
+        (u.username && user.username && u.username.toLowerCase() === user.username.toLowerCase())
+    );
     if (index >= 0) {
       existing[index] = { ...existing[index], ...user };
     } else {
@@ -283,11 +318,14 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
 }
 
 export async function getUserProfile(userId: string): Promise<UserProfileData | null> {
+  if (isUserMarkedDeleted({ userId })) return null;
   try {
     const userRef = doc(db, "users", userId);
     const snapshot = await getDoc(userRef);
     if (snapshot.exists()) {
-      return snapshot.data() as UserProfileData;
+      const data = snapshot.data() as UserProfileData;
+      if (isUserMarkedDeleted(data)) return null;
+      return data;
     }
   } catch (err) {
     console.error("Error fetching user profile from Firestore:", err);
@@ -342,9 +380,10 @@ function enrichUserProfileCredentials(user: UserProfileData, companies: ReturnTy
 export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
   const localList = getLocalUsersBackup();
   const companies = getCompaniesList();
+  const deletedCompIds = new Set(getDeletedCompanyIds());
   const mergedMap = new Map<string, UserProfileData>();
 
-  // 1. Seed default system admin if no admin exists yet
+  // 1. Seed default system admin if not deleted
   const defaultAdmin: UserProfileData = {
     userId: "usr_admin_001",
     username: "admin",
@@ -362,10 +401,13 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
     createdByAdmin: true,
     createdAt: "2024-01-01T00:00:00.000Z",
   };
-  mergedMap.set(defaultAdmin.email.toLowerCase(), defaultAdmin);
+  if (!isUserMarkedDeleted(defaultAdmin)) {
+    mergedMap.set(defaultAdmin.email.toLowerCase(), defaultAdmin);
+  }
 
-  // 2. Include company login accounts from defined companies
+  // 2. Include company login accounts from defined companies (skip if company or its login user was deleted)
   companies.forEach((comp) => {
+    if (deletedCompIds.has(comp.id) || comp.loginUserDeleted) return;
     if (comp.loginUsername) {
       const cleanUser = comp.loginUsername.trim().toLowerCase();
       const email = (comp.loginEmail || `${cleanUser}@muavin.com`).trim().toLowerCase();
@@ -387,41 +429,59 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
         createdByAdmin: true,
         createdAt: comp.createdAt || new Date().toISOString(),
       };
-      mergedMap.set(email, compUser);
+      if (!isUserMarkedDeleted(compUser)) {
+        mergedMap.set(email, compUser);
+      }
     }
   });
 
-  // 3. Add local backup users
+  // 3. Add local backup users (excluding deleted users & deleted companies)
   localList.forEach((u) => {
+    if (!u || isUserMarkedDeleted(u)) return;
+    if (u.companyId && deletedCompIds.has(u.companyId)) return;
     const key = (u.email || u.userId || "").toLowerCase();
     if (key) {
       mergedMap.set(key, enrichUserProfileCredentials(u, companies));
     }
   });
 
-  // 4. Fetch Firestore users and merge
+  // 4. Fetch Firestore users and merge (skipping and cleaning up any deleted users)
   try {
     const usersCol = collection(db, "users");
     const snapshot = await getDocs(usersCol);
     snapshot.forEach((docSnap) => {
       const u = docSnap.data() as UserProfileData;
-      const key = (u.email || u.userId || "").toLowerCase();
+      const docWithId = { ...u, userId: u.userId || docSnap.id };
+      if (
+        isUserMarkedDeleted(docWithId) ||
+        isUserMarkedDeleted({ userId: docSnap.id }) ||
+        (docWithId.companyId && deletedCompIds.has(docWithId.companyId))
+      ) {
+        // Purge stale deleted document from Firestore silently
+        deleteDoc(docSnap.ref).catch(() => {});
+        return;
+      }
+      const key = (docWithId.email || docWithId.userId || "").toLowerCase();
       if (key) {
         const existing = mergedMap.get(key);
         const mergedUser: UserProfileData = {
           ...existing,
-          ...u,
-          username: u.username || existing?.username,
-          passwordPlain: u.passwordPlain || existing?.passwordPlain,
+          ...docWithId,
+          username: docWithId.username || existing?.username,
+          passwordPlain: docWithId.passwordPlain || existing?.passwordPlain,
         };
-        mergedMap.set(key, enrichUserProfileCredentials(mergedUser, companies));
+        if (!isUserMarkedDeleted(mergedUser)) {
+          mergedMap.set(key, enrichUserProfileCredentials(mergedUser, companies));
+        }
       }
     });
   } catch (err) {
     console.error("Error fetching all users for admin from Firestore, using local backup:", err);
   }
 
-  const finalUsers = Array.from(mergedMap.values()).map((u) => enrichUserProfileCredentials(u, companies));
+  const finalUsers = Array.from(mergedMap.values())
+    .filter((u) => !isUserMarkedDeleted(u) && !(u.companyId && deletedCompIds.has(u.companyId)))
+    .map((u) => enrichUserProfileCredentials(u, companies));
   saveLocalUsersBackup(finalUsers);
   return finalUsers;
 }
@@ -430,6 +490,9 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
 export async function findUserProfileByEmail(identifier: string): Promise<UserProfileData | null> {
   const clean = identifier.trim().toLowerCase();
   if (!clean) return null;
+  if (isUserMarkedDeleted({ userId: clean, email: clean, username: clean })) {
+    return null;
+  }
 
   // 1. Direct Firestore query by email or username
   try {
@@ -438,22 +501,25 @@ export async function findUserProfileByEmail(identifier: string): Promise<UserPr
     const qEmail = query(usersCol, where("email", "==", clean));
     const snapshotEmail = await getDocs(qEmail);
     if (!snapshotEmail.empty) {
-      return snapshotEmail.docs[0].data() as UserProfileData;
+      const found = snapshotEmail.docs[0].data() as UserProfileData;
+      if (!isUserMarkedDeleted(found)) return found;
     }
 
     // Check by username
     const qUser = query(usersCol, where("username", "==", clean));
     const snapshotUser = await getDocs(qUser);
     if (!snapshotUser.empty) {
-      return snapshotUser.docs[0].data() as UserProfileData;
+      const found = snapshotUser.docs[0].data() as UserProfileData;
+      if (!isUserMarkedDeleted(found)) return found;
     }
 
     // 2. Case-insensitive Firestore search across all profiles
     const allUsers = await getAllUsersProfiles();
     const match = allUsers.find(
       (u) =>
-        (u.email && u.email.trim().toLowerCase() === clean) ||
-        (u.username && u.username.trim().toLowerCase() === clean)
+        !isUserMarkedDeleted(u) &&
+        ((u.email && u.email.trim().toLowerCase() === clean) ||
+          (u.username && u.username.trim().toLowerCase() === clean))
     );
     if (match) return match;
   } catch (err) {
@@ -464,8 +530,9 @@ export async function findUserProfileByEmail(identifier: string): Promise<UserPr
   const localList = getLocalUsersBackup();
   const localMatch = localList.find(
     (u) =>
-      (u.email && u.email.trim().toLowerCase() === clean) ||
-      (u.username && u.username.trim().toLowerCase() === clean)
+      !isUserMarkedDeleted(u) &&
+      ((u.email && u.email.trim().toLowerCase() === clean) ||
+        (u.username && u.username.trim().toLowerCase() === clean))
   );
   if (localMatch) return localMatch;
 
@@ -474,9 +541,10 @@ export async function findUserProfileByEmail(identifier: string): Promise<UserPr
     const companies = getCompaniesList();
     const matchedComp = companies.find(
       (c) =>
-        (c.loginUsername && c.loginUsername.trim().toLowerCase() === clean) ||
-        (c.loginEmail && c.loginEmail.trim().toLowerCase() === clean) ||
-        (c.email && c.email.trim().toLowerCase() === clean)
+        !c.loginUserDeleted &&
+        ((c.loginUsername && c.loginUsername.trim().toLowerCase() === clean) ||
+          (c.loginEmail && c.loginEmail.trim().toLowerCase() === clean) ||
+          (c.email && c.email.trim().toLowerCase() === clean))
     );
     if (matchedComp && matchedComp.loginUsername) {
       const cleanUser = matchedComp.loginUsername.trim().toLowerCase();
@@ -506,7 +574,9 @@ export async function findUserProfileByEmail(identifier: string): Promise<UserPr
         createdAt: matchedComp.createdAt,
         updatedAt: matchedComp.createdAt,
       };
-      return compProfile;
+      if (!isUserMarkedDeleted(compProfile)) {
+        return compProfile;
+      }
     }
   } catch (compErr) {
     console.warn("Error finding user profile from companies list:", compErr);
@@ -532,6 +602,15 @@ export async function isUserCreatedByAdmin(identifier: string): Promise<{
       isSysAdmin: false,
       existingProfile: null,
       message: "Lütfen geçerli bir kullanıcı adı veya e-posta adresi giriniz.",
+    };
+  }
+
+  if (isUserMarkedDeleted({ userId: clean, email: clean, username: clean })) {
+    return {
+      isAuthorized: false,
+      isSysAdmin: false,
+      existingProfile: null,
+      message: `Kayıt/Giriş Engellendi: '${clean}' kullanıcısı yönetici tarafından sistemden kalıcı olarak silinmiştir.`,
     };
   }
 
@@ -570,32 +649,81 @@ export async function isUserCreatedByAdmin(identifier: string): Promise<{
   };
 }
 
-// Admin Operations: Delete a user profile from Firestore and local backup
-export async function deleteUserProfile(userId: string): Promise<void> {
-  try {
-    const existing = getLocalUsersBackup();
-    const filtered = existing.filter((u) => u.userId !== userId && (u as any).id !== userId);
-    saveLocalUsersBackup(filtered);
-
-    const userRef = doc(db, "users", userId);
-    await deleteDoc(userRef);
-  } catch (err) {
-    console.error("Error deleting user profile:", err);
-    throw err;
-  }
+// Admin Operations: Delete a user profile from Firestore and local backup permanently
+export async function deleteUserProfile(
+  userId: string,
+  extraIdentifiers?: { email?: string; username?: string; companyId?: string }
+): Promise<void> {
+  await deleteUserProfileAndData(userId, false, extraIdentifiers);
 }
 
-// Admin Operations: Delete user profile and optionally their uploaded files
-export async function deleteUserProfileAndData(userId: string, deleteFiles: boolean = false): Promise<void> {
+// Admin Operations: Delete user profile and optionally their uploaded files permanently
+export async function deleteUserProfileAndData(
+  userId: string,
+  deleteFiles: boolean = false,
+  extraIdentifiers?: { email?: string; username?: string; companyId?: string }
+): Promise<void> {
   try {
-    // 0. Remove from local persistent backup
-    const existing = getLocalUsersBackup();
-    const filtered = existing.filter((u) => u.userId !== userId && (u as any).id !== userId);
-    saveLocalUsersBackup(filtered);
+    // 0. Capture user details before removing from local persistent backup, then mark permanently deleted
+    const rawBackup = safeGetStorageItem(LOCAL_USERS_BACKUP_KEY);
+    const parsedBackup: UserProfileData[] = rawBackup ? JSON.parse(rawBackup) : [];
+    const targetInBackup = Array.isArray(parsedBackup)
+      ? parsedBackup.find((u) => u && (u.userId === userId || (u as any).id === userId))
+      : undefined;
 
-    // 1. Delete user doc from 'users' collection
-    const userRef = doc(db, "users", userId);
-    await deleteDoc(userRef);
+    const targetEmail = (extraIdentifiers?.email || targetInBackup?.email || "").trim().toLowerCase();
+    const targetUsername = (extraIdentifiers?.username || targetInBackup?.username || "").trim().toLowerCase();
+    const targetCompanyId = extraIdentifiers?.companyId || targetInBackup?.companyId;
+
+    markUserAsDeleted({
+      userId,
+      email: targetEmail || undefined,
+      username: targetUsername || undefined,
+      companyId: targetCompanyId,
+    });
+
+    if (Array.isArray(parsedBackup)) {
+      const filtered = parsedBackup.filter((u) => {
+        if (!u) return false;
+        if (u.userId === userId || (u as any).id === userId) return false;
+        if (targetEmail && u.email?.trim().toLowerCase() === targetEmail) return false;
+        if (targetUsername && u.username?.trim().toLowerCase() === targetUsername) return false;
+        return !isUserMarkedDeleted(u);
+      });
+      saveLocalUsersBackup(filtered);
+    }
+
+    // 1. Delete user doc(s) from 'users' collection in Firestore (by doc id + matching email/username)
+    try {
+      const userRef = doc(db, "users", userId);
+      await deleteDoc(userRef);
+    } catch {
+      // ignore if doc id doesn't exist
+    }
+
+    try {
+      const usersCol = collection(db, "users");
+      const allSnap = await getDocs(usersCol);
+      const matchingDeletePromises: Promise<void>[] = [];
+      allSnap.forEach((docSnap) => {
+        const d = docSnap.data() as UserProfileData;
+        const dEmail = (d.email || "").trim().toLowerCase();
+        const dUser = (d.username || "").trim().toLowerCase();
+        if (
+          docSnap.id === userId ||
+          d.userId === userId ||
+          (targetEmail && dEmail === targetEmail) ||
+          (targetUsername && dUser === targetUsername)
+        ) {
+          matchingDeletePromises.push(deleteDoc(docSnap.ref));
+        }
+      });
+      if (matchingDeletePromises.length > 0) {
+        await Promise.all(matchingDeletePromises);
+      }
+    } catch {
+      // ignore offline Firestore query error
+    }
 
     // 2. Optionally delete associated user files from 'user_files' collection
     if (deleteFiles) {

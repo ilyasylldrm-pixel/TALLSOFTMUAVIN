@@ -115,6 +115,7 @@ import {
   verifyAndSyncAllUsersLocalDb,
   subscribeToCentralSyncState,
 } from "./services/systemSyncService";
+import { deleteUserProfile } from "./lib/firebase";
 import { readStoredMysoftTenantVkn, writeStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
 import { CompanyModal } from "./components/CompanyModal";
 
@@ -282,6 +283,7 @@ export default function App() {
   const handleDeleteCompany = (id: string) => {
     const updatedList = deleteCompanyItem(id);
     setCompanies(updatedList);
+    void deleteUserProfile(`usr_comp_${id}`);
     if (activeCompanyId === id) {
       const nextId = updatedList.length > 0 ? updatedList[0].id : DEFAULT_COMPANY.id;
       handleSelectCompany(nextId, updatedList);
@@ -289,7 +291,7 @@ export default function App() {
     void verifyAndSyncAllUsersLocalDb(
       0,
       "Sistem Yöneticisi",
-      "Şirket Listesi Güncellendi ve Tüm Kullanıcılara Gönderildi"
+      "Şirket Kalıcı Olarak Silindi ve Yönetici Panelinde Kaydedildi"
     );
   };
 
@@ -364,16 +366,7 @@ export default function App() {
 
   // Auto switch admin to admin tab on login
   useEffect(() => {
-    const userEmail = currentUser?.email?.toLowerCase().trim() || "";
-    const isSysAdmin =
-      currentUser?.id === "nuT309AyQxQKddnAp1ZJjlSgBXt2" ||
-      currentUser?.id === "usr_admin_001" ||
-      currentUser?.role?.includes("Admin") ||
-      userEmail === "ilyasyildirim@outlook.com.tr" ||
-      userEmail === "ilyasylldrm@gmail.com" ||
-      userEmail.includes("admin");
-
-    if (currentUser && isSysAdmin) {
+    if (currentUser && isAdminOrSysAdmin(currentUser)) {
       setCurrentTab("admin");
     }
   }, [currentUser]);

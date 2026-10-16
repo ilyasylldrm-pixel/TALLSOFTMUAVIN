@@ -29,6 +29,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  Save,
 } from "lucide-react";
 import {
   CompanyItem,
@@ -347,12 +348,9 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   };
 
   const handleSubmit = async (makeActiveImmediately: boolean) => {
-    if (!companyName.trim()) {
-      setErrorMsg("Lütfen şirket adını (kısa ad) belirtin.");
-      return;
-    }
-    if (!vkn.trim() && !tckn.trim()) {
-      setErrorMsg("Lütfen en az bir Vergi Kimlik Numarası (VKN) veya T.C. Kimlik Numarası (TCKN) girin.");
+    const cleanName = companyName.trim() || companyTitle.trim();
+    if (!cleanName) {
+      setErrorMsg("Lütfen şirket adını (kısa ad) veya ticari unvanını belirtin.");
       return;
     }
     if (vkn.trim() && vkn.trim().length !== 10) {
@@ -370,16 +368,15 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
         return;
       }
       if (!loginPassword.trim()) {
-        setErrorMsg("Lütfen uygulamaya giriş için en az 6 karakterli bir şifre belirleyin.");
-        return;
-      }
-      if (loginPassword.trim().length < 6) {
-        setErrorMsg("Uygulama giriş şifresi en az 6 karakter olmalıdır.");
+        setErrorMsg("Lütfen uygulamaya giriş için bir şifre belirleyin.");
         return;
       }
     }
 
-    const selectedTenantNumber = mysoftMatchedType === "vkn" ? (vkn.trim() || tckn.trim()) : (tckn.trim() || vkn.trim());
+    const selectedTenantNumber =
+      mysoftMatchedType === "vkn"
+        ? vkn.trim() || tckn.trim() || "1111111111"
+        : tckn.trim() || vkn.trim() || "1111111111";
     const companyId = initialCompany?.id || `comp_${Date.now()}`;
     const targetModules = moduleRestrictionEnabled ? allowedModules : SYSTEM_COMPANY_MODULES.map((m) => m.id);
 
@@ -389,24 +386,24 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       ? (loginEmail.trim() || `${finalLoginUser}@muavin.com`).toLowerCase()
       : undefined;
     const finalLoginName = createLoginAccount
-      ? (loginFullName.trim() || `${companyName.trim() || companyTitle.trim()} Yöneticisi`)
+      ? (loginFullName.trim() || `${cleanName} Yöneticisi`)
       : undefined;
 
     const companyData: CompanyItem = {
       id: companyId,
-      companyName: companyName.trim(),
-      name: companyName.trim(),
-      companyTitle: (companyTitle.trim() || companyName.trim()),
-      title: (companyTitle.trim() || companyName.trim()),
+      companyName: cleanName,
+      name: cleanName,
+      companyTitle: companyTitle.trim() || cleanName,
+      title: companyTitle.trim() || cleanName,
       companyType,
       taxOffice: taxOffice.trim() || "Merkez",
       taxNumber: selectedTenantNumber,
-      vkn: vkn.trim() || undefined,
-      tckn: tckn.trim() || undefined,
+      vkn: vkn.trim() || (mysoftMatchedType === "vkn" ? selectedTenantNumber : undefined),
+      tckn: tckn.trim() || (mysoftMatchedType === "tckn" ? selectedTenantNumber : undefined),
       mysoftMatchedType,
       tenantIdentifierNumber: selectedTenantNumber,
       mysoftStatus: mysoftVerifyResult?.success ? "verified" : "pending",
-      mysoftTenantName: mysoftVerifyResult?.title || (companyTitle.trim() || companyName.trim()),
+      mysoftTenantName: mysoftVerifyResult?.title || (companyTitle.trim() || cleanName),
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
       website: website.trim() || undefined,
@@ -421,6 +418,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       loginEmail: finalLoginEmail,
       loginFullName: finalLoginName,
       loginRole: createLoginAccount ? loginRole : undefined,
+      loginUserDeleted: !createLoginAccount,
       // Mysoft e-Belge Ön Ekleri ve Ardışık Devam Eden Fatura Numaraları
       eFaturaPrefix: (eFaturaPrefix || "GIB").trim().toUpperCase(),
       eFaturaNextNumber: (eFaturaNextNumber || "").trim() || undefined,
@@ -434,9 +432,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
     // If login account is specified, register user profile to Firestore & local storage
     if (createLoginAccount && finalLoginUser && finalLoginPass) {
       try {
-        const generatedUserId = initialCompany?.loginUsername === finalLoginUser
-          ? `usr_${finalLoginUser}`
-          : `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const generatedUserId = `usr_comp_${companyId}`;
 
         const newUserProfile: UserProfileData = {
           userId: generatedUserId,
@@ -488,13 +484,24 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleSubmit(mode === "create")}
+              className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Şirket Tanımını Kaydet"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Kaydet</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -1488,24 +1495,25 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleSubmit(false)}
-              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer"
-            >
-              {mode === "create" ? "Sadece Listeye Ekle" : "Değişiklikleri Kaydet"}
-            </button>
-
             {mode === "create" && (
               <button
                 type="button"
-                onClick={() => handleSubmit(true)}
-                className="px-5 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all active:scale-98 cursor-pointer"
+                onClick={() => handleSubmit(false)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
               >
-                <Check className="w-4 h-4" />
-                <span>Kaydet & Aktif Şirket Olarak Aç</span>
+                <Save className="w-3.5 h-3.5" />
+                <span>Listeye Kaydet</span>
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => handleSubmit(mode === "create")}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all active:scale-98 cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>{mode === "create" ? "Kaydet" : "Kaydet"}</span>
+            </button>
           </div>
         </div>
       </div>
