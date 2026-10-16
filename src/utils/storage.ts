@@ -228,22 +228,26 @@ function ensureCompanyCredentials(comp: CompanyItem): { comp: CompanyItem; chang
 export function getCompaniesList(): CompanyItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.COMPANIES_LIST);
+    const seededFlag = localStorage.getItem("muavin_companies_seeded_v2");
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         let updated = false;
         let list = [...parsed];
-        if (!list.some((c) => c.id === DEFAULT_COMPANY.id)) {
-          list.unshift(DEFAULT_COMPANY);
-          updated = true;
-        }
-        if (!list.some((c) => c.id === DEFAULT_CORPORATE_COMPANY.id || (c.id !== DEFAULT_COMPANY.id && (c.companyType === "limited" || c.companyType === "anonim")))) {
-          list.push(DEFAULT_CORPORATE_COMPANY);
-          updated = true;
-        }
-        if (!list.some((c) => c.id === DEFAULT_INDIVIDUAL_COMPANY.id || c.companyType === "sahis")) {
-          list.push(DEFAULT_INDIVIDUAL_COMPANY);
-          updated = true;
+        if (!seededFlag) {
+          if (!list.some((c) => c.id === DEFAULT_COMPANY.id)) {
+            list.unshift(DEFAULT_COMPANY);
+            updated = true;
+          }
+          if (!list.some((c) => c.id === DEFAULT_CORPORATE_COMPANY.id || (c.id !== DEFAULT_COMPANY.id && (c.companyType === "limited" || c.companyType === "anonim")))) {
+            list.push(DEFAULT_CORPORATE_COMPANY);
+            updated = true;
+          }
+          if (!list.some((c) => c.id === DEFAULT_INDIVIDUAL_COMPANY.id || c.companyType === "sahis")) {
+            list.push(DEFAULT_INDIVIDUAL_COMPANY);
+            updated = true;
+          }
+          safeSetStorageItem("muavin_companies_seeded_v2", "1");
         }
         list = list.map((item) => {
           const res = ensureCompanyCredentials(item);
@@ -255,16 +259,21 @@ export function getCompaniesList(): CompanyItem[] {
         }
         return list;
       }
+      if (Array.isArray(parsed) && parsed.length === 0 && seededFlag) {
+        return [];
+      }
     }
   } catch (e) {
     console.error("Error reading companies list", e);
   }
   const defaultList = [DEFAULT_COMPANY, DEFAULT_CORPORATE_COMPANY, DEFAULT_INDIVIDUAL_COMPANY];
+  safeSetStorageItem("muavin_companies_seeded_v2", "1");
   safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(defaultList));
   return defaultList;
 }
 
 export function saveCompaniesList(list: CompanyItem[]): void {
+  safeSetStorageItem("muavin_companies_seeded_v2", "1");
   safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(list));
 }
 
@@ -298,12 +307,24 @@ export function updateCompanyItem(comp: CompanyItem): CompanyItem[] {
 }
 
 export function deleteCompanyItem(id: string): CompanyItem[] {
-  if (id === DEFAULT_COMPANY.id) return getCompaniesList();
   const current = getCompaniesList();
   const updated = current.filter((c) => c.id !== id);
   saveCompaniesList(updated);
+
+  // Clean up isolated storage slices for the deleted company
+  try {
+    Object.values(STORAGE_KEYS).forEach((baseKey) => {
+      if (baseKey !== STORAGE_KEYS.COMPANIES_LIST && baseKey !== STORAGE_KEYS.ACTIVE_COMPANY_ID) {
+        localStorage.removeItem(`${baseKey}__${id}`);
+      }
+    });
+  } catch (e) {
+    // ignore storage cleanup errors
+  }
+
   if (getActiveCompanyId() === id) {
-    setActiveCompanyId(DEFAULT_COMPANY.id);
+    const nextActiveId = updated.length > 0 ? updated[0].id : DEFAULT_COMPANY.id;
+    setActiveCompanyId(nextActiveId);
   }
   return updated;
 }

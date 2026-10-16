@@ -13,7 +13,7 @@ import {
   Check,
   UploadCloud,
 } from "lucide-react";
-import { Account, CompanyItem } from "../types";
+import { Account, CompanyItem, isAdminOrSysAdmin } from "../types";
 import { UserProfile } from "./AuthModal";
 import { useTheme } from "../context/ThemeContext";
 import { Logo } from "./Logo";
@@ -310,7 +310,7 @@ export const Header: React.FC<HeaderProps> = ({
 
 
         {/* GitHub & Yayınla Button */}
-        {onOpenGitHubPublish && (
+        {onOpenGitHubPublish && isAdminOrSysAdmin(currentUser) && (
           <button
             type="button"
             onClick={onOpenGitHubPublish}

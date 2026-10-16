@@ -64,7 +64,10 @@ interface AdminOverviewPanelProps {
   onNavigateTab: (tab: "matrix" | "users" | "companies" | "files" | "payroll" | "broadcast" | "audit") => void;
   onOpenAddUserModal: () => void;
   onOpenAddCompanyModal?: () => void;
+  onOpenDeleteCompanyModal?: () => void;
   onEditCompany?: (comp: CompanyItem) => void;
+  onDeleteCompany?: (comp: CompanyItem) => void;
+  onSwitchCompany?: (id: string) => void;
   onPreviewFile: (file: UserFileMetadata) => void;
   onDeleteUser?: (user: UserProfileData) => void;
   currentUser: any;
@@ -79,7 +82,9 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
   onNavigateTab,
   onOpenAddUserModal,
   onOpenAddCompanyModal,
+  onOpenDeleteCompanyModal,
   onEditCompany,
+  onDeleteCompany,
   onPreviewFile,
   onDeleteUser,
   currentUser,
@@ -434,6 +439,17 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                 <span>Yeni Şirket</span>
               </button>
             )}
+            {onOpenDeleteCompanyModal && (
+              <button
+                type="button"
+                onClick={onOpenDeleteCompanyModal}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                title="Şirket Silme Panelini Aç"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Şirket Sil</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onOpenAddUserModal}
@@ -553,6 +569,17 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                                 className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-[#0f6bae] rounded text-[11px] font-semibold cursor-pointer transition-colors"
                               >
                                 Düzenle
+                              </button>
+                            )}
+                            {onDeleteCompany && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteCompany(comp)}
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 rounded text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                                title="Şirketi Kalıcı Olarak Sil"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Sil</span>
                               </button>
                             )}
                           </div>
@@ -911,6 +938,17 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                           className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#0f6bae] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                         >
                           Düzenle
+                        </button>
+                      )}
+                      {onDeleteCompany && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteCompany(comp)}
+                          className="px-2.5 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                          title="Şirketi Kalıcı Olarak Sil"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Şirket Sil</span>
                         </button>
                       )}
                     </div>

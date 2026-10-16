@@ -27,6 +27,7 @@ import {
   Hash,
   FileText,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import {
   CompanyItem,
@@ -43,6 +44,7 @@ interface CompanyModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (company: CompanyItem, makeActiveImmediately?: boolean) => void;
+  onDelete?: (company: CompanyItem) => void;
   initialCompany?: CompanyItem | null;
   mode?: "create" | "edit" | "mysoft_match";
   currentUser?: { id?: string; email?: string; role?: string; username?: string } | null;
@@ -52,6 +54,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onDelete,
   initialCompany,
   mode = "create",
   currentUser,
@@ -1399,13 +1402,29 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
 
         {/* Modal Footer */}
         <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-all"
-          >
-            Vazgeç
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            {initialCompany && onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onDelete(initialCompany);
+                }}
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Bu Şirketi Sistemden Kalıcı Olarak Sil"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Şirketi Sil</span>
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <button

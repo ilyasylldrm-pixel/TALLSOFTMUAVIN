@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Building2, Loader2, RefreshCw } from "lucide-react";
 import { useMysoftTenants } from "../hooks/useMysoftTenants";
 
@@ -33,27 +33,47 @@ export const MysoftTenantPicker: React.FC<MysoftTenantPickerProps> = ({
     selectedTenant,
   } = useMysoftTenants({ hintVkn: value || hintVkn });
 
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+
+  const prevValueRef = useRef<string | undefined>(value);
+  const lastEmittedVknRef = useRef<string | undefined>(value || hintVkn);
+
+  // Sync external controlled value prop into internal selectedVkn only when value prop itself changes
   useEffect(() => {
-    if (value !== undefined && value !== selectedVkn) {
-      setSelectedVkn(value);
+    if (value !== prevValueRef.current) {
+      prevValueRef.current = value;
+      if (value !== undefined && value !== selectedVkn) {
+        lastEmittedVknRef.current = value;
+        setSelectedVkn(value);
+      }
     }
   }, [value, selectedVkn, setSelectedVkn]);
 
+  // Notify parent once when internal selectedVkn is resolved/changed
   useEffect(() => {
-    if (selectedVkn && selectedVkn !== value) {
-      onSelect?.(selectedVkn);
+    if (selectedVkn && selectedVkn !== lastEmittedVknRef.current) {
+      lastEmittedVknRef.current = selectedVkn;
+      prevValueRef.current = selectedVkn;
+      onSelectRef.current?.(selectedVkn);
     }
-  }, [selectedVkn, value, onSelect]);
+  }, [selectedVkn]);
 
   const handleSelect = (vkn: string) => {
     const nextVal = vkn || undefined;
+    lastEmittedVknRef.current = nextVal;
+    prevValueRef.current = nextVal;
     setSelectedVkn(nextVal);
-    onSelect?.(nextVal);
+    onSelectRef.current?.(nextVal);
   };
 
   const handleLookup = async () => {
     const tenant = await lookupByVkn();
-    if (tenant) onSelect?.(tenant.taxNumber);
+    if (tenant) {
+      lastEmittedVknRef.current = tenant.taxNumber;
+      prevValueRef.current = tenant.taxNumber;
+      onSelectRef.current?.(tenant.taxNumber);
+    }
   };
 
   if (variant === "compact") {

@@ -195,9 +195,8 @@ export function buildMysoftInvoiceOutboxPayload(
   // Shape mirrors Mysoft GET /api/InvoiceOutbox/createInvoiceOutboxTestJson
   // (docs/mysoft/invoice-outbox-sablon.json) — production defaults: SATIS / TEMEL.
   const payload: Record<string, unknown> = {
-    isCalculateByApi: false, // Mysoft API: "isCalculateByApi Geliştirme aşamasındadır. Lütfen bu alanı false olarak geçiniz."
+    isCalculateByApi: true,
     eDocumentType,
-
     profile,
     invoiceType: resolvedInvoiceType,
     ettn: invoice.eDocumentEttn || undefined,

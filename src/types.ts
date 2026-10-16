@@ -27,10 +27,6 @@ export interface Contact {
   addressDetails?: AddressDetails;
   balance: number; // Pozitif: Alacaklıyız (Müşteri bize borçlu), Negatif: Borçluyuz (Tedarikçiye borcumuz var)
   balanceType: "receivable" | "payable" | "balanced";
-  isEFaturaUser?: boolean;
-  pkAlias?: string;
-  gbAlias?: string;
-  activityStatus?: string;
   notes?: string;
   createdAt: string;
 }
@@ -260,13 +256,13 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "dashboard", name: "Ana Sayfa & Özet Paneli", description: "Finansal özet, hızlı göstergeler ve nakit akışı", category: "core" },
 
   // Ana Modül: Firma Bilgileri & Alt Modülleri
-  { id: "company", name: "Firma Bilgileri & Kurumsal Yönetim", description: "Şirket profili, şubeler, depolar ve ayarlar ana modülü", category: "core" },
+  { id: "company", name: "Firma Bilgileri & Kurumsal Yönetim", description: "Şirket profili, şubeler, depolar ve sistem ayarları ana modülü", category: "core" },
   { id: "company_profile", name: "↳ Firma Profili & Adres", description: "Resmi ticari unvan, vergi dairesi, merkez adres ve logo", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
-  { id: "company_companies", name: "↳ Şirketler & Çoklu Şirket", description: "Çoklu şirket tanımlama ve şirketler arası geçiş", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
-  { id: "company_mysoft", name: "↳ Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef VKN/TCKN ve seri eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_branches", name: "↳ Şubeler Yönetimi", description: "Şirket şubeleri açılış ve adres tanımlama", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_warehouses", name: "↳ Depolar Yönetimi", description: "Merkez ve şube depoları tanımlama ve kapasite takibi", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
-  { id: "company_settings", name: "↳ Firma Sistem Ayarları", description: "Firma bazlı sistem, yedekleme ve şablon tercihleri", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+  { id: "company_settings", name: "↳ Sistem Ayarları", description: "Genel sistem ayarları, çoklu şirket ve Mysoft VKN/TCKN eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+  { id: "company_companies", name: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Çoklu şirket tanımlama ve şirketler arası geçiş", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+  { id: "company_mysoft", name: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef VKN/TCKN ve seri eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
 
   // Ana Modül: E-İşlemler
   { id: "e_services", name: "E-İşlemler (GİB / Portal)", description: "GİB portalı, e-Arşiv, SGK ve e-Devlet sorgulama", category: "commercial", badge: "Resmi" },
@@ -315,7 +311,6 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "files", name: "Bulut Dosya Deposu", description: "Şirket sözleşmeleri, evraklar ve dijital arşiv", category: "operations" },
   { id: "reports", name: "Vergilendirme & Mali Raporlar", description: "KDV beyanname simülasyonu, gelir/gider tabloları", category: "financial" },
   { id: "whatsapp", name: "WhatsApp İletişim Merkezi", description: "Müşterilere e-fatura ve bakiye bildirimi gönderme", category: "integrations", badge: "Canlı" },
-  { id: "settings", name: "Sistem Ayarları & Yedekleme", description: "Genel uygulama ayarları ve veri yedekleme", category: "core" },
 ];
 
 export interface CompanyItem {
@@ -1761,13 +1756,13 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "dashboard", label: "Ana Sayfa / Özet", description: "Genel finansal durum ve grafikler", category: "Genel" },
 
   // Firma Bilgileri & Alt Modülleri
-  { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi (Ana Modül)", category: "Yönetim" },
+  { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo, kurumsal unvan ve sistem ayarları yönetimi (Ana Modül)", category: "Yönetim" },
   { key: "company_profile", label: "↳ Firma Profili & Adres", description: "Resmi şirket kimlik bilgileri, adres ve logo ayarları", category: "Yönetim", parentKey: "company", isSubModule: true },
-  { key: "company_companies", label: "↳ Şirketler & Çoklu Şirket", description: "Kurumsal şirket, şahıs işletmesi ve test şirketleri yönetimi", category: "Yönetim", parentKey: "company", isSubModule: true },
-  { key: "company_mysoft", label: "↳ Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef ve ön ek (prefix) eşleştirme", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_branches", label: "↳ Şubeler", description: "Şirket şubeleri tanımlama ve yönetim", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_warehouses", label: "↳ Depolar", description: "Şirket ve şahıs işletmesi depoları tanımlama", category: "Yönetim", parentKey: "company", isSubModule: true },
-  { key: "company_settings", label: "↳ Firma Sistem Ayarları", description: "Firma bazlı parametreler ve yedekleme", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_settings", label: "↳ Sistem Ayarları", description: "Firma bazlı parametreler, çoklu şirket, Mysoft eşleştirme ve yedekleme", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_companies", label: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Kurumsal şirket, şahıs işletmesi ve test şirketleri yönetimi", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_mysoft", label: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef ve ön ek (prefix) eşleştirme", category: "Yönetim", parentKey: "company", isSubModule: true },
 
   // E-İşlemler
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
@@ -1820,7 +1815,6 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "files", label: "Bulut Dosya Deposu", description: "Kullanıcı ve firma evrak arşivi", category: "Genel" },
   { key: "reports", label: "Vergilendirme & Raporlar", description: "KDV, Muhtasar, Geçici Vergi ve mizan raporları", category: "Finans" },
   { key: "whatsapp", label: "WhatsApp Merkezi", description: "Müşteri bildirimleri ve canlı WhatsApp iletişimi", category: "Genel" },
-  { key: "settings", label: "Sistem Ayarları", description: "Uygulama ayarları, yedekleme ve genel tercihler", category: "Yönetim" },
 ];
 
 export const CUSTOM_MODULES_STORAGE_KEY = "muavin_custom_app_modules_v1";

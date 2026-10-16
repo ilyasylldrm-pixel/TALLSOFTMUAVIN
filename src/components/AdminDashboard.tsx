@@ -271,20 +271,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     fetchData();
   };
 
+  const [companyToDelete, setCompanyToDelete] = useState<CompanyItem | null>(null);
+  const [isQuickDeleteCompanyModalOpen, setIsQuickDeleteCompanyModalOpen] = useState(false);
+  const [quickDeleteCompanySearchTerm, setQuickDeleteCompanySearchTerm] = useState("");
+  const [isDeletingCompany, setIsDeletingCompany] = useState(false);
+
   const handleDeleteCompany = (id: string) => {
-    if (id === "comp_default") {
-      alert("Varsayılan ana şirket silinemez.");
-      return;
-    }
-    if (confirm("Bu şirketi silmek istediğinize emin misiniz?")) {
+    const targetComp = adminCompanies.find((c) => c.id === id);
+    if (targetComp) {
+      setCompanyToDelete(targetComp);
+    } else {
+      const updated = deleteCompanyItem(id);
+      setLocalCompanies(updated);
+      setLocalActiveCompId(getActiveCompanyId());
       if (onDeleteCompany) {
         onDeleteCompany(id);
+      }
+      fetchData();
+    }
+  };
+
+  const handleConfirmDeleteCompany = async () => {
+    if (!companyToDelete) return;
+    setIsDeletingCompany(true);
+    try {
+      const targetId = companyToDelete.id;
+      const targetName = companyToDelete.companyName;
+
+      if (onDeleteCompany) {
+        onDeleteCompany(targetId);
       } else {
-        const updated = deleteCompanyItem(id);
+        const updated = deleteCompanyItem(targetId);
         setLocalCompanies(updated);
         setLocalActiveCompId(getActiveCompanyId());
       }
+      setLocalCompanies(getCompaniesList());
+      setLocalActiveCompId(getActiveCompanyId());
+
+      // Şirkete bağlı oluşturulmuş giriş kullanıcısı varsa onu da temizle
+      const linkedUsers = users.filter(
+        (u) => u.companyId === targetId || u.userId === `usr_comp_${targetId}`
+      );
+      for (const lu of linkedUsers) {
+        try {
+          await deleteUserProfile(lu.userId);
+        } catch (err) {
+          console.warn("Şirket kullanıcısı silinirken uyarı:", err);
+        }
+      }
+      if (linkedUsers.length > 0) {
+        setUsers((prev) =>
+          prev.filter((u) => u.companyId !== targetId && u.userId !== `usr_comp_${targetId}`)
+        );
+      }
+
+      saveLocalDbSyncReport({
+        lastUpdatedAt: new Date().toISOString(),
+        lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        lastActionSummary: `Şirket Silindi: ${targetName}`,
+        totalUsersCount: Math.max(0, users.length - linkedUsers.length),
+        syncedUsersCount: Math.max(0, users.length - linkedUsers.length),
+      });
+
+      setDeleteUserSuccessMessage(`"${targetName}" şirketi ve bağlı yapılandırma kayıtları başarıyla silindi.`);
+      setTimeout(() => setDeleteUserSuccessMessage(null), 4000);
+      setCompanyToDelete(null);
       fetchData();
+    } catch (err: any) {
+      console.error("Company deletion error:", err);
+      triggerFormErrorNotification("Şirket silinirken bir hata oluştu: " + (err?.message || err), "Şirket Silme Hatası");
+    } finally {
+      setIsDeletingCompany(false);
     }
   };
 
@@ -949,6 +1006,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span>Yeni Şirket Ekle</span>
             </button>
             <button
+              onClick={() => setIsQuickDeleteCompanyModalOpen(true)}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
+              title="Şirket Silme Paneli"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Şirket Sil</span>
+            </button>
+            <button
               onClick={handleOpenAddUser}
               className="bg-[#0f6bae] hover:bg-[#005289] text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
             >
@@ -1164,6 +1229,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onPreviewFile={(file) => setPreviewFile(file)}
           onDeleteUser={handleOpenDeleteUserModal}
           onEditCompany={handleOpenEditCompany}
+          onDeleteCompany={(comp) => setCompanyToDelete(comp)}
+          onOpenDeleteCompanyModal={() => setIsQuickDeleteCompanyModalOpen(true)}
           onSwitchCompany={handleSwitchCompany}
           currentUser={currentUser}
         />
@@ -1230,6 +1297,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 <Building2 className="w-3.5 h-3.5" />
                 <span>+ Şirket Ekle</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsQuickDeleteCompanyModalOpen(true)}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                title="Şirket Silme Paneli"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Şirket Sil</span>
               </button>
               <button
                 type="button"
@@ -1392,6 +1468,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                 <Edit2 className="w-3 h-3" />
                                 <span>Şifre/Bilgi Düzenle</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCompanyToDelete(comp)}
+                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white font-bold text-[11px] rounded-lg border border-rose-200 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                title="Şirketi Sil"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Şirket Sil</span>
                               </button>
                             </div>
                           </td>
@@ -2178,7 +2263,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setShowPasswords((prev) => !prev)}
@@ -2194,6 +2279,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 <Building2 className="w-4 h-4" />
                 <span>+ Yeni Şirket Ekle</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsQuickDeleteCompanyModalOpen(true)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98 shrink-0"
+                title="Şirket Silme Paneli"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Şirket Sil</span>
               </button>
             </div>
           </div>
@@ -2394,22 +2488,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditCompany(comp)}
-                                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
                                 title="Şirketi ve Şifresini Düzenle"
                               >
                                 <Sliders className="w-3.5 h-3.5" />
+                                <span>Düzenle</span>
                               </button>
 
-                              {comp.id !== "comp_default" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteCompany(comp.id)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                                  title="Şirketi Sil"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => setCompanyToDelete(comp)}
+                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 font-bold text-xs rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                                title="Şirketi Sil"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Şirket Sil</span>
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -3526,11 +3620,241 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* 🔴 ŞİRKET SİLME ONAY MODALI */}
+      {companyToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-5 bg-gradient-to-r from-rose-700 via-rose-600 to-red-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
+                  <Trash2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Şirket Silme Onayı</h3>
+                  <p className="text-xs text-rose-100 font-medium">
+                    Seçili şirket ve yapılandırma bilgileri silinecek
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCompanyToDelete(null)}
+                disabled={isDeletingCompany}
+                className="p-1.5 text-rose-100 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0f6bae] text-white font-bold flex items-center justify-center text-sm shrink-0">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-bold text-slate-900 truncate">
+                      {companyToDelete.companyName}
+                    </h4>
+                    <p className="text-xs text-slate-500 truncate">
+                      {companyToDelete.companyTitle || companyToDelete.companyName}
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-slate-200/80 grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-slate-400 text-[11px]">VKN / TCKN:</span>
+                    <p className="font-mono font-semibold text-slate-700">
+                      {companyToDelete.vkn || companyToDelete.tckn || companyToDelete.taxNumber || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 text-[11px]">Giriş Kullanıcı Adı:</span>
+                    <p className="font-mono font-bold text-[#0f6bae]">
+                      {companyToDelete.loginUsername || "—"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-rose-900 space-y-1">
+                  <p className="font-bold">Bu şirketi silmek istediğinize emin misiniz?</p>
+                  <p className="text-rose-700 leading-relaxed text-[11px]">
+                    Şirket kaydı, giriş kimlik bilgileri ve eşleştirme ayarları sistemden kaldırılacaktır.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setCompanyToDelete(null)}
+                disabled={isDeletingCompany}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteCompany}
+                disabled={isDeletingCompany}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingCompany ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Siliniyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Evet, Şirketi Sil</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔴 HIZLI ŞİRKET SİLME LİSTESİ MODALI */}
+      {isQuickDeleteCompanyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-5 bg-gradient-to-r from-rose-700 via-rose-600 to-red-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
+                  <Building2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Şirket Silme Paneli</h3>
+                  <p className="text-xs text-rose-100 font-medium">
+                    Sistemde tanımlı şirketleri görüntüleyip dilediğinizi kalıcı olarak silebilirsiniz
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsQuickDeleteCompanyModalOpen(false)}
+                className="p-1.5 text-rose-100 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-b border-slate-200">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Silmek istediğiniz şirketi ara (şirket adı, unvan, VKN/TCKN, kullanıcı adı)..."
+                  value={quickDeleteCompanySearchTerm}
+                  onChange={(e) => setQuickDeleteCompanySearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-2.5 flex-1 custom-scrollbar">
+              {(() => {
+                const filtered = adminCompanies.filter((c) => {
+                  if (!quickDeleteCompanySearchTerm.trim()) return true;
+                  const term = quickDeleteCompanySearchTerm.toLowerCase();
+                  return (
+                    c.companyName?.toLowerCase().includes(term) ||
+                    c.companyTitle?.toLowerCase().includes(term) ||
+                    c.vkn?.includes(term) ||
+                    c.tckn?.includes(term) ||
+                    c.loginUsername?.toLowerCase().includes(term)
+                  );
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-12 text-slate-400 text-xs font-medium space-y-2">
+                      <Building2 className="w-8 h-8 mx-auto text-slate-300" />
+                      <p>Aramaya uygun şirket bulunamadı.</p>
+                    </div>
+                  );
+                }
+
+                return filtered.map((comp) => {
+                  const isActive = comp.id === adminActiveCompId;
+                  return (
+                    <div
+                      key={comp.id}
+                      className="p-3.5 bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-[#0f6bae] text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
+                          <Building2 className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-slate-900 truncate">{comp.companyName}</h4>
+                            {isActive && (
+                              <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                                Aktif Şirket
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 truncate">{comp.companyTitle || comp.companyName}</p>
+                          <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                            {comp.vkn ? `VKN: ${comp.vkn}` : comp.tckn ? `TCKN: ${comp.tckn}` : comp.taxNumber || "—"} • K.Adı: {comp.loginUsername || "test"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsQuickDeleteCompanyModalOpen(false);
+                            setCompanyToDelete(comp);
+                          }}
+                          className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Şirketi Sil</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-xs text-slate-500 font-medium">
+                Toplam Kayıtlı: {adminCompanies.length} Şirket
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsQuickDeleteCompanyModalOpen(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Company Modal */}
       <CompanyModal
         isOpen={isCompModalOpen}
         onClose={() => setIsCompModalOpen(false)}
         onSave={handleSaveCompany}
+        onDelete={(id) => {
+          const target = adminCompanies.find((c) => c.id === id);
+          if (target) {
+            setCompanyToDelete(target);
+          } else {
+            handleDeleteCompany(id);
+          }
+        }}
         initialCompany={compToEdit}
         mode={compModalMode}
         currentUser={currentUser}

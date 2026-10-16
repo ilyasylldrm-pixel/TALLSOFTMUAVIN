@@ -188,8 +188,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const allCompanySubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "company_profile", label: "Firma Profili & Adres", icon: Building },
-    { id: "company_companies", label: "Şirketler & Çoklu Şirket", icon: Building2 },
-    { id: "company_mysoft", label: "Mysoft VKN/TCKN Eşleştirme", icon: Globe },
     { id: "company_branches", label: "Şubeler", icon: Store },
     { id: "company_warehouses", label: "Depolar", icon: WarehouseIcon },
     { id: "company_settings", label: "Sistem Ayarları", icon: Settings },
@@ -323,7 +321,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : isFinanceItem
             ? currentTab === "accounts"
             : isCompanyItem
-            ? ["company", "company_profile", "company_companies", "company_mysoft", "company_branches", "company_warehouses", "company_settings", "settings", "company_e_services"].includes(currentTab)
+            ? [
+                "company",
+                "company_profile",
+                "company_companies",
+                "company_mysoft",
+                "company_branches",
+                "company_warehouses",
+                "company_settings",
+                "settings",
+                "company_e_services",
+              ].includes(currentTab)
             : isProductItem
             ? ["products", "products_list"].includes(currentTab)
             : currentTab === item.id;
@@ -360,7 +368,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }
                   } else if (isCompanyItem) {
                     setIsCompanyExpanded((prev) => !prev);
-                    if (!["company", "company_profile", "company_companies", "company_mysoft", "company_branches", "company_warehouses", "company_settings", "settings"].includes(currentTab)) {
+                    if (
+                      ![
+                        "company",
+                        "company_profile",
+                        "company_companies",
+                        "company_mysoft",
+                        "company_branches",
+                        "company_warehouses",
+                        "company_settings",
+                        "settings",
+                      ].includes(currentTab)
+                    ) {
                       handleSelectTabWithMobileClose("company_profile");
                     }
                   } else if (isConstructionItem) {
@@ -536,7 +555,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
                   {companySubModules.map((sub) => {
                     const SubIcon = sub.icon;
-                    const isSubActive = currentTab === sub.id;
+                    const isSubActive =
+                      currentTab === sub.id ||
+                      (sub.id === "company_settings" &&
+                        ["settings", "company_companies", "company_mysoft"].includes(currentTab));
 
                     return (
                       <button
@@ -860,7 +882,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Quick Action: Yayınla & Senkronize Et */}
-      {onOpenGitHubPublish && (
+      {onOpenGitHubPublish && isAdmin && (
         <div className="px-3 pt-2">
           <button
             type="button"

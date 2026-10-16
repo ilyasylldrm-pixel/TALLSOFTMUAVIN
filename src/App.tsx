@@ -265,14 +265,11 @@ export default function App() {
   };
 
   const handleDeleteCompany = (id: string) => {
-    if (id === DEFAULT_COMPANY.id) {
-      alert("Varsayılan ana şirket silinemez.");
-      return;
-    }
     const updatedList = deleteCompanyItem(id);
     setCompanies(updatedList);
     if (activeCompanyId === id) {
-      handleSelectCompany(DEFAULT_COMPANY.id);
+      const nextId = updatedList.length > 0 ? updatedList[0].id : DEFAULT_COMPANY.id;
+      handleSelectCompany(nextId, updatedList);
     }
   };
 
@@ -280,6 +277,44 @@ export default function App() {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [initialContactIdForInvoice, setInitialContactIdForInvoice] = useState<string | null>(null);
   const [isGitHubPublishOpen, setIsGitHubPublishOpen] = useState(false);
+
+  // Restore GitHub PAT from browser localStorage after container restarts and auto-push pending commits
+  useEffect(() => {
+    const savedToken = localStorage.getItem("muavin_github_pat")?.trim();
+    const savedRepo = localStorage.getItem("muavin_github_repo_url")?.trim();
+    if (!savedToken) return;
+
+    (async () => {
+      try {
+        const stRes = await fetch("/api/github/status");
+        if (!stRes.ok) return;
+        const st = await stRes.json();
+        if (!st.hasToken) {
+          await fetch("/api/github/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: savedToken,
+              repoUrl: savedRepo || st.repoUrl,
+            }),
+          });
+        }
+        if ((st.aheadCount && st.aheadCount > 0) || !st.isClean) {
+          await fetch("/api/github/publish", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: savedToken,
+              repoUrl: savedRepo || st.repoUrl,
+              pullFirst: true,
+            }),
+          });
+        }
+      } catch {
+        // Ignore background sync errors
+      }
+    })();
+  }, []);
 
   // Auth & Profile State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
@@ -810,23 +845,27 @@ export default function App() {
 
   const handleAddInvoice = (invoice: Invoice) => {
     setData((prev) => {
-      // Update contact balance
-      const updatedContacts = prev.contacts.map((c) => {
-        if (c.id === invoice.contactId) {
-          const delta = invoice.type === "sales" ? invoice.grandTotal : -invoice.grandTotal;
-          const newBal = c.balance + delta;
-          return {
-            ...c,
-            balance: newBal,
-            balanceType: newBal > 0 ? "receivable" : newBal < 0 ? "payable" : "balanced",
-          };
-        }
-        return c;
-      });
+      const isDraftOrCancelled = invoice.status === "draft" || invoice.status === "cancelled";
 
-      // Advance Mysoft e-Fatura / e-Arşiv sequential invoice number when issuing a sales invoice
+      // Update contact balance only when invoice is officially issued (not draft/cancelled)
+      const updatedContacts = isDraftOrCancelled
+        ? prev.contacts
+        : prev.contacts.map((c) => {
+            if (c.id === invoice.contactId) {
+              const delta = invoice.type === "sales" ? invoice.grandTotal : -invoice.grandTotal;
+              const newBal = c.balance + delta;
+              return {
+                ...c,
+                balance: newBal,
+                balanceType: newBal > 0 ? "receivable" : newBal < 0 ? "payable" : "balanced",
+              };
+            }
+            return c;
+          });
+
+      // Advance Mysoft e-Fatura / e-Arşiv sequential invoice number when issuing a non-draft sales invoice
       let updatedSettings = prev.settings;
-      if (invoice.type === "sales" && invoice.docKind !== "receipt") {
+      if (!isDraftOrCancelled && invoice.type === "sales" && invoice.docKind !== "receipt") {
         const cleanNo = String(invoice.invoiceNumber || "").trim().toUpperCase();
         const serialMatch = cleanNo.match(/^([A-Z0-9]{3})(\d{4})(\d{9})$/);
         if (serialMatch) {
@@ -995,10 +1034,22 @@ export default function App() {
     setData((prev) => {
       const oldInvoice = prev.invoices.find((i) => i.id === updatedInvoice.id);
       let updatedContacts = prev.contacts;
+      let updatedSettings = prev.settings;
 
       if (oldInvoice) {
-        const oldDelta = oldInvoice.type === "sales" ? oldInvoice.grandTotal : -oldInvoice.grandTotal;
-        const newDelta = updatedInvoice.type === "sales" ? updatedInvoice.grandTotal : -updatedInvoice.grandTotal;
+        const oldWasInactive = oldInvoice.status === "draft" || oldInvoice.status === "cancelled";
+        const newIsInactive = updatedInvoice.status === "draft" || updatedInvoice.status === "cancelled";
+
+        const oldDelta = oldWasInactive
+          ? 0
+          : oldInvoice.type === "sales"
+          ? oldInvoice.grandTotal
+          : -oldInvoice.grandTotal;
+        const newDelta = newIsInactive
+          ? 0
+          : updatedInvoice.type === "sales"
+          ? updatedInvoice.grandTotal
+          : -updatedInvoice.grandTotal;
 
         if (oldInvoice.contactId === updatedInvoice.contactId) {
           const diff = newDelta - oldDelta;
@@ -1017,7 +1068,7 @@ export default function App() {
           }
         } else {
           updatedContacts = prev.contacts.map((c) => {
-            if (c.id === oldInvoice.contactId) {
+            if (c.id === oldInvoice.contactId && oldDelta !== 0) {
               const newBal = c.balance - oldDelta;
               return {
                 ...c,
@@ -1025,7 +1076,7 @@ export default function App() {
                 balanceType: newBal > 0 ? ("receivable" as const) : newBal < 0 ? ("payable" as const) : ("balanced" as const),
               };
             }
-            if (c.id === updatedInvoice.contactId) {
+            if (c.id === updatedInvoice.contactId && newDelta !== 0) {
               const newBal = c.balance + newDelta;
               return {
                 ...c,
@@ -1036,10 +1087,63 @@ export default function App() {
             return c;
           });
         }
+
+        // If transitioning from draft to an issued sales invoice, advance Mysoft serial counter
+        if (
+          oldInvoice.status === "draft" &&
+          !newIsInactive &&
+          updatedInvoice.type === "sales" &&
+          updatedInvoice.docKind !== "receipt"
+        ) {
+          const cleanNo = String(updatedInvoice.invoiceNumber || "").trim().toUpperCase();
+          const serialMatch = cleanNo.match(/^([A-Z0-9]{3})(\d{4})(\d{9})$/);
+          if (serialMatch) {
+            const usedPrefix = serialMatch[1];
+            const usedYear = serialMatch[2];
+            const usedSeq = parseInt(serialMatch[3], 10) || 0;
+            const nextSerialNo = `${usedPrefix}${usedYear}${String(usedSeq + 1).padStart(9, "0")}`;
+            const isEArsivDoc =
+              updatedInvoice.eDocumentType === "e_arsiv" ||
+              updatedInvoice.invoiceScenario === "EARSIVFATURA" ||
+              usedPrefix === (prev.settings.eArsivPrefix || "EAR").toUpperCase();
+
+            updatedSettings = {
+              ...prev.settings,
+              ...(isEArsivDoc
+                ? {
+                    eArsivPrefix: prev.settings.eArsivPrefix || usedPrefix,
+                    eArsivNextNumber: nextSerialNo,
+                  }
+                : {
+                    eFaturaPrefix: prev.settings.eFaturaPrefix || usedPrefix,
+                    eFaturaNextNumber: nextSerialNo,
+                  }),
+            };
+
+            const activeComp = companies.find((c) => c.id === activeCompanyId);
+            if (activeComp) {
+              const updatedComp: CompanyItem = {
+                ...activeComp,
+                ...(isEArsivDoc
+                  ? {
+                      eArsivPrefix: activeComp.eArsivPrefix || usedPrefix,
+                      eArsivNextNumber: nextSerialNo,
+                    }
+                  : {
+                      eFaturaPrefix: activeComp.eFaturaPrefix || usedPrefix,
+                      eFaturaNextNumber: nextSerialNo,
+                    }),
+              };
+              const updatedCompList = updateCompanyItem(updatedComp);
+              setCompanies(updatedCompList);
+            }
+          }
+        }
       }
 
       return {
         ...prev,
+        settings: updatedSettings,
         invoices: prev.invoices.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv)),
         contacts: updatedContacts as Contact[],
       };
@@ -2033,6 +2137,10 @@ export default function App() {
         return "Firma Şubeleri";
       case "company_warehouses":
         return "Firma Depoları";
+      case "company_companies":
+        return "Firma Bilgileri - Sistem Ayarları (Şirketler & Çoklu Şirket)";
+      case "company_mysoft":
+        return "Firma Bilgileri - Sistem Ayarları (Mysoft Eşleştirme)";
       case "company_settings":
       case "settings":
         return "Firma Bilgileri - Sistem Ayarları";
@@ -2054,14 +2162,14 @@ export default function App() {
     if (tab === "admin") return isAdminOrSysAdmin(currentUser);
 
     const tabPermissionMap: Record<string, { key: string; parent?: string }> = {
-      company: { key: "companies" },
-      company_profile: { key: "companies_profile", parent: "companies" },
-      company_companies: { key: "companies_list", parent: "companies" },
-      company_mysoft: { key: "companies_mysoft", parent: "companies" },
-      company_branches: { key: "companies_branches", parent: "companies" },
-      company_warehouses: { key: "companies_warehouses", parent: "companies" },
-      company_settings: { key: "companies_settings", parent: "companies" },
-      settings: { key: "companies_settings", parent: "companies" },
+      company: { key: "company" },
+      company_profile: { key: "company_profile", parent: "company" },
+      company_branches: { key: "company_branches", parent: "company" },
+      company_warehouses: { key: "company_warehouses", parent: "company" },
+      settings: { key: "company_settings", parent: "company" },
+      company_settings: { key: "company_settings", parent: "company" },
+      company_companies: { key: "company_companies", parent: "company" },
+      company_mysoft: { key: "company_mysoft", parent: "company" },
       contacts: { key: "contacts" },
       contacts_debtors: { key: "contacts_customers", parent: "contacts" },
       contacts_risky: { key: "contacts_customers", parent: "contacts" },

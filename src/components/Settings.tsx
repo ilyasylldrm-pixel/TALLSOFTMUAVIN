@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { CompanySettings } from "../types";
+import { CompanySettings, isAdminOrSysAdmin } from "../types";
+import { UserProfile } from "./AuthModal";
 import { useTheme } from "../context/ThemeContext";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import {
@@ -36,6 +37,8 @@ import {
   Info,
   Gift,
   CheckCircle2,
+  Building2,
+  Globe,
 } from "lucide-react";
 import { GitHubSyncPanel } from "./GitHubSyncPanel";
 
@@ -47,6 +50,9 @@ interface SettingsProps {
   onResetDemoData?: () => void;
   embedded?: boolean;
   initialTab?: "theme" | "system" | "backup" | "cloud" | "github";
+  companiesCount?: number;
+  onOpenSubModule?: (sub: "companies" | "mysoft") => void;
+  currentUser?: UserProfile | null;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -57,9 +63,13 @@ export const Settings: React.FC<SettingsProps> = ({
   onResetDemoData,
   embedded = false,
   initialTab,
+  companiesCount,
+  onOpenSubModule,
+  currentUser,
 }) => {
+  const isAdmin = isAdminOrSysAdmin(currentUser);
   const [activeTab, setActiveTab] = useState<"theme" | "system" | "backup" | "cloud" | "github">(
-    initialTab || (embedded ? "system" : "theme")
+    initialTab === "github" && !isAdmin ? (embedded ? "system" : "theme") : initialTab || (embedded ? "system" : "theme")
   );
   const [formData, setFormData] = useState<CompanySettings>(settings);
 
@@ -160,7 +170,29 @@ export const Settings: React.FC<SettingsProps> = ({
       )}
 
       {/* Tabs Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+        {onOpenSubModule && (
+          <>
+            <button
+              type="button"
+              onClick={() => onOpenSubModule("companies")}
+              className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
+            >
+              <Building2 className="w-4 h-4 text-[#0f6bae]" />
+              <span>Şirketler & Çoklu Şirket{companiesCount !== undefined ? ` (${companiesCount})` : ""}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onOpenSubModule("mysoft")}
+              className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
+            >
+              <Globe className="w-4 h-4 text-indigo-600" />
+              <span>Mysoft VKN/TCKN Eşleştirme</span>
+            </button>
+          </>
+        )}
+
         <button
           type="button"
           onClick={() => setActiveTab("theme")}
@@ -220,19 +252,21 @@ export const Settings: React.FC<SettingsProps> = ({
           <span>Google Cloud & Hızlandırma</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("github")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer ${
-            activeTab === "github"
-              ? "text-white shadow-2xs"
-              : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
-          }`}
-          style={activeTab === "github" ? { backgroundColor: theme.primaryColor } : {}}
-        >
-          <UploadCloud className="w-4 h-4" />
-          <span>Yayınla & GitHub</span>
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("github")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === "github"
+                ? "text-white shadow-2xs"
+                : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+            }`}
+            style={activeTab === "github" ? { backgroundColor: theme.primaryColor } : {}}
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Yayınla & GitHub</span>
+          </button>
+        )}
       </div>
 
       {/* ─── TAB 1: THEME & APPEARANCE ─── */}
@@ -1300,7 +1334,7 @@ export const Settings: React.FC<SettingsProps> = ({
       )}
 
       {/* ─── TAB 5: PUBLISH & GITHUB SYNC ─── */}
-      {activeTab === "github" && (
+      {isAdmin && activeTab === "github" && (
         <GitHubSyncPanel
           isModal={false}
           onSuccessNotification={(msg) => triggerFormErrorNotification(msg, "Yayınlama Başarılı")}
