@@ -29,8 +29,8 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Add dumb-init for POSIX signal handling & curl for Cloud Run health probes
-RUN apk add --no-cache dumb-init curl
+# Add dumb-init for POSIX signal handling, curl for Cloud Run health probes, & git for GitHub sync
+RUN apk add --no-cache dumb-init curl git
 
 ENV NODE_ENV=production
 ENV PORT=3000

@@ -278,7 +278,7 @@ export default function App() {
   const [initialContactIdForInvoice, setInitialContactIdForInvoice] = useState<string | null>(null);
   const [isGitHubPublishOpen, setIsGitHubPublishOpen] = useState(false);
 
-  // Restore GitHub PAT from browser localStorage after container restarts and auto-push pending commits
+  // Restore GitHub PAT from browser localStorage after container restarts
   const githubAutoSyncedRef = useRef(false);
   useEffect(() => {
     if (githubAutoSyncedRef.current) return;
@@ -290,32 +290,16 @@ export default function App() {
 
     (async () => {
       try {
-        const stRes = await fetch("/api/github/status");
-        if (!stRes.ok) return;
-        const st = await stRes.json();
-        if (!st.hasToken) {
-          await fetch("/api/github/config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token: savedToken,
-              repoUrl: savedRepo || st.repoUrl,
-            }),
-          });
-        }
-        if (st.aheadCount && st.aheadCount > 0) {
-          await fetch("/api/github/publish", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token: savedToken,
-              repoUrl: savedRepo || st.repoUrl,
-              pullFirst: true,
-            }),
-          });
-        }
+        await fetch("/api/github/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: savedToken,
+            repoUrl: savedRepo || undefined,
+          }),
+        });
       } catch {
-        // Ignore background sync errors
+        // Ignore background config sync errors
       }
     })();
   }, []);

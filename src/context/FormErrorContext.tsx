@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
-import { AlertCircle, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, X } from "lucide-react";
 
 export interface FormErrorInfo {
   id: string;
@@ -145,54 +145,94 @@ export const FormErrorProvider: React.FC<{ children: ReactNode }> = ({ children 
     <FormErrorContext.Provider value={{ errors, triggerError, removeError, clearAllErrors }}>
       {children}
 
-      {/* HAZE FINANCIAL PASTEL CRIMSON (error-crimson) POP-UP NOTIFICATIONS */}
+      {/* POP-UP NOTIFICATIONS (Supports both Success and Error styles) */}
       {errors.length > 0 && (
         <div
           id="haze-form-error-toast-container"
           className="fixed top-5 right-5 z-[999999] flex flex-col gap-2.5 max-w-sm sm:max-w-md w-[calc(100vw-2.5rem)] pointer-events-none"
           aria-live="assertive"
         >
-          {errors.map((err) => (
-            <div
-              key={err.id}
-              id={`error-toast-${err.id}`}
-              className="haze-form-error-toast pointer-events-auto rounded-2xl shadow-xl border border-[#fecdd3] p-4 flex items-start gap-3 backdrop-blur-md transition-all select-none"
-              style={{
-                backgroundColor: "rgba(255, 226, 229, 0.95)", // Pastel error-crimson container
-                color: "#7f1d1d", // Deep crimson text for high contrast
-                boxShadow: "0 12px 28px -6px rgba(185, 28, 28, 0.22), 0 4px 10px rgba(0, 0, 0, 0.04)",
-              }}
-            >
-              <div className="shrink-0 w-8 h-8 rounded-xl bg-[#fee2e2] border border-[#fca5a5] flex items-center justify-center text-[#b91c1c]">
-                <AlertCircle className="w-5 h-5" />
-              </div>
+          {errors.map((err) => {
+            const titleLower = (err.title || "").toLocaleLowerCase("tr-TR");
+            const isSuccess =
+              titleLower.includes("başarılı") ||
+              titleLower.includes("tamamlandı") ||
+              titleLower.includes("onaylandı");
 
-              <div className="flex-1 min-w-0 pr-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-[#991b1b]">
-                    {err.title || "Form Doğrulama Hatası"}
-                  </h4>
-                  {err.fieldName && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#fecdd3] text-[#881337]">
-                      {err.fieldName}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs mt-1 text-[#7f1d1d] font-semibold leading-relaxed break-words">
-                  {err.message}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => removeError(err.id)}
-                className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-[#991b1b] hover:text-[#7f1d1d] hover:bg-[#b91c1c]/10 transition-colors cursor-pointer"
-                title="Bildirimi Kapat"
+            return (
+              <div
+                key={err.id}
+                id={`error-toast-${err.id}`}
+                className={`haze-form-error-toast pointer-events-auto rounded-2xl shadow-xl border p-4 flex items-start gap-3 backdrop-blur-md transition-all select-none ${
+                  isSuccess ? "border-emerald-300" : "border-[#fecdd3]"
+                }`}
+                style={
+                  isSuccess
+                    ? {
+                        backgroundColor: "rgba(236, 253, 245, 0.96)",
+                        color: "#064e3b",
+                        boxShadow: "0 12px 28px -6px rgba(16, 185, 129, 0.22), 0 4px 10px rgba(0, 0, 0, 0.04)",
+                      }
+                    : {
+                        backgroundColor: "rgba(255, 226, 229, 0.95)",
+                        color: "#7f1d1d",
+                        boxShadow: "0 12px 28px -6px rgba(185, 28, 28, 0.22), 0 4px 10px rgba(0, 0, 0, 0.04)",
+                      }
+                }
               >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+                <div
+                  className={`shrink-0 w-8 h-8 rounded-xl border flex items-center justify-center ${
+                    isSuccess
+                      ? "bg-emerald-100 border-emerald-300 text-emerald-700"
+                      : "bg-[#fee2e2] border-[#fca5a5] text-[#b91c1c]"
+                  }`}
+                >
+                  {isSuccess ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                </div>
+
+                <div className="flex-1 min-w-0 pr-1">
+                  <div className="flex items-center gap-2">
+                    <h4
+                      className={`text-xs font-black uppercase tracking-wider ${
+                        isSuccess ? "text-emerald-900" : "text-[#991b1b]"
+                      }`}
+                    >
+                      {err.title || "Form Doğrulama Hatası"}
+                    </h4>
+                    {err.fieldName && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          isSuccess ? "bg-emerald-200 text-emerald-900" : "bg-[#fecdd3] text-[#881337]"
+                        }`}
+                      >
+                        {err.fieldName}
+                      </span>
+                    )}
+                  </div>
+                  <p
+                    className={`text-xs mt-1 font-semibold leading-relaxed break-words ${
+                      isSuccess ? "text-emerald-800" : "text-[#7f1d1d]"
+                    }`}
+                  >
+                    {err.message}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => removeError(err.id)}
+                  className={`shrink-0 w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                    isSuccess
+                      ? "text-emerald-800 hover:text-emerald-950 hover:bg-emerald-600/10"
+                      : "text-[#991b1b] hover:text-[#7f1d1d] hover:bg-[#b91c1c]/10"
+                  }`}
+                  title="Bildirimi Kapat"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </FormErrorContext.Provider>
