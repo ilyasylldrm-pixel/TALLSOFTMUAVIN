@@ -2064,12 +2064,7 @@ export class MysoftEdocumentClient {
     }
 
     // 3. Known Taxpayers fixture or Mock Mode
-    const known = knownTaxpayers[clean];
     if (this.config.mockMode || known) {
-      const defaultFullAddr = known
-        ? `${known.neighborhood} ${known.street} ${known.buildingNo} ${known.doorNo}, ${known.district} / ${known.city} (PK: ${known.postalCode})`
-        : `${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor}, ${defaultDist} / ${defaultCity} (PK: ${defaultPc})`;
-
       return {
         vknTckn: clean,
         isEFaturaUser: known ? known.isEFatura : isCorporate,
@@ -2097,7 +2092,6 @@ export class MysoftEdocumentClient {
     }
 
     // 4. Deterministic VKN vs TCKN rule
-    const defaultFullAddr = `${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor}, ${defaultDist} / ${defaultCity} (PK: ${defaultPc})`;
     return {
       vknTckn: clean,
       isEFaturaUser: isCorporate,
