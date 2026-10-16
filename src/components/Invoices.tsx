@@ -398,6 +398,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       normalizeMysoftTenantIdentifier(companySettings.mysoftCredentials?.tenantIdentifierNumber)
     );
   });
+  const selectedTenantVkn = mysoftTenantVkn;
   const [isFetchingNextDocNo, setIsFetchingNextDocNo] = useState<boolean>(false);
   const [mysoftNumberInfo, setMysoftNumberInfo] = useState<MysoftNextInvoiceNumberResult | null>(null);
   const [recipientStatus, setRecipientStatus] = useState<RecipientTaxpayerStatus | null>(null);
@@ -658,7 +659,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, fetchAndApplyNextInvoiceNumber]);
+  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, mysoftTenantVkn, fetchAndApplyNextInvoiceNumber]);
 
   const handleQuickLookupVkn = async (overrideVkn?: string) => {
     const rawVal = overrideVkn !== undefined ? overrideVkn : newContactTaxNo;
