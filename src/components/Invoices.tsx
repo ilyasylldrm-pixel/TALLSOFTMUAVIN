@@ -375,6 +375,74 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [manualEmail, setManualEmail] = useState<string>("");
   const [saveManualAsContact, setSaveManualAsContact] = useState<boolean>(false);
   const manualAddressInputRef = React.useRef<HTMLInputElement | null>(null);
+  const lastQueriedManualVknRef = React.useRef<string>("");
+
+  const applyQueriedTaxpayerToManualForm = useCallback(
+    (status: RecipientTaxpayerStatus, queriedTaxNo?: string) => {
+      const normalizeTr = (val?: string) =>
+        String(val || "")
+          .trim()
+          .toLocaleLowerCase("tr-TR");
+
+      let resolvedCity = String(status.city || "").trim();
+      let resolvedDistrict = String(status.district || "").trim();
+
+      if (resolvedCity) {
+        const matchedProv = TURKEY_PROVINCES_DATA.find(
+          (p) => normalizeTr(p.name) === normalizeTr(resolvedCity)
+        );
+        if (matchedProv) {
+          resolvedCity = matchedProv.name;
+          if (resolvedDistrict) {
+            const matchedDist = matchedProv.districts?.find(
+              (d) => normalizeTr(d.name) === normalizeTr(resolvedDistrict)
+            );
+            if (matchedDist) {
+              resolvedDistrict = matchedDist.name;
+            }
+          }
+        }
+      }
+
+      if (queriedTaxNo) {
+        setManualTaxNumber(queriedTaxNo);
+      }
+      if (status.companyTitle || status.title || status.name) {
+        setManualCustomerName(status.companyTitle || status.title || status.name || "");
+      }
+      if (status.taxOffice) {
+        setManualTaxOffice(status.taxOffice);
+      }
+      if (resolvedCity) {
+        setManualCity(resolvedCity);
+      }
+      if (resolvedDistrict) {
+        setManualDistrict(resolvedDistrict);
+      }
+      if (status.phone) {
+        setManualPhone((prev) => prev.trim() || status.phone || "");
+      }
+      if (status.email) {
+        setManualEmail((prev) => prev.trim() || status.email || "");
+      }
+
+      const rawOpenAddress =
+        status.address ||
+        [status.neighborhood, status.street, status.buildingNo, status.doorNo]
+          .filter(Boolean)
+          .join(" ");
+
+      const formattedAddress = appendCityDistrictToAddress(
+        rawOpenAddress,
+        resolvedCity || manualCity,
+        resolvedDistrict || manualDistrict
+      );
+      if (formattedAddress) {
+        setManualAddress(formattedAddress);
+      }
+    },
+    [manualCity, manualDistrict]
+  );
 
   const handleManualCitySelect = (newCity: string) => {
     const prevCity = manualCity;
@@ -408,142 +476,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const clampManualAddressCaret = () => {
     const input = manualAddressInputRef.current;
     if (!input) return;
-    const locSuffix = [manualDistrict.trim(), manualCity.trim()].filter(Boolean).join(" / ");
-    if (!locSuffix) return;
+    const locPrefix = [manualCity.trim(), manualDistrict.trim()].filter(Boolean).join(" / ");
+    if (!locPrefix) return;
     const currentVal = input.value;
-    if (currentVal === locSuffix) {
-      if (input.selectionStart === input.selectionEnd) {
-        input.setSelectionRange(0, 0);
-      }
-      return;
-    }
-    const suffixWithComma = `, ${locSuffix}`;
-    if (currentVal.endsWith(suffixWithComma)) {
-      const maxStreetPos = currentVal.length - suffixWithComma.length;
-      if (
-        input.selectionStart !== null &&
-        input.selectionStart === input.selectionEnd &&
-        input.selectionStart > maxStreetPos
-      ) {
-        input.setSelectionRange(maxStreetPos, maxStreetPos);
-      }
+    if (currentVal === locPrefix) {
+      const nextWithComma = `${locPrefix}, `;
+      setManualAddress(nextWithComma);
+      requestAnimationFrame(() => {
+        input.setSelectionRange(nextWithComma.length, nextWithComma.length);
+      });
     }
   };
 
   const handleManualAddressInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawVal = e.target.value;
-    const locSuffix = [manualDistrict.trim(), manualCity.trim()].filter(Boolean).join(" / ");
-    if (!locSuffix) {
-      setManualAddress(rawVal);
-      return;
-    }
-
-    const prevVal = manualAddress;
-    if (!rawVal) {
-      setManualAddress(locSuffix);
-      requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
-      return;
-    }
-
-    if (!prevVal || prevVal === locSuffix) {
-      if (rawVal.length <= locSuffix.length && prevVal === locSuffix) {
-        setManualAddress(locSuffix);
-        requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
-        return;
-      }
-      let streetPart = rawVal;
-      if (prevVal === locSuffix) {
-        let p = 0;
-        while (p < locSuffix.length && p < rawVal.length && rawVal[p] === locSuffix[p]) p++;
-        let s = 0;
-        while (
-          s < locSuffix.length - p &&
-          s < rawVal.length - p &&
-          rawVal[rawVal.length - 1 - s] === locSuffix[locSuffix.length - 1 - s]
-        ) {
-          s++;
-        }
-        streetPart =
-          p + s === locSuffix.length
-            ? rawVal.slice(p, rawVal.length - s)
-            : appendCityDistrictToAddress(rawVal, "", "", manualCity, manualDistrict);
-      } else {
-        streetPart = appendCityDistrictToAddress(rawVal, "", "", manualCity, manualDistrict);
-      }
-
-      if (!streetPart) {
-        setManualAddress(locSuffix);
-        requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
-        return;
-      }
-
-      const nextVal = `${streetPart}, ${locSuffix}`;
-      const caretPos = streetPart.length;
-      setManualAddress(nextVal);
-      requestAnimationFrame(() =>
-        manualAddressInputRef.current?.setSelectionRange(caretPos, caretPos)
-      );
-      return;
-    }
-
-    const suffixWithComma = `, ${locSuffix}`;
-    if (rawVal.endsWith(suffixWithComma)) {
-      const streetPart = rawVal.slice(0, rawVal.length - suffixWithComma.length);
-      if (!streetPart) {
-        setManualAddress(locSuffix);
-        requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
-        return;
-      }
-      const caretPos = Math.min(e.target.selectionStart ?? streetPart.length, streetPart.length);
-      setManualAddress(rawVal);
-      requestAnimationFrame(() =>
-        manualAddressInputRef.current?.setSelectionRange(caretPos, caretPos)
-      );
-      return;
-    }
-
-    const prevStreet = prevVal.endsWith(suffixWithComma)
-      ? prevVal.slice(0, prevVal.length - suffixWithComma.length)
-      : appendCityDistrictToAddress(prevVal, "", "", manualCity, manualDistrict);
-
-    if (rawVal.length < prevVal.length) {
-      const nextStreet = prevStreet.slice(0, -1);
-      if (!nextStreet) {
-        setManualAddress(locSuffix);
-        requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
-      } else {
-        setManualAddress(`${nextStreet}, ${locSuffix}`);
-        requestAnimationFrame(() =>
-          manualAddressInputRef.current?.setSelectionRange(nextStreet.length, nextStreet.length)
-        );
-      }
-      return;
-    }
-
-    let p = 0;
-    while (p < prevVal.length && p < rawVal.length && rawVal[p] === prevVal[p]) p++;
-    let s = 0;
-    while (
-      s < prevVal.length - p &&
-      s < rawVal.length - p &&
-      rawVal[rawVal.length - 1 - s] === prevVal[prevVal.length - 1 - s]
-    ) {
-      s++;
-    }
-    const inserted = p + s === prevVal.length ? rawVal.slice(p, rawVal.length - s) : "";
-    const nextStreet = inserted
-      ? `${prevStreet}${inserted}`
-      : appendCityDistrictToAddress(rawVal, "", "", manualCity, manualDistrict);
-
-    if (!nextStreet) {
-      setManualAddress(locSuffix);
-      requestAnimationFrame(() => manualAddressInputRef.current?.setSelectionRange(0, 0));
-    } else {
-      setManualAddress(`${nextStreet}, ${locSuffix}`);
-      requestAnimationFrame(() =>
-        manualAddressInputRef.current?.setSelectionRange(nextStreet.length, nextStreet.length)
-      );
-    }
+    setManualAddress(e.target.value);
   };
 
   const [contactId, setContactId] = useState<string>(
@@ -877,29 +823,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
           } else {
             setInvoiceScenario("EARSIVFATURA");
           }
-          if (customerMode === "manual") {
-            if (!manualCustomerName.trim() && (status.companyTitle || status.title || status.name)) {
-              setManualCustomerName(status.companyTitle || status.title || status.name || "");
-            }
-            if (!manualTaxOffice.trim() && status.taxOffice) {
-              setManualTaxOffice(status.taxOffice);
-            }
-            const nextCity = !manualCity.trim() && status.city ? status.city : manualCity;
-            const nextDistrict = !manualDistrict.trim() && status.district ? status.district : manualDistrict;
-            if (!manualCity.trim() && status.city) {
-              setManualCity(status.city);
-            }
-            if (!manualDistrict.trim() && status.district) {
-              setManualDistrict(status.district);
-            }
-            if ((!manualAddress.trim() && status.address) || nextCity || nextDistrict) {
-              setManualAddress((prevAddr) =>
-                appendCityDistrictToAddress(
-                  prevAddr.trim() ? prevAddr : (status.address || ""),
-                  nextCity,
-                  nextDistrict
-                )
-              );
+          if (customerMode === "manual" && taxNum !== "11111111111") {
+            if (lastQueriedManualVknRef.current !== taxNum) {
+              lastQueriedManualVknRef.current = taxNum;
+              applyQueriedTaxpayerToManualForm(status, taxNum);
             }
           }
           void fetchAndApplyNextInvoiceNumber(undefined, nextType);
@@ -912,7 +839,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, mysoftTenantVkn, fetchAndApplyNextInvoiceNumber]);
+  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, mysoftTenantVkn, fetchAndApplyNextInvoiceNumber, applyQueriedTaxpayerToManualForm]);
 
   const handleQuickLookupVkn = async (overrideVkn?: string) => {
     const rawVal = overrideVkn !== undefined ? overrideVkn : newContactTaxNo;
@@ -953,8 +880,18 @@ export const Invoices: React.FC<InvoicesProps> = ({
       buildingNo: quickContactStatus?.buildingNo || undefined,
       doorNo: quickContactStatus?.doorNo || undefined,
       postalCode: quickContactStatus?.postalCode || undefined,
-      address: quickContactStatus?.address || undefined,
-      shippingAddress: quickContactStatus?.shippingAddress || quickContactStatus?.address || undefined,
+      address:
+        appendCityDistrictToAddress(
+          quickContactStatus?.address,
+          quickContactStatus?.city,
+          quickContactStatus?.district
+        ) || undefined,
+      shippingAddress:
+        appendCityDistrictToAddress(
+          quickContactStatus?.shippingAddress || quickContactStatus?.address,
+          quickContactStatus?.city,
+          quickContactStatus?.district
+        ) || undefined,
       phone: newContactPhone.trim() || quickContactStatus?.phone || undefined,
       email: quickContactStatus?.email || undefined,
       contactPerson: quickContactStatus?.contactPerson || undefined,
@@ -1232,6 +1169,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     }
 
     // Reset manual customer fields
+    lastQueriedManualVknRef.current = "";
     setCustomerMode(initialContactIdForNewInvoice ? "registered" : (contacts.length === 0 ? "manual" : "registered"));
     setManualCustomerName("");
     setManualTaxNumber("");
@@ -3456,70 +3394,72 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               )}
 
-              {/* Fatura & Firma Logosu (Bilgisayardan Yükleme / Önizleme) */}
-              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 flex items-center justify-center shrink-0">
-                    <Logo size="sm" src={companySettings?.logoUrl || "/logo.svg"} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-extrabold text-slate-900 truncate">
-                        {companySettings?.companyName || "Firma Logosu & Başlığı"}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
-                        Fatura Logosu
-                      </span>
+              {/* Fatura & Firma Logosu (Sadece Gider Faturası Ekleme Bölümünde Gösterilir) */}
+              {forcedType !== "sales" && invType !== "sales" && (
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 flex items-center justify-center shrink-0">
+                      <Logo size="sm" src={companySettings?.logoUrl || "/logo.svg"} />
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Bilgisayarınızdan yüklediğiniz logo fatura şablonunda, PDF çıktısında ve sistem genelinde kullanılır.
-                    </p>
-                    {logoUploadNotice && (
-                      <p className="text-[11px] font-bold text-emerald-700 mt-1 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                        <span>{logoUploadNotice}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-extrabold text-slate-900 truncate">
+                          {companySettings?.companyName || "Firma Logosu & Başlığı"}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                          Fatura Logosu
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Bilgisayarınızdan yüklediğiniz logo fatura şablonunda, PDF çıktısında ve sistem genelinde kullanılır.
                       </p>
+                      {logoUploadNotice && (
+                        <p className="text-[11px] font-bold text-emerald-700 mt-1 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          <span>{logoUploadNotice}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <input
+                      ref={invoiceLogoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
+                      onChange={handleInvoiceLogoUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => invoiceLogoInputRef.current?.click()}
+                      className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Bilgisayardan Logo Yükle</span>
+                    </button>
+                    {companySettings?.logoUrl && companySettings.logoUrl !== "/logo.svg" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onSaveCompanySettings) {
+                            onSaveCompanySettings({ ...companySettings, logoUrl: "/logo.svg" });
+                          }
+                          void saveCloudLogo("/logo.svg", {
+                            brandName: companySettings.companyName || "E-MUAVİN",
+                            description: "Varsayılan kurumsal logo",
+                          });
+                          setLogoUploadNotice("Varsayılan kurumsal logoya dönüldü.");
+                          setTimeout(() => setLogoUploadNotice(null), 3000);
+                        }}
+                        className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold border border-slate-200 transition-all cursor-pointer"
+                        title="Varsayılan logoya dön"
+                      >
+                        Varsayılan
+                      </button>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <input
-                    ref={invoiceLogoInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
-                    onChange={handleInvoiceLogoUpload}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => invoiceLogoInputRef.current?.click()}
-                    className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Bilgisayardan Logo Yükle</span>
-                  </button>
-                  {companySettings?.logoUrl && companySettings.logoUrl !== "/logo.svg" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onSaveCompanySettings) {
-                          onSaveCompanySettings({ ...companySettings, logoUrl: "/logo.svg" });
-                        }
-                        void saveCloudLogo("/logo.svg", {
-                          brandName: companySettings.companyName || "E-MUAVİN",
-                          description: "Varsayılan kurumsal logo",
-                        });
-                        setLogoUploadNotice("Varsayılan kurumsal logoya dönüldü.");
-                        setTimeout(() => setLogoUploadNotice(null), 3000);
-                      }}
-                      className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold border border-slate-200 transition-all cursor-pointer"
-                      title="Varsayılan logoya dön"
-                    >
-                      Varsayılan
-                    </button>
-                  )}
-                </div>
-              </div>
+              )}
 
               {/* Top Controls & Selected Cari / Müşteri Information */}
               <div className="space-y-3.5 bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -3545,8 +3485,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       type="button"
                       onClick={() => {
                         setCustomerMode("manual");
-                        if (!manualTaxNumber && vknSearchInput) {
-                          setManualTaxNumber(vknSearchInput);
+                        const cleanVkn = vknSearchInput.replace(/\D/g, "").trim();
+                        if (cleanVkn) {
+                          setManualTaxNumber(cleanVkn);
+                          if (recipientStatus && recipientStatus.vknTckn === cleanVkn) {
+                            lastQueriedManualVknRef.current = cleanVkn;
+                            applyQueriedTaxpayerToManualForm(recipientStatus, cleanVkn);
+                          }
                         }
                       }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -3607,7 +3552,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="relative">
+                        <div className="flex items-center gap-1.5">
                           <input
                             type="text"
                             maxLength={11}
@@ -3616,6 +3561,42 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             onChange={(e) => handleVknInputChange(e.target.value)}
                             className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                           />
+                          {(vknSearchInput.length === 10 || vknSearchInput.length === 11) &&
+                            !contacts.some(
+                              (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
+                            ) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const clean = vknSearchInput.replace(/\D/g, "").trim();
+                                  setCustomerMode("manual");
+                                  setManualTaxNumber(clean);
+                                  setIsCheckingRecipient(true);
+                                  checkRecipientTaxpayerStatus(clean, undefined, mysoftTenantVkn)
+                                    .then((status) => {
+                                      setRecipientStatus(status);
+                                      lastQueriedManualVknRef.current = clean;
+                                      applyQueriedTaxpayerToManualForm(status, clean);
+                                      const nextType = status.isEFaturaUser ? "e_fatura" : "e_arsiv";
+                                      setMysoftEDocType(nextType);
+                                      setInvoiceScenario(
+                                        status.isEFaturaUser
+                                          ? status.suggestedProfile === "TEMELFATURA"
+                                            ? "TEMELFATURA"
+                                            : "TICARIFATURA"
+                                          : "EARSIVFATURA"
+                                      );
+                                      void fetchAndApplyNextInvoiceNumber(undefined, nextType);
+                                    })
+                                    .finally(() => setIsCheckingRecipient(false));
+                                }}
+                                className="px-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer shrink-0"
+                                title="Sorgula ve müşteri bilgilerini doldur"
+                              >
+                                <Sparkles className="w-3 h-3 text-purple-200" />
+                                <span>Sorgula</span>
+                              </button>
+                            )}
                         </div>
                       </div>
 
@@ -3628,7 +3609,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setCustomerMode("manual")}
+                              onClick={() => {
+                                setCustomerMode("manual");
+                                const cleanVkn = vknSearchInput.replace(/\D/g, "").trim();
+                                if (cleanVkn) {
+                                  setManualTaxNumber(cleanVkn);
+                                  if (recipientStatus && recipientStatus.vknTckn === cleanVkn) {
+                                    lastQueriedManualVknRef.current = cleanVkn;
+                                    applyQueriedTaxpayerToManualForm(recipientStatus, cleanVkn);
+                                  }
+                                }
+                              }}
                               className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer flex items-center gap-0.5"
                             >
                               <UserPlus className="w-3 h-3" />
@@ -3885,13 +3876,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 checkRecipientTaxpayerStatus(clean, undefined, mysoftTenantVkn)
                                   .then((status) => {
                                     setRecipientStatus(status);
-                                    if (status.companyTitle || status.title || status.name) {
-                                      setManualCustomerName(status.companyTitle || status.title || status.name || "");
-                                    }
-                                    if (status.taxOffice) setManualTaxOffice(status.taxOffice);
-                                    if (status.city) setManualCity(status.city);
-                                    if (status.district) setManualDistrict(status.district);
-                                    if (status.address) setManualAddress(status.address);
+                                    lastQueriedManualVknRef.current = clean;
+                                    applyQueriedTaxpayerToManualForm(status, clean);
                                     const nextType = status.isEFaturaUser ? "e_fatura" : "e_arsiv";
                                     setMysoftEDocType(nextType);
                                     setInvoiceScenario(status.isEFaturaUser ? (status.suggestedProfile === "TEMELFATURA" ? "TEMELFATURA" : "TICARIFATURA") : "EARSIVFATURA");
@@ -4112,7 +4098,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         </label>
                         {(manualCity || manualDistrict) && (
                           <span className="text-[10px] font-semibold text-purple-700">
-                            Seçilen İl/İlçe: {[manualDistrict, manualCity].filter(Boolean).join(" / ")}
+                            Seçilen İl/İlçe: {[manualCity, manualDistrict].filter(Boolean).join(" / ")}
                           </span>
                         )}
                       </div>

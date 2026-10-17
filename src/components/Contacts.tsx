@@ -695,14 +695,14 @@ export const Contacts: React.FC<ContactsProps> = ({
     pc?: string
   ) => {
     const parts = [];
+    if (nh && nh !== "Diğer") parts.push(nh.endsWith("Mah.") || nh.endsWith("Mahallesi") ? nh : `${nh} Mah.`);
     if (st && st !== "Diğer") parts.push(st);
     if (bld) parts.push(bld.startsWith("No:") || bld.startsWith("No ") ? bld : `No: ${bld}`);
     if (door) parts.push(door.startsWith("D:") || door.startsWith("Daire:") ? door : `D: ${door}`);
-    if (nh && nh !== "Diğer") parts.push(nh.endsWith("Mah.") || nh.endsWith("Mahallesi") ? nh : `${nh} Mah.`);
     let full = parts.join(" ");
-    const loc = [dist !== "Diğer" ? dist : "", ct].filter(Boolean).join(" / ");
+    const loc = [ct, dist !== "Diğer" ? dist : ""].filter(Boolean).join(" / ");
     if (loc) {
-      full = full ? `${full}, ${loc}` : loc;
+      full = full ? `${loc}, ${full}` : loc;
     }
     if (pc) {
       full = `${full} (PK: ${pc})`;

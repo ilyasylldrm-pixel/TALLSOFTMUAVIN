@@ -1820,8 +1820,8 @@ export class MysoftEdocumentClient {
     const defaultDoor = known?.doorNo || "D: 4";
     const defaultPc = known?.postalCode || "34710";
     const defaultFullAddr = known
-      ? `${known.neighborhood} ${known.street} ${known.buildingNo} ${known.doorNo}, ${known.district} / ${known.city} (PK: ${known.postalCode})`
-      : `${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor}, ${defaultDist} / ${defaultCity} (PK: ${defaultPc})`;
+      ? `${known.city} / ${known.district}, ${known.neighborhood} ${known.street} ${known.buildingNo} ${known.doorNo} (PK: ${known.postalCode})`
+      : `${defaultCity} / ${defaultDist}, ${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor} (PK: ${defaultPc})`;
 
     // 1. Live Mysoft API Lookup (Taxpayer detail + GİB Account model)
     if (!this.config.mockMode) {
@@ -1874,24 +1874,77 @@ export class MysoftEdocumentClient {
             addressList[0] ||
             {};
 
-          const liveCity = String(primaryAddr?.cityName || "").trim() || defaultCity;
-          const liveDistrict = String(primaryAddr?.townName || primaryAddr?.district || "").trim() || defaultDist;
-          const liveNeighborhood = String(primaryAddr?.township || "").trim() || defaultNh;
-          const liveStreet = String(primaryAddr?.streetName || "").trim() || defaultSt;
-          const bldRaw = String(primaryAddr?.buildingNumber || "").trim();
-          const liveBuildingNo = bldRaw ? (bldRaw.toLowerCase().startsWith("no") ? bldRaw : `No: ${bldRaw}`) : defaultBld;
-          const roomRaw = String(primaryAddr?.room || "").trim();
-          const liveDoorNo = roomRaw ? (roomRaw.toLowerCase().startsWith("d") || roomRaw.toLowerCase().startsWith("kat") ? roomRaw : `D: ${roomRaw}`) : defaultDoor;
+          const hasLiveAddress = Boolean(
+            primaryAddr?.cityName ||
+              primaryAddr?.townName ||
+              primaryAddr?.district ||
+              primaryAddr?.streetName ||
+              primaryAddr?.township ||
+              primaryAddr?.region ||
+              (primaryAddr as any)?.fullAddress ||
+              (primaryAddr as any)?.address
+          );
 
-          const addrParts = [
+          const liveCity = String(primaryAddr?.cityName || (taxpayerRaw as any)?.cityName || "").trim() || defaultCity;
+          const liveDistrict = String(primaryAddr?.townName || (taxpayerRaw as any)?.townName || primaryAddr?.district || "").trim() || defaultDist;
+
+          const rawMahalle = String(
+            (primaryAddr?.district && primaryAddr.district !== liveDistrict ? primaryAddr.district : "") ||
+              primaryAddr?.region ||
+              primaryAddr?.township ||
+              ""
+          ).trim();
+          const liveNeighborhood = hasLiveAddress
+            ? rawMahalle
+              ? /mah/i.test(rawMahalle)
+                ? rawMahalle
+                : `${rawMahalle} Mah.`
+              : ""
+            : defaultNh;
+
+          const rawStreet = String(
+            primaryAddr?.streetName ||
+              (primaryAddr as any)?.boulevard ||
+              (primaryAddr as any)?.fullAddress ||
+              (primaryAddr as any)?.address ||
+              ""
+          ).trim();
+          const liveStreet = hasLiveAddress
+            ? rawStreet
+              ? /^\d+$/.test(rawStreet)
+                ? `${rawStreet}. Sokak`
+                : rawStreet
+              : ""
+            : defaultSt;
+
+          const bldRaw = String(primaryAddr?.buildingNumber || "").trim();
+          const liveBuildingNo = hasLiveAddress
+            ? bldRaw
+              ? bldRaw.toLowerCase().startsWith("no")
+                ? bldRaw
+                : `No: ${bldRaw}`
+              : ""
+            : defaultBld;
+
+          const roomRaw = String(primaryAddr?.room || "").trim();
+          const liveDoorNo = hasLiveAddress
+            ? roomRaw
+              ? roomRaw.toLowerCase().startsWith("d") || roomRaw.toLowerCase().startsWith("kat") || roomRaw.toLowerCase().startsWith("iç")
+                ? roomRaw
+                : `D: ${roomRaw}`
+              : ""
+            : defaultDoor;
+
+          const openAddrParts = [
             liveNeighborhood,
             liveStreet,
             liveBuildingNo,
             liveDoorNo,
-            primaryAddr?.district && primaryAddr.district !== liveDistrict ? primaryAddr.district : "",
-            liveDistrict && liveCity ? `${liveDistrict} / ${liveCity}` : (liveDistrict || liveCity || ""),
           ].filter(Boolean);
-          const liveFullAddress = addrParts.join(" ") || `${liveNeighborhood} ${liveStreet} ${liveBuildingNo} ${liveDoorNo}, ${liveDistrict} / ${liveCity}`;
+          const locPrefix = [liveCity, liveDistrict].filter(Boolean).join(" / ");
+          const liveFullAddress =
+            [locPrefix, openAddrParts.join(" ")].filter(Boolean).join(", ") ||
+            defaultFullAddr;
 
           // e-Fatura determination & GİB mailbox aliases
           const hasEInvoice = Boolean(gibRaw?.eInvoiceStartDate) && gibRaw?.isPassive !== true;
@@ -2040,11 +2093,15 @@ export class MysoftEdocumentClient {
             typeof data.postalCode === "string" ? data.postalCode :
             defaultPc;
 
-          const address =
-            typeof data.address === "string" ? data.address :
-            typeof data.adres === "string" ? data.adres :
-            typeof data.fullAddress === "string" ? data.fullAddress :
-            `${neighborhood} ${street} ${buildingNo} ${doorNo}, ${district} / ${city} (PK: ${postalCode})`;
+          const rawOpenAddr =
+            typeof data.address === "string" && data.address.trim() ? data.address.trim() :
+            typeof data.adres === "string" && data.adres.trim() ? data.adres.trim() :
+            typeof data.fullAddress === "string" && data.fullAddress.trim() ? data.fullAddress.trim() :
+            `${neighborhood} ${street} ${buildingNo} ${doorNo} (PK: ${postalCode})`;
+          const locPrefix = [city, district].filter(Boolean).join(" / ");
+          const address = locPrefix && !rawOpenAddr.toLocaleLowerCase("tr-TR").startsWith(locPrefix.toLocaleLowerCase("tr-TR"))
+            ? `${locPrefix}, ${rawOpenAddr}`
+            : rawOpenAddr;
 
           const isEFatura =
             data.isEFaturaUser === true ||

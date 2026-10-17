@@ -1464,9 +1464,9 @@ export function importBackupJSON(jsonString: string): boolean {
 }
 
 /**
- * Ensures that a manual or open address string includes the selected district and city
- * (e.g., "Barbaros Mah. Çiğdem Sk. No: 14, Kadıköy / İstanbul") without duplicating them,
- * and replaces any previous district/city suffix when province or district selection changes.
+ * Ensures that a manual or open address string starts with the selected city and district
+ * followed by the open address details (e.g., "İstanbul / Kadıköy, Barbaros Mah. Çiğdem Sk. No: 14")
+ * without duplicating them, and updates the city/district prefix when province or district changes.
  */
 export function appendCityDistrictToAddress(
   rawAddress?: string,
@@ -1479,18 +1479,32 @@ export function appendCityDistrictToAddress(
   const cleanDistrict = String(district || "").trim();
   const cleanPrevCity = String(prevCity || "").trim();
   const cleanPrevDistrict = String(prevDistrict || "").trim();
-  const locationSuffix = [cleanDistrict, cleanCity].filter(Boolean).join(" / ");
+  const locationPrefix = [cleanCity, cleanDistrict].filter(Boolean).join(" / ");
 
   let base = String(rawAddress || "").trim();
 
-  // Build candidate trailing suffixes to strip (from previous or current selections)
+  // Temporarily extract trailing postal code like "(PK: 34381)" so any city/district before it can be stripped cleanly
+  let pkSuffix = "";
+  const pkMatch = base.match(/\s*(\(PK:\s*[^)]+\))\s*$/i);
+  if (pkMatch) {
+    pkSuffix = pkMatch[1];
+    base = base.slice(0, base.length - pkMatch[0].length).trim();
+  }
+
+  // Build candidate prefixes/suffixes to strip (from previous or current selections, in either order)
   const candidates = Array.from(
     new Set(
       [
+        [cleanPrevCity, cleanPrevDistrict].filter(Boolean).join(" / "),
+        [cleanPrevCity, cleanPrevDistrict].filter(Boolean).join("/"),
         [cleanPrevDistrict, cleanPrevCity].filter(Boolean).join(" / "),
         [cleanPrevDistrict, cleanPrevCity].filter(Boolean).join("/"),
-        [cleanDistrict, cleanPrevCity].filter(Boolean).join(" / "),
+        [cleanCity, cleanPrevDistrict].filter(Boolean).join(" / "),
         [cleanPrevDistrict, cleanCity].filter(Boolean).join(" / "),
+        [cleanPrevCity, cleanDistrict].filter(Boolean).join(" / "),
+        [cleanDistrict, cleanPrevCity].filter(Boolean).join(" / "),
+        [cleanCity, cleanDistrict].filter(Boolean).join(" / "),
+        [cleanCity, cleanDistrict].filter(Boolean).join("/"),
         [cleanDistrict, cleanCity].filter(Boolean).join(" / "),
         [cleanDistrict, cleanCity].filter(Boolean).join("/"),
         cleanPrevCity,
@@ -1512,7 +1526,35 @@ export function appendCityDistrictToAddress(
         stripped = true;
         break;
       }
-      const sepPatterns = [`, ${lowerCand}`, ` - ${lowerCand}`, ` / ${lowerCand}`, `,${lowerCand}`];
+
+      // 1. Strip leading city/district prefix
+      const leadPatterns = [
+        `${lowerCand}, `,
+        `${lowerCand} - `,
+        `${lowerCand} / `,
+        `${lowerCand},`,
+        `${lowerCand}-`,
+        ...(lowerCand.includes("/") ? [`${lowerCand} `] : []),
+      ];
+      let matchedLead = false;
+      for (const pat of leadPatterns) {
+        if (lowerBase.startsWith(pat)) {
+          base = base.slice(pat.length).replace(/^[\s,\-/]+/, "").trim();
+          stripped = true;
+          matchedLead = true;
+          break;
+        }
+      }
+      if (matchedLead) break;
+
+      // 2. Strip trailing city/district suffix
+      const sepPatterns = [
+        `, ${lowerCand}`,
+        ` - ${lowerCand}`,
+        ` / ${lowerCand}`,
+        `,${lowerCand}`,
+        ...(lowerCand.includes("/") ? [` ${lowerCand}`] : []),
+      ];
       let matchedSep = false;
       for (const pat of sepPatterns) {
         if (lowerBase.endsWith(pat)) {
@@ -1526,22 +1568,19 @@ export function appendCityDistrictToAddress(
     }
   }
 
-  if (!locationSuffix) {
+  if (pkSuffix && base && !base.includes(pkSuffix)) {
+    base = `${base} ${pkSuffix}`.trim();
+  }
+
+  if (!locationPrefix) {
     return base;
   }
 
   if (!base) {
-    return locationSuffix;
+    return locationPrefix;
   }
 
-  const lowerBase = base.toLocaleLowerCase("tr-TR");
-  const hasCity = !cleanCity || lowerBase.includes(cleanCity.toLocaleLowerCase("tr-TR"));
-  const hasDistrict = !cleanDistrict || lowerBase.includes(cleanDistrict.toLocaleLowerCase("tr-TR"));
-  if (hasCity && hasDistrict) {
-    return base;
-  }
-
-  return `${base}, ${locationSuffix}`;
+  return `${locationPrefix}, ${base}`;
 }
 
 /**

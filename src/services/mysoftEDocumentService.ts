@@ -2985,8 +2985,8 @@ export async function checkRecipientTaxpayerStatus(
   const defaultDoor = known?.doorNo || "D: 4";
   const defaultPc = known?.postalCode || "34710";
   const defaultFullAddr = known
-    ? `${known.neighborhood} ${known.street} ${known.buildingNo} ${known.doorNo}, ${known.district} / ${known.city} (PK: ${known.postalCode})`
-    : `${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor}, ${defaultDist} / ${defaultCity} (PK: ${defaultPc})`;
+    ? `${known.city} / ${known.district}, ${known.neighborhood} ${known.street} ${known.buildingNo} ${known.doorNo} (PK: ${known.postalCode})`
+    : `${defaultCity} / ${defaultDist}, ${defaultNh} ${defaultSt} ${defaultBld} ${defaultDoor} (PK: ${defaultPc})`;
 
   const fallback: RecipientTaxpayerStatus = {
     vknTckn: clean,
