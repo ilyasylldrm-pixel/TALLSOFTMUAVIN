@@ -1535,66 +1535,66 @@ var MysoftEdocumentClient = class {
         email: "muhasebe@semihyapi.com.tr",
         contactPerson: "Semih Bey (\u015Eirket M\xFCd\xFCr\xFC)",
         isEFatura: true,
-        pkAlias: "urn:mail:defaultpk@7600924362.com.tr"
+        pkAlias: "urn:mail:smhpk@semihaplhan.com"
       },
       "37756832708": {
-        title: "ABDURRAHMAN KAYA",
-        companyTitle: "ABDURRAHMAN KAYA",
-        name: "Abdurrahman Kaya",
-        taxOffice: "Kad\u0131k\xF6y V.D.",
-        city: "\u0130stanbul",
-        district: "Kad\u0131k\xF6y",
-        neighborhood: "Cafera\u011Fa Mahallesi",
-        street: "Moda Caddesi",
-        buildingNo: "No: 18",
-        doorNo: "D: 2",
-        postalCode: "34710",
+        title: "ABDURRAHMAN \u015E\u0130M\u015EEK",
+        companyTitle: "ABDURRAHMAN \u015E\u0130M\u015EEK",
+        name: "Abdurrahman \u015Eim\u015Fek",
+        taxOffice: "Sel\xE7uk V.D.",
+        city: "Konya",
+        district: "Sel\xE7uklu",
+        neighborhood: "Ni\u015Fanta\u015F Mahallesi",
+        street: "Dr. M. Hulusi Baybal Caddesi",
+        buildingNo: "No: 3E",
+        doorNo: "D: E",
+        postalCode: "42060",
         phone: "0532 444 11 22",
-        email: "iletisim@abdurrahmankaya.com",
-        contactPerson: "Abdurrahman Kaya",
+        email: "iletisim@ababdurrahmansimsek.com",
+        contactPerson: "Abdurrahman \u015Eim\u015Fek",
         isEFatura: true,
-        pkAlias: "urn:mail:defaultpk@37756832708.com.tr"
+        pkAlias: "urn:mail:faturapk@ababdurrahmansimsek.com"
       },
       "13819008730": {
-        title: "KUTLU \u0130LET\u0130\u015E\u0130M VE B\u0130L\u0130\u015E\u0130M H\u0130ZMETLER\u0130",
-        companyTitle: "KUTLU \u0130LET\u0130\u015E\u0130M VE B\u0130L\u0130\u015E\u0130M H\u0130ZMETLER\u0130 SAN. T\u0130C. LTD. \u015ET\u0130.",
-        name: "Kutlu \u0130leti\u015Fim",
-        taxOffice: "\xDCsk\xFCdar V.D.",
-        city: "\u0130stanbul",
-        district: "\xDCsk\xFCdar",
-        neighborhood: "Mimar Sinan Mahallesi",
-        street: "H\xE2kimiyeti Milliye Caddesi",
-        buildingNo: "No: 35",
-        doorNo: "D: 6",
-        postalCode: "34672",
-        phone: "0216 333 44 55",
-        email: "muhasebe@kutluiletisim.com.tr",
-        contactPerson: "Kutlu Yetkilisi",
+        title: "KUTTUS\u0130 DEM\u0130R",
+        companyTitle: "KUTTUS\u0130 DEM\u0130R",
+        name: "Kuttusi Demir",
+        taxOffice: "Meram V.D.",
+        city: "Konya",
+        district: "Sel\xE7uklu",
+        neighborhood: "Yaz\u0131r Mahallesi",
+        street: "Fahr\xFCddin Razi Caddesi",
+        buildingNo: "No: 14",
+        doorNo: "D: 25",
+        postalCode: "42075",
+        phone: "0544 487 57 16",
+        email: "kuddusi_demir_06@hotmail.com",
+        contactPerson: "Kuttusi Demir",
         isEFatura: true,
-        pkAlias: "urn:mail:defaultpk@13819008730.com.tr"
+        pkAlias: "urn:mail:faturapk@kuttusidemir.com"
       },
       "36895866360": {
-        title: "ADEM \xC7EL\u0130K DI\u015E T\u0130CARET",
-        companyTitle: "ADEM \xC7EL\u0130K DI\u015E T\u0130CARET VE SANAY\u0130 A.\u015E.",
-        name: "Adem \xC7elik D\u0131\u015F Ticaret",
-        taxOffice: "Bak\u0131rk\xF6y V.D.",
-        city: "\u0130stanbul",
-        district: "Bak\u0131rk\xF6y",
-        neighborhood: "Zuhuratbaba Mahallesi",
-        street: "\u0130ncirli Caddesi",
-        buildingNo: "No: 74",
-        doorNo: "D: 8",
-        postalCode: "34147",
-        phone: "0212 570 80 90",
-        email: "muhasebe@ademcelik.com.tr",
-        contactPerson: "Adem Bey",
+        title: "ADEM \xC7EL\u0130KEL",
+        companyTitle: "ADEM \xC7EL\u0130KEL",
+        name: "Adem \xC7elikel",
+        taxOffice: "Yunak Malm\xFCd\xFCrl\xFC\u011F\xFC",
+        city: "Konya",
+        district: "Yunak",
+        neighborhood: "Saray Mahallesi",
+        street: "171423 Sokak",
+        buildingNo: "No: 13",
+        doorNo: "D: 1",
+        postalCode: "42530",
+        phone: "0507 411 71 71",
+        email: "celikeladem@outlook.com.tr",
+        contactPerson: "Adem \xC7elikel",
         isEFatura: true,
-        pkAlias: "urn:mail:defaultpk@36895866360.com.tr"
+        pkAlias: "urn:mail:admpk@www.adem.com"
       },
       "4840847211": {
-        title: "MYSOFT D\u0130J\u0130TAL D\xD6N\xDC\u015E\xDCM A.\u015E.",
-        companyTitle: "MYSOFT D\u0130J\u0130TAL D\xD6N\xDC\u015E\xDCM ANON\u0130M \u015E\u0130RKET\u0130",
-        name: "Mysoft Dijital D\xF6n\xFC\u015F\xFCm",
+        title: "\u0130Z\u0130B\u0130Z B\u0130L\u0130\u015E\u0130M TEKNOLOJ\u0130LER\u0130 A.\u015E.",
+        companyTitle: "\u0130Z\u0130B\u0130Z B\u0130L\u0130\u015E\u0130M TEKNOLOJ\u0130LER\u0130 ANON\u0130M \u015E\u0130RKET\u0130",
+        name: "\u0130zibiz Bili\u015Fim",
         taxOffice: "Kozyata\u011F\u0131 V.D.",
         city: "\u0130stanbul",
         district: "Kad\u0131k\xF6y",
@@ -1605,9 +1605,9 @@ var MysoftEdocumentClient = class {
         postalCode: "34742",
         phone: "0216 999 76 38",
         email: "destek@mysoft.com.tr",
-        contactPerson: "Mysoft Yetkilisi",
+        contactPerson: "Yetkili",
         isEFatura: true,
-        pkAlias: "urn:mail:defaultpk@mysoft.com.tr"
+        pkAlias: "urn:mail:merkezpk@izibiz.com.tr"
       }
     };
     const known = knownTaxpayers[clean];
@@ -1658,15 +1658,21 @@ var MysoftEdocumentClient = class {
           const hasEInvoice = Boolean(gibRaw?.eInvoiceStartDate) && gibRaw?.isPassive !== true;
           const isEFatura = gibRaw ? hasEInvoice : isCorporate;
           const aliasList = Array.isArray(gibRaw?.gibAccountAliasList) ? gibRaw.gibAccountAliasList : [];
-          const activeAliases = aliasList.filter((a) => !a?.deletionTime);
-          const foundPk = activeAliases.find(
-            (a) => a?.role === 1 || String(a?.alias || "").toLowerCase().includes("pk") || String(a?.alias || "").startsWith("urn:mail:defaultpk") || String(a?.alias || "").startsWith("urn:mail:")
+          const activeEInvoiceAliases = aliasList.filter(
+            (a) => !a?.aliasDeleteDate && !a?.deletionTime && (!a?.gibDocumentType || a?.gibDocumentType === 1)
           );
-          const foundGb = activeAliases.find(
-            (a) => a?.role === 2 || String(a?.alias || "").toLowerCase().includes("gb") || String(a?.alias || "").startsWith("urn:mail:defaultgb")
+          const foundPk = activeEInvoiceAliases.find(
+            (a) => a?.aliasType === 1 || a?.role === 1
+          ) || activeEInvoiceAliases.find(
+            (a) => a?.aliasType !== 2 && a?.role !== 2 && String(a?.alias || "").toLowerCase().includes("pk")
           );
-          const pkAlias = foundPk?.alias || (isEFatura ? `urn:mail:defaultpk@${clean}.com.tr` : void 0);
-          const gbAlias = foundGb?.alias || (isEFatura ? `urn:mail:defaultgb@${clean}.com.tr` : void 0);
+          const foundGb = activeEInvoiceAliases.find(
+            (a) => a?.aliasType === 2 || a?.role === 2
+          ) || activeEInvoiceAliases.find(
+            (a) => a?.aliasType !== 1 && a?.role !== 1 && String(a?.alias || "").toLowerCase().includes("gb")
+          );
+          const pkAlias = foundPk?.alias || known?.pkAlias || void 0;
+          const gbAlias = foundGb?.alias || void 0;
           const activityStatus = taxpayerRaw?.activityTerminationStatus === 1 ? "active" : taxpayerRaw?.activityTerminationStatus === 2 ? "terminated" : "unknown";
           const activityStatusDescription = taxpayerRaw?.activityTerminationStatus === 1 ? "Faal M\xFCkellef" : taxpayerRaw?.activityTerminationStatus === 2 ? "Terk (Kapal\u0131)" : void 0;
           return {
@@ -1710,8 +1716,8 @@ var MysoftEdocumentClient = class {
         if (info && info.succeed !== false) {
           const data = info.data || info.result || info || {};
           const title = typeof data.title === "string" ? data.title : typeof data.unvan === "string" ? data.unvan : typeof data.companyName === "string" ? data.companyName : typeof data.name === "string" ? data.name : void 0;
-          const pkAlias = typeof data.pkAlias === "string" ? data.pkAlias : typeof data.postboxAlias === "string" ? data.postboxAlias : typeof data.mailbox === "string" ? data.mailbox : `urn:mail:defaultpk@${clean}.com.tr`;
-          const gbAlias = typeof data.gbAlias === "string" ? data.gbAlias : typeof data.senderAlias === "string" ? data.senderAlias : `urn:mail:defaultgb@${clean}.com.tr`;
+          const pkAlias = typeof data.pkAlias === "string" && data.pkAlias.trim() ? data.pkAlias.trim() : typeof data.postboxAlias === "string" && data.postboxAlias.trim() ? data.postboxAlias.trim() : typeof data.mailbox === "string" && data.mailbox.trim() ? data.mailbox.trim() : known?.pkAlias;
+          const gbAlias = typeof data.gbAlias === "string" && data.gbAlias.trim() ? data.gbAlias.trim() : typeof data.senderAlias === "string" && data.senderAlias.trim() ? data.senderAlias.trim() : void 0;
           const taxOffice = typeof data.taxOffice === "string" ? data.taxOffice : typeof data.taxOfficeName === "string" ? data.taxOfficeName : typeof data.vergiDairesi === "string" ? data.vergiDairesi : "Kad\u0131k\xF6y V.D.";
           const city = typeof data.city === "string" ? data.city : typeof data.cityName === "string" ? data.cityName : defaultCity;
           const district = typeof data.district === "string" ? data.district : typeof data.districtName === "string" ? data.districtName : defaultDist;
@@ -1760,8 +1766,8 @@ var MysoftEdocumentClient = class {
         title: known?.title || (isCorporate ? "G\u0130B Kay\u0131tl\u0131 e-Fatura M\xFCkellefi A.\u015E." : "Bireysel M\xFC\u015Fteri"),
         companyTitle: known?.companyTitle || (isCorporate ? "G\u0130B Kay\u0131tl\u0131 e-Fatura M\xFCkellefi Sanayi ve Ticaret Anonim \u015Eirketi" : "Bireysel M\xFC\u015Fteri"),
         name: known?.name || (isCorporate ? "G\u0130B Kay\u0131tl\u0131 M\xFC\u015Fteri" : "Bireysel M\xFC\u015Fteri"),
-        pkAlias: known?.pkAlias || (isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : void 0),
-        gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : void 0,
+        pkAlias: known?.pkAlias,
+        gbAlias: void 0,
         taxOffice: known?.taxOffice || (isCorporate ? "Kad\u0131k\xF6y V.D." : "Kad\u0131k\xF6y V.D."),
         city: known?.city || defaultCity,
         district: known?.district || defaultDist,
@@ -1785,8 +1791,8 @@ var MysoftEdocumentClient = class {
       title: isCorporate ? "G\u0130B Kay\u0131tl\u0131 e-Fatura M\xFCkellefi" : "Bireysel / e-Ar\u015Fiv Al\u0131c\u0131s\u0131",
       companyTitle: isCorporate ? "G\u0130B Kay\u0131tl\u0131 e-Fatura M\xFCkellefi Sanayi ve Ticaret Anonim \u015Eirketi" : "Bireysel M\xFC\u015Fteri",
       name: isCorporate ? "G\u0130B Kay\u0131tl\u0131 M\xFCkellef" : "Bireysel M\xFC\u015Fteri",
-      pkAlias: isCorporate ? `urn:mail:defaultpk@${clean}.com.tr` : void 0,
-      gbAlias: isCorporate ? `urn:mail:defaultgb@${clean}.com.tr` : void 0,
+      pkAlias: void 0,
+      gbAlias: void 0,
       taxOffice: "Kad\u0131k\xF6y V.D.",
       city: defaultCity,
       district: defaultDist,
@@ -1803,13 +1809,108 @@ var MysoftEdocumentClient = class {
     };
   }
   /**
-   * Fill empty design/numerator fields from the customer's Mysoft portal
-   * defaults before posting invoiceOutbox. Explicit payload values win.
+   * Fill empty design/numerator fields and ensure required sub-models
+   * (invoiceCalculation, invoiceDetail, invoiceAccount, pkAlias/prefix)
+   * are valid before posting invoiceOutbox.
    */
   async enrichInvoiceOutboxDefaults(payload) {
     if (!isObject(payload) || Array.isArray(payload)) return payload;
     const body = { ...payload };
     body.isCalculateByApi = false;
+    if (body.isManuelCalculation === void 0) {
+      body.isManuelCalculation = false;
+    }
+    const round2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
+    const hasRootTax = Array.isArray(body.tax) && body.tax.length > 0;
+    const details = Array.isArray(body.invoiceDetail) ? body.invoiceDetail.map((row) => {
+      if (!isObject(row)) return row;
+      const item = { ...row };
+      if (!hasRootTax && "currencyCode" in item) {
+        delete item.currencyCode;
+      }
+      if (!Array.isArray(item.allowanceCharge)) {
+        item.allowanceCharge = [];
+      }
+      return item;
+    }) : [];
+    body.invoiceDetail = details;
+    if (!isObject(body.invoiceCalculation)) {
+      let lineExtensionAmount = 0;
+      let taxExclusiveAmount = 0;
+      let totalVat = 0;
+      let totalWithholding = 0;
+      let allowanceTotalAmount = 0;
+      for (const d of details) {
+        if (!isObject(d)) continue;
+        const amt = round2(d.amtTra);
+        const taxable = d.taxableAmtTra !== void 0 && d.taxableAmtTra !== null ? round2(d.taxableAmtTra) : amt;
+        const vatRate = Number(d.vatRate) || 0;
+        const vat = d.amtVatTra !== void 0 && d.amtVatTra !== null ? round2(d.amtVatTra) : round2(taxable * vatRate / 100);
+        const wh = round2(d.withholdingTaxAmount);
+        const disc = Array.isArray(d.allowanceCharge) ? d.allowanceCharge.reduce(
+          (s, ac) => s + (isObject(ac) && ac.chargeIndicator !== true ? round2(ac.amount) : 0),
+          0
+        ) : 0;
+        lineExtensionAmount = round2(lineExtensionAmount + amt);
+        taxExclusiveAmount = round2(taxExclusiveAmount + taxable);
+        totalVat = round2(totalVat + vat);
+        totalWithholding = round2(totalWithholding + wh);
+        allowanceTotalAmount = round2(allowanceTotalAmount + disc);
+      }
+      const taxInclusiveAmount = round2(lineExtensionAmount + totalVat);
+      const payableAmount = round2(Math.max(0, taxInclusiveAmount - totalWithholding));
+      body.invoiceCalculation = {
+        lineExtensionAmount,
+        taxExclusiveAmount,
+        taxInclusiveAmount,
+        payableRoundingAmount: 0,
+        payableAmount,
+        allowanceTotalAmount,
+        chargeTotalAmount: 0
+      };
+    }
+    const eDocType = String(body.eDocumentType || "EFATURA").toUpperCase();
+    const isEArsiv = eDocType.includes("ARSIV");
+    if (isObject(body.invoiceAccount)) {
+      const acc = { ...body.invoiceAccount };
+      const rawVkn = String(acc.vknTckn || "").replace(/\D/g, "");
+      if (rawVkn.length === 10 || rawVkn.length === 11) {
+        acc.vknTckn = rawVkn;
+      } else if (isEArsiv) {
+        acc.vknTckn = "11111111111";
+      }
+      if (!stringOrEmpty(acc.countryName)) {
+        acc.countryName = "T\xDCRK\u0130YE";
+      }
+      if (!stringOrEmpty(acc.cityName)) {
+        acc.cityName = "\u0130stanbul";
+      }
+      if (!stringOrEmpty(acc.citySubdivision)) {
+        acc.citySubdivision = "Merkez";
+      }
+      body.invoiceAccount = acc;
+    }
+    if (isEArsiv) {
+      delete body.pkAlias;
+      delete body.gbAlias;
+      if (!stringOrEmpty(body.senderType)) {
+        body.senderType = "ELEKTRONIK";
+      }
+    } else {
+      delete body.gbAlias;
+      const pk = stringOrEmpty(body.pkAlias);
+      if (!pk || /^urn:mail:default(pk|gb)@\d{10,11}\.com\.tr$/i.test(pk)) {
+        delete body.pkAlias;
+      }
+    }
+    const rawDocNo = stringOrEmpty(body.docNo).toUpperCase();
+    if (rawDocNo && (/^(GIB|FYS|GLF|GDF|TED|FAT)/i.test(rawDocNo) || !/^[A-Z0-9]{3}20\d{2}\d{9}$/.test(rawDocNo))) {
+      body.docNo = "";
+    }
+    const rawPrefix = stringOrEmpty(body.prefix).toUpperCase();
+    if (rawPrefix && /^(GIB|FYS|GLF|GDF|TED|FAT)$/i.test(rawPrefix)) {
+      delete body.prefix;
+    }
     let tenant = typeof body.tenantIdentifierNumber === "string" ? normalizeMysoftTenantIdentifier(body.tenantIdentifierNumber) || body.tenantIdentifierNumber.trim() : "";
     if (!tenant) {
       const resolved = await this.resolveEffectiveTenant();
@@ -1821,8 +1922,9 @@ var MysoftEdocumentClient = class {
     if (!tenant) return body;
     const needsXslt = !stringOrEmpty(body.xsltName) && !stringOrEmpty(body.xsltSetCode);
     const currentPrefix = stringOrEmpty(body.prefix).toUpperCase();
-    const isGenericFallbackPrefix = currentPrefix === "GIB" || currentPrefix === "EAR";
-    const needsPrefix = (!currentPrefix || isGenericFallbackPrefix) && !stringOrEmpty(body.numeratorSetCode) && !stringOrEmpty(body.docNo);
+    const currentDocNo = stringOrEmpty(body.docNo).toUpperCase();
+    const isGenericFallbackPrefix = !currentPrefix || currentPrefix === "GIB" || currentPrefix === "EAR";
+    const needsPrefix = (isGenericFallbackPrefix || Boolean(currentDocNo)) && !stringOrEmpty(body.numeratorSetCode);
     if (!needsXslt && !needsPrefix) return body;
     try {
       const defaults = await this.resolveInvoiceDesignDefaults({
@@ -1837,10 +1939,19 @@ var MysoftEdocumentClient = class {
         }
       }
       if (needsPrefix) {
+        const portalPrefixes = (defaults.prefixes || []).map((p) => typeof p.prefix === "string" ? p.prefix.trim().toUpperCase() : "").filter(Boolean);
         if (!currentPrefix && defaults.numeratorSetCode) {
           body.numeratorSetCode = defaults.numeratorSetCode;
         } else if (defaults.prefix) {
-          body.prefix = defaults.prefix;
+          if (!currentPrefix || currentPrefix === "GIB" || currentPrefix === "EAR" || portalPrefixes.length > 0 && !portalPrefixes.includes(currentPrefix)) {
+            body.prefix = defaults.prefix;
+          }
+        }
+        if (currentDocNo && portalPrefixes.length > 0) {
+          const docPrefix = currentDocNo.slice(0, 3).toUpperCase();
+          if (!portalPrefixes.includes(docPrefix)) {
+            body.docNo = "";
+          }
         }
       }
     } catch {
@@ -1979,11 +2090,31 @@ var MysoftEdocumentClient = class {
     });
   }
   async createOutgoing(payload) {
-    const body = await this.enrichInvoiceOutboxDefaults(this.submissionPayload(payload));
-    return this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
-      method: "POST",
-      body
-    });
+    const body = await this.enrichInvoiceOutboxDefaults(
+      this.submissionPayload(payload)
+    );
+    try {
+      return await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
+        method: "POST",
+        body
+      });
+    } catch (error) {
+      if (error instanceof MysoftApiError && isObject(body)) {
+        const msg = String(error.message || "").toLowerCase();
+        const isDocNoErr = Boolean(body.docNo) && (msg.includes("belge numaras\u0131") || msg.includes("fatura numaras\u0131") || msg.includes("m\xFCkerrer") || msg.includes("daha \xF6nce") || msg.includes("gib") || msg.includes("fys"));
+        const isAliasErr = Boolean(body.pkAlias) && (msg.includes("etiket") || msg.includes("alias") || msg.includes("00006"));
+        if (isDocNoErr || isAliasErr) {
+          const retryBody = { ...body };
+          if (isDocNoErr) retryBody.docNo = "";
+          if (isAliasErr) delete retryBody.pkAlias;
+          return await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
+            method: "POST",
+            body: retryBody
+          });
+        }
+      }
+      throw error;
+    }
   }
   async createOutgoingWithUblXml(payload) {
     const body = await this.enrichInvoiceOutboxDefaults(this.submissionPayload(payload));

@@ -1678,8 +1678,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       docNo: invoiceNumberInput,
       isSaveAsDraft: true,
       tenantIdentifierNumber: effectiveTenant,
-      pkAlias: recipientStatus?.pkAlias,
-      gbAlias: recipientStatus?.gbAlias,
+      pkAlias: isCurrentSalesEArsiv ? undefined : recipientStatus?.pkAlias,
     });
   }, [
     customerMode,
@@ -2132,8 +2131,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
           docNo: baseInvoice.invoiceNumber,
           isSaveAsDraft: false,
           tenantIdentifierNumber: effectiveTenant,
-          pkAlias: recipientStatus?.pkAlias,
-          gbAlias: recipientStatus?.gbAlias,
+          pkAlias: isCurrentSalesEArsiv ? undefined : recipientStatus?.pkAlias,
         });
         const result = await sendMysoftOutgoingInvoice(payload);
         const outbox = extractMysoftOutboxResult(result);

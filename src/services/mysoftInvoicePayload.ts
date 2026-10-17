@@ -71,33 +71,101 @@ function resolveEDocumentType(
   return "EFATURA";
 }
 
-function mapLine(item: InvoiceItem, index: number, currency: string) {
+function round2(val: number): number {
+  return Math.round((Number(val) + Number.EPSILON) * 100) / 100;
+}
+
+const STANDARD_WITHHOLDING_PERCENTAGES: Record<string, number> = {
+  "601": 40,
+  "602": 90,
+  "603": 70,
+  "604": 50,
+  "605": 50,
+  "606": 90,
+  "607": 90,
+  "608": 90,
+  "609": 70,
+  "610": 90,
+  "611": 90,
+  "612": 90,
+  "613": 90,
+  "614": 50,
+  "615": 70,
+  "616": 50,
+  "617": 70,
+  "618": 70,
+  "619": 70,
+  "620": 70,
+  "621": 90,
+  "622": 90,
+  "623": 50,
+  "624": 20,
+  "625": 30,
+  "626": 20,
+  "627": 50,
+};
+
+function isFabricatedDefaultAlias(alias?: string): boolean {
+  if (!alias) return false;
+  return /^urn:mail:default(pk|gb)@\d{10,11}\.com\.tr$/i.test(alias.trim());
+}
+
+function mapLine(item: InvoiceItem, index: number) {
   const qty = Number(item.quantity) || 1;
-  const unitPrice = Number(item.unitPrice) || 0;
-  const amtTra = Number(item.totalWithoutVat) || qty * unitPrice;
+  const unitPrice = round2(Number(item.unitPrice) || 0);
+  const grossAmt = round2(qty * unitPrice);
+  const discAmt = round2(Math.max(0, Number(item.discountAmount) || 0));
+  const discRate = Number(item.discountRate) || (grossAmt > 0 && discAmt > 0 ? round2((discAmt / grossAmt) * 100) : 0);
+  const amtTra = round2(
+    item.totalWithoutVat !== undefined && item.totalWithoutVat !== null
+      ? Number(item.totalWithoutVat)
+      : Math.max(0, grossAmt - discAmt),
+  );
   const vatRate = Number(item.vatRate) || 0;
 
   // Effective taxable amount (for special tax base / kar marji)
-  const taxableAmtTra =
+  const taxableAmtTra = round2(
     item.specialTaxBase !== undefined && item.specialTaxBase !== null && item.specialTaxBase >= 0
       ? Number(item.specialTaxBase)
-      : amtTra;
-  const amtVatTra = Number(item.vatAmount) || (taxableAmtTra * vatRate) / 100;
+      : amtTra,
+  );
+  const amtVatTra = round2(
+    item.vatAmount !== undefined && item.vatAmount !== null
+      ? Number(item.vatAmount)
+      : (taxableAmtTra * vatRate) / 100,
+  );
 
-  // Tevkifat mapping
-  const withholdingTaxTypeCode: string | undefined = item.withholdingCode || undefined;
+  // Tevkifat mapping (GİB UBL-TR: withholdingTaxableAmount is the VAT amount amtVatTra)
+  const withholdingTaxTypeCode: string | undefined = item.withholdingCode
+    ? String(item.withholdingCode).trim()
+    : undefined;
   let withholdingTaxPercentage: number | undefined = undefined;
   let withholdingTaxAmount: number | undefined = undefined;
   let withholdingTaxableAmount: number | undefined = undefined;
 
-  if (item.withholdingRateNumerator && item.withholdingRateDenominator && item.withholdingRateDenominator > 0) {
-    withholdingTaxPercentage = Math.round((item.withholdingRateNumerator / item.withholdingRateDenominator) * 100);
-    withholdingTaxAmount = (amtVatTra * item.withholdingRateNumerator) / item.withholdingRateDenominator;
-    withholdingTaxableAmount = taxableAmtTra;
-  } else if (item.withholdingRate && item.withholdingRate > 0) {
-    withholdingTaxPercentage = Math.round(item.withholdingRate * 100);
-    withholdingTaxAmount = amtVatTra * item.withholdingRate;
-    withholdingTaxableAmount = taxableAmtTra;
+  if (withholdingTaxTypeCode) {
+    const standardPct = STANDARD_WITHHOLDING_PERCENTAGES[withholdingTaxTypeCode];
+    if (standardPct !== undefined) {
+      withholdingTaxPercentage = standardPct;
+    } else if (
+      item.withholdingRateNumerator &&
+      item.withholdingRateDenominator &&
+      item.withholdingRateDenominator > 0
+    ) {
+      withholdingTaxPercentage = Math.round(
+        (item.withholdingRateNumerator / item.withholdingRateDenominator) * 100,
+      );
+    } else if (item.withholdingRate && item.withholdingRate > 0) {
+      withholdingTaxPercentage =
+        item.withholdingRate <= 1
+          ? Math.round(item.withholdingRate * 100)
+          : Math.round(item.withholdingRate);
+    }
+
+    if (withholdingTaxPercentage && withholdingTaxPercentage > 0) {
+      withholdingTaxableAmount = amtVatTra;
+      withholdingTaxAmount = round2((amtVatTra * withholdingTaxPercentage) / 100);
+    }
   }
 
   // İstisna or Özel Matrah Reason Code
@@ -109,11 +177,27 @@ function mapLine(item: InvoiceItem, index: number, currency: string) {
   const code =
     item.productId ||
     `LINE${String(index + 1).padStart(3, "0")}`;
+
+  const allowanceCharge =
+    discAmt > 0
+      ? [
+          {
+            chargeIndicator: false,
+            allowanceChargeReason: "İskonto",
+            multiplierFactorNumeric: discRate,
+            sequenceNumeric: 1,
+            amount: discAmt,
+            baseAmount: grossAmt,
+          },
+        ]
+      : [];
+
+  // Note: Do NOT send currencyCode inside invoiceDetail unless multi-currency
+  // line items with manual root tax are used; Mysoft rejects detail.currencyCode otherwise.
   return {
     productCode: code.slice(0, 100),
     productName: (item.description || "Mal / Hizmet").slice(0, 150),
     unitCode: unitCode(item.unit),
-    currencyCode: currency,
     qty,
     unitPriceTra: unitPrice,
     amtTra,
@@ -125,7 +209,7 @@ function mapLine(item: InvoiceItem, index: number, currency: string) {
     withholdingTaxPercentage: withholdingTaxPercentage || undefined,
     withholdingTaxableAmount: withholdingTaxableAmount || undefined,
     withholdingTaxAmount: withholdingTaxAmount || undefined,
-    allowanceCharge: [],
+    allowanceCharge,
   };
 }
 
@@ -167,30 +251,117 @@ export function buildMysoftInvoiceOutboxPayload(
         company.vknTckn ||
         company.mysoftCredentials?.tenantIdentifierNumber,
     ) || undefined;
-  const buyerTax = digits(contact.taxNumber || invoice.taxNumber);
+  const rawBuyerTax = digits(contact.taxNumber || invoice.taxNumber);
+  const buyerTax =
+    rawBuyerTax.length === 10 || rawBuyerTax.length === 11
+      ? rawBuyerTax
+      : eDocumentType === "EARSIVFATURA"
+        ? "11111111111"
+        : rawBuyerTax || undefined;
 
-  const effectiveDocNo =
+  const rawDocNo =
     typeof options.docNo === "string" && options.docNo.trim()
       ? options.docNo.trim()
       : typeof invoice.invoiceNumber === "string" && invoice.invoiceNumber.trim()
         ? invoice.invoiceNumber.replace(/\s*\(TASLAK\)\s*$/i, "").trim()
         : "";
 
+  // GİB & Mysoft rule: Belge numarası "GIB" veya "FYS" (veya geçersiz ön ek) ile başlayamaz.
+  const isForbiddenOrInternalDocNo =
+    /^(GIB|FYS|GLF|GDF|TED|FAT)/i.test(rawDocNo) ||
+    !/^[A-Za-z0-9]{3}20\d{2}\d{9}$/.test(rawDocNo);
+  const effectiveDocNo = isForbiddenOrInternalDocNo ? "" : rawDocNo.toUpperCase();
+
   const invoicePrefixMatch = /^[A-Za-z0-9]{3}20\d{2}/.test(effectiveDocNo)
     ? effectiveDocNo.slice(0, 3).toUpperCase()
     : "";
-  const companyTypePrefix = (
+  const rawCompanyTypePrefix = (
     eDocumentType === "EARSIVFATURA" ? company.eArsivPrefix : company.eFaturaPrefix
   )
     ?.trim()
     .toUpperCase()
     .slice(0, 3);
+  const companyTypePrefix =
+    rawCompanyTypePrefix && !/^(GIB|FYS|GLF|GDF|TED|FAT)$/i.test(rawCompanyTypePrefix)
+      ? rawCompanyTypePrefix
+      : undefined;
+  const rawOptPrefix = options.prefix?.trim().toUpperCase().slice(0, 3);
+  const optPrefix =
+    rawOptPrefix && !/^(GIB|FYS|GLF|GDF|TED|FAT)$/i.test(rawOptPrefix)
+      ? rawOptPrefix
+      : undefined;
+
   const prefix =
-    options.prefix?.trim().toUpperCase().slice(0, 3) ||
+    optPrefix ||
     invoicePrefixMatch ||
     companyTypePrefix ||
-    (effectiveDocNo ? effectiveDocNo.replace(/\d+$/, "").slice(0, 3).toUpperCase() : undefined) ||
     undefined;
+
+  const mappedDetails = (invoice.items || []).map((item, index) =>
+    mapLine(item, index),
+  );
+
+  // Compute invoiceCalculation totals (REQUIRED by Mysoft .NET backend even when isManuelCalculation is false;
+  // omitting invoiceCalculation causes System.NullReferenceException: "Object reference not set to an instance of an object.")
+  const calcLineExtension = round2(
+    invoice.subtotal !== undefined && invoice.subtotal !== null
+      ? Number(invoice.subtotal)
+      : mappedDetails.reduce((sum, d) => sum + (Number(d.amtTra) || 0), 0),
+  );
+  const calcAllowanceTotal = round2(
+    invoice.totalDiscount !== undefined && invoice.totalDiscount !== null
+      ? Number(invoice.totalDiscount)
+      : mappedDetails.reduce(
+          (sum, d) => sum + (Number(d.allowanceCharge?.[0]?.amount) || 0),
+          0,
+        ),
+  );
+  const calcTaxExclusive = round2(
+    invoice.effectiveTaxableAmount !== undefined && invoice.effectiveTaxableAmount !== null
+      ? Number(invoice.effectiveTaxableAmount)
+      : mappedDetails.reduce((sum, d) => sum + (Number(d.taxableAmtTra) || 0), 0),
+  );
+  const calcTotalVat = round2(
+    invoice.totalVat !== undefined && invoice.totalVat !== null
+      ? Number(invoice.totalVat)
+      : mappedDetails.reduce((sum, d) => sum + (Number(d.amtVatTra) || 0), 0),
+  );
+  const calcWithholding = round2(
+    invoice.totalWithholding !== undefined && invoice.totalWithholding !== null
+      ? Number(invoice.totalWithholding)
+      : mappedDetails.reduce((sum, d) => sum + (Number(d.withholdingTaxAmount) || 0), 0),
+  );
+  const calcTaxInclusive = round2(calcLineExtension + calcTotalVat);
+  const calcPayable = round2(
+    invoice.payableAmount !== undefined && invoice.payableAmount !== null
+      ? Number(invoice.payableAmount)
+      : invoice.grandTotal !== undefined && invoice.grandTotal !== null
+        ? Number(invoice.grandTotal)
+        : Math.max(0, calcTaxInclusive - calcWithholding),
+  );
+
+  const cleanPkAlias =
+    eDocumentType === "EARSIVFATURA"
+      ? undefined
+      : options.pkAlias?.trim() && !isFabricatedDefaultAlias(options.pkAlias)
+        ? options.pkAlias.trim()
+        : undefined;
+
+  const accountName = (contact.name || invoice.contactName || "Alıcı").trim();
+  const isIndividualTckn = buyerTax && buyerTax.length === 11;
+  const nameTokens = accountName.split(/\s+/).filter(Boolean);
+  const personInfo =
+    isIndividualTckn && nameTokens.length >= 2
+      ? {
+          firstName: nameTokens.slice(0, -1).join(" "),
+          familyName: nameTokens[nameTokens.length - 1],
+        }
+      : isIndividualTckn
+        ? {
+            firstName: accountName,
+            familyName: "-",
+          }
+        : undefined;
 
   // Shape mirrors Mysoft GET /api/InvoiceOutbox/createInvoiceOutboxTestJson
   // (docs/mysoft/invoice-outbox-sablon.json) — production defaults: SATIS / TEMEL.
@@ -216,10 +387,19 @@ export function buildMysoftInvoiceOutboxPayload(
     isSaveAsDraft: options.isSaveAsDraft === true,
     isAddPayableAmountString: true,
     isManuelCalculation: false,
+    invoiceCalculation: {
+      lineExtensionAmount: calcLineExtension,
+      taxExclusiveAmount: calcTaxExclusive,
+      taxInclusiveAmount: calcTaxInclusive,
+      payableRoundingAmount: 0,
+      payableAmount: calcPayable,
+      allowanceTotalAmount: calcAllowanceTotal,
+      chargeTotalAmount: 0,
+    },
     referanceKey: invoice.id,
     tenantIdentifierNumber: tenant,
-    pkAlias: options.pkAlias?.trim() || undefined,
-    gbAlias: options.gbAlias?.trim() || undefined,
+    pkAlias: cleanPkAlias,
+    gbAlias: options.gbAlias?.trim() && !isFabricatedDefaultAlias(options.gbAlias) ? options.gbAlias.trim() : undefined,
     notes: (() => {
       const noteList: { note: string }[] = [];
       if (invoice.paymentMethod) {
@@ -245,18 +425,17 @@ export function buildMysoftInvoiceOutboxPayload(
     })(),
     invoiceAccount: {
       vknTckn: buyerTax || undefined,
-      accountName: contact.name || invoice.contactName,
+      accountName,
       taxOfficeName: contact.taxOffice || invoice.taxOffice || undefined,
       countryName: "TÜRKİYE",
-      cityName: contact.city || invoice.customerCity || undefined,
-      citySubdivision: contact.district || invoice.customerDistrict || undefined,
+      cityName: contact.city || invoice.customerCity || "İstanbul",
+      citySubdivision: contact.district || invoice.customerDistrict || "Merkez",
       streetName: contact.address || invoice.customerAddress || undefined,
       telephone1: contact.phone || invoice.customerPhone || undefined,
       email1: contact.email || invoice.customerEmail || undefined,
+      personInfo,
     },
-    invoiceDetail: (invoice.items || []).map((item, index) =>
-      mapLine(item, index, currency),
-    ),
+    invoiceDetail: mappedDetails,
   };
 
   // Mysoft (2026-08-25): connectorGuid kullanılmamalı — boş bırakılır.
