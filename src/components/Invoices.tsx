@@ -55,6 +55,11 @@ import {
 import {
   buildMysoftInvoiceOutboxPayload,
   extractMysoftOutboxResult,
+  getRecentMysoftDiagnosticLogs,
+  MysoftPayloadValidationError,
+  validateMysoftInvoiceOutboxPayload,
+  type MysoftDiagnosticLogEntry,
+  type MysoftOutboxValidationIssue,
 } from "../services/mysoftInvoicePayload";
 import { MysoftTenantPicker } from "./MysoftTenantPicker";
 import { readStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
@@ -596,11 +601,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [isSavingMysoft, setIsSavingMysoft] = useState(false);
   const [mysoftSaveError, setMysoftSaveError] = useState<string | null>(null);
   const [mysoftSaveNotice, setMysoftSaveNotice] = useState<string | null>(null);
+  const [mysoftValidationIssues, setMysoftValidationIssues] = useState<MysoftOutboxValidationIssue[]>([]);
+  const [mysoftDiagnosticLog, setMysoftDiagnosticLog] = useState<MysoftDiagnosticLogEntry | null>(null);
 
   const handleCloseDetail = useCallback(() => {
     setEditingInvoiceId(null);
     setEditingInvoiceNumber(null);
     setMysoftSaveError(null);
+    setMysoftValidationIssues([]);
+    setMysoftDiagnosticLog(null);
     detailNav.backToList();
   }, [detailNav]);
 
@@ -2114,11 +2123,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
       if (!effectiveTenant) {
         setMysoftSaveError(
-          "Mysoft kesimi için mükellef seçin. Listeyi yükleyip VKN/TCKN seçin veya VKN ile getirin.",
+          "Mysoft kesimi için gönderici firma (mükellef) VKN/TCKN seçin. Listeyi yükleyip VKN/TCKN seçin veya VKN ile getirin.",
         );
         return;
       }
       setIsSavingMysoft(true);
+      setMysoftValidationIssues([]);
+      setMysoftDiagnosticLog(null);
       try {
         const effectiveEDocType = isCurrentSalesEArsiv ? "e_arsiv" : "e_fatura";
         const payload = buildMysoftInvoiceOutboxPayload({
@@ -2133,7 +2144,19 @@ export const Invoices: React.FC<InvoicesProps> = ({
           tenantIdentifierNumber: effectiveTenant,
           pkAlias: isCurrentSalesEArsiv ? undefined : recipientStatus?.pkAlias,
         });
-        const result = await sendMysoftOutgoingInvoice(payload);
+        const preCheck = validateMysoftInvoiceOutboxPayload(payload, {
+          requireTenantIdentifier: true,
+          autoRepair: true,
+        });
+        if (!preCheck.valid) {
+          setMysoftValidationIssues(preCheck.errors);
+          setMysoftSaveError(preCheck.summary);
+          const recentLogs = getRecentMysoftDiagnosticLogs(1);
+          if (recentLogs[0]) setMysoftDiagnosticLog(recentLogs[0]);
+          setIsSavingMysoft(false);
+          return;
+        }
+        const result = await sendMysoftOutgoingInvoice(preCheck.sanitizedPayload);
         const outbox = extractMysoftOutboxResult(result);
         if (outbox.invoiceETTN) {
           baseInvoice = {
@@ -2149,6 +2172,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
             : `Fatura Mysoft giden kutusuna iletildi (Belge No: ${baseInvoice.invoiceNumber}).`,
         );
       } catch (error) {
+        if (error instanceof MysoftPayloadValidationError) {
+          setMysoftValidationIssues(error.issues);
+        } else if (
+          error &&
+          typeof error === "object" &&
+          "details" in error &&
+          error.details &&
+          typeof error.details === "object" &&
+          Array.isArray((error.details as Record<string, unknown>).issues)
+        ) {
+          setMysoftValidationIssues(
+            (error.details as { issues: MysoftOutboxValidationIssue[] }).issues,
+          );
+        }
+        const recentLogs = getRecentMysoftDiagnosticLogs(1);
+        if (recentLogs[0]) setMysoftDiagnosticLog(recentLogs[0]);
         const message =
           error instanceof Error
             ? error.message
@@ -5388,7 +5427,52 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     )}
                     {mysoftSaveError && (
-                      <p className="text-[11px] font-semibold text-rose-700 pl-6">{mysoftSaveError}</p>
+                      <div className="ml-6 mt-2 rounded-xl border border-rose-200 bg-rose-50/90 p-3 text-rose-900 space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-[11px] font-bold text-rose-800">
+                            Mysoft Gönderim Kontrolü & Hata Detayı
+                          </p>
+                          {mysoftDiagnosticLog && (
+                            <span className="text-[10px] font-mono text-rose-600">
+                              {new Date(mysoftDiagnosticLog.timestamp).toLocaleTimeString("tr-TR")}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] font-semibold text-rose-700 leading-relaxed">
+                          {mysoftSaveError}
+                        </p>
+                        {mysoftValidationIssues.length > 0 && (
+                          <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-rose-800">
+                            {mysoftValidationIssues.map((issue, idx) => (
+                              <li key={`${issue.code}_${idx}`}>
+                                <span className="font-mono font-bold text-[10px] mr-1">
+                                  [{issue.field}]
+                                </span>
+                                {issue.message}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {mysoftDiagnosticLog && (
+                          <div className="pt-1.5 mt-1 border-t border-rose-200/80 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono text-rose-700">
+                            <span>
+                              Mükellef VKN: {mysoftDiagnosticLog.tenantIdentifierNumber || "Eksik"}
+                            </span>
+                            <span>
+                              Alıcı VKN/TCKN: {mysoftDiagnosticLog.buyerVknTckn || "Eksik"}
+                            </span>
+                            <span>
+                              Kalem: {mysoftDiagnosticLog.lineCount} adet
+                            </span>
+                            <span>
+                              Dip Toplam Nesnesi:{" "}
+                              {mysoftDiagnosticLog.nullGuard.hasInvoiceCalculationObject
+                                ? "Tamam"
+                                : "Eksik"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     )}
                     {mysoftSaveNotice && (
                       <p className="text-[11px] font-semibold text-emerald-700 pl-6">{mysoftSaveNotice}</p>

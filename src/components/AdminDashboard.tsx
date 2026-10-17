@@ -49,6 +49,7 @@ import {
   Globe,
   ArrowRight,
   Edit2,
+  Terminal,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import { UserProfile, BRAND_LOGOS } from "./AuthModal";
@@ -96,6 +97,7 @@ import { PayrollParametersPanel } from "./PayrollParametersPanel";
 import { AdminOverviewPanel } from "./AdminOverviewPanel";
 import { AdminBroadcastPanel } from "./AdminBroadcastPanel";
 import { AdminAuditPanel } from "./AdminAuditPanel";
+import { AdminMysoftLogMonitorPanel } from "./AdminMysoftLogMonitorPanel";
 import { AdminSyncStatusBar } from "./AdminSyncStatusBar";
 import {
   logSystemAction,
@@ -204,7 +206,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteCompany,
 }) => {
   const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState<"overview" | "credentials" | "matrix" | "users" | "companies" | "files" | "payroll" | "broadcast" | "audit">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "credentials" | "matrix" | "users" | "companies" | "files" | "payroll" | "broadcast" | "audit" | "mysoft_logs">("overview");
   const [users, setUsers] = useState<UserProfileData[]>([]);
   const [allFiles, setAllFiles] = useState<UserFileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1213,6 +1215,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         actions={
           <div className="flex flex-wrap items-center gap-2.5">
             <button
+              onClick={() => setActiveTab("mysoft_logs")}
+              className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
+              title="Mysoft API Teknik Hata Dökümü ve Çözüm Önerisi Log İzleme Ekranı"
+            >
+              <Terminal className="w-4 h-4" />
+              <span>Log İzleme Ekranı</span>
+            </button>
+            <button
               onClick={() => setActiveTab("credentials")}
               className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
               title="Tanımlanan Şirket ve Kullanıcıların Kullanıcı Adı ve Şifreleri"
@@ -1376,6 +1386,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <ShieldCheck className="w-4 h-4" />
             <span>Denetim Günlüğü</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("mysoft_logs")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "mysoft_logs"
+                ? "bg-white text-slate-900 shadow-2xs border border-white"
+                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+            }`}
+          >
+            <Terminal className="w-4 h-4 text-amber-300" />
+            <span>Log İzleme Ekranı (Mysoft API)</span>
           </button>
         </div>
       </ModuleEntranceHeader>
@@ -2840,6 +2862,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ========================================================================= */}
       {activeTab === "audit" && (
         <AdminAuditPanel />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🖥️ TAB 7: MYSOFT API TEKNİK HATA & LOG İZLEME EKRANI */}
+      {/* ========================================================================= */}
+      {activeTab === "mysoft_logs" && (
+        <AdminMysoftLogMonitorPanel />
       )}
 
       {/* ========================================================================= */}

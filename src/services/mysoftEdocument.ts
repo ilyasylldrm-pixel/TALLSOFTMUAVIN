@@ -18,6 +18,14 @@ import {
   calculateNextInvoiceNumber,
   parseInvoiceDocNo,
 } from "./mysoftInvoiceNumber.ts";
+import {
+  extractMysoftOutboxResult,
+  getRecentMysoftDiagnosticLogs,
+  MysoftPayloadValidationError,
+  recordMysoftDiagnosticLog,
+  validateMysoftInvoiceOutboxPayload,
+  type MysoftDiagnosticLogEntry,
+} from "./mysoftInvoicePayload.ts";
 
 export type MysoftDirection = "incoming" | "outgoing";
 export type MysoftGrantType = "client_credentials" | "password";
@@ -2484,15 +2492,67 @@ export class MysoftEdocumentClient {
     });
   }
 
+  getDiagnosticLogs(limit = 50): MysoftDiagnosticLogEntry[] {
+    return getRecentMysoftDiagnosticLogs(limit);
+  }
+
+  async validateOutgoingPayload(payload: unknown) {
+    const enriched = await this.enrichInvoiceOutboxDefaults(
+      this.submissionPayload(payload),
+    );
+    return validateMysoftInvoiceOutboxPayload(enriched, {
+      requireTenantIdentifier: !this.config.mockMode,
+      autoRepair: true,
+    });
+  }
+
   async createOutgoing(payload: unknown): Promise<unknown> {
-    const body = (await this.enrichInvoiceOutboxDefaults(
+    const enriched = (await this.enrichInvoiceOutboxDefaults(
       this.submissionPayload(payload),
     )) as Record<string, unknown>;
+
+    // Pre-send mandatory field & null-reference validation
+    const validation = validateMysoftInvoiceOutboxPayload(enriched, {
+      requireTenantIdentifier: !this.config.mockMode,
+      autoRepair: true,
+    });
+
+    if (!validation.valid) {
+      throw new MysoftPayloadValidationError(
+        validation.summary,
+        validation.errors,
+        validation.nullGuard,
+      );
+    }
+
+    const body = validation.sanitizedPayload;
+    const acc = isObject(body.invoiceAccount) ? body.invoiceAccount : {};
+    const calc = isObject(body.invoiceCalculation) ? body.invoiceCalculation : {};
+    const detailCount = Array.isArray(body.invoiceDetail) ? body.invoiceDetail.length : 0;
+
     try {
-      return await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
+      const response = await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
         method: "POST",
         body,
       });
+      const outboxResult = extractMysoftOutboxResult(response);
+      recordMysoftDiagnosticLog({
+        stage: "SEND_SUCCESS",
+        operation: "createOutgoing",
+        tenantIdentifierNumber: stringOrEmpty(body.tenantIdentifierNumber) || undefined,
+        buyerVknTckn: stringOrEmpty(acc.vknTckn) || undefined,
+        buyerName: stringOrEmpty(acc.accountName) || undefined,
+        eDocumentType: stringOrEmpty(body.eDocumentType) || undefined,
+        profile: stringOrEmpty(body.profile) || undefined,
+        invoiceType: stringOrEmpty(body.invoiceType) || undefined,
+        docNo: outboxResult.docNo || stringOrEmpty(body.docNo) || undefined,
+        prefix: stringOrEmpty(body.prefix) || undefined,
+        lineCount: detailCount,
+        payableAmount: Number(calc.payableAmount) || 0,
+        nullGuard: validation.nullGuard,
+        validationWarnings: validation.warnings,
+      });
+      return response;
     } catch (error) {
       // If a user/client-supplied docNo or pkAlias caused an upstream conflict,
       // retry once letting Mysoft auto-assign the next portal docNo and valid postbox alias.
@@ -2510,15 +2570,80 @@ export class MysoftEdocumentClient {
           Boolean(body.pkAlias) &&
           (msg.includes("etiket") || msg.includes("alias") || msg.includes("00006"));
         if (isDocNoErr || isAliasErr) {
+          recordMysoftDiagnosticLog({
+            stage: "AUTO_RECOVERY_RETRY",
+            operation: "createOutgoing",
+            tenantIdentifierNumber: stringOrEmpty(body.tenantIdentifierNumber) || undefined,
+            buyerVknTckn: stringOrEmpty(acc.vknTckn) || undefined,
+            buyerName: stringOrEmpty(acc.accountName) || undefined,
+            eDocumentType: stringOrEmpty(body.eDocumentType) || undefined,
+            profile: stringOrEmpty(body.profile) || undefined,
+            invoiceType: stringOrEmpty(body.invoiceType) || undefined,
+            docNo: stringOrEmpty(body.docNo) || undefined,
+            prefix: stringOrEmpty(body.prefix) || undefined,
+            lineCount: detailCount,
+            payableAmount: Number(calc.payableAmount) || 0,
+            nullGuard: validation.nullGuard,
+            upstreamStatus: error.status,
+            upstreamErrorCode: error.code,
+            errorMessage: `Otomatik düzeltme denemesi (${isDocNoErr ? "docNo temizlendi" : ""}${isAliasErr ? " pkAlias temizlendi" : ""}): ${error.message}`,
+          });
           const retryBody = { ...body };
           if (isDocNoErr) retryBody.docNo = "";
           if (isAliasErr) delete retryBody.pkAlias;
-          return await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
+          const retryResponse = await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
             method: "POST",
             body: retryBody,
           });
+          const retryResult = extractMysoftOutboxResult(retryResponse);
+          recordMysoftDiagnosticLog({
+            stage: "SEND_SUCCESS",
+            operation: "createOutgoing:retry",
+            tenantIdentifierNumber: stringOrEmpty(retryBody.tenantIdentifierNumber) || undefined,
+            buyerVknTckn: stringOrEmpty(acc.vknTckn) || undefined,
+            buyerName: stringOrEmpty(acc.accountName) || undefined,
+            eDocumentType: stringOrEmpty(retryBody.eDocumentType) || undefined,
+            profile: stringOrEmpty(retryBody.profile) || undefined,
+            invoiceType: stringOrEmpty(retryBody.invoiceType) || undefined,
+            docNo: retryResult.docNo || stringOrEmpty(retryBody.docNo) || undefined,
+            prefix: stringOrEmpty(retryBody.prefix) || undefined,
+            lineCount: detailCount,
+            payableAmount: Number(calc.payableAmount) || 0,
+            nullGuard: validation.nullGuard,
+          });
+          return retryResponse;
         }
       }
+
+      const rawErrorMsg = error instanceof Error ? error.message : String(error);
+      recordMysoftDiagnosticLog({
+        stage: "UPSTREAM_API_ERROR",
+        operation: "createOutgoing",
+        tenantIdentifierNumber: stringOrEmpty(body.tenantIdentifierNumber) || undefined,
+        buyerVknTckn: stringOrEmpty(acc.vknTckn) || undefined,
+        buyerName: stringOrEmpty(acc.accountName) || undefined,
+        eDocumentType: stringOrEmpty(body.eDocumentType) || undefined,
+        profile: stringOrEmpty(body.profile) || undefined,
+        invoiceType: stringOrEmpty(body.invoiceType) || undefined,
+        docNo: stringOrEmpty(body.docNo) || undefined,
+        prefix: stringOrEmpty(body.prefix) || undefined,
+        lineCount: detailCount,
+        payableAmount: Number(calc.payableAmount) || 0,
+        nullGuard: validation.nullGuard,
+        validationWarnings: validation.warnings,
+        upstreamStatus: error instanceof MysoftApiError ? error.status : undefined,
+        upstreamErrorCode: error instanceof MysoftApiError ? error.code : undefined,
+        errorMessage: rawErrorMsg,
+      });
+
+      if (
+        error instanceof MysoftApiError &&
+        /object reference not set to an instance of an object/i.test(rawErrorMsg)
+      ) {
+        const detailedMsg = `Mysoft e-Belge sunucusu nesne referans hatası döndürdü (${rawErrorMsg}). Gönderilen veri kontrol özeti — Mükellef VKN: ${stringOrEmpty(body.tenantIdentifierNumber) || "Eksik"}, Alıcı VKN/TCKN: ${stringOrEmpty(acc.vknTckn) || "Eksik"} (${stringOrEmpty(acc.accountName) || "Ünvan Yok"}), Kalem Sayısı: ${detailCount}, Belge Tipi: ${stringOrEmpty(body.eDocumentType)}/${stringOrEmpty(body.profile)}, Ön Ek: ${stringOrEmpty(body.prefix) || "Varsayılan"}. Lütfen firma VKN, alıcı VKN/TCKN ve fatura kalem bilgilerini kontrol edin.`;
+        throw new MysoftApiError(detailedMsg, error.status, error.details, error.code);
+      }
+
       throw error;
     }
   }
@@ -2531,9 +2656,21 @@ export class MysoftEdocumentClient {
     });
   }
 
-  /** Normalize outgoing invoice JSON (tenant, xslt, prefix defaults). */
+  /** Normalize outgoing invoice JSON (tenant, xslt, prefix defaults, null-guards). */
   async prepareInvoiceOutboxPayload(payload: unknown): Promise<unknown> {
-    return this.enrichInvoiceOutboxDefaults(this.submissionPayload(payload));
+    const enriched = await this.enrichInvoiceOutboxDefaults(this.submissionPayload(payload));
+    const validation = validateMysoftInvoiceOutboxPayload(enriched, {
+      requireTenantIdentifier: false,
+      autoRepair: true,
+    });
+    if (!validation.valid) {
+      throw new MysoftPayloadValidationError(
+        validation.summary,
+        validation.errors,
+        validation.nullGuard,
+      );
+    }
+    return validation.sanitizedPayload;
   }
 
   /**

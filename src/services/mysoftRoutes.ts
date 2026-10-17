@@ -9,6 +9,7 @@ import {
   getMysoftConfig,
 } from "./mysoftEdocument.ts";
 import { normalizeMysoftTenantIdentifier } from "./mysoftTenant.ts";
+import { MysoftPayloadValidationError } from "./mysoftInvoicePayload.ts";
 
 class InvalidMysoftRequestError extends Error {
   readonly code = "INVALID_REQUEST";
@@ -41,6 +42,15 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     }
     if (error instanceof InvalidMysoftRequestError) {
       res.status(400).json({ error: error.message, code: error.code });
+      return;
+    }
+    if (error instanceof MysoftPayloadValidationError) {
+      res.status(400).json({
+        error: error.message,
+        code: error.code,
+        issues: error.issues,
+        nullGuard: error.nullGuard,
+      });
       return;
     }
     if (error instanceof MysoftApiError) {
@@ -596,6 +606,19 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
   );
 
   router.post("/outgoing", run((req) => client.createOutgoing(req.body)));
+  router.post(
+    "/outgoing/validate",
+    run((req) => client.validateOutgoingPayload(req.body)),
+  );
+  router.get(
+    "/diagnostics",
+    run((req) => {
+      const limit = positiveInt(queryText(req, "limit")) || 50;
+      return {
+        logs: client.getDiagnosticLogs(limit),
+      };
+    }),
+  );
   router.post("/outgoing/ubl", run((req) => client.createOutgoingWithUblXml(req.body)));
   router.post(
     "/outgoing/draft-preview",

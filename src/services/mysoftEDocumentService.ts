@@ -12,11 +12,27 @@ import { auth } from "../lib/firebase";
 import {
   normalizeMysoftTenantIdentifier,
 } from "./mysoftTenant";
+import {
+  getRecentMysoftDiagnosticLogs,
+  MysoftPayloadValidationError,
+  validateMysoftInvoiceOutboxPayload,
+  type MysoftDiagnosticLogEntry,
+  type MysoftOutboxValidationIssue,
+  type MysoftOutboxValidationResult,
+} from "./mysoftInvoicePayload";
 
 // Re-export the shared models from this service module for UI consumers that
 // do not otherwise need to import the entire application type catalogue.
 export type { EDocumentDirection, MysoftEDocument } from "../types";
 export { normalizeMysoftTenantIdentifier, isMysoftTenantScopeError } from "./mysoftTenant";
+export {
+  validateMysoftInvoiceOutboxPayload,
+  MysoftPayloadValidationError,
+  getRecentMysoftDiagnosticLogs,
+  type MysoftDiagnosticLogEntry,
+  type MysoftOutboxValidationIssue,
+  type MysoftOutboxValidationResult,
+};
 
 /** Production and test hosts published by Mysoft. */
 export const MYSOFT_PRODUCTION_BASE_URL = "https://edocumentapi.mysoft.com.tr";
@@ -1595,20 +1611,62 @@ async function proxyRequest(
 
 /**
  * Create an outgoing e-Fatura/e-Arşiv document through the same-origin proxy.
- * The payload is intentionally opaque here: Mysoft has separate request
- * models for normal and UBL submissions and the server remains responsible
- * for credentials and tenant defaults.
+ * Runs mandatory pre-send validation & null-reference guards (company VKN/TCKN,
+ * buyer VKN/TCKN & name, line items, and invoiceCalculation totals) before
+ * posting to prevent Mysoft .NET "Object reference not set to an instance of an object".
  */
 export async function createMysoftOutgoingEDocument(
   payload: unknown,
   options: { signal?: AbortSignal } = {},
 ): Promise<unknown> {
+  const validation = validateMysoftInvoiceOutboxPayload(payload, {
+    requireTenantIdentifier: false,
+    autoRepair: true,
+  });
+  if (!validation.valid) {
+    throw new MysoftPayloadValidationError(
+      validation.summary,
+      validation.errors,
+      validation.nullGuard,
+    );
+  }
   const { payload: result } = await proxyRequest("/outgoing", {
     method: "POST",
-    body: JSON.stringify(payload ?? {}),
+    body: JSON.stringify(validation.sanitizedPayload),
     signal: options.signal,
   });
   return result;
+}
+
+/** Fetch recent Mysoft diagnostic & error logs from server and local buffer. */
+export async function fetchMysoftDiagnosticLogs(
+  limit = 30,
+  options: { signal?: AbortSignal } = {},
+): Promise<MysoftDiagnosticLogEntry[]> {
+  const localLogs = getRecentMysoftDiagnosticLogs(limit);
+  try {
+    const { payload } = await proxyRequest(
+      `diagnostics?limit=${limit}`,
+      { method: "GET", signal: options.signal },
+      "",
+    );
+    const record = asRecord(payload);
+    const serverLogs = Array.isArray(record?.logs)
+      ? (record.logs as MysoftDiagnosticLogEntry[])
+      : [];
+    const merged = [...serverLogs, ...localLogs];
+    const seen = new Set<string>();
+    return merged
+      .filter((entry) => {
+        if (!entry?.id || seen.has(entry.id)) return false;
+        seen.add(entry.id);
+        return true;
+      })
+      .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")))
+      .slice(0, limit);
+  } catch {
+    return localLogs;
+  }
 }
 
 /** Submit an outgoing invoice carrying a UBL XML document. */

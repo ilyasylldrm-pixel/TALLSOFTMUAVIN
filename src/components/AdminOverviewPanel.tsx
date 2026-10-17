@@ -36,6 +36,7 @@ import {
   Check,
   Zap,
   Trash2,
+  Terminal,
 } from "lucide-react";
 import { UserProfileData, UserFileMetadata } from "../lib/firebase";
 import { CompanyItem } from "../types";
@@ -65,7 +66,7 @@ interface AdminOverviewPanelProps {
   users: UserProfileData[];
   companies?: CompanyItem[];
   files: UserFileMetadata[];
-  onNavigateTab: (tab: "matrix" | "users" | "companies" | "files" | "payroll" | "broadcast" | "audit") => void;
+  onNavigateTab: (tab: "matrix" | "users" | "companies" | "files" | "payroll" | "broadcast" | "audit" | "mysoft_logs") => void;
   onOpenAddUserModal: () => void;
   onOpenAddCompanyModal?: () => void;
   onOpenDeleteCompanyModal?: () => void;
@@ -253,6 +254,14 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
 
           {/* Aksiyon Butonları */}
           <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <button
+              onClick={() => onNavigateTab("mysoft_logs")}
+              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+              title="Mysoft API Teknik Hata Dökümü ve Çözüm Önerisi Log İzleme Ekranı"
+            >
+              <Terminal className="w-4 h-4" />
+              <span>Mysoft Log İzleme Ekranı</span>
+            </button>
             <button
               onClick={handleForceGlobalSyncPulse}
               className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-white/20 cursor-pointer shadow-sm hover:scale-102 active:scale-98"

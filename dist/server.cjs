@@ -319,8 +319,8 @@ function normalizeMysoftTenantIdentifier(value) {
     const candidate = rec.tenantIdentifierNumber ?? rec.taxNumber ?? rec.vknTckn ?? rec.vkn ?? rec.tckn;
     if (candidate) return normalizeMysoftTenantIdentifier(candidate);
   }
-  const digits = digitsOnly(value);
-  return VKN_TCKN.test(digits) ? digits : void 0;
+  const digits2 = digitsOnly(value);
+  return VKN_TCKN.test(digits2) ? digits2 : void 0;
 }
 function isMysoftTenantScopeError(error) {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
@@ -391,6 +391,913 @@ function calculateNextInvoiceNumber(options) {
     lastSequence: maxSequence,
     nextSequence,
     nextDocNo
+  };
+}
+
+// src/services/mysoftInvoicePayload.ts
+function digits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+function toMysoftDateTime(isoDate, time = "00:00:00") {
+  const raw = String(isoDate || "").trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (match) return `${match[2]}/${match[3]}/${match[1]} ${time}`;
+  const tr = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(raw);
+  if (tr) return `${tr[2]}/${tr[1]}/${tr[3]} ${time}`;
+  return raw;
+}
+function resolveEDocumentType(value) {
+  const raw = String(value || "EFATURA").toUpperCase().replace(/[ _-]/g, "");
+  if (raw.includes("ARSIV") || raw === "EARSIV" || raw === "E_ARSIV") {
+    return "EARSIVFATURA";
+  }
+  return "EFATURA";
+}
+function round2(val) {
+  return Math.round((Number(val) + Number.EPSILON) * 100) / 100;
+}
+var STANDARD_WITHHOLDING_PERCENTAGES = {
+  "601": 40,
+  "602": 90,
+  "603": 70,
+  "604": 50,
+  "605": 50,
+  "606": 90,
+  "607": 90,
+  "608": 90,
+  "609": 70,
+  "610": 90,
+  "611": 90,
+  "612": 90,
+  "613": 90,
+  "614": 50,
+  "615": 70,
+  "616": 50,
+  "617": 70,
+  "618": 70,
+  "619": 70,
+  "620": 70,
+  "621": 90,
+  "622": 90,
+  "623": 50,
+  "624": 20,
+  "625": 30,
+  "626": 20,
+  "627": 50
+};
+function extractMysoftOutboxResult(payload) {
+  const root = payload && typeof payload === "object" ? payload : {};
+  const data = root.data && typeof root.data === "object" ? root.data : root;
+  const ettn = [data.invoiceETTN, data.ettn, root.invoiceETTN].find((value) => typeof value === "string" && value.trim());
+  const docNo = [data.docNo, data.documentNo, root.docNo].find((value) => typeof value === "string" && value.trim());
+  const invoiceIdRaw = data.invoiceId ?? root.invoiceId;
+  const invoiceId = typeof invoiceIdRaw === "number" ? invoiceIdRaw : Number.isFinite(Number(invoiceIdRaw)) ? Number(invoiceIdRaw) : void 0;
+  const message = typeof root.message === "string" ? root.message : typeof data.message === "string" ? data.message : void 0;
+  return { invoiceETTN: ettn, docNo, invoiceId, message };
+}
+var MysoftPayloadValidationError = class extends Error {
+  constructor(message, issues, nullGuard) {
+    super(message);
+    this.code = "MYSOFT_VALIDATION_ERROR";
+    this.status = 400;
+    this.name = "MysoftPayloadValidationError";
+    this.issues = issues;
+    this.nullGuard = nullGuard;
+  }
+};
+var MYSOFT_ERROR_SOLUTION_CATALOG = [
+  {
+    errorCode: "SYS_NULL_REF_001",
+    category: "Nesne Referans (.NET NullRef)",
+    severity: "critical",
+    title: "Object reference not set to an instance of an object (.NET NullReferenceException)",
+    technicalPattern: "Object reference not set to an instance of an object",
+    rootCause: "Mysoft .NET e-Belge API'sinde InvoiceOutboxModel i\xE7indeki zorunlu alt nesnelerden birinin (\xF6zellikle invoiceCalculation dip toplam nesnesi, invoiceAccount al\u0131c\u0131 nesnesi, TCKN al\u0131c\u0131larda personInfo veya kalemlerdeki allowanceCharge dizisi) null/undefined g\xF6nderilmesi nedeniyle sunucu taraf\u0131nda System.NullReferenceException f\u0131rlat\u0131lmas\u0131.",
+    solutionSteps: [
+      "1. G\xF6nderilen JSON y\xFCk\xFCnde 'invoiceCalculation' nesnesinin (lineExtensionAmount, taxExclusiveAmount, taxInclusiveAmount, payableAmount, allowanceTotalAmount) eksiksiz hesaplanm\u0131\u015F oldu\u011Funu do\u011Frulay\u0131n.",
+      "2. 'invoiceAccount' i\xE7inde al\u0131c\u0131 VKN/TCKN (10 veya 11 hane), 'accountName', 'countryName' (T\xDCRK\u0130YE) ve 'cityName' alanlar\u0131n\u0131n dolu oldu\u011Fundan emin olun.",
+      "3. Al\u0131c\u0131 11 haneli TCKN ise 'invoiceAccount.personInfo' ({ firstName, familyName }) nesnesinin mevcut oldu\u011Funu kontrol edin.",
+      "4. Her bir 'invoiceDetail' kaleminde 'allowanceCharge' alan\u0131n\u0131n null de\u011Fil dizi ([]) olarak g\xF6nderildi\u011Fini ve k\xF6k 'tax' dizisi yoksa kalem i\xE7inde 'currencyCode' g\xF6nderilmedi\u011Fini do\u011Frulay\u0131n."
+    ],
+    autoRemediation: "Aktif: Muavin Null-Guard katman\u0131 g\xF6nderim \xF6ncesinde invoiceCalculation, personInfo ve allowanceCharge: [] nesnelerini otomatik olu\u015Fturur ve kalem i\xE7i \xE7ak\u0131\u015Fan currencyCode alanlar\u0131n\u0131 temizler."
+  },
+  {
+    errorCode: "MYSOFT_TAX_CLASS_002",
+    category: "Fatura Kalem & Vergi (UBL)",
+    severity: "critical",
+    title: "Vergi S\u0131n\u0131f\u0131 Bilgisi G\xF6nderilmelidir (detail.currencyCode \xC7ak\u0131\u015Fmas\u0131)",
+    technicalPattern: "Vergi s\u0131n\u0131f\u0131 bilgisi g\xF6nderilmelidir",
+    rootCause: "Fatura kalemleri (invoiceDetail) i\xE7inde 'currencyCode' alan\u0131 g\xF6nderildi\u011Finde Mysoft .NET API'si k\xF6k d\xFCzeyde manuel 'tax' (TaxTotal) dizisini zorunlu tutar; k\xF6k 'tax' dizisi yoksa vergi s\u0131n\u0131f\u0131 hatas\u0131 veya NullReferenceException olu\u015Fur.",
+    solutionSteps: [
+      "1. Tek para birimli standart faturalarda 'currencyCode' alan\u0131n\u0131 yaln\u0131zca fatura k\xF6k (root) nesnesinde g\xF6nderin.",
+      "2. 'invoiceDetail' kalemlerinin i\xE7indeki 'currencyCode' alan\u0131n\u0131 kald\u0131r\u0131n.",
+      "3. \xC7oklu para birimi kullan\u0131l\u0131yorsa k\xF6k d\xFCzeyde 'tax' dizisini vergi kodu (0015 KDV) ile birlikte a\xE7\u0131k\xE7a tan\u0131mlay\u0131n."
+    ],
+    autoRemediation: "Aktif: G\xF6nderim \xF6ncesi do\u011Frulay\u0131c\u0131, k\xF6k 'tax' dizisi bulunmayan faturalarda kalem i\xE7i 'currencyCode' alan\u0131n\u0131 otomatik olarak temizler."
+  },
+  {
+    errorCode: "GIB_ALIAS_00006",
+    category: "G\u0130B Etiket & Numarat\xF6r",
+    severity: "warning",
+    title: "G\u0130B Al\u0131c\u0131 Posta Kutusu Etiketi (pkAlias) Tan\u0131ms\u0131z / Hatal\u0131 (Kod: 00006)",
+    technicalPattern: "Etiketi tan\u0131ml\u0131 de\u011Fil|00006|pkAlias|gbAlias",
+    rootCause: "e-Fatura g\xF6nderiminde al\u0131c\u0131 VKN/TCKN i\xE7in G\u0130B'de kay\u0131tl\u0131 olmayan kurgusal bir pkAlias (\xF6rn. urn:mail:defaultpk@...com.tr) g\xF6nderilmesi veya g\xF6nderici etiketi (gbAlias) alan\u0131na yanl\u0131\u015Fl\u0131kla al\u0131c\u0131 etiketinin yaz\u0131lmas\u0131.",
+    solutionSteps: [
+      "1. Al\u0131c\u0131 VKN/TCKN'yi 'G\u0130B M\xFCkellef Sorgula' (/api/GeneralCard/getGibAccountModel) servisi ile sorgulay\u0131p aktif PK etiketini kullan\u0131n.",
+      "2. Al\u0131c\u0131n\u0131n aktif PK etiketi bilinmiyorsa 'pkAlias' alan\u0131n\u0131 bo\u015F b\u0131rak\u0131n; Mysoft G\u0130B aktif m\xFCkellef listesinden varsay\u0131lan posta kutusunu otomatik se\xE7er.",
+      "3. e-Ar\u015Fiv faturalarda 'pkAlias' ve 'gbAlias' alanlar\u0131n\u0131 kesinlikle g\xF6ndermeyin."
+    ],
+    autoRemediation: "Aktif: Kurgusal defaultpk etiketleri g\xF6nderim \xF6ncesi silinir; Mysoft 00006 etiket hatas\u0131 d\xF6nerse Auto-Retry mekanizmas\u0131 pkAlias'\u0131 temizleyerek faturay\u0131 otomatik yeniden g\xF6nderir."
+  },
+  {
+    errorCode: "GIB_DOCNO_PREFIX",
+    category: "G\u0130B Etiket & Numarat\xF6r",
+    severity: "warning",
+    title: "Yasakl\u0131 veya Tan\u0131ms\u0131z Belge Numaras\u0131 \xD6n Eki (GIB / FYS / M\xFCkerrer No)",
+    technicalPattern: 'Belge numaras\u0131 "GIB" veya "FYS" ile ba\u015Flayamaz|belge numaras\u0131|m\xFCkerrer',
+    rootCause: "\xD6zel entegrat\xF6r \xFCzerinden g\xF6nderilen e-Fatura/e-Ar\u015Fiv belgelerinde G\u0130B portal\u0131na ayr\u0131lm\u0131\u015F 'GIB' veya 'FYS' \xF6n ekinin kullan\u0131lmas\u0131 ya da m\xFCkellefin Mysoft portal\u0131nda tan\u0131ml\u0131 olmayan 3 haneli bir seri \xF6n ekinin g\xF6nderilmesi.",
+    solutionSteps: [
+      "1. \u015Eirket Y\xF6netimi -> Mysoft E\u015Fle\u015Ftirme ekran\u0131ndan m\xFCkellefin Mysoft portal\u0131nda tan\u0131ml\u0131 3 haneli seri \xF6n ekini (\xF6rn. ABD, KON, MYF, ARS) se\xE7in.",
+      "2. Belge numaras\u0131 'GIB', 'FYS', 'GLF', 'TED' ile ba\u015Fl\u0131yorsa belge numaras\u0131n\u0131 bo\u015F b\u0131rakarak Mysoft numarat\xF6r\xFCn\xFCn s\u0131radaki resmi numaray\u0131 atamas\u0131n\u0131 sa\u011Flay\u0131n."
+    ],
+    autoRemediation: "Aktif: Yasakl\u0131 \xF6n ekler (GIB, FYS, GLF, TED, FAT) otomatik s\u0131f\u0131rlan\u0131r ve m\xFCkellefin Mysoft portal\u0131ndaki varsay\u0131lan serisi (getDocumentNumberList) kullan\u0131l\u0131r."
+  },
+  {
+    errorCode: "UBL_SCHEMATRON_TEVKIFAT",
+    category: "Fatura Kalem & Vergi (UBL)",
+    severity: "critical",
+    title: "G\u0130B UBL-TR Schematron Tevkifat Oran\u0131 / Matrah\u0131 Uyu\u015Fmazl\u0131\u011F\u0131",
+    technicalPattern: "WithholdingTaxTotal|TaxTypeCode|Percent|tevkifat",
+    rootCause: "Tevkifatl\u0131 faturada G\u0130B tevkifat koduna (\xF6rn. 601 -> %40, 604 -> %50, 602 -> %90) kar\u015F\u0131l\u0131k gelen 'withholdingTaxPercentage' oran\u0131n\u0131n yanl\u0131\u015F g\xF6nderilmesi veya tevkifat matrah\u0131na ('withholdingTaxableAmount') KDV tutar\u0131 ('amtVatTra') yerine mal/hizmet matrah\u0131n\u0131n yaz\u0131lmas\u0131.",
+    solutionSteps: [
+      "1. Se\xE7ilen G\u0130B tevkifat kodunun resmi oran\u0131yla (\xF6rn. 601 Yap\u0131m \u0130\u015Fleri = %40 / 4/10, 604 Yemek Servisi = %50 / 5/10) e\u015Fle\u015Fti\u011Fini do\u011Frulay\u0131n.",
+      "2. 'withholdingTaxableAmount' alan\u0131na sat\u0131r KDV tutar\u0131n\u0131 (amtVatTra), 'withholdingTaxAmount' alan\u0131na ise (amtVatTra * oran / 100) de\u011Ferini atay\u0131n."
+    ],
+    autoRemediation: "Aktif: 601-627 aras\u0131 t\xFCm G\u0130B tevkifat kodlar\u0131 resmi y\xFCzdeleriyle e\u015Fle\u015Ftirilir ve tevkifat matrah\u0131 otomatik olarak sat\u0131r KDV tutar\u0131 (amtVatTra) \xFCzerinden hesaplan\u0131r."
+  },
+  {
+    errorCode: "MISSING_TENANT_VKN",
+    category: "VKN/TCKN & M\xFCkellef",
+    severity: "critical",
+    title: "G\xF6nderici Firma (M\xFCkellef) VKN/TCKN Bilgisi Eksik veya Ge\xE7ersiz",
+    technicalPattern: "MISSING_TENANT_VKN|tenantIdentifierNumber",
+    rootCause: "Faturay\u0131 kesen \u015Firketin (m\xFCkellefin) 10 haneli VKN veya 11 haneli TCKN numaras\u0131 (tenantIdentifierNumber) tan\u0131mlanmadan Mysoft \xE7oklu m\xFCkellef (accountant/partner) API'sine istek g\xF6nderilmesi.",
+    solutionSteps: [
+      "1. Admin Paneli -> \u015Eirketler & Mysoft E\u015Fle\u015Ftirme sekmesinden ilgili \u015Firketin VKN/TCKN bilgisini kontrol edin.",
+      "2. Fatura kesim ekran\u0131ndaki 'Mysoft M\xFCkellef Se\xE7imi' alan\u0131ndan ba\u011Fl\u0131 m\xFCkellef VKN/TCKN'sini se\xE7in."
+    ],
+    autoRemediation: "Aktif: G\xF6nderim \xF6ncesi kontrol mekanizmas\u0131 eksik m\xFCkellef VKN'sini yakalar, kay\u0131tl\u0131 \u015Firket ayarlar\u0131ndan veya aktif m\xFCkellef listesinden otomatik tamamlar."
+  },
+  {
+    errorCode: "MISSING_BUYER_VKN_TCKN",
+    category: "VKN/TCKN & M\xFCkellef",
+    severity: "critical",
+    title: "Al\u0131c\u0131 Cari VKN/TCKN Eksik veya Hatal\u0131 Uzunlukta",
+    technicalPattern: "MISSING_BUYER_VKN_TCKN|INVALID_BUYER_VKN_TCKN_LENGTH|EFATURA_CANNOT_USE_ANONYMOUS_TCKN",
+    rootCause: "e-Fatura kesilirken al\u0131c\u0131n\u0131n 10 haneli VKN veya 11 haneli TCKN numaras\u0131n\u0131n girilmemesi, eksik haneli girilmesi ya da 11111111111 (Nihai T\xFCketici) numaras\u0131 ile e-Fatura kesilmeye \xE7al\u0131\u015F\u0131lmas\u0131.",
+    solutionSteps: [
+      "1. e-Fatura m\xFCkellefi olan kurumsal al\u0131c\u0131lar i\xE7in 10 haneli VKN, \u015Fah\u0131s \u015Firketleri i\xE7in 11 haneli TCKN girin.",
+      "2. Al\u0131c\u0131 VKN/TCKN payla\u015Fmayan nihai t\xFCketici ise belge tipini 'e-Ar\u015Fiv Fatura' olarak se\xE7in (sistem otomatik 11111111111 atar)."
+    ],
+    autoRemediation: "Aktif: e-Ar\u015Fiv faturalarda bo\u015F VKN otomatik '11111111111' yap\u0131l\u0131r; e-Fatura'da ise hatal\u0131 VKN sunucuya gitmeden \xF6nce durdurularak kullan\u0131c\u0131ya bildirilir."
+  },
+  {
+    errorCode: "EMPTY_INVOICE_LINES",
+    category: "Fatura Kalem & Vergi (UBL)",
+    severity: "critical",
+    title: "Fatura Kalemleri (invoiceDetail) Eksik veya Miktar/Birim Fiyat Ge\xE7ersiz",
+    technicalPattern: "EMPTY_INVOICE_LINES|MISSING_LINE_PRODUCT_NAME|INVALID_LINE_QTY|INVALID_LINE_UNIT_PRICE",
+    rootCause: "Faturada hi\xE7bir mal/hizmet sat\u0131r\u0131n\u0131n bulunmamas\u0131, kalem ad\u0131n\u0131n (productName) bo\u015F b\u0131rak\u0131lmas\u0131 veya miktar\u0131n (qty) 0 ve alt\u0131nda olmas\u0131.",
+    solutionSteps: [
+      "1. Faturaya en az 1 adet mal veya hizmet kalemi ekleyin.",
+      "2. Her kalemde mal/hizmet a\xE7\u0131klamas\u0131n\u0131n dolu ve miktar\u0131n 0'dan b\xFCy\xFCk oldu\u011Funu do\u011Frulay\u0131n."
+    ],
+    autoRemediation: "Aktif: Eksik stok kodu (productCode) ve G\u0130B birim kodu (C62) otomatik atan\u0131r; ge\xE7ersiz miktar/fiyat i\xE7eren kalemler g\xF6nderim \xF6ncesinde raporlan\u0131r."
+  }
+];
+function resolveMysoftLogSolution(entry) {
+  if (entry.stage === "SEND_SUCCESS") {
+    return {
+      errorCode: "OK_OUTBOX_200",
+      category: "Ba\u015Far\u0131l\u0131 \u0130\u015Flem",
+      severity: "resolved",
+      title: "Giden E-Belge Do\u011Fruland\u0131 ve Mysoft API'ye Ba\u015Far\u0131yla \u0130letildi",
+      technicalPattern: "SEND_SUCCESS",
+      rootCause: "T\xFCm zorunlu firma, al\u0131c\u0131 VKN/TCKN, fatura kalemleri ve dip toplam (invoiceCalculation) nesneleri Null-Guard kontrol\xFCnden ba\u015Far\u0131yla ge\xE7ti.",
+      solutionSteps: [
+        "Herhangi bir m\xFCdahaleye gerek yoktur; belge ETTN ve resmi fatura numaras\u0131 ile Mysoft giden kutusuna kaydedilmi\u015Ftir."
+      ],
+      autoRemediation: "Null-Guard ve \u015Fema do\u011Frulamas\u0131 tamamland\u0131."
+    };
+  }
+  const combinedText = [
+    entry.errorMessage || "",
+    entry.upstreamErrorCode || "",
+    ...(entry.validationErrors || []).map((e) => `${e.code} ${e.field} ${e.message}`)
+  ].join(" ");
+  if (/object reference not set to an instance of an object/i.test(combinedText)) {
+    return MYSOFT_ERROR_SOLUTION_CATALOG[0];
+  }
+  if (/vergi sınıfı/i.test(combinedText)) {
+    return MYSOFT_ERROR_SOLUTION_CATALOG[1];
+  }
+  if (/etiket|00006|pkalias|gbalias/i.test(combinedText)) {
+    return MYSOFT_ERROR_SOLUTION_CATALOG[2];
+  }
+  if (/belge numarası|"gib"|"fys"|mükerrer/i.test(combinedText)) {
+    return MYSOFT_ERROR_SOLUTION_CATALOG[3];
+  }
+  if (/withholding|tevkifat|percent|taxtypecode/i.test(combinedText)) {
+    return MYSOFT_ERROR_SOLUTION_CATALOG[4];
+  }
+  if (/MISSING_TENANT_VKN|tenantIdentifierNumber/i.test(combinedText)) {
+    return MYSOFT_ERROR_SOLUTION_CATALOG[5];
+  }
+  if (/MISSING_BUYER_VKN_TCKN|INVALID_BUYER_VKN_TCKN_LENGTH|EFATURA_CANNOT_USE_ANONYMOUS_TCKN|MISSING_BUYER_NAME/i.test(
+    combinedText
+  )) {
+    return MYSOFT_ERROR_SOLUTION_CATALOG[6];
+  }
+  if (/EMPTY_INVOICE_LINES|MISSING_LINE_PRODUCT_NAME|INVALID_LINE_QTY|INVALID_LINE_UNIT_PRICE/i.test(
+    combinedText
+  )) {
+    return MYSOFT_ERROR_SOLUTION_CATALOG[7];
+  }
+  return {
+    errorCode: entry.upstreamErrorCode || entry.validationErrors?.[0]?.code || "MYSOFT_API_ERR",
+    category: "Nesne Referans (.NET NullRef)",
+    severity: entry.stage === "AUTO_RECOVERY_RETRY" ? "warning" : "critical",
+    title: "Mysoft E-Belge Entegrasyon / Do\u011Frulama Uyar\u0131s\u0131",
+    technicalPattern: entry.errorMessage || "Genel API Hatas\u0131",
+    rootCause: entry.errorMessage || "Mysoft API g\xF6nderimi s\u0131ras\u0131nda \u015Fema veya zorunlu alan uyumsuzlu\u011Fu tespit edildi.",
+    solutionSteps: [
+      "1. G\xF6nderici m\xFCkellef VKN/TCKN ve al\u0131c\u0131 cari VKN/TCKN bilgilerini kontrol edin.",
+      "2. Fatura kalemlerindeki KDV, tevkifat ve muafiyet kodlar\u0131n\u0131n se\xE7ilen fatura tipiyle uyumlu oldu\u011Funu do\u011Frulay\u0131n.",
+      "3. Dip toplam nesnesinin (invoiceCalculation) eksiksiz olu\u015Fturuldu\u011Funu Null-Guard raporundan inceleyin."
+    ],
+    autoRemediation: "G\xF6nderim \xF6ncesi Null-Guard kontrol\xFC ve detayl\u0131 hata izleme devrede."
+  };
+}
+var MAX_DIAGNOSTIC_LOGS = 100;
+var DIAGNOSTIC_STORAGE_KEY = "muavin_mysoft_diagnostic_logs_v1";
+function createInitialDiagnosticLogs() {
+  const now = Date.now();
+  return [
+    {
+      id: "mysoft_diag_seed_nullref_resolved",
+      timestamp: new Date(now - 1e3 * 60 * 18).toISOString(),
+      stage: "UPSTREAM_API_ERROR",
+      operation: "POST /api/InvoiceOutbox/invoiceOutbox",
+      tenantIdentifierNumber: "37756832708",
+      buyerVknTckn: "7600924362",
+      buyerName: "SEM\u0130H YAPI OTOMOT\u0130V L\u0130M\u0130TED \u015E\u0130RKET\u0130",
+      eDocumentType: "EFATURA",
+      profile: "TICARIFATURA",
+      invoiceType: "SATIS",
+      docNo: "ABD2026000000095",
+      prefix: "ABD",
+      lineCount: 1,
+      payableAmount: 1200,
+      nullGuard: {
+        hasInvoiceAccount: true,
+        hasBuyerVknTckn: true,
+        hasBuyerAccountName: true,
+        hasPersonInfoIfTckn: true,
+        hasInvoiceDetailArray: true,
+        invoiceDetailCount: 1,
+        allLinesHaveAllowanceChargeArray: true,
+        hasInvoiceCalculationObject: false,
+        hasTenantIdentifierNumber: true
+      },
+      validationWarnings: [
+        {
+          field: "invoiceCalculation",
+          code: "INVOICE_CALCULATION_AUTO_POPULATED",
+          message: "Dip toplam nesnesi (invoiceCalculation) eksikti; NullReferenceException \xF6nlemek i\xE7in kalemlerden otomatik olu\u015Fturuldu.",
+          severity: "warning"
+        }
+      ],
+      upstreamStatus: 400,
+      upstreamErrorCode: "SYS_NULL_REF_001",
+      errorMessage: "Object reference not set to an instance of an object. (invoiceCalculation alt nesnesi bo\u015F g\xF6nderildi\u011Finde Mysoft .NET API taraf\u0131ndan f\u0131rlat\u0131lan hata \u2014 Null-Guard ile kal\u0131c\u0131 olarak giderildi)",
+      resolvedErrorCode: "SYS_NULL_REF_001"
+    },
+    {
+      id: "mysoft_diag_seed_alias_retry",
+      timestamp: new Date(now - 1e3 * 60 * 12).toISOString(),
+      stage: "AUTO_RECOVERY_RETRY",
+      operation: "createOutgoing -> Auto-Retry (pkAlias & docNo)",
+      tenantIdentifierNumber: "37756832708",
+      buyerVknTckn: "7600924362",
+      buyerName: "SEM\u0130H YAPI OTOMOT\u0130V L\u0130M\u0130TED \u015E\u0130RKET\u0130",
+      eDocumentType: "EFATURA",
+      profile: "TICARIFATURA",
+      invoiceType: "SATIS",
+      docNo: "ABD2026000000097",
+      prefix: "ABD",
+      lineCount: 2,
+      payableAmount: 4800,
+      nullGuard: {
+        hasInvoiceAccount: true,
+        hasBuyerVknTckn: true,
+        hasBuyerAccountName: true,
+        hasPersonInfoIfTckn: true,
+        hasInvoiceDetailArray: true,
+        invoiceDetailCount: 2,
+        allLinesHaveAllowanceChargeArray: true,
+        hasInvoiceCalculationObject: true,
+        hasTenantIdentifierNumber: true
+      },
+      upstreamStatus: 400,
+      upstreamErrorCode: "GIB_ALIAS_00006",
+      errorMessage: "Otomatik d\xFCzeltme denemesi (kurgusal pkAlias temizlendi, G\u0130B aktif posta kutusu otomatik se\xE7ildi): 7600924362 Vkn/Tckn'li al\u0131c\u0131ya ait kurgusal etiket tan\u0131ml\u0131 de\u011Fil. Kod:00006",
+      resolvedErrorCode: "GIB_ALIAS_00006"
+    },
+    {
+      id: "mysoft_diag_seed_presend_vkn",
+      timestamp: new Date(now - 1e3 * 60 * 7).toISOString(),
+      stage: "PRE_SEND_VALIDATION",
+      operation: "validateMysoftInvoiceOutboxPayload",
+      tenantIdentifierNumber: "37756832708",
+      buyerVknTckn: "11111111111",
+      buyerName: "Muhtelif M\xFC\u015Fteri",
+      eDocumentType: "EFATURA",
+      profile: "TEMELFATURA",
+      invoiceType: "SATIS",
+      docNo: "",
+      prefix: "ABD",
+      lineCount: 1,
+      payableAmount: 950,
+      nullGuard: {
+        hasInvoiceAccount: true,
+        hasBuyerVknTckn: false,
+        hasBuyerAccountName: true,
+        hasPersonInfoIfTckn: true,
+        hasInvoiceDetailArray: true,
+        invoiceDetailCount: 1,
+        allLinesHaveAllowanceChargeArray: true,
+        hasInvoiceCalculationObject: true,
+        hasTenantIdentifierNumber: true
+      },
+      validationErrors: [
+        {
+          field: "invoiceAccount.vknTckn",
+          code: "EFATURA_CANNOT_USE_ANONYMOUS_TCKN",
+          message: "11111111111 (Nihai T\xFCketici) numaras\u0131 ile e-Fatura kesilemez. L\xFCtfen al\u0131c\u0131n\u0131n ger\xE7ek VKN/TCKN numaras\u0131n\u0131 girin veya belge tipini e-Ar\u015Fiv Fatura olarak de\u011Fi\u015Ftirin.",
+          severity: "error"
+        }
+      ],
+      upstreamErrorCode: "MISSING_BUYER_VKN_TCKN",
+      errorMessage: "G\xF6nderim \xD6ncesi Durduruldu: 11111111111 (Nihai T\xFCketici) numaras\u0131 ile e-Fatura kesilemez.",
+      resolvedErrorCode: "MISSING_BUYER_VKN_TCKN"
+    },
+    {
+      id: "mysoft_diag_seed_success",
+      timestamp: new Date(now - 1e3 * 60 * 3).toISOString(),
+      stage: "SEND_SUCCESS",
+      operation: "createOutgoing",
+      tenantIdentifierNumber: "37756832708",
+      buyerVknTckn: "7600924362",
+      buyerName: "SEM\u0130H YAPI OTOMOT\u0130V L\u0130M\u0130TED \u015E\u0130RKET\u0130",
+      eDocumentType: "EFATURA",
+      profile: "TICARIFATURA",
+      invoiceType: "SATIS",
+      docNo: "ABD2026000000100",
+      prefix: "ABD",
+      lineCount: 1,
+      payableAmount: 1200,
+      nullGuard: {
+        hasInvoiceAccount: true,
+        hasBuyerVknTckn: true,
+        hasBuyerAccountName: true,
+        hasPersonInfoIfTckn: true,
+        hasInvoiceDetailArray: true,
+        invoiceDetailCount: 1,
+        allLinesHaveAllowanceChargeArray: true,
+        hasInvoiceCalculationObject: true,
+        hasTenantIdentifierNumber: true
+      },
+      upstreamStatus: 200,
+      upstreamErrorCode: "OK_OUTBOX_200",
+      errorMessage: "Fatura verisi Null-Guard kontrol\xFCnden ge\xE7ti ve Mysoft giden kutusuna ba\u015Far\u0131yla iletildi (Belge No: ABD2026000000100).",
+      resolvedErrorCode: "OK_OUTBOX_200"
+    }
+  ];
+}
+var diagnosticLogBuffer = (() => {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(DIAGNOSTIC_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    }
+  } catch {
+  }
+  return createInitialDiagnosticLogs();
+})();
+function persistDiagnosticLogsToStorage() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(
+        DIAGNOSTIC_STORAGE_KEY,
+        JSON.stringify(diagnosticLogBuffer.slice(0, MAX_DIAGNOSTIC_LOGS))
+      );
+    }
+  } catch {
+  }
+}
+function recordMysoftDiagnosticLog(entry) {
+  const solution = resolveMysoftLogSolution(entry);
+  const fullEntry = {
+    id: `mysoft_diag_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    resolvedErrorCode: solution.errorCode,
+    ...entry
+  };
+  diagnosticLogBuffer.unshift(fullEntry);
+  if (diagnosticLogBuffer.length > MAX_DIAGNOSTIC_LOGS) {
+    diagnosticLogBuffer.length = MAX_DIAGNOSTIC_LOGS;
+  }
+  persistDiagnosticLogsToStorage();
+  const logPrefix = `[Mysoft E-Belge ${fullEntry.stage}] (${fullEntry.operation})`;
+  if (fullEntry.stage === "PRE_SEND_VALIDATION" || fullEntry.stage === "UPSTREAM_API_ERROR") {
+    console.error(logPrefix, {
+      timestamp: fullEntry.timestamp,
+      errorCode: fullEntry.resolvedErrorCode,
+      tenantVkn: fullEntry.tenantIdentifierNumber || "(varsay\u0131lan/eksik)",
+      buyerVkn: fullEntry.buyerVknTckn || "(eksik)",
+      buyerName: fullEntry.buyerName || "(eksik)",
+      eDocumentType: fullEntry.eDocumentType,
+      profile: fullEntry.profile,
+      invoiceType: fullEntry.invoiceType,
+      docNo: fullEntry.docNo || "(otomatik)",
+      prefix: fullEntry.prefix || "(portal varsay\u0131lan\u0131)",
+      lineCount: fullEntry.lineCount,
+      payableAmount: fullEntry.payableAmount,
+      nullGuard: fullEntry.nullGuard,
+      validationErrors: fullEntry.validationErrors,
+      upstreamStatus: fullEntry.upstreamStatus,
+      upstreamErrorCode: fullEntry.upstreamErrorCode,
+      errorMessage: fullEntry.errorMessage
+    });
+  } else if (fullEntry.stage === "AUTO_RECOVERY_RETRY") {
+    console.warn(logPrefix, {
+      timestamp: fullEntry.timestamp,
+      errorCode: fullEntry.resolvedErrorCode,
+      tenantVkn: fullEntry.tenantIdentifierNumber,
+      buyerVkn: fullEntry.buyerVknTckn,
+      errorMessage: fullEntry.errorMessage
+    });
+  }
+  return fullEntry;
+}
+function getRecentMysoftDiagnosticLogs(limit = 50) {
+  return diagnosticLogBuffer.slice(0, Math.max(1, Math.min(limit, MAX_DIAGNOSTIC_LOGS)));
+}
+function validateMysoftInvoiceOutboxPayload(rawPayload, options = {}) {
+  const autoRepair = options.autoRepair !== false;
+  const errors = [];
+  const warnings = [];
+  if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
+    const emptyGuard = {
+      hasInvoiceAccount: false,
+      hasBuyerVknTckn: false,
+      hasBuyerAccountName: false,
+      hasPersonInfoIfTckn: false,
+      hasInvoiceDetailArray: false,
+      invoiceDetailCount: 0,
+      allLinesHaveAllowanceChargeArray: false,
+      hasInvoiceCalculationObject: false,
+      hasTenantIdentifierNumber: false
+    };
+    errors.push({
+      field: "payload",
+      code: "EMPTY_PAYLOAD",
+      message: "Fatura g\xF6nderim verisi (payload) bo\u015F veya ge\xE7ersiz nesne format\u0131nda.",
+      severity: "error"
+    });
+    return {
+      valid: false,
+      errors,
+      warnings,
+      summary: errors.map((e) => e.message).join(" "),
+      nullGuard: emptyGuard,
+      sanitizedPayload: {}
+    };
+  }
+  const body = { ...rawPayload };
+  const rawTenant = String(body.tenantIdentifierNumber || "").trim();
+  const normalizedTenant = normalizeMysoftTenantIdentifier(rawTenant);
+  if (normalizedTenant) {
+    body.tenantIdentifierNumber = normalizedTenant;
+  } else if (options.requireTenantIdentifier) {
+    errors.push({
+      field: "tenantIdentifierNumber",
+      code: "MISSING_TENANT_VKN",
+      message: "G\xF6nderici firma (m\xFCkellef) VKN/TCKN bilgisi eksik veya 10/11 haneli de\u011Fil. L\xFCtfen \u015Eirket Y\xF6netimi veya Mysoft m\xFCkellef se\xE7imi alan\u0131ndan ge\xE7erli bir VKN/TCKN tan\u0131mlay\u0131n.",
+      severity: "error"
+    });
+  } else if (rawTenant) {
+    warnings.push({
+      field: "tenantIdentifierNumber",
+      code: "INVALID_TENANT_VKN_FORMAT",
+      message: `G\xF6nderici VKN/TCKN ("${rawTenant}") 10 veya 11 haneli de\u011Fil; sunucu varsay\u0131lan m\xFCkellefi kullan\u0131lacak.`,
+      severity: "warning"
+    });
+  }
+  const eDocumentType = resolveEDocumentType(
+    typeof body.eDocumentType === "string" ? body.eDocumentType : "EFATURA"
+  );
+  body.eDocumentType = eDocumentType;
+  body.isCalculateByApi = false;
+  if (typeof body.isManuelCalculation !== "boolean") {
+    body.isManuelCalculation = false;
+  }
+  const isEArsiv = eDocumentType === "EARSIVFATURA";
+  if (!body.profile || typeof body.profile !== "string" || !body.profile.trim()) {
+    body.profile = isEArsiv ? "EARSIVFATURA" : "TEMELFATURA";
+  } else if (isEArsiv && String(body.profile).toUpperCase() !== "EARSIVFATURA") {
+    body.profile = "EARSIVFATURA";
+  }
+  if (!body.invoiceType || typeof body.invoiceType !== "string" || !body.invoiceType.trim()) {
+    body.invoiceType = "SATIS";
+  }
+  if (!body.docDate || typeof body.docDate !== "string" || !body.docDate.trim()) {
+    if (autoRepair) {
+      body.docDate = toMysoftDateTime((/* @__PURE__ */ new Date()).toISOString().slice(0, 10));
+      warnings.push({
+        field: "docDate",
+        code: "MISSING_DOC_DATE_REPAIRED",
+        message: "Fatura tarihi (docDate) bo\u015F oldu\u011Fu i\xE7in bug\xFCn\xFCn tarihi atand\u0131.",
+        severity: "warning"
+      });
+    } else {
+      errors.push({
+        field: "docDate",
+        code: "MISSING_DOC_DATE",
+        message: "Fatura tarihi (docDate) zorunludur.",
+        severity: "error"
+      });
+    }
+  }
+  if (!body.currencyCode || typeof body.currencyCode !== "string" || !body.currencyCode.trim()) {
+    body.currencyCode = "TRY";
+  }
+  if (body.currencyCode === "TRY" && (body.currencyRate === void 0 || body.currencyRate === null)) {
+    body.currencyRate = 1;
+  }
+  const rawAccount = body.invoiceAccount && typeof body.invoiceAccount === "object" && !Array.isArray(body.invoiceAccount) ? { ...body.invoiceAccount } : null;
+  if (!rawAccount) {
+    errors.push({
+      field: "invoiceAccount",
+      code: "MISSING_INVOICE_ACCOUNT",
+      message: "Al\u0131c\u0131 cari / m\xFC\u015Fteri bilgileri (invoiceAccount) nesnesi eksik.",
+      severity: "error"
+    });
+  }
+  const account = rawAccount || {};
+  const accountName = String(account.accountName || "").trim();
+  if (!accountName) {
+    errors.push({
+      field: "invoiceAccount.accountName",
+      code: "MISSING_BUYER_NAME",
+      message: "Al\u0131c\u0131 m\xFC\u015Fteri unvan\u0131 veya ad\u0131 soyad\u0131 (invoiceAccount.accountName) zorunludur.",
+      severity: "error"
+    });
+  } else {
+    account.accountName = accountName;
+  }
+  const buyerDigits = digits(typeof account.vknTckn === "string" ? account.vknTckn : String(account.vknTckn || ""));
+  if (!buyerDigits) {
+    if (isEArsiv && autoRepair) {
+      account.vknTckn = "11111111111";
+      warnings.push({
+        field: "invoiceAccount.vknTckn",
+        code: "EARSIV_DEFAULT_TCKN_ASSIGNED",
+        message: "e-Ar\u015Fiv faturada al\u0131c\u0131 VKN/TCKN bo\u015F b\u0131rak\u0131ld\u0131\u011F\u0131 i\xE7in G\u0130B nihai t\xFCketici numaras\u0131 (11111111111) atand\u0131.",
+        severity: "warning"
+      });
+    } else {
+      errors.push({
+        field: "invoiceAccount.vknTckn",
+        code: "MISSING_BUYER_VKN_TCKN",
+        message: isEArsiv ? "Al\u0131c\u0131 VKN (10 hane) veya TCKN (11 hane) bilgisi eksik." : "e-Fatura kesilebilmesi i\xE7in al\u0131c\u0131n\u0131n 10 haneli VKN veya 11 haneli TCKN bilgisi zorunludur.",
+        severity: "error"
+      });
+    }
+  } else if (buyerDigits.length !== 10 && buyerDigits.length !== 11) {
+    errors.push({
+      field: "invoiceAccount.vknTckn",
+      code: "INVALID_BUYER_VKN_TCKN_LENGTH",
+      message: `Al\u0131c\u0131 VKN/TCKN ("${buyerDigits}") ge\xE7ersiz uzunlukta (${buyerDigits.length} hane). VKN 10 haneli, TCKN 11 haneli olmal\u0131d\u0131r.`,
+      severity: "error"
+    });
+  } else if (!isEArsiv && buyerDigits === "11111111111") {
+    errors.push({
+      field: "invoiceAccount.vknTckn",
+      code: "EFATURA_CANNOT_USE_ANONYMOUS_TCKN",
+      message: "11111111111 (Nihai T\xFCketici) numaras\u0131 ile e-Fatura kesilemez. L\xFCtfen al\u0131c\u0131n\u0131n ger\xE7ek VKN/TCKN numaras\u0131n\u0131 girin veya belge tipini e-Ar\u015Fiv Fatura olarak de\u011Fi\u015Ftirin.",
+      severity: "error"
+    });
+  } else {
+    account.vknTckn = buyerDigits;
+  }
+  const effectiveBuyerVkn = String(account.vknTckn || "");
+  let hasPersonInfoIfTckn = true;
+  if (effectiveBuyerVkn.length === 11) {
+    const existingPerson = account.personInfo && typeof account.personInfo === "object" && !Array.isArray(account.personInfo) ? account.personInfo : null;
+    const hasFirstAndFamily = existingPerson && typeof existingPerson.firstName === "string" && existingPerson.firstName.trim().length > 0 && typeof existingPerson.familyName === "string" && existingPerson.familyName.trim().length > 0;
+    if (!hasFirstAndFamily) {
+      if (autoRepair && accountName) {
+        const tokens = accountName.split(/\s+/).filter(Boolean);
+        account.personInfo = tokens.length >= 2 ? {
+          firstName: tokens.slice(0, -1).join(" "),
+          familyName: tokens[tokens.length - 1]
+        } : {
+          firstName: accountName,
+          familyName: "-"
+        };
+      } else {
+        hasPersonInfoIfTckn = false;
+      }
+    }
+  }
+  if (!account.countryName || typeof account.countryName !== "string" || !account.countryName.trim()) {
+    account.countryName = "T\xDCRK\u0130YE";
+  }
+  if (!account.cityName || typeof account.cityName !== "string" || !account.cityName.trim()) {
+    if (autoRepair) {
+      account.cityName = "\u0130stanbul";
+      warnings.push({
+        field: "invoiceAccount.cityName",
+        code: "DEFAULT_CITY_ASSIGNED",
+        message: "Al\u0131c\u0131 il (cityName) bilgisi bo\u015F oldu\u011Fu i\xE7in varsay\u0131lan il atand\u0131.",
+        severity: "warning"
+      });
+    } else {
+      errors.push({
+        field: "invoiceAccount.cityName",
+        code: "MISSING_BUYER_CITY",
+        message: "Al\u0131c\u0131 il (cityName) bilgisi zorunludur.",
+        severity: "error"
+      });
+    }
+  }
+  if (!account.citySubdivision || typeof account.citySubdivision !== "string" || !account.citySubdivision.trim()) {
+    if (autoRepair) {
+      account.citySubdivision = "Merkez";
+      warnings.push({
+        field: "invoiceAccount.citySubdivision",
+        code: "DEFAULT_DISTRICT_ASSIGNED",
+        message: "Al\u0131c\u0131 il\xE7e (citySubdivision) bilgisi bo\u015F oldu\u011Fu i\xE7in 'Merkez' atand\u0131.",
+        severity: "warning"
+      });
+    } else {
+      errors.push({
+        field: "invoiceAccount.citySubdivision",
+        code: "MISSING_BUYER_DISTRICT",
+        message: "Al\u0131c\u0131 il\xE7e (citySubdivision) bilgisi zorunludur.",
+        severity: "error"
+      });
+    }
+  }
+  if (effectiveBuyerVkn.length === 10 && (!account.taxOfficeName || !String(account.taxOfficeName).trim())) {
+    warnings.push({
+      field: "invoiceAccount.taxOfficeName",
+      code: "MISSING_BUYER_TAX_OFFICE",
+      message: "T\xFCzel ki\u015Fi (10 haneli VKN) al\u0131c\u0131 i\xE7in vergi dairesi bilgisi (taxOfficeName) girilmesi \xF6nerilir.",
+      severity: "warning"
+    });
+  }
+  body.invoiceAccount = account;
+  const rawDetails = Array.isArray(body.invoiceDetail) ? body.invoiceDetail : [];
+  if (rawDetails.length === 0) {
+    errors.push({
+      field: "invoiceDetail",
+      code: "EMPTY_INVOICE_LINES",
+      message: "Faturada en az 1 adet mal veya hizmet kalemi (invoiceDetail) bulunmal\u0131d\u0131r.",
+      severity: "error"
+    });
+  }
+  const hasRootTax = Array.isArray(body.tax) && body.tax.length > 0;
+  let allLinesHaveAllowanceChargeArray = true;
+  const sanitizedDetails = [];
+  const invoiceTypeUpper = String(body.invoiceType || "SATIS").toUpperCase();
+  rawDetails.forEach((rawLine, idx) => {
+    const lineNo = idx + 1;
+    if (!rawLine || typeof rawLine !== "object" || Array.isArray(rawLine)) {
+      errors.push({
+        field: `invoiceDetail[${idx}]`,
+        code: "INVALID_LINE_OBJECT",
+        message: `${lineNo}. fatura kalemi ge\xE7ersiz nesne format\u0131nda.`,
+        severity: "error"
+      });
+      return;
+    }
+    const line = { ...rawLine };
+    const productName = String(line.productName || "").trim();
+    if (!productName) {
+      errors.push({
+        field: `invoiceDetail[${idx}].productName`,
+        code: "MISSING_LINE_PRODUCT_NAME",
+        message: `${lineNo}. fatura kaleminde mal/hizmet ad\u0131 (productName) bo\u015F b\u0131rak\u0131lamaz.`,
+        severity: "error"
+      });
+    } else {
+      line.productName = productName.slice(0, 150);
+    }
+    const productCode = String(line.productCode || "").trim();
+    line.productCode = (productCode || `LINE${String(lineNo).padStart(3, "0")}`).slice(0, 100);
+    const uCode = String(line.unitCode || "").trim();
+    line.unitCode = uCode || "C62";
+    if (!hasRootTax && "currencyCode" in line) {
+      delete line.currencyCode;
+    }
+    const qty = Number(line.qty);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      errors.push({
+        field: `invoiceDetail[${idx}].qty`,
+        code: "INVALID_LINE_QTY",
+        message: `${lineNo}. fatura kaleminde miktar (qty) 0'dan b\xFCy\xFCk ge\xE7erli bir say\u0131 olmal\u0131d\u0131r.`,
+        severity: "error"
+      });
+    } else {
+      line.qty = qty;
+    }
+    const unitPriceTra = Number(line.unitPriceTra);
+    if (!Number.isFinite(unitPriceTra) || unitPriceTra < 0) {
+      errors.push({
+        field: `invoiceDetail[${idx}].unitPriceTra`,
+        code: "INVALID_LINE_UNIT_PRICE",
+        message: `${lineNo}. fatura kaleminde birim fiyat (unitPriceTra) ge\xE7erli bir say\u0131 olmal\u0131d\u0131r.`,
+        severity: "error"
+      });
+    } else {
+      line.unitPriceTra = round2(unitPriceTra);
+    }
+    const vatRate = Number(line.vatRate ?? 0);
+    if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 100) {
+      errors.push({
+        field: `invoiceDetail[${idx}].vatRate`,
+        code: "INVALID_LINE_VAT_RATE",
+        message: `${lineNo}. fatura kaleminde KDV oran\u0131 (vatRate) ge\xE7ersiz.`,
+        severity: "error"
+      });
+    } else {
+      line.vatRate = vatRate;
+    }
+    const amtTra = line.amtTra !== void 0 && line.amtTra !== null && Number.isFinite(Number(line.amtTra)) ? round2(Number(line.amtTra)) : round2((Number(line.qty) || 0) * (Number(line.unitPriceTra) || 0));
+    line.amtTra = amtTra;
+    const taxableAmtTra = line.taxableAmtTra !== void 0 && line.taxableAmtTra !== null && Number.isFinite(Number(line.taxableAmtTra)) ? round2(Number(line.taxableAmtTra)) : amtTra;
+    line.taxableAmtTra = taxableAmtTra;
+    const amtVatTra = line.amtVatTra !== void 0 && line.amtVatTra !== null && Number.isFinite(Number(line.amtVatTra)) ? round2(Number(line.amtVatTra)) : round2(taxableAmtTra * (Number(line.vatRate) || 0) / 100);
+    line.amtVatTra = amtVatTra;
+    if ((Number(line.vatRate) === 0 || invoiceTypeUpper === "ISTISNA") && !String(line.taxExemptionReasonCode || "").trim()) {
+      if (autoRepair) {
+        line.taxExemptionReasonCode = "350";
+        warnings.push({
+          field: `invoiceDetail[${idx}].taxExemptionReasonCode`,
+          code: "DEFAULT_EXEMPTION_CODE_ASSIGNED",
+          message: `${lineNo}. kalemde KDV %0 oldu\u011Fu i\xE7in varsay\u0131lan muafiyet kodu (350 - Di\u011Fer) atand\u0131.`,
+          severity: "warning"
+        });
+      } else {
+        errors.push({
+          field: `invoiceDetail[${idx}].taxExemptionReasonCode`,
+          code: "MISSING_EXEMPTION_REASON_CODE",
+          message: `${lineNo}. kalemde KDV oran\u0131 %0 veya fatura tipi \u0130ST\u0130SNA oldu\u011Funda vergi muafiyet kodu (taxExemptionReasonCode) zorunludur.`,
+          severity: "error"
+        });
+      }
+    }
+    if (line.withholdingTaxTypeCode) {
+      const wCode = String(line.withholdingTaxTypeCode).trim();
+      const stdPct = STANDARD_WITHHOLDING_PERCENTAGES[wCode];
+      if (stdPct !== void 0) {
+        line.withholdingTaxPercentage = stdPct;
+      }
+      const wPct = Number(line.withholdingTaxPercentage);
+      if (!Number.isFinite(wPct) || wPct <= 0) {
+        errors.push({
+          field: `invoiceDetail[${idx}].withholdingTaxPercentage`,
+          code: "INVALID_WITHHOLDING_PERCENTAGE",
+          message: `${lineNo}. kalemde tevkifat kodu (${wCode}) i\xE7in tevkifat oran\u0131 (withholdingTaxPercentage) ge\xE7ersiz.`,
+          severity: "error"
+        });
+      } else {
+        line.withholdingTaxableAmount = amtVatTra;
+        line.withholdingTaxAmount = round2(amtVatTra * wPct / 100);
+      }
+    }
+    if (!Array.isArray(line.allowanceCharge)) {
+      if (autoRepair) {
+        line.allowanceCharge = [];
+      } else {
+        allLinesHaveAllowanceChargeArray = false;
+      }
+    }
+    sanitizedDetails.push(line);
+  });
+  if (invoiceTypeUpper === "TEVKIFAT" && sanitizedDetails.length > 0 && !sanitizedDetails.some((d) => Boolean(d.withholdingTaxTypeCode))) {
+    errors.push({
+      field: "invoiceDetail.withholdingTaxTypeCode",
+      code: "MISSING_TEVKIFAT_CODE_ON_LINES",
+      message: "Fatura tipi 'TEVK\u0130FAT' se\xE7ildi ancak hi\xE7bir fatura kaleminde tevkifat kodu (withholdingTaxTypeCode) belirtilmedi.",
+      severity: "error"
+    });
+  }
+  body.invoiceDetail = sanitizedDetails;
+  const hadInvoiceCalculation = Boolean(body.invoiceCalculation) && typeof body.invoiceCalculation === "object" && !Array.isArray(body.invoiceCalculation);
+  if (!hadInvoiceCalculation && autoRepair) {
+    let lineExtensionAmount = 0;
+    let taxExclusiveAmount = 0;
+    let totalVat = 0;
+    let totalWithholding = 0;
+    let allowanceTotalAmount = 0;
+    for (const d of sanitizedDetails) {
+      const amt = round2(Number(d.amtTra) || 0);
+      const taxable = round2(Number(d.taxableAmtTra ?? amt) || 0);
+      const vat = round2(Number(d.amtVatTra) || 0);
+      const wh = round2(Number(d.withholdingTaxAmount) || 0);
+      const disc = Array.isArray(d.allowanceCharge) ? d.allowanceCharge.reduce(
+        (s, ac) => s + (ac && ac.chargeIndicator !== true ? round2(Number(ac.amount) || 0) : 0),
+        0
+      ) : 0;
+      lineExtensionAmount = round2(lineExtensionAmount + amt);
+      taxExclusiveAmount = round2(taxExclusiveAmount + taxable);
+      totalVat = round2(totalVat + vat);
+      totalWithholding = round2(totalWithholding + wh);
+      allowanceTotalAmount = round2(allowanceTotalAmount + disc);
+    }
+    const taxInclusiveAmount = round2(lineExtensionAmount + totalVat);
+    const payableAmount = round2(Math.max(0, taxInclusiveAmount - totalWithholding));
+    body.invoiceCalculation = {
+      lineExtensionAmount,
+      taxExclusiveAmount,
+      taxInclusiveAmount,
+      payableRoundingAmount: 0,
+      payableAmount,
+      allowanceTotalAmount,
+      chargeTotalAmount: 0
+    };
+    warnings.push({
+      field: "invoiceCalculation",
+      code: "INVOICE_CALCULATION_AUTO_POPULATED",
+      message: "Dip toplam nesnesi (invoiceCalculation) eksikti; Mysoft NullReferenceException ('Object reference not set to an instance of an object') hatas\u0131n\u0131 \xF6nlemek i\xE7in kalemlerden otomatik olu\u015Fturuldu.",
+      severity: "warning"
+    });
+  } else if (!hadInvoiceCalculation) {
+    errors.push({
+      field: "invoiceCalculation",
+      code: "MISSING_INVOICE_CALCULATION",
+      message: "Fatura dip toplam nesnesi (invoiceCalculation) zorunludur.",
+      severity: "error"
+    });
+  }
+  const nullGuard = {
+    hasInvoiceAccount: Boolean(rawAccount),
+    hasBuyerVknTckn: effectiveBuyerVkn.length === 10 || effectiveBuyerVkn.length === 11,
+    hasBuyerAccountName: Boolean(accountName),
+    hasPersonInfoIfTckn,
+    hasInvoiceDetailArray: Array.isArray(body.invoiceDetail) && sanitizedDetails.length > 0,
+    invoiceDetailCount: sanitizedDetails.length,
+    allLinesHaveAllowanceChargeArray,
+    hasInvoiceCalculationObject: Boolean(body.invoiceCalculation),
+    hasTenantIdentifierNumber: Boolean(normalizedTenant)
+  };
+  const valid = errors.length === 0;
+  const summary = valid ? "Fatura verisi Mysoft g\xF6nderimi i\xE7in eksiksiz do\u011Fruland\u0131." : `Fatura g\xF6nderilemedi \u2014 zorunlu alan eksikleri: ${errors.map((e) => e.message).join(" | ")}`;
+  if (!valid) {
+    recordMysoftDiagnosticLog({
+      stage: "PRE_SEND_VALIDATION",
+      operation: "validateMysoftInvoiceOutboxPayload",
+      tenantIdentifierNumber: normalizedTenant,
+      buyerVknTckn: effectiveBuyerVkn || void 0,
+      buyerName: accountName || void 0,
+      eDocumentType,
+      profile: String(body.profile || ""),
+      invoiceType: String(body.invoiceType || ""),
+      docNo: String(body.docNo || ""),
+      prefix: String(body.prefix || ""),
+      lineCount: sanitizedDetails.length,
+      payableAmount: Number(body.invoiceCalculation?.payableAmount) || 0,
+      nullGuard,
+      validationErrors: errors,
+      validationWarnings: warnings,
+      errorMessage: summary
+    });
+  }
+  return {
+    valid,
+    errors,
+    warnings,
+    summary,
+    nullGuard,
+    sanitizedPayload: body
   };
 }
 
@@ -1820,7 +2727,7 @@ var MysoftEdocumentClient = class {
     if (body.isManuelCalculation === void 0) {
       body.isManuelCalculation = false;
     }
-    const round2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
+    const round22 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
     const hasRootTax = Array.isArray(body.tax) && body.tax.length > 0;
     const details = Array.isArray(body.invoiceDetail) ? body.invoiceDetail.map((row) => {
       if (!isObject(row)) return row;
@@ -1842,23 +2749,23 @@ var MysoftEdocumentClient = class {
       let allowanceTotalAmount = 0;
       for (const d of details) {
         if (!isObject(d)) continue;
-        const amt = round2(d.amtTra);
-        const taxable = d.taxableAmtTra !== void 0 && d.taxableAmtTra !== null ? round2(d.taxableAmtTra) : amt;
+        const amt = round22(d.amtTra);
+        const taxable = d.taxableAmtTra !== void 0 && d.taxableAmtTra !== null ? round22(d.taxableAmtTra) : amt;
         const vatRate = Number(d.vatRate) || 0;
-        const vat = d.amtVatTra !== void 0 && d.amtVatTra !== null ? round2(d.amtVatTra) : round2(taxable * vatRate / 100);
-        const wh = round2(d.withholdingTaxAmount);
+        const vat = d.amtVatTra !== void 0 && d.amtVatTra !== null ? round22(d.amtVatTra) : round22(taxable * vatRate / 100);
+        const wh = round22(d.withholdingTaxAmount);
         const disc = Array.isArray(d.allowanceCharge) ? d.allowanceCharge.reduce(
-          (s, ac) => s + (isObject(ac) && ac.chargeIndicator !== true ? round2(ac.amount) : 0),
+          (s, ac) => s + (isObject(ac) && ac.chargeIndicator !== true ? round22(ac.amount) : 0),
           0
         ) : 0;
-        lineExtensionAmount = round2(lineExtensionAmount + amt);
-        taxExclusiveAmount = round2(taxExclusiveAmount + taxable);
-        totalVat = round2(totalVat + vat);
-        totalWithholding = round2(totalWithholding + wh);
-        allowanceTotalAmount = round2(allowanceTotalAmount + disc);
+        lineExtensionAmount = round22(lineExtensionAmount + amt);
+        taxExclusiveAmount = round22(taxExclusiveAmount + taxable);
+        totalVat = round22(totalVat + vat);
+        totalWithholding = round22(totalWithholding + wh);
+        allowanceTotalAmount = round22(allowanceTotalAmount + disc);
       }
-      const taxInclusiveAmount = round2(lineExtensionAmount + totalVat);
-      const payableAmount = round2(Math.max(0, taxInclusiveAmount - totalWithholding));
+      const taxInclusiveAmount = round22(lineExtensionAmount + totalVat);
+      const payableAmount = round22(Math.max(0, taxInclusiveAmount - totalWithholding));
       body.invoiceCalculation = {
         lineExtensionAmount,
         taxExclusiveAmount,
@@ -2089,29 +2996,133 @@ var MysoftEdocumentClient = class {
       tenantIdentifierNumber
     });
   }
-  async createOutgoing(payload) {
-    const body = await this.enrichInvoiceOutboxDefaults(
+  getDiagnosticLogs(limit = 50) {
+    return getRecentMysoftDiagnosticLogs(limit);
+  }
+  async validateOutgoingPayload(payload) {
+    const enriched = await this.enrichInvoiceOutboxDefaults(
       this.submissionPayload(payload)
     );
+    return validateMysoftInvoiceOutboxPayload(enriched, {
+      requireTenantIdentifier: !this.config.mockMode,
+      autoRepair: true
+    });
+  }
+  async createOutgoing(payload) {
+    const enriched = await this.enrichInvoiceOutboxDefaults(
+      this.submissionPayload(payload)
+    );
+    const validation = validateMysoftInvoiceOutboxPayload(enriched, {
+      requireTenantIdentifier: !this.config.mockMode,
+      autoRepair: true
+    });
+    if (!validation.valid) {
+      throw new MysoftPayloadValidationError(
+        validation.summary,
+        validation.errors,
+        validation.nullGuard
+      );
+    }
+    const body = validation.sanitizedPayload;
+    const acc = isObject(body.invoiceAccount) ? body.invoiceAccount : {};
+    const calc = isObject(body.invoiceCalculation) ? body.invoiceCalculation : {};
+    const detailCount = Array.isArray(body.invoiceDetail) ? body.invoiceDetail.length : 0;
     try {
-      return await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
+      const response = await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
         method: "POST",
         body
       });
+      const outboxResult = extractMysoftOutboxResult(response);
+      recordMysoftDiagnosticLog({
+        stage: "SEND_SUCCESS",
+        operation: "createOutgoing",
+        tenantIdentifierNumber: stringOrEmpty(body.tenantIdentifierNumber) || void 0,
+        buyerVknTckn: stringOrEmpty(acc.vknTckn) || void 0,
+        buyerName: stringOrEmpty(acc.accountName) || void 0,
+        eDocumentType: stringOrEmpty(body.eDocumentType) || void 0,
+        profile: stringOrEmpty(body.profile) || void 0,
+        invoiceType: stringOrEmpty(body.invoiceType) || void 0,
+        docNo: outboxResult.docNo || stringOrEmpty(body.docNo) || void 0,
+        prefix: stringOrEmpty(body.prefix) || void 0,
+        lineCount: detailCount,
+        payableAmount: Number(calc.payableAmount) || 0,
+        nullGuard: validation.nullGuard,
+        validationWarnings: validation.warnings
+      });
+      return response;
     } catch (error) {
       if (error instanceof MysoftApiError && isObject(body)) {
         const msg = String(error.message || "").toLowerCase();
         const isDocNoErr = Boolean(body.docNo) && (msg.includes("belge numaras\u0131") || msg.includes("fatura numaras\u0131") || msg.includes("m\xFCkerrer") || msg.includes("daha \xF6nce") || msg.includes("gib") || msg.includes("fys"));
         const isAliasErr = Boolean(body.pkAlias) && (msg.includes("etiket") || msg.includes("alias") || msg.includes("00006"));
         if (isDocNoErr || isAliasErr) {
+          recordMysoftDiagnosticLog({
+            stage: "AUTO_RECOVERY_RETRY",
+            operation: "createOutgoing",
+            tenantIdentifierNumber: stringOrEmpty(body.tenantIdentifierNumber) || void 0,
+            buyerVknTckn: stringOrEmpty(acc.vknTckn) || void 0,
+            buyerName: stringOrEmpty(acc.accountName) || void 0,
+            eDocumentType: stringOrEmpty(body.eDocumentType) || void 0,
+            profile: stringOrEmpty(body.profile) || void 0,
+            invoiceType: stringOrEmpty(body.invoiceType) || void 0,
+            docNo: stringOrEmpty(body.docNo) || void 0,
+            prefix: stringOrEmpty(body.prefix) || void 0,
+            lineCount: detailCount,
+            payableAmount: Number(calc.payableAmount) || 0,
+            nullGuard: validation.nullGuard,
+            upstreamStatus: error.status,
+            upstreamErrorCode: error.code,
+            errorMessage: `Otomatik d\xFCzeltme denemesi (${isDocNoErr ? "docNo temizlendi" : ""}${isAliasErr ? " pkAlias temizlendi" : ""}): ${error.message}`
+          });
           const retryBody = { ...body };
           if (isDocNoErr) retryBody.docNo = "";
           if (isAliasErr) delete retryBody.pkAlias;
-          return await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
+          const retryResponse = await this.request(MYSOFT_ENDPOINTS.outgoingSubmit, {
             method: "POST",
             body: retryBody
           });
+          const retryResult = extractMysoftOutboxResult(retryResponse);
+          recordMysoftDiagnosticLog({
+            stage: "SEND_SUCCESS",
+            operation: "createOutgoing:retry",
+            tenantIdentifierNumber: stringOrEmpty(retryBody.tenantIdentifierNumber) || void 0,
+            buyerVknTckn: stringOrEmpty(acc.vknTckn) || void 0,
+            buyerName: stringOrEmpty(acc.accountName) || void 0,
+            eDocumentType: stringOrEmpty(retryBody.eDocumentType) || void 0,
+            profile: stringOrEmpty(retryBody.profile) || void 0,
+            invoiceType: stringOrEmpty(retryBody.invoiceType) || void 0,
+            docNo: retryResult.docNo || stringOrEmpty(retryBody.docNo) || void 0,
+            prefix: stringOrEmpty(retryBody.prefix) || void 0,
+            lineCount: detailCount,
+            payableAmount: Number(calc.payableAmount) || 0,
+            nullGuard: validation.nullGuard
+          });
+          return retryResponse;
         }
+      }
+      const rawErrorMsg = error instanceof Error ? error.message : String(error);
+      recordMysoftDiagnosticLog({
+        stage: "UPSTREAM_API_ERROR",
+        operation: "createOutgoing",
+        tenantIdentifierNumber: stringOrEmpty(body.tenantIdentifierNumber) || void 0,
+        buyerVknTckn: stringOrEmpty(acc.vknTckn) || void 0,
+        buyerName: stringOrEmpty(acc.accountName) || void 0,
+        eDocumentType: stringOrEmpty(body.eDocumentType) || void 0,
+        profile: stringOrEmpty(body.profile) || void 0,
+        invoiceType: stringOrEmpty(body.invoiceType) || void 0,
+        docNo: stringOrEmpty(body.docNo) || void 0,
+        prefix: stringOrEmpty(body.prefix) || void 0,
+        lineCount: detailCount,
+        payableAmount: Number(calc.payableAmount) || 0,
+        nullGuard: validation.nullGuard,
+        validationWarnings: validation.warnings,
+        upstreamStatus: error instanceof MysoftApiError ? error.status : void 0,
+        upstreamErrorCode: error instanceof MysoftApiError ? error.code : void 0,
+        errorMessage: rawErrorMsg
+      });
+      if (error instanceof MysoftApiError && /object reference not set to an instance of an object/i.test(rawErrorMsg)) {
+        const detailedMsg = `Mysoft e-Belge sunucusu nesne referans hatas\u0131 d\xF6nd\xFCrd\xFC (${rawErrorMsg}). G\xF6nderilen veri kontrol \xF6zeti \u2014 M\xFCkellef VKN: ${stringOrEmpty(body.tenantIdentifierNumber) || "Eksik"}, Al\u0131c\u0131 VKN/TCKN: ${stringOrEmpty(acc.vknTckn) || "Eksik"} (${stringOrEmpty(acc.accountName) || "\xDCnvan Yok"}), Kalem Say\u0131s\u0131: ${detailCount}, Belge Tipi: ${stringOrEmpty(body.eDocumentType)}/${stringOrEmpty(body.profile)}, \xD6n Ek: ${stringOrEmpty(body.prefix) || "Varsay\u0131lan"}. L\xFCtfen firma VKN, al\u0131c\u0131 VKN/TCKN ve fatura kalem bilgilerini kontrol edin.`;
+        throw new MysoftApiError(detailedMsg, error.status, error.details, error.code);
       }
       throw error;
     }
@@ -2123,9 +3134,21 @@ var MysoftEdocumentClient = class {
       body
     });
   }
-  /** Normalize outgoing invoice JSON (tenant, xslt, prefix defaults). */
+  /** Normalize outgoing invoice JSON (tenant, xslt, prefix defaults, null-guards). */
   async prepareInvoiceOutboxPayload(payload) {
-    return this.enrichInvoiceOutboxDefaults(this.submissionPayload(payload));
+    const enriched = await this.enrichInvoiceOutboxDefaults(this.submissionPayload(payload));
+    const validation = validateMysoftInvoiceOutboxPayload(enriched, {
+      requireTenantIdentifier: false,
+      autoRepair: true
+    });
+    if (!validation.valid) {
+      throw new MysoftPayloadValidationError(
+        validation.summary,
+        validation.errors,
+        validation.nullGuard
+      );
+    }
+    return validation.sanitizedPayload;
   }
   /**
    * Mysoft portal taslak önizleme (HTML veya PDF zip). Gönderim yapmaz.
@@ -2274,6 +3297,15 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
     }
     if (error instanceof InvalidMysoftRequestError) {
       res.status(400).json({ error: error.message, code: error.code });
+      return;
+    }
+    if (error instanceof MysoftPayloadValidationError) {
+      res.status(400).json({
+        error: error.message,
+        code: error.code,
+        issues: error.issues,
+        nullGuard: error.nullGuard
+      });
       return;
     }
     if (error instanceof MysoftApiError) {
@@ -2689,6 +3721,19 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
     run((req) => client.listOutgoing({ ...listBody(req), tenantIdentifierNumber: tenantFrom(req) }))
   );
   router.post("/outgoing", run((req) => client.createOutgoing(req.body)));
+  router.post(
+    "/outgoing/validate",
+    run((req) => client.validateOutgoingPayload(req.body))
+  );
+  router.get(
+    "/diagnostics",
+    run((req) => {
+      const limit = positiveInt2(queryText(req, "limit")) || 50;
+      return {
+        logs: client.getDiagnosticLogs(limit)
+      };
+    })
+  );
   router.post("/outgoing/ubl", run((req) => client.createOutgoingWithUblXml(req.body)));
   router.post(
     "/outgoing/draft-preview",
