@@ -153,6 +153,7 @@ import {
   AssetDisposalRecord,
   isAdminOrSysAdmin,
   isModuleOrSubModuleAllowed,
+  isCompanyMysoftMatched,
 } from "./types";
 
 import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X, Lock } from "lucide-react";
@@ -2332,8 +2333,11 @@ export default function App() {
     companies.find((c) => c.id === activeCompanyId) || companies[0] || null;
 
   const isCurrentTabAuthorized = (tab: NavItem): boolean => {
-    if (tab === "dashboard" || tab === "company_logs" || tab === "e_document_logs") return true;
-    if (tab === "admin") return isAdminOrSysAdmin(currentUser);
+    if (tab === "dashboard") return true;
+    if (tab === "admin" || tab === "company_companies") return isAdminOrSysAdmin(currentUser);
+    if (tab === "company_logs" || tab === "e_document_logs") {
+      return isCompanyMysoftMatched(activeCompanyObj, data.settings);
+    }
 
     const tabPermissionMap: Record<string, { key: string; parent?: string }> = {
       company: { key: "company" },
@@ -2442,7 +2446,9 @@ export default function App() {
           companies={companies}
           activeCompanyId={activeCompanyId}
           onSelectCompany={handleSelectCompany}
-          onOpenNewCompanyModal={() => setIsNewCompanyModalOpen(true)}
+          onOpenNewCompanyModal={
+            isAdminOrSysAdmin(currentUser) ? () => setIsNewCompanyModalOpen(true) : undefined
+          }
         />
 
         <main className="flex-1 pb-12 bg-theme-page">
@@ -2538,19 +2544,6 @@ export default function App() {
               globalSearchTerm={searchTerm}
               onImportInvoice={handleImportMysoftInvoice}
             />
-          )}
-
-          {currentTab === "e_document_logs" && (
-            <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-              <AdminMysoftLogMonitorPanel
-                companyName={data.settings.companyName}
-                companyTaxNumber={
-                  data.settings.tenantIdentifierNumber ||
-                  data.settings.taxNumber ||
-                  readStoredMysoftTenantVkn()
-                }
-              />
-            </div>
           )}
 
           {currentTab === "quotes" && (
@@ -2899,7 +2892,7 @@ export default function App() {
             />
           )}
 
-          {["company", "company_profile", "company_companies", "company_mysoft", "company_branches", "company_warehouses", "company_settings", "company_logs", "settings"].includes(currentTab) && (
+          {["company", "company_profile", "company_companies", "company_mysoft", "company_branches", "company_warehouses", "company_settings", "company_logs", "e_document_logs", "settings"].includes(currentTab) && (
             <CompanyManagement
               settings={data.settings}
               branches={data.branches || []}
@@ -2926,7 +2919,7 @@ export default function App() {
                   ? "companies"
                   : currentTab === "company_mysoft"
                   ? "mysoft"
-                  : currentTab === "company_logs"
+                  : currentTab === "company_logs" || currentTab === "e_document_logs"
                   ? "logs"
                   : currentTab === "company_branches"
                   ? "branches"

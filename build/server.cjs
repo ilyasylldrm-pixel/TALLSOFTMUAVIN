@@ -2243,41 +2243,85 @@ var MysoftEdocumentClient = class {
    */
   async getTenantDocumentNumbersWithSequence(vknTckn) {
     const vkn = normalizeMysoftTenantIdentifier(vknTckn) || String(vknTckn || "").trim();
-    const [numSettled, setSettled, outboxSettled] = await Promise.allSettled([
+    const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+    const startDate = `${currentYear}-01-01`;
+    const endDate = `${currentYear}-12-31`;
+    const [numSettled, setSettled, efatOutboxSettled, earsOutboxSettled, allOutboxSettled] = await Promise.allSettled([
       this.getDocumentNumberList(vkn),
       this.getNumeratorSetList(vkn),
-      this.listOutgoing({ tenantIdentifierNumber: vkn, limit: 50 })
+      this.listOutgoing({
+        tenantIdentifierNumber: vkn,
+        startDate,
+        endDate,
+        afterValue: 0,
+        limit: 500,
+        eDocumentType: "EFATURA"
+      }),
+      this.listOutgoing({
+        tenantIdentifierNumber: vkn,
+        startDate,
+        endDate,
+        afterValue: 0,
+        limit: 500,
+        eDocumentType: "EARSIVFATURA"
+      }),
+      this.listOutgoing({
+        tenantIdentifierNumber: vkn,
+        startDate,
+        endDate,
+        afterValue: 0,
+        limit: 500
+      })
     ]);
     const prefixes = numSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(numSettled.value)) : [];
     const numeratorSets = setSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(setSettled.value)) : [];
-    const outboxDocs = outboxSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(outboxSettled.value)) : [];
-    const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+    const efatDocs = efatOutboxSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(efatOutboxSettled.value)) : [];
+    const earsDocs = earsOutboxSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(earsOutboxSettled.value)) : [];
+    const generalDocs = allOutboxSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(allOutboxSettled.value)) : [];
     const maxOutboxSeqByPrefix = {};
-    let latestOutboxEFaturaPrefix = "";
-    let latestOutboxEArsivPrefix = "";
-    for (const doc of outboxDocs) {
-      const rawDocNo = String(doc.docNo ?? doc.documentNo ?? doc.invoiceNumber ?? "").trim();
+    const lastDocNoByPrefix = {};
+    let maxEFaturaOutboxSeq = 0;
+    let maxEFaturaOutboxPrefix = "";
+    let lastEFaturaDocNo = "";
+    let maxEArsivOutboxSeq = 0;
+    let maxEArsivOutboxPrefix = "";
+    let lastEArsivDocNo = "";
+    const inspectDoc = (doc, forcedKind) => {
+      const rawDocNo = String(
+        doc.docNo ?? doc.documentNo ?? doc.invoiceNumber ?? doc.number ?? ""
+      ).trim();
       const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(rawDocNo);
-      if (match) {
-        const pfx = match[1].toUpperCase();
-        const yr = Number(match[2]);
-        const seq = parseInt(match[3], 10);
-        if (yr === currentYear && !isNaN(seq)) {
-          if (!maxOutboxSeqByPrefix[pfx] || seq > maxOutboxSeqByPrefix[pfx]) {
-            maxOutboxSeqByPrefix[pfx] = seq;
-          }
+      if (!match) return;
+      const pfx = match[1].toUpperCase();
+      const yr = Number(match[2]);
+      const seq = parseInt(match[3], 10);
+      if (yr !== currentYear || isNaN(seq) || seq <= 0) return;
+      const formattedDocNo = `${pfx}${yr}${String(seq).padStart(9, "0")}`;
+      if (!maxOutboxSeqByPrefix[pfx] || seq > maxOutboxSeqByPrefix[pfx]) {
+        maxOutboxSeqByPrefix[pfx] = seq;
+        lastDocNoByPrefix[pfx] = formattedDocNo;
+      }
+      const docTypeStr = String(
+        doc.eDocumentType ?? doc.edocumentType ?? doc.profile ?? doc.documentType ?? ""
+      ).toUpperCase();
+      const isEArsivDoc = forcedKind === "earsiv" || forcedKind !== "efatura" && (docTypeStr.includes("ARSIV") || docTypeStr === "2" || pfx === "EAR");
+      if (isEArsivDoc) {
+        if (seq >= maxEArsivOutboxSeq) {
+          maxEArsivOutboxSeq = seq;
+          maxEArsivOutboxPrefix = pfx;
+          lastEArsivDocNo = formattedDocNo;
         }
-        const docTypeStr = String(
-          doc.eDocumentType ?? doc.edocumentType ?? doc.profile ?? doc.documentType ?? ""
-        ).toUpperCase();
-        const isEArsivDoc = docTypeStr.includes("ARSIV") || docTypeStr === "2";
-        if (isEArsivDoc) {
-          if (!latestOutboxEArsivPrefix) latestOutboxEArsivPrefix = pfx;
-        } else {
-          if (!latestOutboxEFaturaPrefix) latestOutboxEFaturaPrefix = pfx;
+      } else {
+        if (seq >= maxEFaturaOutboxSeq) {
+          maxEFaturaOutboxSeq = seq;
+          maxEFaturaOutboxPrefix = pfx;
+          lastEFaturaDocNo = formattedDocNo;
         }
       }
-    }
+    };
+    for (const d of efatDocs) inspectDoc(d, "efatura");
+    for (const d of earsDocs) inspectDoc(d, "earsiv");
+    for (const d of generalDocs) inspectDoc(d);
     const isEArsivRow = (p) => {
       const typeVal = String(p.edocumentType ?? p.eDocumentType ?? p.documentType ?? "").toUpperCase();
       return typeVal === "2" || typeVal.includes("ARSIV");
@@ -2289,22 +2333,34 @@ var MysoftEdocumentClient = class {
     };
     const eFaturaRows = prefixes.filter(isEFaturaRow);
     const defaultEFatura = eFaturaRows.find((r) => r.isDefault === true && r.isPassive !== true) || eFaturaRows.find((r) => r.isPassive !== true) || eFaturaRows[0] || numeratorSets.find((r) => isEFaturaRow(r) && typeof r.prefix === "string" && r.prefix.trim());
-    const eFaturaPrefix = (typeof defaultEFatura?.prefix === "string" && defaultEFatura.prefix.trim() || latestOutboxEFaturaPrefix || "GIB").toUpperCase().slice(0, 3);
+    const portalEFaturaPrefix = typeof defaultEFatura?.prefix === "string" && defaultEFatura.prefix.trim() ? defaultEFatura.prefix.trim().toUpperCase().slice(0, 3) : "";
+    const eFaturaPrefix = (maxEFaturaOutboxPrefix || portalEFaturaPrefix || "GIB").toUpperCase().slice(0, 3);
     const apiEFatCurNum = Number(
       defaultEFatura?.currentNumber ?? defaultEFatura?.lastNumber ?? defaultEFatura?.sequenceNumber ?? 0
     ) || 0;
-    const eFaturaCurNum = Math.max(apiEFatCurNum, maxOutboxSeqByPrefix[eFaturaPrefix] || 0);
+    const eFaturaCurNum = Math.max(
+      apiEFatCurNum,
+      maxOutboxSeqByPrefix[eFaturaPrefix] || 0,
+      eFaturaPrefix === maxEFaturaOutboxPrefix ? maxEFaturaOutboxSeq : 0
+    );
     const eFaturaSequence = eFaturaCurNum + 1;
     const eFaturaNextNumber = `${eFaturaPrefix}${currentYear}${String(eFaturaSequence).padStart(9, "0")}`;
+    const eFaturaLastNumber = lastDocNoByPrefix[eFaturaPrefix] || (eFaturaCurNum > 0 ? `${eFaturaPrefix}${currentYear}${String(eFaturaCurNum).padStart(9, "0")}` : lastEFaturaDocNo || void 0);
     const eArsivRows = prefixes.filter(isEArsivRow);
     const defaultEArsiv = eArsivRows.find((r) => r.isDefault === true && r.isPassive !== true) || eArsivRows.find((r) => r.isPassive !== true) || eArsivRows[0] || numeratorSets.find((r) => isEArsivRow(r) && typeof r.prefix === "string" && r.prefix.trim());
-    const eArsivPrefix = (typeof defaultEArsiv?.prefix === "string" && defaultEArsiv.prefix.trim() || latestOutboxEArsivPrefix || "EAR").toUpperCase().slice(0, 3);
+    const portalEArsivPrefix = typeof defaultEArsiv?.prefix === "string" && defaultEArsiv.prefix.trim() ? defaultEArsiv.prefix.trim().toUpperCase().slice(0, 3) : "";
+    const eArsivPrefix = (maxEArsivOutboxPrefix || portalEArsivPrefix || "EAR").toUpperCase().slice(0, 3);
     const apiEArsCurNum = Number(
       defaultEArsiv?.currentNumber ?? defaultEArsiv?.lastNumber ?? defaultEArsiv?.sequenceNumber ?? 0
     ) || 0;
-    const eArsivCurNum = Math.max(apiEArsCurNum, maxOutboxSeqByPrefix[eArsivPrefix] || 0);
+    const eArsivCurNum = Math.max(
+      apiEArsCurNum,
+      maxOutboxSeqByPrefix[eArsivPrefix] || 0,
+      eArsivPrefix === maxEArsivOutboxPrefix ? maxEArsivOutboxSeq : 0
+    );
     const eArsivSequence = eArsivCurNum + 1;
     const eArsivNextNumber = `${eArsivPrefix}${currentYear}${String(eArsivSequence).padStart(9, "0")}`;
+    const eArsivLastNumber = lastDocNoByPrefix[eArsivPrefix] || (eArsivCurNum > 0 ? `${eArsivPrefix}${currentYear}${String(eArsivCurNum).padStart(9, "0")}` : lastEArsivDocNo || void 0);
     const enrichedPrefixes = prefixes.map((p) => {
       const pfx = typeof p.prefix === "string" ? p.prefix.trim().toUpperCase().slice(0, 3) : "";
       const rowCur = Math.max(
@@ -2315,15 +2371,18 @@ var MysoftEdocumentClient = class {
         ...p,
         prefix: pfx || p.prefix,
         currentNumber: rowCur,
+        lastNumber: pfx && rowCur > 0 ? `${pfx}${currentYear}${String(rowCur).padStart(9, "0")}` : void 0,
         nextNumber: pfx ? `${pfx}${currentYear}${String(rowCur + 1).padStart(9, "0")}` : void 0
       };
     });
     return {
       vknTckn: vkn,
       eFaturaPrefix,
+      eFaturaLastNumber,
       eFaturaNextNumber,
       eFaturaSequence,
       eArsivPrefix,
+      eArsivLastNumber,
       eArsivNextNumber,
       eArsivSequence,
       prefixes: enrichedPrefixes
@@ -2341,8 +2400,13 @@ var MysoftEdocumentClient = class {
     const canonicalEDocType = isEarsiv ? "EARSIVFATURA" : "EFATURA";
     const edocumentTypeCode = isEarsiv ? 2 : 1;
     const year = Number.isInteger(options.year) && options.year >= 2e3 ? options.year : (/* @__PURE__ */ new Date()).getFullYear();
-    let resolvedPrefix = typeof options.prefix === "string" ? options.prefix.trim().toUpperCase() : "";
-    if (!resolvedPrefix && tenant) {
+    const startDate = `${year}-01-01`;
+    const endDate = `${year}-12-31`;
+    const rawCallerPrefix = typeof options.prefix === "string" ? options.prefix.trim().toUpperCase().slice(0, 3) : "";
+    const isGenericCallerPrefix = !rawCallerPrefix || rawCallerPrefix === "GIB" || rawCallerPrefix === "EAR";
+    let portalPrefix = "";
+    let portalCurrentSeq = 0;
+    if (tenant) {
       try {
         const numRes = await this.getDocumentNumberList(tenant);
         const prefixes = asObjectArray(unwrapMysoftData(numRes));
@@ -2351,61 +2415,86 @@ var MysoftEdocumentClient = class {
           const rowType = String(row.edocumentType ?? "");
           return !rowType || rowType === typeCodeStr;
         });
-        const defaultRow = matching.find((row) => row.isDefault === true && row.isPassive !== true) || matching.find((row) => row.isPassive !== true) || matching[0];
+        const defaultRow = (rawCallerPrefix && !isGenericCallerPrefix ? matching.find((row) => String(row.prefix || "").trim().toUpperCase() === rawCallerPrefix) : void 0) || matching.find((row) => row.isDefault === true && row.isPassive !== true) || matching.find((row) => row.isPassive !== true) || matching[0];
         if (typeof defaultRow?.prefix === "string" && defaultRow.prefix.trim()) {
-          resolvedPrefix = defaultRow.prefix.trim().toUpperCase();
+          portalPrefix = defaultRow.prefix.trim().toUpperCase().slice(0, 3);
+          portalCurrentSeq = Number(
+            defaultRow.currentNumber ?? defaultRow.lastNumber ?? defaultRow.sequenceNumber ?? 0
+          ) || 0;
         }
       } catch {
       }
     }
     let outboxList = [];
     if (tenant) {
-      try {
-        const outboxRes = await this.listOutgoing({
+      const [typedSettled, allSettled] = await Promise.allSettled([
+        this.listOutgoing({
           tenantIdentifierNumber: tenant,
-          limit: 100,
+          startDate,
+          endDate,
+          afterValue: 0,
+          limit: 500,
           eDocumentType: canonicalEDocType
-        });
-        outboxList = asObjectArray(unwrapMysoftData(outboxRes));
-      } catch {
-        try {
-          const outboxRes = await this.listOutgoing({
-            tenantIdentifierNumber: tenant,
-            limit: 100
-          });
-          outboxList = asObjectArray(unwrapMysoftData(outboxRes));
-        } catch {
-        }
+        }),
+        this.listOutgoing({
+          tenantIdentifierNumber: tenant,
+          startDate,
+          endDate,
+          afterValue: 0,
+          limit: 500
+        })
+      ]);
+      const typedRows = typedSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(typedSettled.value)) : [];
+      const allRows = allSettled.status === "fulfilled" ? asObjectArray(unwrapMysoftData(allSettled.value)) : [];
+      const filteredFromAll = allRows.filter((doc) => {
+        const docTypeStr = String(
+          doc.eDocumentType ?? doc.edocumentType ?? doc.profile ?? doc.documentType ?? ""
+        ).toUpperCase();
+        if (!docTypeStr) return true;
+        const rowIsEArsiv = docTypeStr.includes("ARSIV") || docTypeStr === "2";
+        return isEarsiv ? rowIsEArsiv : !rowIsEArsiv;
+      });
+      const mergedMap = /* @__PURE__ */ new Map();
+      for (const r of [...typedRows, ...filteredFromAll]) {
+        const key = String(r.ettn ?? r.id ?? r.docNo ?? r.documentNo ?? JSON.stringify(r));
+        mergedMap.set(key, r);
+      }
+      outboxList = [...mergedMap.values()];
+    }
+    let highestOutboxPrefix = "";
+    let highestOutboxSeq = 0;
+    for (const item of outboxList) {
+      const docNo = String(item.docNo ?? item.documentNo ?? item.invoiceNumber ?? "").trim().toUpperCase();
+      const parsed = parseInvoiceDocNo(docNo);
+      if (parsed && parsed.year === year && parsed.sequence >= highestOutboxSeq) {
+        highestOutboxSeq = parsed.sequence;
+        highestOutboxPrefix = parsed.prefix;
       }
     }
-    if (!resolvedPrefix && outboxList.length > 0) {
-      for (const item of outboxList) {
-        const docNo = typeof item.docNo === "string" ? item.docNo.trim().toUpperCase() : "";
-        const parsed = parseInvoiceDocNo(docNo);
-        if (parsed?.prefix) {
-          resolvedPrefix = parsed.prefix;
-          break;
-        }
-      }
-    }
-    if (!resolvedPrefix) {
-      resolvedPrefix = isEarsiv ? "EAR" : "GIB";
-    }
-    const existingDocNos = outboxList.map((item) => typeof item.docNo === "string" ? item.docNo : void 0).filter((doc) => typeof doc === "string" && doc.trim().length > 0);
+    const existingDocNos = outboxList.map((item) => {
+      const raw = item.docNo ?? item.documentNo ?? item.invoiceNumber;
+      return typeof raw === "string" ? raw.trim().toUpperCase() : void 0;
+    }).filter((doc) => typeof doc === "string" && doc.length > 0);
+    const callerHasMatchingDocs = !isGenericCallerPrefix && existingDocNos.some((d) => d.startsWith(rawCallerPrefix));
+    const resolvedPrefix = (callerHasMatchingDocs ? rawCallerPrefix : "") || highestOutboxPrefix || portalPrefix || (!isGenericCallerPrefix ? rawCallerPrefix : "") || (isEarsiv ? "EAR" : "GIB");
     const calcResult = calculateNextInvoiceNumber({
       existingDocNos,
       targetPrefix: resolvedPrefix,
       targetYear: year,
       fallbackPrefix: isEarsiv ? "EAR" : "GIB"
     });
+    const finalLastSeq = Math.max(calcResult.lastSequence, portalPrefix === calcResult.prefix ? portalCurrentSeq : 0);
+    const finalNextSeq = finalLastSeq + 1;
+    const finalNextDocNo = `${calcResult.prefix}${calcResult.year}${String(finalNextSeq).padStart(9, "0")}`;
+    const finalLastDocNo = calcResult.lastDocNo || (finalLastSeq > 0 ? `${calcResult.prefix}${calcResult.year}${String(finalLastSeq).padStart(9, "0")}` : void 0);
     return {
       tenantIdentifierNumber: tenant || void 0,
       prefix: calcResult.prefix,
       year: calcResult.year,
-      lastInvoiceNumber: calcResult.lastDocNo,
-      lastSequence: calcResult.lastSequence,
-      nextSequence: calcResult.nextSequence,
-      nextInvoiceNumber: calcResult.nextDocNo,
+      lastInvoiceNumber: finalLastDocNo,
+      lastSequence: finalLastSeq,
+      nextSequence: finalNextSeq,
+      nextInvoiceNumber: finalNextDocNo,
       eDocumentType: canonicalEDocType,
       totalOutgoingChecked: outboxList.length
     };

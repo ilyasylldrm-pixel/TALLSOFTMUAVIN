@@ -818,7 +818,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                             <option value="">-- Serbest --</option>
                             {products.map((p) => (
                               <option key={p.id} value={p.id}>
-                                {p.name}
+                                {p.name} (Stok: {p.stockQuantity ?? p.stock ?? 0} {p.unit || "Adet"})
                               </option>
                             ))}
                           </select>

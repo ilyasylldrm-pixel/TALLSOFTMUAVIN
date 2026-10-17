@@ -6,7 +6,9 @@ import {
   Warehouse,
   AddressDetails,
   TAXPAYER_TYPES,
+  isAdminOrSysAdmin,
   isModuleOrSubModuleAllowed,
+  isCompanyMysoftMatched,
 } from "../types";
 import { UserProfile } from "./AuthModal";
 import { ExportButtons } from "./ExportButtons";
@@ -171,13 +173,17 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   // Selected company for Mysoft tab
   const [selectedMysoftCompId, setSelectedMysoftCompId] = useState<string>(currentActiveCompanyId);
 
+  const isAdmin = isAdminOrSysAdmin(currentUser);
+
   const handleOpenAddCompany = () => {
+    if (!isAdmin) return;
     setEditingCompany(null);
     setCompanyModalMode("create");
     setIsCompanyModalOpen(true);
   };
 
   const handleOpenEditCompany = (comp: CompanyItem) => {
+    if (!isAdmin) return;
     setEditingCompany(comp);
     setCompanyModalMode("edit");
     setIsCompanyModalOpen(true);
@@ -241,6 +247,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   const [companyToDelete, setCompanyToDelete] = useState<CompanyItem | null>(null);
 
   const handleDeleteCompanyItem = (id: string) => {
+    if (!isAdmin) return;
     if (isProtectedCompanyId(id)) {
       return;
     }
@@ -876,7 +883,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null;
               const isCompanySubAllowed = (subKey: string) =>
                 isModuleOrSubModuleAllowed(subKey, "company", currentUser, activeCompObj);
-              const isSettingsActive = ["settings", "companies", "mysoft"].includes(currentSubTab);
+              const isSettingsActive = ["settings", "companies", "mysoft", "logs"].includes(currentSubTab);
 
               return (
                 <>
@@ -935,18 +942,6 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                       <span>Sistem Ayarları</span>
                     </button>
                   )}
-
-                  <button
-                    onClick={() => handleTabChange("logs")}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                      currentSubTab === "logs"
-                        ? "bg-amber-500 text-slate-950 shadow-2xs font-bold"
-                        : "bg-[#1a233a] hover:bg-[#202c48] text-amber-300 border border-amber-500/30"
-                    }`}
-                  >
-                    <Terminal className={`w-4 h-4 ${currentSubTab === "logs" ? "text-slate-950" : "text-amber-400"}`} />
-                    <span>Log İzleme Ekranı</span>
-                  </button>
                 </>
               );
             })()}
@@ -955,72 +950,83 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       </div>
 
       {/* Sistem Ayarları Alt Modül Sekme Çubuğu (Genel Ayarlar, Şirketler & Çoklu Şirket, Mysoft VKN/TCKN Eşleştirme, Log İzleme) */}
-      {["settings", "companies", "mysoft", "logs"].includes(currentSubTab) && (
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleTabChange("settings")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                currentSubTab === "settings"
-                  ? "bg-[#0f6bae] text-white shadow-2xs"
-                  : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
-              }`}
-            >
-              <SettingsIcon className="w-4 h-4" />
-              <span>Genel & Sistem Ayarları</span>
-            </button>
+      {["settings", "companies", "mysoft", "logs"].includes(currentSubTab) && (() => {
+        const activeCompObj = effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null;
+        const isMysoftMatched = isCompanyMysoftMatched(activeCompObj, profileForm || settings);
 
-            <button
-              type="button"
-              onClick={() => handleTabChange("companies")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                currentSubTab === "companies"
-                  ? "bg-[#0f6bae] text-white shadow-2xs"
-                  : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>Şirketler & Çoklu Şirket ({effectiveCompanies.length})</span>
-            </button>
+        return (
+          <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleTabChange("settings")}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  currentSubTab === "settings"
+                    ? "bg-[#0f6bae] text-white shadow-2xs"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
+                }`}
+              >
+                <SettingsIcon className="w-4 h-4" />
+                <span>Genel & Sistem Ayarları</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => handleTabChange("mysoft")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                currentSubTab === "mysoft"
-                  ? "bg-[#0f6bae] text-white shadow-2xs"
-                  : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
-              }`}
-            >
-              <Globe className="w-4 h-4" />
-              <span>Mysoft VKN/TCKN Eşleştirme</span>
-            </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("companies")}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    currentSubTab === "companies"
+                      ? "bg-[#0f6bae] text-white shadow-2xs"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
+                  }`}
+                >
+                  <Building2 className="w-4 h-4" />
+                  <span>Şirketler & Çoklu Şirket ({effectiveCompanies.length})</span>
+                </button>
+              )}
 
-            <button
-              type="button"
-              onClick={() => handleTabChange("logs")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                currentSubTab === "logs"
-                  ? "bg-amber-500 text-slate-950 shadow-2xs"
-                  : "bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200"
-              }`}
-            >
-              <Terminal className="w-4 h-4" />
-              <span>Log İzleme Ekranı (Mysoft API)</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => handleTabChange("mysoft")}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  currentSubTab === "mysoft"
+                    ? "bg-[#0f6bae] text-white shadow-2xs"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
+                }`}
+              >
+                <Globe className="w-4 h-4" />
+                <span>Mysoft VKN/TCKN Eşleştirme</span>
+              </button>
+
+              {isMysoftMatched && (
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("logs")}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    currentSubTab === "logs"
+                      ? "bg-amber-500 text-slate-950 shadow-2xs"
+                      : "bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200"
+                  }`}
+                >
+                  <Terminal className="w-4 h-4" />
+                  <span>Log İzleme Ekranı (Mysoft API)</span>
+                </button>
+              )}
+            </div>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleOpenAddCompany}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-98 shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Yeni Şirket Ekle</span>
+              </button>
+            )}
           </div>
-
-          <button
-            type="button"
-            onClick={handleOpenAddCompany}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-98 shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Yeni Şirket Ekle</span>
-          </button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* SUB-TAB 1: FIRMA PROFILI & RESMI BILGILER */}
       {currentSubTab === "profile" && (
@@ -2706,12 +2712,26 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             companiesCount={effectiveCompanies.length}
             onOpenSubModule={(sub) => handleTabChange(sub)}
             currentUser={currentUser}
+            activeCompany={effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null}
           />
         </div>
       )}
 
       {/* SUB-TAB: ŞİRKETLER & ÇOKLU ŞİRKET YÖNETİMİ */}
       {currentSubTab === "companies" && (
+        !isAdmin ? (
+          <div className="p-8 max-w-xl mx-auto bg-white rounded-2xl border border-amber-200 shadow-xs text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+              <Lock className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900">
+              Çoklu Şirket Tanımı Yetki Kısıtlaması
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Çoklu şirket tanımlama, yeni şirket ekleme ve şirket yapılandırma işlemleri yalnızca <strong>Admin</strong> ve <strong>Sistem Yöneticisi</strong> yetkisine sahip kullanıcılar tarafından yapılabilir.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-6">
           {/* Header Bar */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -2899,6 +2919,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             })}
           </div>
         </div>
+        )
       )}
 
       {/* SUB-TAB: MYSOFT ENTEGRASYON & VKN/TCKN EŞLEŞTİRME MASASI */}
@@ -3434,17 +3455,46 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       )}
 
       {/* SUB-TAB: LOG İZLEME EKRANI (MYSOFT API & TEKNİK HATA KONSOLU) */}
-      {currentSubTab === "logs" && (
-        <AdminMysoftLogMonitorPanel
-          companyName={profileForm.companyName || settings.companyName}
-          companyTaxNumber={
-            profileForm.tenantIdentifierNumber ||
-            profileForm.taxNumber ||
-            settings.tenantIdentifierNumber ||
-            settings.taxNumber
-          }
-        />
-      )}
+      {currentSubTab === "logs" && (() => {
+        const activeCompObj = effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null;
+        const isMysoftMatched = isCompanyMysoftMatched(activeCompObj, profileForm || settings);
+
+        if (!isMysoftMatched) {
+          return (
+            <div className="p-8 max-w-xl mx-auto bg-white rounded-2xl border border-amber-200 shadow-xs text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+                <Terminal className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">
+                Mysoft Eşleştirmesi Bulunamadı
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Log İzleme Ekranı (Mysoft API) bölümü yalnızca <strong>Mysoft VKN/TCKN eşleştirmesi yapılan firma</strong> için görüntülenmektedir. Lütfen önce Sistem Ayarları altından Mysoft VKN/TCKN eşleştirmesini tamamlayın.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleTabChange("mysoft")}
+                className="px-4 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Globe className="w-4 h-4" />
+                <span>Mysoft VKN/TCKN Eşleştirme Ekranına Git</span>
+              </button>
+            </div>
+          );
+        }
+
+        return (
+          <AdminMysoftLogMonitorPanel
+            companyName={profileForm.companyName || settings.companyName}
+            companyTaxNumber={
+              profileForm.tenantIdentifierNumber ||
+              profileForm.taxNumber ||
+              settings.tenantIdentifierNumber ||
+              settings.taxNumber
+            }
+          />
+        );
+      })()}
 
       {/* Modal */}
       <CompanyModal

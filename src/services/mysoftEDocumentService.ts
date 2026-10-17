@@ -1028,15 +1028,18 @@ export async function getMysoftTenantInfo(
 export interface MysoftMappingDefaults {
   vknTckn: string;
   eFaturaPrefix: string;
+  eFaturaLastNumber?: string;
   eFaturaNextNumber: string;
   eFaturaSequence: number;
   eArsivPrefix: string;
+  eArsivLastNumber?: string;
   eArsivNextNumber: string;
   eArsivSequence: number;
   prefixes: Array<{
     prefix: string;
     edocumentType?: number;
     currentNumber?: number;
+    lastNumber?: string;
     nextNumber?: string;
     isDefault?: boolean;
     isPassive?: boolean;
@@ -1173,12 +1176,25 @@ export async function getMysoftMappingDefaults(
         (maxLocalSeqByPrefix[eArsivPrefix] || 0) + 1,
       );
 
+      const eFaturaLastSeq = eFaturaSequence - 1;
+      const eArsivLastSeq = eArsivSequence - 1;
+
       return {
         vknTckn: identifier,
         eFaturaPrefix,
+        eFaturaLastNumber:
+          data.eFaturaLastNumber ||
+          (eFaturaLastSeq > 0
+            ? `${eFaturaPrefix}${currentYear}${String(eFaturaLastSeq).padStart(9, "0")}`
+            : undefined),
         eFaturaNextNumber: `${eFaturaPrefix}${currentYear}${String(eFaturaSequence).padStart(9, "0")}`,
         eFaturaSequence,
         eArsivPrefix,
+        eArsivLastNumber:
+          data.eArsivLastNumber ||
+          (eArsivLastSeq > 0
+            ? `${eArsivPrefix}${currentYear}${String(eArsivLastSeq).padStart(9, "0")}`
+            : undefined),
         eArsivNextNumber: `${eArsivPrefix}${currentYear}${String(eArsivSequence).padStart(9, "0")}`,
         eArsivSequence,
         prefixes: apiPrefixes,
@@ -1734,27 +1750,133 @@ export async function getNextMysoftInvoiceNumber(
     signal?: AbortSignal;
   } = {},
 ): Promise<MysoftNextInvoiceNumberResult> {
+  const year = options.year || new Date().getFullYear();
+  const isEarsiv = String(options.eDocumentType || "")
+    .toUpperCase()
+    .includes("ARSIV");
+
   const query = makeQuery({
     tenantIdentifierNumber: options.tenantIdentifierNumber,
     eDocumentType: options.eDocumentType,
     prefix: options.prefix,
-    year: options.year,
+    year,
   });
-  const { payload } = await proxyRequest(`/next-invoice-number${query}`, {
-    method: "GET",
-    signal: options.signal,
-  });
-  const data = (unwrapResult(payload) || {}) as Record<string, unknown>;
+
+  let apiData: Record<string, unknown> = {};
+  try {
+    const { payload } = await proxyRequest(`/next-invoice-number${query}`, {
+      method: "GET",
+      signal: options.signal,
+    });
+    apiData = (unwrapResult(payload) || {}) as Record<string, unknown>;
+  } catch {
+    // Fallback to local / mapping defaults if proxy endpoint is unreachable
+  }
+
+  const cleanTenant = String(options.tenantIdentifierNumber || "").replace(/\D/g, "");
+  let matchedComp: ReturnType<typeof getCompaniesList>[number] | undefined;
+  try {
+    if (cleanTenant) {
+      const companies = getCompaniesList();
+      matchedComp = companies.find(
+        (c) =>
+          (c.tenantIdentifierNumber && c.tenantIdentifierNumber.replace(/\D/g, "") === cleanTenant) ||
+          (c.vkn && c.vkn.replace(/\D/g, "") === cleanTenant) ||
+          (c.tckn && c.tckn.replace(/\D/g, "") === cleanTenant) ||
+          (c.taxNumber && c.taxNumber.replace(/\D/g, "") === cleanTenant),
+      );
+    }
+  } catch {}
+
+  const apiPrefix = firstString(apiData.prefix)?.toUpperCase().slice(0, 3);
+  const savedCompPrefix = (
+    isEarsiv ? matchedComp?.eArsivPrefix : matchedComp?.eFaturaPrefix
+  )
+    ?.toUpperCase()
+    .slice(0, 3);
+  const callerPrefix = options.prefix?.trim().toUpperCase().slice(0, 3);
+
+  const resolvedPrefix =
+    (apiPrefix && apiPrefix !== "GIB" && apiPrefix !== "EAR" ? apiPrefix : "") ||
+    (savedCompPrefix && savedCompPrefix !== "GIB" && savedCompPrefix !== "EAR"
+      ? savedCompPrefix
+      : "") ||
+    (callerPrefix && callerPrefix !== "GIB" && callerPrefix !== "EAR" ? callerPrefix : "") ||
+    apiPrefix ||
+    savedCompPrefix ||
+    callerPrefix ||
+    (isEarsiv ? "EAR" : "GIB");
+
+  // Also check local persisted e-documents and local sales invoices for this prefix/type
+  let localMaxSeq = 0;
+  const checkDocNo = (rawNo: string) => {
+    const cleaned = String(rawNo || "")
+      .replace(/\s*\(TASLAK\)\s*$/i, "")
+      .trim();
+    const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(cleaned);
+    if (match) {
+      const pfx = match[1].toUpperCase();
+      const yr = Number(match[2]);
+      const seq = parseInt(match[3], 10);
+      if (yr === year && pfx === resolvedPrefix && !isNaN(seq) && seq > localMaxSeq) {
+        localMaxSeq = seq;
+      }
+    }
+  };
+
+  try {
+    for (const doc of readPersistedEDocuments()) {
+      if (!matchedComp || !doc.companyId || doc.companyId === matchedComp.id) {
+        checkDocNo(String(doc.documentNo || doc.documentNumber || ""));
+      }
+    }
+  } catch {}
+
+  try {
+    const storedApp = getStoredData(matchedComp?.id);
+    for (const inv of storedApp.invoices || []) {
+      if (inv.type === "sales" && inv.status !== "draft") {
+        checkDocNo(String(inv.invoiceNumber || ""));
+      }
+    }
+  } catch {}
+
+  // Check if company has a saved nextNumber for this prefix
+  let savedNextSeq = 0;
+  const savedNextStr = isEarsiv ? matchedComp?.eArsivNextNumber : matchedComp?.eFaturaNextNumber;
+  if (savedNextStr) {
+    const m = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(savedNextStr.trim());
+    if (m && m[1].toUpperCase() === resolvedPrefix && Number(m[2]) === year) {
+      savedNextSeq = parseInt(m[3], 10) || 0;
+    }
+  }
+
+  const apiLastSeq = Number(apiData.lastSequence) || 0;
+  const apiNextSeq = Number(apiData.nextSequence) || (apiLastSeq > 0 ? apiLastSeq + 1 : 1);
+
+  const finalLastSeq = Math.max(
+    apiLastSeq,
+    localMaxSeq,
+    savedNextSeq > 1 ? savedNextSeq - 1 : 0,
+  );
+  const finalNextSeq = Math.max(apiNextSeq, finalLastSeq + 1, 1);
+  const finalNextInvoiceNumber = `${resolvedPrefix}${year}${String(finalNextSeq).padStart(9, "0")}`;
+  const finalLastInvoiceNumber =
+    finalLastSeq > 0
+      ? `${resolvedPrefix}${year}${String(finalLastSeq).padStart(9, "0")}`
+      : firstString(apiData.lastInvoiceNumber);
+
   return {
-    tenantIdentifierNumber: firstString(data.tenantIdentifierNumber),
-    prefix: firstString(data.prefix) || "GIB",
-    year: Number(data.year) || new Date().getFullYear(),
-    lastInvoiceNumber: firstString(data.lastInvoiceNumber),
-    lastSequence: Number(data.lastSequence) || 0,
-    nextSequence: Number(data.nextSequence) || 1,
-    nextInvoiceNumber: firstString(data.nextInvoiceNumber) || "",
-    eDocumentType: firstString(data.eDocumentType) || "EFATURA",
-    totalOutgoingChecked: Number(data.totalOutgoingChecked) || 0,
+    tenantIdentifierNumber:
+      firstString(apiData.tenantIdentifierNumber) || options.tenantIdentifierNumber,
+    prefix: resolvedPrefix,
+    year,
+    lastInvoiceNumber: finalLastInvoiceNumber,
+    lastSequence: finalLastSeq,
+    nextSequence: finalNextSeq,
+    nextInvoiceNumber: finalNextInvoiceNumber,
+    eDocumentType: firstString(apiData.eDocumentType) || (isEarsiv ? "EARSIVFATURA" : "EFATURA"),
+    totalOutgoingChecked: Number(apiData.totalOutgoingChecked) || 0,
   };
 }
 

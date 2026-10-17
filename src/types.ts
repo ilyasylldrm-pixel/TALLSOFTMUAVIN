@@ -271,7 +271,7 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "company_settings", name: "↳ Sistem Ayarları", description: "Genel sistem ayarları, çoklu şirket ve Mysoft VKN/TCKN eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_companies", name: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Çoklu şirket tanımlama ve şirketler arası geçiş", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_mysoft", name: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef VKN/TCKN ve seri eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
-  { id: "company_logs", name: "↳ Log İzleme Ekranı (Mysoft API)", description: "Mysoft e-Fatura/e-Belge teknik hata dökümü ve çözüm önerileri ekranı", category: "core", parentId: "company", isSubModule: true, badge: "Canlı Log" },
+  { id: "company_logs", name: "↳ Sistem Ayarları: Log İzleme Ekranı (Mysoft API)", description: "Mysoft e-Fatura/e-Belge teknik hata dökümü ve çözüm önerileri ekranı (Yalnızca Mysoft eşleştirmesi yapılan firma için)", category: "core", parentId: "company", isSubModule: true, badge: "Canlı Log" },
 
   // Ana Modül: E-İşlemler
   { id: "e_services", name: "E-İşlemler (GİB / Portal)", description: "GİB portalı, e-Arşiv, SGK ve e-Devlet sorgulama", category: "commercial", badge: "Resmi" },
@@ -285,7 +285,6 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "waybills_receipt", name: "↳ Gelen e-İrsaliyeler", description: "Tedarikçilerden gelen e-İrsaliye belgeleri", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
   { id: "waybills_dispatch", name: "↳ Giden e-İrsaliyeler", description: "Müşterilere düzenlenen giden e-İrsaliyeler", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
   { id: "waybills", name: "↳ İrsaliye Oluştur (Yerel)", description: "Sevk ve tesellüm irsaliyesi oluşturma ve faturaya aktarma", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
-  { id: "e_document_logs", name: "↳ Log İzleme Ekranı (E-Fatura)", description: "E-Fatura gönderim ve Mysoft API teknik hata log izleme ekranı", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Canlı Log" },
 
   // Ana Modül: Sipariş & Proforma & Alt Modülleri
   { id: "orders_module", name: "Sipariş & Proforma Fatura", description: "Alınan/verilen siparişler ve proforma teklifler ana modülü", category: "commercial" },
@@ -377,6 +376,32 @@ export interface CompanyItem {
 
 export interface MysoftCredentials {
   tenantIdentifierNumber?: string;
+}
+
+/**
+ * Aktif şirketin Mysoft VKN/TCKN eşleştirmesi yapılıp yapılmadığını kontrol eder.
+ */
+export function isCompanyMysoftMatched(
+  company?: Partial<CompanyItem> | null,
+  settings?: {
+    tenantIdentifierNumber?: string;
+    mysoftStatus?: string;
+    mysoftCredentials?: { tenantIdentifierNumber?: string };
+  } | null,
+): boolean {
+  const compTenant = String(company?.tenantIdentifierNumber || "").replace(/\D/g, "").trim();
+  if (compTenant.length === 10 || compTenant.length === 11) return true;
+  if (company?.mysoftStatus === "verified") return true;
+  const settingsTenant = String(
+    settings?.tenantIdentifierNumber ||
+      settings?.mysoftCredentials?.tenantIdentifierNumber ||
+      "",
+  )
+    .replace(/\D/g, "")
+    .trim();
+  if (settingsTenant.length === 10 || settingsTenant.length === 11) return true;
+  if (settings?.mysoftStatus === "verified") return true;
+  return false;
 }
 
 export type DocumentKind = "invoice" | "receipt"; // invoice = Fatura, receipt = Fiş (Gelir/Gider Fişi)
@@ -1793,7 +1818,7 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "company_settings", label: "↳ Sistem Ayarları", description: "Firma bazlı parametreler, çoklu şirket, Mysoft eşleştirme ve yedekleme", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_companies", label: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Kurumsal şirket, şahıs işletmesi ve test şirketleri yönetimi", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_mysoft", label: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef ve ön ek (prefix) eşleştirme", category: "Yönetim", parentKey: "company", isSubModule: true },
-  { key: "company_logs", label: "↳ Log İzleme Ekranı (Mysoft API)", description: "Mysoft API teknik hata dökümü ve çözüm önerileri ekranı", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_logs", label: "↳ Sistem Ayarları: Log İzleme Ekranı (Mysoft API)", description: "Mysoft API teknik hata dökümü ve çözüm önerileri ekranı (Yalnızca Mysoft eşleştirmesi yapılan firma için)", category: "Yönetim", parentKey: "company", isSubModule: true },
 
   // E-İşlemler
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
@@ -1807,7 +1832,6 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "waybills_receipt", label: "↳ Gelen e-İrsaliyeler", description: "Gelen e-İrsaliye belgeleri", category: "Ticari", parentKey: "invoices", isSubModule: true },
   { key: "waybills_dispatch", label: "↳ Giden e-İrsaliyeler", description: "Giden e-İrsaliye belgeleri", category: "Ticari", parentKey: "invoices", isSubModule: true },
   { key: "waybills", label: "↳ İrsaliye Oluştur", description: "Sevk irsaliyesi oluşturma ve faturaya dönüştürme", category: "Ticari", parentKey: "invoices", isSubModule: true },
-  { key: "e_document_logs", label: "↳ Log İzleme Ekranı (E-Fatura)", description: "Mysoft e-Belge API teknik hata ve çözüm izleme konsolu", category: "Ticari", parentKey: "invoices", isSubModule: true },
 
   // Sipariş & Proforma & Alt Modülleri
   { key: "orders_module", label: "Sipariş & Proforma", description: "Müşteri siparişleri ve proforma teklifler (Ana Modül)", category: "Ticari" },
@@ -1957,12 +1981,22 @@ export function isModuleOrSubModuleAllowed(
   moduleKey: string,
   parentKey: string | undefined,
   currentUser?: { id?: string; email?: string; role?: string; username?: string; allowedModules?: string[] } | null,
-  activeCompany?: { moduleRestrictionEnabled?: boolean; allowedModules?: string[] } | null
+  activeCompany?: {
+    moduleRestrictionEnabled?: boolean;
+    allowedModules?: string[];
+    tenantIdentifierNumber?: string;
+    mysoftStatus?: "active" | "pending" | "none";
+    eFaturaPrefix?: string;
+    eArsivPrefix?: string;
+    eFaturaNextNumber?: string;
+    eArsivNextNumber?: string;
+  } | null
 ): boolean {
+  if (moduleKey === "company_logs" || moduleKey === "e_document_logs") {
+    return isCompanyMysoftMatched(activeCompany);
+  }
   if (isAdminOrSysAdmin(currentUser)) return true;
-  if (moduleKey === "admin") return false;
-  // Log İzleme Ekranı tüm şirketler ve kullanıcılar için her zaman görünür
-  if (moduleKey === "company_logs" || moduleKey === "e_document_logs") return true;
+  if (moduleKey === "admin" || moduleKey === "company_companies") return false;
 
   // 1. Şirket bazlı modül ve alt modül kısıtlaması
   if (activeCompany?.moduleRestrictionEnabled && Array.isArray(activeCompany.allowedModules)) {

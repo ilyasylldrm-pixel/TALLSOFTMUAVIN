@@ -194,7 +194,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "company_branches", label: "Şubeler", icon: Store },
     { id: "company_warehouses", label: "Depolar", icon: WarehouseIcon },
     { id: "company_settings", label: "Sistem Ayarları", icon: Settings },
-    { id: "company_logs", label: "Log İzleme Ekranı", icon: Terminal },
   ];
   const companySubModules = allCompanySubModules.filter((sub) =>
     isModuleOrSubModuleAllowed(sub.id, "company", currentUser, activeCompany)
@@ -208,7 +207,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "waybills_receipt", label: "Gelen e-İrsaliyeler", icon: ArrowDownLeft },
     { id: "waybills_dispatch", label: "Giden e-İrsaliyeler", icon: ArrowUpRight },
     { id: "waybills", label: "İrsaliye Oluştur", icon: FileText },
-    { id: "e_document_logs", label: "E-Fatura Log İzleme", icon: Terminal },
   ];
   const invoiceSubModules = allInvoiceSubModules.filter((sub) =>
     isModuleOrSubModuleAllowed(sub.id, "invoices", currentUser, activeCompany)
@@ -568,7 +566,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     const isSubActive =
                       currentTab === sub.id ||
                       (sub.id === "company_settings" &&
-                        ["settings", "company_companies", "company_mysoft"].includes(currentTab));
+                        ["settings", "company_companies", "company_mysoft", "company_logs", "e_document_logs"].includes(currentTab));
 
                     return (
                       <button

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CompanySettings, isAdminOrSysAdmin } from "../types";
+import { CompanySettings, CompanyItem, isAdminOrSysAdmin, isCompanyMysoftMatched } from "../types";
 import { UserProfile } from "./AuthModal";
 import { useTheme } from "../context/ThemeContext";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
@@ -55,8 +55,9 @@ interface SettingsProps {
   embedded?: boolean;
   initialTab?: "theme" | "system" | "backup" | "cloud" | "github";
   companiesCount?: number;
-  onOpenSubModule?: (sub: "companies" | "mysoft") => void;
+  onOpenSubModule?: (sub: "companies" | "mysoft" | "logs") => void;
   currentUser?: UserProfile | null;
+  activeCompany?: CompanyItem | null;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -70,8 +71,10 @@ export const Settings: React.FC<SettingsProps> = ({
   companiesCount,
   onOpenSubModule,
   currentUser,
+  activeCompany,
 }) => {
   const isAdmin = isAdminOrSysAdmin(currentUser);
+  const isMysoftMatched = isCompanyMysoftMatched(activeCompany, settings);
   const [activeTab, setActiveTab] = useState<"theme" | "system" | "backup" | "cloud" | "github">(
     initialTab === "github" && !isAdmin ? (embedded ? "system" : "theme") : initialTab || (embedded ? "system" : "theme")
   );
@@ -207,14 +210,16 @@ export const Settings: React.FC<SettingsProps> = ({
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
         {onOpenSubModule && (
           <>
-            <button
-              type="button"
-              onClick={() => onOpenSubModule("companies")}
-              className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
-            >
-              <Building2 className="w-4 h-4 text-[#0f6bae]" />
-              <span>Şirketler & Çoklu Şirket{companiesCount !== undefined ? ` (${companiesCount})` : ""}</span>
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => onOpenSubModule("companies")}
+                className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
+              >
+                <Building2 className="w-4 h-4 text-[#0f6bae]" />
+                <span>Şirketler & Çoklu Şirket{companiesCount !== undefined ? ` (${companiesCount})` : ""}</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -224,6 +229,17 @@ export const Settings: React.FC<SettingsProps> = ({
               <Globe className="w-4 h-4 text-indigo-600" />
               <span>Mysoft VKN/TCKN Eşleştirme</span>
             </button>
+
+            {isMysoftMatched && (
+              <button
+                type="button"
+                onClick={() => onOpenSubModule("logs")}
+                className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200"
+              >
+                <Terminal className="w-4 h-4 text-amber-600" />
+                <span>Log İzleme Ekranı (Mysoft API)</span>
+              </button>
+            )}
           </>
         )}
 

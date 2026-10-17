@@ -579,7 +579,7 @@ export const Quotes: React.FC<QuotesProps> = ({
                                   <option value="">-- Stok / Hizmet Kataloğundan Seç --</option>
                                   {products.map((p) => (
                                     <option key={p.id} value={p.id}>
-                                      {p.stockType ? `[${p.stockType}] ` : ""}{p.name} {p.barcode ? `(Barkod: ${p.barcode})` : ""} - ₺{p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      {p.stockType ? `[${p.stockType}] ` : ""}{p.name} - Stok: {p.stockQuantity ?? p.stock ?? 0} {p.unit || "Adet"} {p.barcode ? `(Barkod: ${p.barcode})` : ""} - ₺{p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </option>
                                   ))}
                                 </select>

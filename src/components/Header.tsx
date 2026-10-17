@@ -288,7 +288,7 @@ export const Header: React.FC<HeaderProps> = ({
                   })}
                 </div>
 
-                {onOpenNewCompanyModal && (
+                {onOpenNewCompanyModal && isAdminOrSysAdmin(currentUser) && (
                   <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800">
                     <button
                       type="button"

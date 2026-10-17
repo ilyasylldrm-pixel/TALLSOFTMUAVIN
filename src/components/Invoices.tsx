@@ -647,14 +647,111 @@ export const Invoices: React.FC<InvoicesProps> = ({
       if (!vkn) return;
       setIsLoadingMysoftSeries(true);
       try {
-        const defaults = await getMysoftMappingDefaults(vkn);
-        setMysoftMappingDefaults(defaults);
-        if (defaults.eFaturaPrefix) {
-          setSelectedEFaturaPrefix(defaults.eFaturaPrefix.trim().toUpperCase().slice(0, 3));
-        }
-        if (defaults.eArsivPrefix) {
-          setSelectedEArsivPrefix(defaults.eArsivPrefix.trim().toUpperCase().slice(0, 3));
-        }
+        const currentYear = new Date().getFullYear();
+        const [defaultsSettled, efatNextSettled, earsNextSettled] = await Promise.allSettled([
+          getMysoftMappingDefaults(vkn),
+          getNextMysoftInvoiceNumber({
+            tenantIdentifierNumber: vkn,
+            eDocumentType: "EFATURA",
+            year: currentYear,
+          }),
+          getNextMysoftInvoiceNumber({
+            tenantIdentifierNumber: vkn,
+            eDocumentType: "EARSIVFATURA",
+            year: currentYear,
+          }),
+        ]);
+
+        const defaults = defaultsSettled.status === "fulfilled" ? defaultsSettled.value : null;
+        const efatNext = efatNextSettled.status === "fulfilled" ? efatNextSettled.value : null;
+        const earsNext = earsNextSettled.status === "fulfilled" ? earsNextSettled.value : null;
+
+        const localSalesDocNos = invoices
+          .filter((inv) => inv.type === "sales" && inv.status !== "draft")
+          .map((inv) => inv.invoiceNumber)
+          .filter(Boolean);
+
+        const resolvedEFatPrefix = (
+          (efatNext?.prefix && efatNext.prefix !== "GIB" ? efatNext.prefix : "") ||
+          (defaults?.eFaturaPrefix && defaults.eFaturaPrefix !== "GIB" ? defaults.eFaturaPrefix : "") ||
+          efatNext?.prefix ||
+          defaults?.eFaturaPrefix ||
+          "GIB"
+        )
+          .trim()
+          .toUpperCase()
+          .slice(0, 3);
+
+        const efatMerged = calculateNextInvoiceNumber({
+          existingDocNos: [
+            efatNext?.lastInvoiceNumber,
+            defaults?.eFaturaLastNumber,
+            ...localSalesDocNos,
+          ].filter((x): x is string => Boolean(x)),
+          targetPrefix: resolvedEFatPrefix,
+          targetYear: currentYear,
+          fallbackPrefix: "GIB",
+        });
+
+        const finalEFatSeq = Math.max(
+          efatNext?.nextSequence || 1,
+          defaults?.eFaturaSequence || 1,
+          efatMerged.nextSequence || 1,
+        );
+        const finalEFatNextNo = `${resolvedEFatPrefix}${currentYear}${String(finalEFatSeq).padStart(9, "0")}`;
+        const finalEFatLastNo =
+          finalEFatSeq > 1
+            ? `${resolvedEFatPrefix}${currentYear}${String(finalEFatSeq - 1).padStart(9, "0")}`
+            : efatNext?.lastInvoiceNumber || defaults?.eFaturaLastNumber;
+
+        const resolvedEArsPrefix = (
+          (earsNext?.prefix && earsNext.prefix !== "EAR" ? earsNext.prefix : "") ||
+          (defaults?.eArsivPrefix && defaults.eArsivPrefix !== "EAR" ? defaults.eArsivPrefix : "") ||
+          earsNext?.prefix ||
+          defaults?.eArsivPrefix ||
+          "EAR"
+        )
+          .trim()
+          .toUpperCase()
+          .slice(0, 3);
+
+        const earsMerged = calculateNextInvoiceNumber({
+          existingDocNos: [
+            earsNext?.lastInvoiceNumber,
+            defaults?.eArsivLastNumber,
+            ...localSalesDocNos,
+          ].filter((x): x is string => Boolean(x)),
+          targetPrefix: resolvedEArsPrefix,
+          targetYear: currentYear,
+          fallbackPrefix: "EAR",
+        });
+
+        const finalEArsSeq = Math.max(
+          earsNext?.nextSequence || 1,
+          defaults?.eArsivSequence || 1,
+          earsMerged.nextSequence || 1,
+        );
+        const finalEArsNextNo = `${resolvedEArsPrefix}${currentYear}${String(finalEArsSeq).padStart(9, "0")}`;
+        const finalEArsLastNo =
+          finalEArsSeq > 1
+            ? `${resolvedEArsPrefix}${currentYear}${String(finalEArsSeq - 1).padStart(9, "0")}`
+            : earsNext?.lastInvoiceNumber || defaults?.eArsivLastNumber;
+
+        setSelectedEFaturaPrefix(resolvedEFatPrefix);
+        setSelectedEArsivPrefix(resolvedEArsPrefix);
+
+        setMysoftMappingDefaults({
+          vknTckn: vkn,
+          eFaturaPrefix: resolvedEFatPrefix,
+          eFaturaLastNumber: finalEFatLastNo,
+          eFaturaNextNumber: finalEFatNextNo,
+          eFaturaSequence: finalEFatSeq,
+          eArsivPrefix: resolvedEArsPrefix,
+          eArsivLastNumber: finalEArsLastNo,
+          eArsivNextNumber: finalEArsNextNo,
+          eArsivSequence: finalEArsSeq,
+          prefixes: defaults?.prefixes || [],
+        });
       } catch {
         // Keep current prefixes/settings
       } finally {
@@ -667,6 +764,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       companySettings.vkn,
       companySettings.tckn,
       companySettings.taxNumber,
+      invoices,
     ],
   );
 
@@ -3286,6 +3384,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
               </select>
             </div>
 
+            {/* Stok Rehberi Toplam Özet Bandı */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 bg-purple-50/70 border border-purple-200/80 rounded-2xl text-xs">
+              <div className="flex items-center gap-2 font-bold text-purple-900">
+                <Package className="w-4 h-4 text-purple-600" />
+                <span>Stok Rehberi Envanter Özeti ({products.length} Kalem Stok/Hizmet)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg bg-white border border-purple-200 font-mono font-extrabold text-purple-800 shadow-2xs">
+                  Toplam Mevcut Adet:{" "}
+                  {products
+                    .reduce((sum, p) => sum + Number(p.stockQuantity ?? p.stock ?? 0), 0)
+                    .toLocaleString("tr-TR")}{" "}
+                  Birim
+                </span>
+              </div>
+            </div>
+
             <div className="max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar pr-1">
               {products
                 .filter((p) => {
@@ -3294,26 +3409,48 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   const matchesCat = productCategoryFilter === "all" || p.category === productCategoryFilter;
                   return matchesSearch && matchesCat;
                 })
-                .map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => handleSelectProductFromPicker(p)}
-                    className="p-3.5 rounded-2xl border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 transition-all cursor-pointer flex items-center justify-between group"
-                  >
-                    <div>
-                      <div className="font-bold text-xs text-slate-900 group-hover:text-purple-900">{p.name}</div>
-                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                        Kod: {p.code || "-"} • Stok: <strong className={p.stock <= 0 ? "text-rose-600" : "text-emerald-700"}>{p.stock ?? 0} {p.unit || "Adet"}</strong>
+                .map((p) => {
+                  const stockQty = Number(p.stockQuantity ?? p.stock ?? 0);
+                  const unitLabel = p.unit || "Adet";
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => handleSelectProductFromPicker(p)}
+                      className="p-3.5 rounded-2xl border border-slate-200 hover:border-purple-300 hover:bg-purple-50/40 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-xs text-slate-900 group-hover:text-purple-900">
+                            {p.name}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-extrabold border ${
+                              p.isService
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                : stockQty <= 0
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            }`}
+                          >
+                            Stok: {stockQty.toLocaleString("tr-TR")} {unitLabel}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                          Kod: {p.code || "-"} • Kategori: {p.category || "Genel"} • Mevcut Miktar:{" "}
+                          <strong className={stockQty <= 0 && !p.isService ? "text-rose-600" : "text-emerald-700"}>
+                            {stockQty.toLocaleString("tr-TR")} {unitLabel}
+                          </strong>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-mono font-bold text-xs text-purple-700">
+                          ₺{invType === "purchase" ? p.buyPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-semibold">+%{p.vatRate ?? 20} KDV</span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-mono font-bold text-xs text-purple-700">
-                        ₺{invType === "purchase" ? p.buyPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.sellPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                      <span className="text-[10px] text-slate-400 font-semibold">+%{p.vatRate ?? 20} KDV</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
         </DetailPageLayout>
@@ -3943,18 +4080,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             <span>Fatura Numarası</span>
                           </label>
                           {invType === "sales" && formDocKind === "invoice" && !editingInvoiceId ? (
-                            isManualInvoiceNumber ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIsManualInvoiceNumber(false);
-                                  setInvoiceNumberInput(activeMysoftSerialNumber);
-                                }}
-                                className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 cursor-pointer"
-                              >
-                                ↺ Mysoft Sıradaki No
-                              </button>
-                            ) : (
+                            <div className="flex items-center gap-1">
                               <span
                                 className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
                                   isCurrentSalesEArsiv
@@ -3962,9 +4088,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                     : "bg-emerald-50 text-emerald-800 border-emerald-200"
                                 }`}
                               >
-                                {isCurrentSalesEArsiv ? `e-Arşiv Serisi (${activeMysoftPrefix})` : `e-Fatura Serisi (${activeMysoftPrefix})`}
+                                {isCurrentSalesEArsiv ? `e-Arşiv (${activeMysoftPrefix})` : `e-Fatura (${activeMysoftPrefix})`}
                               </span>
-                            )
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsManualInvoiceNumber(false);
+                                  void fetchAndApplyNextInvoiceNumber();
+                                }}
+                                disabled={isFetchingNextDocNo}
+                                className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 cursor-pointer flex items-center gap-0.5 disabled:opacity-50"
+                                title="Mysoft'tan sıradaki ardışık fatura numarasını çek"
+                              >
+                                <RefreshCw className={`w-2.5 h-2.5 ${isFetchingNextDocNo ? "animate-spin" : ""}`} />
+                                <span>Sıradaki No</span>
+                              </button>
+                            </div>
                           ) : (
                             <span className="text-[10px] text-purple-700 font-semibold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
                               İsteğe Bağlı (Otomatik)
@@ -3984,6 +4123,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           }}
                           className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
+                        {sendToMysoft && invType === "sales" && !editingInvoiceId && mysoftNumberInfo && (
+                          <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span>
+                              {mysoftNumberInfo.lastInvoiceNumber
+                                ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
+                                : `Sıradaki: ${invoiceNumberInput}`}
+                            </span>
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -4351,16 +4500,29 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                         <span className="font-bold text-[11px] text-slate-700 shrink-0">Stok Rehberi:</span>
                                         <span className="text-[11px] text-slate-600 font-medium truncate">
                                           {item.productId
-                                            ? (products.find((p) => p.id === item.productId)?.name || item.description || "Stok Seçildi")
-                                            : "Stok rehberinden ürün / hammadde seçin..."}
+                                            ? (() => {
+                                                const selProd = products.find((p) => p.id === item.productId);
+                                                const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
+                                                return `${selProd?.name || item.description || "Stok Seçildi"} (Stok: ${qty.toLocaleString("tr-TR")} ${selProd?.unit || "Adet"})`;
+                                              })()
+                                            : `Stok rehberinden seçin (${products.length} ürün • Top. ${products.reduce((s, p) => s + Number(p.stockQuantity ?? p.stock ?? 0), 0).toLocaleString("tr-TR")} adet)...`}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-1 shrink-0">
-                                        {item.productId && (
-                                          <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
-                                            {products.find((p) => p.id === item.productId)?.code || "Seçili"}
-                                          </span>
-                                        )}
+                                        {item.productId && (() => {
+                                          const selProd = products.find((p) => p.id === item.productId);
+                                          const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
+                                          return (
+                                            <>
+                                              <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                                {qty.toLocaleString("tr-TR")} {selProd?.unit || "Adet"}
+                                              </span>
+                                              <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
+                                                {selProd?.code || "Seçili"}
+                                              </span>
+                                            </>
+                                          );
+                                        })()}
                                         <span className="text-[10px] font-bold text-purple-700 bg-white border border-purple-200 group-hover:bg-purple-100 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition-colors">
                                           <Search className="w-2.5 h-2.5 text-purple-600" />
                                           <span>Rehber</span>
@@ -4411,16 +4573,29 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                         <span className="font-bold text-[11px] text-slate-700 shrink-0">Stok Rehberi:</span>
                                         <span className="text-[11px] text-slate-600 font-medium truncate">
                                           {item.productId
-                                            ? (products.find((p) => p.id === item.productId)?.name || item.description || "Stok Seçildi")
-                                            : "Stok rehberinden ürün / hizmet seçin..."}
+                                            ? (() => {
+                                                const selProd = products.find((p) => p.id === item.productId);
+                                                const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
+                                                return `${selProd?.name || item.description || "Stok Seçildi"} (Stok: ${qty.toLocaleString("tr-TR")} ${selProd?.unit || "Adet"})`;
+                                              })()
+                                            : `Stok rehberinden seçin (${products.length} ürün • Top. ${products.reduce((s, p) => s + Number(p.stockQuantity ?? p.stock ?? 0), 0).toLocaleString("tr-TR")} adet)...`}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-1 shrink-0">
-                                        {item.productId && (
-                                          <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
-                                            {products.find((p) => p.id === item.productId)?.code || "Seçili"}
-                                          </span>
-                                        )}
+                                        {item.productId && (() => {
+                                          const selProd = products.find((p) => p.id === item.productId);
+                                          const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
+                                          return (
+                                            <>
+                                              <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                                {qty.toLocaleString("tr-TR")} {selProd?.unit || "Adet"}
+                                              </span>
+                                              <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
+                                                {selProd?.code || "Seçili"}
+                                              </span>
+                                            </>
+                                          );
+                                        })()}
                                         <span className="text-[10px] font-bold text-purple-700 bg-white border border-purple-200 group-hover:bg-purple-100 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition-colors">
                                           <Search className="w-2.5 h-2.5 text-purple-600" />
                                           <span>Rehber</span>
@@ -5392,6 +5567,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                   {activeEFaturaNextNo}
                                 </div>
                               </div>
+                              {mysoftMappingDefaults?.eFaturaLastNumber && (
+                                <p className="mt-1 text-[10px] text-emerald-800 font-mono truncate">
+                                  Son: {mysoftMappingDefaults.eFaturaLastNumber} → Sıradaki: {activeEFaturaNextNo}
+                                </p>
+                              )}
                             </div>
 
                             {/* e-Arşiv Seri & Ardışık No */}
@@ -5400,6 +5580,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 setMysoftEDocType("e_arsiv");
                                 setInvoiceScenario("EARSIVFATURA");
                                 setIsManualInvoiceNumber(false);
+                                void fetchAndApplyNextInvoiceNumber(mysoftTenantVkn, "e_arsiv");
                               }}
                               className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
                                 isCurrentSalesEArsiv
@@ -5436,6 +5617,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                   {activeEArsivNextNo}
                                 </div>
                               </div>
+                              {mysoftMappingDefaults?.eArsivLastNumber && (
+                                <p className="mt-1 text-[10px] text-sky-800 font-mono truncate">
+                                  Son: {mysoftMappingDefaults.eArsivLastNumber} → Sıradaki: {activeEArsivNextNo}
+                                </p>
+                              )}
                             </div>
                           </div>
 

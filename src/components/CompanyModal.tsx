@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Building2,
   X,
@@ -43,6 +43,7 @@ import { saveUserProfile, UserProfileData } from "../lib/firebase";
 import {
   getMysoftTenant,
   getMysoftMappingDefaults,
+  getNextMysoftInvoiceNumber,
   checkRecipientTaxpayerStatus,
 } from "../services/mysoftEDocumentService";
 import { parseSeparateAddressFields, appendCityDistrictToAddress } from "../utils/storage";
@@ -170,17 +171,20 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   const [eFaturaNextNumber, setEFaturaNextNumber] = useState<string>(
     initialCompany?.eFaturaNextNumber || `GIB${currentYear}000000001`
   );
+  const [eFaturaLastNumber, setEFaturaLastNumber] = useState<string | undefined>(undefined);
   const [eArsivPrefix, setEArsivPrefix] = useState<string>(
     initialCompany?.eArsivPrefix || "EAR"
   );
   const [eArsivNextNumber, setEArsivNextNumber] = useState<string>(
     initialCompany?.eArsivNextNumber || `EAR${currentYear}000000001`
   );
+  const [eArsivLastNumber, setEArsivLastNumber] = useState<string | undefined>(undefined);
   const [availablePrefixes, setAvailablePrefixes] = useState<
     Array<{
       prefix: string;
       edocumentType?: number;
       currentNumber?: number;
+      lastNumber?: string;
       nextNumber?: string;
       isDefault?: boolean;
     }>
@@ -189,6 +193,113 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   const [prefixesFetched, setPrefixesFetched] = useState<boolean>(
     Boolean(initialCompany?.eFaturaPrefix || initialCompany?.eArsivPrefix)
   );
+
+  const fetchMysoftSequentialSerials = React.useCallback(async (rawTargetId?: string) => {
+    const cleanTarget = (
+      rawTargetId ||
+      (mysoftMatchedType === "vkn" ? vkn : tckn) ||
+      vkn ||
+      tckn ||
+      initialCompany?.tenantIdentifierNumber ||
+      initialCompany?.taxNumber ||
+      ""
+    )
+      .replace(/\D/g, "")
+      .trim();
+
+    if (cleanTarget.length !== 10 && cleanTarget.length !== 11) return;
+
+    setIsFetchingPrefixes(true);
+    try {
+      const [defaultsSettled, efatNextSettled, earsNextSettled] = await Promise.allSettled([
+        getMysoftMappingDefaults(cleanTarget),
+        getNextMysoftInvoiceNumber({
+          tenantIdentifierNumber: cleanTarget,
+          eDocumentType: "EFATURA",
+          year: currentYear,
+        }),
+        getNextMysoftInvoiceNumber({
+          tenantIdentifierNumber: cleanTarget,
+          eDocumentType: "EARSIVFATURA",
+          year: currentYear,
+        }),
+      ]);
+
+      const defaults = defaultsSettled.status === "fulfilled" ? defaultsSettled.value : null;
+      const efatNext = efatNextSettled.status === "fulfilled" ? efatNextSettled.value : null;
+      const earsNext = earsNextSettled.status === "fulfilled" ? earsNextSettled.value : null;
+
+      const resolvedEFatPrefix =
+        (efatNext?.prefix && efatNext.prefix !== "GIB" ? efatNext.prefix : "") ||
+        (defaults?.eFaturaPrefix && defaults.eFaturaPrefix !== "GIB" ? defaults.eFaturaPrefix : "") ||
+        efatNext?.prefix ||
+        defaults?.eFaturaPrefix ||
+        "GIB";
+
+      const resolvedEFatSeq = Math.max(
+        efatNext?.nextSequence || 1,
+        defaults?.eFaturaSequence || 1,
+      );
+      const resolvedEFatNextNo = `${resolvedEFatPrefix}${currentYear}${String(resolvedEFatSeq).padStart(9, "0")}`;
+
+      const resolvedEArsPrefix =
+        (earsNext?.prefix && earsNext.prefix !== "EAR" ? earsNext.prefix : "") ||
+        (defaults?.eArsivPrefix && defaults.eArsivPrefix !== "EAR" ? defaults.eArsivPrefix : "") ||
+        earsNext?.prefix ||
+        defaults?.eArsivPrefix ||
+        "EAR";
+
+      const resolvedEArsSeq = Math.max(
+        earsNext?.nextSequence || 1,
+        defaults?.eArsivSequence || 1,
+      );
+      const resolvedEArsNextNo = `${resolvedEArsPrefix}${currentYear}${String(resolvedEArsSeq).padStart(9, "0")}`;
+
+      setEFaturaPrefix(resolvedEFatPrefix);
+      setEFaturaNextNumber(resolvedEFatNextNo);
+      setEFaturaLastNumber(
+        efatNext?.lastInvoiceNumber ||
+          defaults?.eFaturaLastNumber ||
+          (resolvedEFatSeq > 1
+            ? `${resolvedEFatPrefix}${currentYear}${String(resolvedEFatSeq - 1).padStart(9, "0")}`
+            : undefined),
+      );
+
+      setEArsivPrefix(resolvedEArsPrefix);
+      setEArsivNextNumber(resolvedEArsNextNo);
+      setEArsivLastNumber(
+        earsNext?.lastInvoiceNumber ||
+          defaults?.eArsivLastNumber ||
+          (resolvedEArsSeq > 1
+            ? `${resolvedEArsPrefix}${currentYear}${String(resolvedEArsSeq - 1).padStart(9, "0")}`
+            : undefined),
+      );
+
+      if (defaults?.prefixes && defaults.prefixes.length > 0) {
+        setAvailablePrefixes(defaults.prefixes);
+      }
+      setPrefixesFetched(true);
+    } catch {
+      // Keep current values on error
+    } finally {
+      setIsFetchingPrefixes(false);
+    }
+  }, [mysoftMatchedType, vkn, tckn, initialCompany, currentYear]);
+
+  useEffect(() => {
+    const initialId = (
+      initialCompany?.tenantIdentifierNumber ||
+      initialCompany?.vkn ||
+      initialCompany?.tckn ||
+      initialCompany?.taxNumber ||
+      ""
+    )
+      .replace(/\D/g, "")
+      .trim();
+    if (initialId.length === 10 || initialId.length === 11) {
+      void fetchMysoftSequentialSerials(initialId);
+    }
+  }, [initialCompany?.id, fetchMysoftSequentialSerials]);
 
   // Helper to suggest username from company name
   const suggestUsername = (name: string) => {
@@ -379,21 +490,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       }
 
       // 🌟 Mysoft portalından e-Fatura & e-Arşiv fatura ön eklerini ve ardışık devam eden fatura numarasını getir
-      try {
-        const mapping = await getMysoftMappingDefaults(targetId);
-        if (mapping) {
-          if (mapping.eFaturaPrefix) setEFaturaPrefix(mapping.eFaturaPrefix);
-          if (mapping.eFaturaNextNumber) setEFaturaNextNumber(mapping.eFaturaNextNumber);
-          if (mapping.eArsivPrefix) setEArsivPrefix(mapping.eArsivPrefix);
-          if (mapping.eArsivNextNumber) setEArsivNextNumber(mapping.eArsivNextNumber);
-          if (mapping.prefixes && mapping.prefixes.length > 0) {
-            setAvailablePrefixes(mapping.prefixes);
-          }
-          setPrefixesFetched(true);
-        }
-      } catch (mapErr) {
-        console.warn("Mysoft fatura seri ve ardışık numara çekme uyarısı:", mapErr);
-      }
+      await fetchMysoftSequentialSerials(targetId);
     } catch (err: any) {
       // Still allow admin to map the number and compute sequence
       setMysoftVerifyResult({
@@ -403,19 +500,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
         message: "Canlı Mysoft API sorgulandı. Yönetici onaylı VKN/TCKN eşleştirmesi geçerli kılındı.",
       });
 
-      try {
-        const mapping = await getMysoftMappingDefaults(targetId);
-        if (mapping) {
-          if (mapping.eFaturaPrefix) setEFaturaPrefix(mapping.eFaturaPrefix);
-          if (mapping.eFaturaNextNumber) setEFaturaNextNumber(mapping.eFaturaNextNumber);
-          if (mapping.eArsivPrefix) setEArsivPrefix(mapping.eArsivPrefix);
-          if (mapping.eArsivNextNumber) setEArsivNextNumber(mapping.eArsivNextNumber);
-          if (mapping.prefixes && mapping.prefixes.length > 0) {
-            setAvailablePrefixes(mapping.prefixes);
-          }
-          setPrefixesFetched(true);
-        }
-      } catch (mapErr) {}
+      await fetchMysoftSequentialSerials(targetId);
     } finally {
       setIsVerifyingMysoft(false);
       setIsFetchingPrefixes(false);
@@ -954,13 +1039,17 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                     </h5>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {isFetchingPrefixes && (
-                      <span className="text-[10px] text-indigo-600 font-bold flex items-center gap-1">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Seriler Çekiliyor...
-                      </span>
-                    )}
-                    {prefixesFetched && (
+                    <button
+                      type="button"
+                      onClick={() => void fetchMysoftSequentialSerials()}
+                      disabled={isFetchingPrefixes || (!vkn && !tckn)}
+                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                      title="Mysoft'tan son kesilen e-Fatura ve e-Arşiv seri numaralarını ardışık olarak çek"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isFetchingPrefixes ? "animate-spin text-indigo-600" : ""}`} />
+                      <span>{isFetchingPrefixes ? "Mysoft'tan Çekiliyor..." : "Mysoft'tan Sıradaki Numaraları Çek"}</span>
+                    </button>
+                    {prefixesFetched && !isFetchingPrefixes && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                         Portal Seri Eşleşti
@@ -970,7 +1059,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                 </div>
 
                 <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Mysoft e-Belge portalında firmanız için tanımlı <strong>fatura serisi ön ekleri (Prefix)</strong> ve sıradaki <strong>ardışık devam eden fatura numarası</strong> otomatik getirilmiştir. Fatura kesiminde bu seri ardışık olarak devam edecektir.
+                  Mysoft e-Belge portalında firmanız için tanımlı <strong>fatura serisi ön ekleri (Prefix)</strong> ve en son hangi numarada kalmışsa <strong>ardışık devam eden sıradaki fatura numarası</strong> otomatik çekilmiştir. Fatura kesiminde bu seri ardışık olarak devam edecektir.
                 </p>
 
                 {availablePrefixes.length > 0 && (
@@ -988,15 +1077,17 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                               setEArsivPrefix(pref);
                               const seq = p.nextNumber || `${pref}${currentYear}000000001`;
                               setEArsivNextNumber(seq);
+                              if (p.lastNumber) setEArsivLastNumber(p.lastNumber);
                             } else {
                               setEFaturaPrefix(pref);
                               const seq = p.nextNumber || `${pref}${currentYear}000000001`;
                               setEFaturaNextNumber(seq);
+                              if (p.lastNumber) setEFaturaLastNumber(p.lastNumber);
                             }
                           }}
                           className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-indigo-500 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200 cursor-pointer transition-all"
                         >
-                          {p.prefix} ({isEarsiv ? "e-Arşiv" : "e-Fatura"})
+                          {p.prefix} ({isEarsiv ? "e-Arşiv" : "e-Fatura"} • Sıradaki: {p.nextNumber || `${p.prefix}${currentYear}000000001`})
                         </button>
                       );
                     })}
@@ -1051,7 +1142,9 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                       </div>
                     </div>
                     <span className="text-[9px] text-blue-700/80 dark:text-blue-400 block">
-                      GİB formatı: 3 harf seri ({eFaturaPrefix || "GIB"}) + {currentYear} + 9 hane ardışık sayaç
+                      {eFaturaLastNumber
+                        ? `Son Kesilen: ${eFaturaLastNumber} → Sıradaki: ${eFaturaNextNumber}`
+                        : `GİB formatı: 3 harf seri (${eFaturaPrefix || "GIB"}) + ${currentYear} + 9 hane ardışık sayaç`}
                     </span>
                   </div>
 
@@ -1102,7 +1195,9 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                       </div>
                     </div>
                     <span className="text-[9px] text-purple-700/80 dark:text-purple-400 block">
-                      GİB formatı: 3 harf seri ({eArsivPrefix || "EAR"}) + {currentYear} + 9 hane ardışık sayaç
+                      {eArsivLastNumber
+                        ? `Son Kesilen: ${eArsivLastNumber} → Sıradaki: ${eArsivNextNumber}`
+                        : `GİB formatı: 3 harf seri (${eArsivPrefix || "EAR"}) + ${currentYear} + 9 hane ardışık sayaç`}
                     </span>
                   </div>
                 </div>
