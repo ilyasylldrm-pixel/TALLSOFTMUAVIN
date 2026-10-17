@@ -16,7 +16,14 @@ import {
   deleteDoc,
   updateDoc
 } from "firebase/firestore";
-import { db, sanitizeForFirestore, getAllUsersProfiles } from "../lib/firebase";
+import {
+  db,
+  sanitizeForFirestore,
+  getAllUsersProfiles,
+  getLocalUsersBackup,
+  saveLocalUsersBackup,
+  UserProfileData,
+} from "../lib/firebase";
 import {
   PayrollYearlyParameters,
   CURRENT_PAYROLL_PARAMS_2026,
@@ -33,6 +40,7 @@ import {
   saveDeletedCompanyIds,
   getDeletedUserKeys,
   saveDeletedUserKeys,
+  isProtectedCompanyId,
 } from "../utils/storage";
 
 export interface SystemAuditLogItem {
@@ -408,14 +416,45 @@ export async function verifyAndSyncAllUsersLocalDb(
   actionName: string = "Tüm Şirketler ve Kullanıcılar Senkronize Edildi"
 ): Promise<LocalDbSyncReport> {
   const nowIso = new Date().toISOString();
+  const syncDocRef = doc(db, "system_settings", "central_sync_state");
+
+  // 0. Önce merkezi Firestore kaydındaki mevcut şirketleri ve kullanıcıları yerel listeyle birleştir (hiçbir mevcut şirket/kullanıcı kaybolmasın)
+  try {
+    const existingSyncSnap = await getDoc(syncDocRef);
+    if (existingSyncSnap.exists()) {
+      const existingData = existingSyncSnap.data();
+      if (Array.isArray(existingData?.deletedCompanyIdsV3) && existingData.deletedCompanyIdsV3.length > 0) {
+        saveDeletedCompanyIds([
+          ...getDeletedCompanyIds(),
+          ...existingData.deletedCompanyIdsV3,
+        ]);
+      }
+      if (Array.isArray(existingData?.deletedUserKeysV3) && existingData.deletedUserKeysV3.length > 0) {
+        saveDeletedUserKeys([
+          ...getDeletedUserKeys(),
+          ...existingData.deletedUserKeysV3,
+        ]);
+      }
+      if (Array.isArray(existingData?.companiesRegistry) && existingData.companiesRegistry.length > 0) {
+        saveCompaniesList(existingData.companiesRegistry, false);
+      }
+      if (Array.isArray(existingData?.usersRegistry) && existingData.usersRegistry.length > 0) {
+        saveLocalUsersBackup(existingData.usersRegistry, false);
+      }
+    }
+  } catch {
+    // Çevrimdışı ise yerel kayıtlarla devam et
+  }
 
   // 1. Tüm kayıtlı şirketlerin ayar, VKN/TCKN, açık adres ve Mysoft yapılandırmalarını senkronize et
   const { syncedCompaniesCount, companies } = syncAllCompaniesAndUsersData();
 
   // 2. Tüm şirket ve sistem kullanıcı profillerini doğrula ve senkronize et
   let effectiveUsersCount = totalUsersCount;
+  let syncedUsersList: UserProfileData[] = getLocalUsersBackup();
   try {
     const allUsers = await getAllUsersProfiles();
+    syncedUsersList = allUsers;
     if (allUsers.length > effectiveUsersCount) {
       effectiveUsersCount = allUsers.length;
     }
@@ -430,9 +469,8 @@ export async function verifyAndSyncAllUsersLocalDb(
     console.warn("Merkezi parametre doğrulanırken hata:", e);
   }
 
-  // 4. Merkezi Firestore senkronizasyon durumunu, silinen şirket/kullanıcı kayıtlarını ve şirket listesini güncelle
+  // 4. Merkezi Firestore senkronizasyon durumunu, şirket ve kullanıcı listesini güncelle
   try {
-    const syncDocRef = doc(db, "system_settings", "central_sync_state");
     await setDoc(
       syncDocRef,
       sanitizeForFirestore({
@@ -443,8 +481,11 @@ export async function verifyAndSyncAllUsersLocalDb(
         syncedCompaniesCount,
         totalUsersCount: effectiveUsersCount > 0 ? effectiveUsersCount : 1,
         companiesRegistry: companies,
-        deletedCompanyIds: getDeletedCompanyIds(),
-        deletedUserKeys: getDeletedUserKeys(),
+        usersRegistry: syncedUsersList,
+        deletedCompanyIds: [],
+        deletedUserKeys: [],
+        deletedCompanyIdsV3: getDeletedCompanyIds(),
+        deletedUserKeysV3: getDeletedUserKeys(),
         version: Date.now(),
       }),
       { merge: true }
@@ -491,38 +532,51 @@ export function subscribeToCentralSyncState(
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
-          // 1. Önce silinen şirket ve kullanıcı kayıtlarını birleştir (silinenler bir daha gösterilmesin)
-          if (Array.isArray(data?.deletedCompanyIds) && data.deletedCompanyIds.length > 0) {
+          // 1. Önce v3 silinen şirket ve kullanıcı kayıtlarını birleştir (korunan şirket/kullanıcılar asla silinmez)
+          if (Array.isArray(data?.deletedCompanyIdsV3) && data.deletedCompanyIdsV3.length > 0) {
             const mergedDeletedComps = Array.from(
-              new Set([...getDeletedCompanyIds(), ...data.deletedCompanyIds])
+              new Set([...getDeletedCompanyIds(), ...data.deletedCompanyIdsV3])
             );
             saveDeletedCompanyIds(mergedDeletedComps);
           }
-          if (Array.isArray(data?.deletedUserKeys) && data.deletedUserKeys.length > 0) {
+          if (Array.isArray(data?.deletedUserKeysV3) && data.deletedUserKeysV3.length > 0) {
             const mergedDeletedUsers = Array.from(
-              new Set([...getDeletedUserKeys(), ...data.deletedUserKeys])
+              new Set([...getDeletedUserKeys(), ...data.deletedUserKeysV3])
             );
             saveDeletedUserKeys(mergedDeletedUsers);
           }
 
-          // 2. Merkezi şirket kaydı geldiyse silinenleri hariç tutarak yerel şirket listesiyle birleştir
+          // 2. Merkezi şirket kaydı geldiyse mevcut şirketleri koruyarak birleştir
           const deletedCompSet = new Set(getDeletedCompanyIds());
           if (Array.isArray(data?.companiesRegistry)) {
             try {
               const localCompanies = getCompaniesList();
               const mergedMap = new Map<string, any>();
               localCompanies.forEach((c) => {
-                if (c && c.id && !deletedCompSet.has(c.id)) {
+                if (c && c.id && (isProtectedCompanyId(c.id) || !deletedCompSet.has(c.id))) {
                   mergedMap.set(c.id, c);
                 }
               });
               data.companiesRegistry.forEach((remoteComp: any) => {
-                if (remoteComp && remoteComp.id && !deletedCompSet.has(remoteComp.id)) {
+                if (
+                  remoteComp &&
+                  remoteComp.id &&
+                  (isProtectedCompanyId(remoteComp.id) || !deletedCompSet.has(remoteComp.id))
+                ) {
                   const existing = mergedMap.get(remoteComp.id);
                   mergedMap.set(remoteComp.id, existing ? { ...existing, ...remoteComp } : remoteComp);
                 }
               });
-              saveCompaniesList(Array.from(mergedMap.values()));
+              saveCompaniesList(Array.from(mergedMap.values()), false);
+            } catch {
+              // ignore merge warning
+            }
+          }
+
+          // 3. Merkezi kullanıcı kaydı geldiyse mevcut kullanıcıları koruyarak birleştir
+          if (Array.isArray(data?.usersRegistry) && data.usersRegistry.length > 0) {
+            try {
+              saveLocalUsersBackup(data.usersRegistry, false);
             } catch {
               // ignore merge warning
             }

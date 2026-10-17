@@ -26,6 +26,7 @@ import {
   updateCompanyItem,
   deleteCompanyItem,
   setActiveCompanyId,
+  isProtectedCompanyId,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import { checkRecipientTaxpayerStatus } from "../services/mysoftEDocumentService";
@@ -216,8 +217,12 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   const [companyToDelete, setCompanyToDelete] = useState<CompanyItem | null>(null);
 
   const handleDeleteCompanyItem = (id: string) => {
+    if (isProtectedCompanyId(id)) {
+      return;
+    }
     const target = effectiveCompanies.find((c) => c.id === id);
     if (target) {
+      if (isProtectedCompanyId(target.id) || target.isDefault) return;
       setCompanyToDelete(target);
     } else {
       if (onDeleteCompany) {
@@ -231,6 +236,10 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
   const handleConfirmDeleteCompanyItem = () => {
     if (!companyToDelete) return;
+    if (isProtectedCompanyId(companyToDelete.id) || companyToDelete.isDefault) {
+      setCompanyToDelete(null);
+      return;
+    }
     if (onDeleteCompany) {
       onDeleteCompany(companyToDelete.id);
     } else {
@@ -2425,15 +2434,25 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                       </button>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteCompanyItem(comp.id)}
-                      className="px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                      title="Şirketi Sil"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Şirket Sil</span>
-                    </button>
+                    {!isProtectedCompanyId(comp.id) && !comp.isDefault ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCompanyItem(comp.id)}
+                        className="px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Şirketi Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Şirket Sil</span>
+                      </button>
+                    ) : (
+                      <span
+                        className="px-2.5 py-1 text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-lg flex items-center gap-1 cursor-not-allowed"
+                        title="Mevcut ana şirketler silinemez"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Korunan Şirket</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               );

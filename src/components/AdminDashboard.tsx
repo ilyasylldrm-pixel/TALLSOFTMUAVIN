@@ -66,6 +66,8 @@ import {
   isUserMarkedDeleted,
   markCompanyAsDeleted,
   markUserAsDeleted,
+  isProtectedCompanyId,
+  isProtectedUserIdentifier,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import {
@@ -320,10 +322,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [quickDeleteCompanySearchTerm, setQuickDeleteCompanySearchTerm] = useState("");
   const [isDeletingCompany, setIsDeletingCompany] = useState(false);
 
+  const canDeleteCompany = (comp?: CompanyItem | null) => {
+    if (!comp) return false;
+    if (isProtectedCompanyId(comp.id) || comp.isDefault) return false;
+    return true;
+  };
+
+  const handleOpenDeleteCompanyModal = (comp: CompanyItem) => {
+    if (!canDeleteCompany(comp)) {
+      triggerFormErrorNotification(
+        "Mevcut ana/varsayılan şirketler sistem güvenliği gereği hiçbir zaman silinemez.",
+        "Korunan Şirket"
+      );
+      return;
+    }
+    setCompanyToDelete(comp);
+  };
+
   const handleDeleteCompany = (id: string) => {
+    if (isProtectedCompanyId(id)) {
+      triggerFormErrorNotification(
+        "Mevcut ana/varsayılan şirketler sistem güvenliği gereği hiçbir zaman silinemez.",
+        "Korunan Şirket"
+      );
+      return;
+    }
     const targetComp = adminCompanies.find((c) => c.id === id);
     if (targetComp) {
-      setCompanyToDelete(targetComp);
+      handleOpenDeleteCompanyModal(targetComp);
     } else {
       markCompanyAsDeleted(id);
       const updated = deleteCompanyItem(id);
@@ -343,6 +369,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleConfirmDeleteCompany = async () => {
     if (!companyToDelete) return;
+    if (!canDeleteCompany(companyToDelete)) {
+      triggerFormErrorNotification(
+        "Mevcut ana/varsayılan şirketler sistem güvenliği gereği hiçbir zaman silinemez.",
+        "Korunan Şirket"
+      );
+      setCompanyToDelete(null);
+      return;
+    }
     setIsDeletingCompany(true);
     try {
       const targetId = companyToDelete.id;
@@ -821,6 +855,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const canDeleteUser = (user: UserProfileData) => {
     if (!user) return false;
+    if (isProtectedUserIdentifier(user)) return false;
     // Kendi aktif oturum hesabını silmeyi engelle
     const currentId = currentUser?.id || (currentUser as any)?.userId;
     const currentEmail = currentUser?.email?.toLowerCase().trim();
@@ -831,7 +866,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleOpenDeleteUserModal = (user: UserProfileData) => {
     if (!canDeleteUser(user)) {
-      triggerFormErrorNotification("Kendi aktif admin hesabınızı silemezsiniz.", "Güvenlik Uyarısı");
+      triggerFormErrorNotification(
+        "Mevcut ana/sistem kullanıcıları ve aktif yönetici hesabı hiçbir zaman silinemez.",
+        "Korunan Kullanıcı"
+      );
       return;
     }
     setUserToDelete(user);
@@ -840,6 +878,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleConfirmDeleteUser = async () => {
     if (!userToDelete) return;
+    if (!canDeleteUser(userToDelete)) {
+      triggerFormErrorNotification(
+        "Mevcut ana/sistem kullanıcıları hiçbir zaman silinemez.",
+        "Korunan Kullanıcı"
+      );
+      setUserToDelete(null);
+      return;
+    }
     setIsDeletingUser(true);
     const targetUserId = userToDelete.userId;
     const targetUserName = userToDelete.name || userToDelete.email;
@@ -1407,7 +1453,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onPreviewFile={(file) => setPreviewFile(file)}
           onDeleteUser={handleOpenDeleteUserModal}
           onEditCompany={handleOpenEditCompany}
-          onDeleteCompany={(comp) => setCompanyToDelete(comp)}
+          onDeleteCompany={(comp) => handleOpenDeleteCompanyModal(comp)}
           onOpenDeleteCompanyModal={() => setIsQuickDeleteCompanyModalOpen(true)}
           onSwitchCompany={handleSwitchCompany}
           currentUser={currentUser}
@@ -1647,15 +1693,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <Edit2 className="w-3 h-3" />
                                 <span>Şifre/Bilgi Düzenle</span>
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setCompanyToDelete(comp)}
-                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white font-bold text-[11px] rounded-lg border border-rose-200 inline-flex items-center gap-1 cursor-pointer transition-colors"
-                                title="Şirketi Sil"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                <span>Şirket Sil</span>
-                              </button>
+                              {canDeleteCompany(comp) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDeleteCompanyModal(comp)}
+                                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white font-bold text-[11px] rounded-lg border border-rose-200 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Şirketi Sil"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Şirket Sil</span>
+                                </button>
+                              ) : (
+                                <span
+                                  className="px-2.5 py-1.5 bg-slate-100 text-slate-500 font-bold text-[11px] rounded-lg border border-slate-200 inline-flex items-center gap-1 cursor-not-allowed"
+                                  title="Mevcut ana şirketler silinemez"
+                                >
+                                  <Lock className="w-3 h-3" />
+                                  <span>Korunan Şirket</span>
+                                </span>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2673,15 +2729,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <span>Düzenle</span>
                               </button>
 
-                              <button
-                                type="button"
-                                onClick={() => setCompanyToDelete(comp)}
-                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 font-bold text-xs rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
-                                title="Şirketi Sil"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Şirket Sil</span>
-                              </button>
+                              {canDeleteCompany(comp) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDeleteCompanyModal(comp)}
+                                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 font-bold text-xs rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                                  title="Şirketi Sil"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Şirket Sil</span>
+                                </button>
+                              ) : (
+                                <span
+                                  className="px-2.5 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs rounded-xl flex items-center gap-1 cursor-not-allowed"
+                                  title="Mevcut ana şirketler silinemez"
+                                >
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span>Korunan</span>
+                                </span>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -4015,17 +4081,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsQuickDeleteCompanyModalOpen(false);
-                            setCompanyToDelete(comp);
-                          }}
-                          className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Şirketi Sil</span>
-                        </button>
+                        {canDeleteCompany(comp) ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsQuickDeleteCompanyModalOpen(false);
+                              handleOpenDeleteCompanyModal(comp);
+                            }}
+                            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Şirketi Sil</span>
+                          </button>
+                        ) : (
+                          <span
+                            className="px-3 py-1.5 bg-slate-100 text-slate-500 font-bold text-xs rounded-xl border border-slate-200 flex items-center gap-1.5 cursor-not-allowed"
+                            title="Mevcut ana şirketler silinemez"
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Korunan Şirket</span>
+                          </span>
+                        )}
                       </div>
                     </div>
                   );

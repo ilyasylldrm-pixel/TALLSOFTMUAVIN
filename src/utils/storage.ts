@@ -165,39 +165,115 @@ export const DEFAULT_INDIVIDUAL_COMPANY: CompanyItem = {
   createdAt: "2025-01-15T00:00:00.000Z",
 };
 
-export const DELETED_COMPANIES_STORAGE_KEY = "muavin_deleted_companies_registry_v1";
-export const DELETED_USERS_STORAGE_KEY = "muavin_deleted_users_registry_v1";
+export const DELETED_COMPANIES_STORAGE_KEY = "muavin_deleted_companies_registry_v3";
+export const DELETED_USERS_STORAGE_KEY = "muavin_deleted_users_registry_v3";
+
+export const PROTECTED_COMPANY_IDS = new Set<string>([
+  DEFAULT_COMPANY.id,
+  DEFAULT_CORPORATE_COMPANY.id,
+  DEFAULT_INDIVIDUAL_COMPANY.id,
+]);
+
+export const PROTECTED_USER_KEYS = new Set<string>([
+  "usr_admin_001",
+  "admin",
+  "main_admin",
+  "ilyasylldrm@gmail.com",
+  "ilyasyildirim@outlook.com.tr",
+  "admin@sirket.com",
+  "admin@bilisim.com",
+  "admin@tallsoft.com.tr",
+  "test",
+  "test@muavin.com",
+  "usr_test",
+  "usr_comp_comp_default",
+  "anadolu_yonetici",
+  "muhasebe@anadoluteknoloji.com.tr",
+  "usr_anadolu_yonetici",
+  "usr_comp_comp_kurumsal_default",
+  "ahmet_yilmaz",
+  "ahmet@yilmazticaret.com",
+  "usr_ahmet_yilmaz",
+  "usr_comp_comp_sahis_default",
+]);
+
+export function isProtectedCompanyId(companyId?: string | null): boolean {
+  if (!companyId) return false;
+  return PROTECTED_COMPANY_IDS.has(String(companyId).trim());
+}
+
+export function isProtectedUserIdentifier(
+  user?: { userId?: string; id?: string; email?: string; username?: string } | null
+): boolean {
+  if (!user) return false;
+  const uid = (user.userId || user.id || "").trim().toLowerCase();
+  const email = (user.email || "").trim().toLowerCase();
+  const uname = (user.username || "").trim().toLowerCase();
+  if (uid && PROTECTED_USER_KEYS.has(uid)) return true;
+  if (email && PROTECTED_USER_KEYS.has(email)) return true;
+  if (uname && (PROTECTED_USER_KEYS.has(uname) || PROTECTED_USER_KEYS.has(`usr_${uname}`))) return true;
+  return false;
+}
 
 export function getDeletedCompanyIds(): string[] {
   try {
+    // Clean up legacy v1/v2 keys so no existing company remains hidden from earlier sessions
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage?.removeItem("muavin_deleted_companies_registry_v1");
+        window.localStorage?.removeItem("muavin_deleted_companies_registry_v2");
+      }
+    } catch {}
     const raw = safeGetStorageItem(DELETED_COMPANIES_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string" && x.trim().length > 0) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (x) =>
+            typeof x === "string" &&
+            x.trim().length > 0 &&
+            !PROTECTED_COMPANY_IDS.has(x.trim())
+        )
+      : [];
   } catch {
     return [];
   }
 }
 
 export function saveDeletedCompanyIds(ids: string[]): void {
-  const unique = Array.from(new Set(ids.map((x) => String(x || "").trim()).filter(Boolean)));
+  const unique = Array.from(
+    new Set(
+      ids
+        .map((x) => String(x || "").trim())
+        .filter((x) => Boolean(x) && !PROTECTED_COMPANY_IDS.has(x))
+    )
+  );
   safeSetStorageItem(DELETED_COMPANIES_STORAGE_KEY, JSON.stringify(unique));
 }
 
 export function isCompanyMarkedDeleted(companyId?: string | null): boolean {
   if (!companyId) return false;
   const cleanId = String(companyId).trim();
-  if (!cleanId) return false;
+  if (!cleanId || PROTECTED_COMPANY_IDS.has(cleanId)) return false;
   return getDeletedCompanyIds().includes(cleanId);
 }
 
 export function getDeletedUserKeys(): string[] {
   try {
+    // Clean up legacy v1/v2 keys so no existing user remains hidden from earlier sessions
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage?.removeItem("muavin_deleted_users_registry_v1");
+        window.localStorage?.removeItem("muavin_deleted_users_registry_v2");
+      }
+    } catch {}
     const raw = safeGetStorageItem(DELETED_USERS_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed)
-      ? parsed.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
+      ? parsed
+          .map((x) => String(x || "").trim().toLowerCase())
+          .filter((x) => Boolean(x) && !PROTECTED_USER_KEYS.has(x))
       : [];
   } catch {
     return [];
@@ -206,7 +282,11 @@ export function getDeletedUserKeys(): string[] {
 
 export function saveDeletedUserKeys(keys: string[]): void {
   const unique = Array.from(
-    new Set(keys.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean))
+    new Set(
+      keys
+        .map((x) => String(x || "").trim().toLowerCase())
+        .filter((x) => Boolean(x) && !PROTECTED_USER_KEYS.has(x))
+    )
   );
   safeSetStorageItem(DELETED_USERS_STORAGE_KEY, JSON.stringify(unique));
 }
@@ -215,6 +295,7 @@ export function isUserMarkedDeleted(
   user?: { userId?: string; id?: string; email?: string; username?: string } | null
 ): boolean {
   if (!user) return false;
+  if (isProtectedUserIdentifier(user)) return false;
   const deletedSet = new Set(getDeletedUserKeys());
   if (deletedSet.size === 0) return false;
   const uid = (user.userId || user.id || "").trim().toLowerCase();
@@ -232,52 +313,18 @@ export function markUserAsDeleted(identifiers: {
   username?: string;
   companyId?: string;
 }): void {
+  if (isProtectedUserIdentifier(identifiers)) return;
   const keys = new Set(getDeletedUserKeys());
   const uid = (identifiers.userId || "").trim().toLowerCase();
   const email = (identifiers.email || "").trim().toLowerCase();
   const uname = (identifiers.username || "").trim().toLowerCase();
-  if (uid) keys.add(uid);
-  if (email) keys.add(email);
-  if (uname) {
+  if (uid && !PROTECTED_USER_KEYS.has(uid)) keys.add(uid);
+  if (email && !PROTECTED_USER_KEYS.has(email)) keys.add(email);
+  if (uname && !PROTECTED_USER_KEYS.has(uname)) {
     keys.add(uname);
     keys.add(`usr_${uname}`);
   }
   saveDeletedUserKeys(Array.from(keys));
-
-  // If this user corresponds to a company's login account, mark loginUserDeleted on that company so it never regenerates
-  try {
-    const raw = safeGetStorageItem(STORAGE_KEYS.COMPANIES_LIST);
-    if (raw) {
-      const list: CompanyItem[] = JSON.parse(raw);
-      if (Array.isArray(list)) {
-        let modified = false;
-        const nextList = list.map((c) => {
-          const cUser = (c.loginUsername || "").trim().toLowerCase();
-          const cEmail = (c.loginEmail || "").trim().toLowerCase();
-          const matchesCompanyUser =
-            (cUser && (cUser === uname || `usr_${cUser}` === uid)) ||
-            (cEmail && cEmail === email) ||
-            (uid && uid === `usr_comp_${c.id}`);
-          if (matchesCompanyUser) {
-            modified = true;
-            return {
-              ...c,
-              loginUserDeleted: true,
-              loginUsername: undefined,
-              loginPasswordPlain: undefined,
-              loginEmail: undefined,
-            };
-          }
-          return c;
-        });
-        if (modified) {
-          safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(nextList));
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
 }
 
 export function unmarkUserAsDeleted(identifiers: {
@@ -302,12 +349,12 @@ export function unmarkUserAsDeleted(identifiers: {
 
 export function markCompanyAsDeleted(companyId: string, comp?: Partial<CompanyItem> | null): void {
   const cleanId = String(companyId || "").trim();
-  if (!cleanId) return;
+  if (!cleanId || PROTECTED_COMPANY_IDS.has(cleanId)) return;
   const current = new Set(getDeletedCompanyIds());
   current.add(cleanId);
   saveDeletedCompanyIds(Array.from(current));
 
-  if (comp) {
+  if (comp && !PROTECTED_COMPANY_IDS.has(cleanId)) {
     const uname = (comp.loginUsername || "").trim().toLowerCase();
     const email = (comp.loginEmail || (uname ? `${uname}@muavin.com` : "")).trim().toLowerCase();
     markUserAsDeleted({
@@ -330,8 +377,13 @@ function ensureCompanyCredentials(comp: CompanyItem): { comp: CompanyItem; chang
   let changed = false;
   const copy = { ...comp };
 
-  if (copy.loginUserDeleted) {
-    return { comp: copy, changed: false };
+  if (PROTECTED_COMPANY_IDS.has(copy.id) && copy.loginUserDeleted) {
+    copy.loginUserDeleted = false;
+    changed = true;
+  }
+
+  if (copy.loginUserDeleted && !PROTECTED_COMPANY_IDS.has(copy.id)) {
+    return { comp: copy, changed };
   }
 
   if (copy.id === DEFAULT_COMPANY.id) {
@@ -394,35 +446,28 @@ export function getCompaniesList(): CompanyItem[] {
   const deletedIds = new Set(getDeletedCompanyIds());
   try {
     const raw = safeGetStorageItem(STORAGE_KEYS.COMPANIES_LIST);
-    const seededFlag = safeGetStorageItem("muavin_companies_seeded_v2");
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         let updated = false;
-        let list = parsed.filter((c) => c && c.id && !deletedIds.has(c.id));
+        let list = parsed.filter(
+          (c) => c && c.id && (PROTECTED_COMPANY_IDS.has(c.id) || !deletedIds.has(c.id))
+        );
         if (list.length !== parsed.length) {
           updated = true;
         }
-        if (!seededFlag) {
-          if (!deletedIds.has(DEFAULT_COMPANY.id) && !list.some((c) => c.id === DEFAULT_COMPANY.id)) {
-            list.unshift(DEFAULT_COMPANY);
-            updated = true;
-          }
-          if (
-            !deletedIds.has(DEFAULT_CORPORATE_COMPANY.id) &&
-            !list.some((c) => c.id === DEFAULT_CORPORATE_COMPANY.id || (c.id !== DEFAULT_COMPANY.id && (c.companyType === "limited" || c.companyType === "anonim")))
-          ) {
-            list.push(DEFAULT_CORPORATE_COMPANY);
-            updated = true;
-          }
-          if (
-            !deletedIds.has(DEFAULT_INDIVIDUAL_COMPANY.id) &&
-            !list.some((c) => c.id === DEFAULT_INDIVIDUAL_COMPANY.id || c.companyType === "sahis")
-          ) {
-            list.push(DEFAULT_INDIVIDUAL_COMPANY);
-            updated = true;
-          }
-          safeSetStorageItem("muavin_companies_seeded_v2", "1");
+        // Always guarantee that existing default companies are never missing
+        if (!list.some((c) => c.id === DEFAULT_COMPANY.id)) {
+          list.unshift(DEFAULT_COMPANY);
+          updated = true;
+        }
+        if (!list.some((c) => c.id === DEFAULT_CORPORATE_COMPANY.id)) {
+          list.push(DEFAULT_CORPORATE_COMPANY);
+          updated = true;
+        }
+        if (!list.some((c) => c.id === DEFAULT_INDIVIDUAL_COMPANY.id)) {
+          list.push(DEFAULT_INDIVIDUAL_COMPANY);
+          updated = true;
         }
         list = list.map((item) => {
           const res = ensureCompanyCredentials(item);
@@ -438,26 +483,61 @@ export function getCompaniesList(): CompanyItem[] {
   } catch (e) {
     console.error("Error reading companies list", e);
   }
-  const defaultList = [DEFAULT_COMPANY, DEFAULT_CORPORATE_COMPANY, DEFAULT_INDIVIDUAL_COMPANY].filter(
-    (c) => !deletedIds.has(c.id)
-  );
+  const defaultList = [DEFAULT_COMPANY, DEFAULT_CORPORATE_COMPANY, DEFAULT_INDIVIDUAL_COMPANY];
   safeSetStorageItem("muavin_companies_seeded_v2", "1");
   safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(defaultList));
   return defaultList;
 }
 
-export function saveCompaniesList(list: CompanyItem[]): void {
+export function saveCompaniesList(list: CompanyItem[], allowRemoval = false): void {
   const deletedIds = new Set(getDeletedCompanyIds());
-  const filtered = (Array.isArray(list) ? list : []).filter((c) => c && c.id && !deletedIds.has(c.id));
+  const mergedMap = new Map<string, CompanyItem>();
+
+  // Always preserve existing non-deleted companies unless allowRemoval is explicitly true
+  if (!allowRemoval) {
+    try {
+      const rawExisting = safeGetStorageItem(STORAGE_KEYS.COMPANIES_LIST);
+      if (rawExisting) {
+        const parsedExisting = JSON.parse(rawExisting);
+        if (Array.isArray(parsedExisting)) {
+          parsedExisting.forEach((c: CompanyItem) => {
+            if (c && c.id && (PROTECTED_COMPANY_IDS.has(c.id) || !deletedIds.has(c.id))) {
+              mergedMap.set(c.id, ensureCompanyCredentials(c).comp);
+            }
+          });
+        }
+      }
+    } catch {}
+  }
+
+  (Array.isArray(list) ? list : []).forEach((c) => {
+    if (c && c.id && (PROTECTED_COMPANY_IDS.has(c.id) || !deletedIds.has(c.id))) {
+      const existing = mergedMap.get(c.id);
+      mergedMap.set(c.id, ensureCompanyCredentials(existing ? { ...existing, ...c } : c).comp);
+    }
+  });
+
+  // Always guarantee protected default companies remain present
+  if (!mergedMap.has(DEFAULT_COMPANY.id)) {
+    mergedMap.set(DEFAULT_COMPANY.id, DEFAULT_COMPANY);
+  }
+  if (!mergedMap.has(DEFAULT_CORPORATE_COMPANY.id)) {
+    mergedMap.set(DEFAULT_CORPORATE_COMPANY.id, DEFAULT_CORPORATE_COMPANY);
+  }
+  if (!mergedMap.has(DEFAULT_INDIVIDUAL_COMPANY.id)) {
+    mergedMap.set(DEFAULT_INDIVIDUAL_COMPANY.id, DEFAULT_INDIVIDUAL_COMPANY);
+  }
+
+  const finalCompanies = Array.from(mergedMap.values());
   safeSetStorageItem("muavin_companies_seeded_v2", "1");
-  safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(filtered));
+  safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(finalCompanies));
 }
 
 export function getActiveCompanyId(): string {
   try {
     const active = safeGetStorageItem(STORAGE_KEYS.ACTIVE_COMPANY_ID);
     const deletedIds = new Set(getDeletedCompanyIds());
-    if (active && !deletedIds.has(active)) return active;
+    if (active && (PROTECTED_COMPANY_IDS.has(active) || !deletedIds.has(active))) return active;
     const companies = getCompaniesList();
     if (companies.length > 0) return companies[0].id;
   } catch (e) {
@@ -482,14 +562,14 @@ export function addCompanyItem(comp: CompanyItem): CompanyItem[] {
   const current = getCompaniesList();
   const normalizedComp: CompanyItem = {
     ...comp,
-    loginUserDeleted: comp.loginUsername ? false : comp.loginUserDeleted,
+    loginUserDeleted: false,
   };
   const exists = current.some((c) => c.id === normalizedComp.id);
   const updated = exists
     ? current.map((c) => (c.id === normalizedComp.id ? normalizedComp : c))
     : [...current, normalizedComp];
   saveCompaniesList(updated);
-  return updated;
+  return getCompaniesList();
 }
 
 export function updateCompanyItem(comp: CompanyItem): CompanyItem[] {
@@ -504,22 +584,25 @@ export function updateCompanyItem(comp: CompanyItem): CompanyItem[] {
   const current = getCompaniesList();
   const normalizedComp: CompanyItem = {
     ...comp,
-    loginUserDeleted: comp.loginUsername ? false : comp.loginUserDeleted,
+    loginUserDeleted: false,
   };
   const exists = current.some((c) => c.id === normalizedComp.id);
   const updated = exists
     ? current.map((c) => (c.id === normalizedComp.id ? normalizedComp : c))
     : [...current, normalizedComp];
   saveCompaniesList(updated);
-  return updated;
+  return getCompaniesList();
 }
 
 export function deleteCompanyItem(id: string): CompanyItem[] {
   const current = getCompaniesList();
+  if (PROTECTED_COMPANY_IDS.has(id)) {
+    return current;
+  }
   const targetComp = current.find((c) => c.id === id);
   markCompanyAsDeleted(id, targetComp);
   const updated = current.filter((c) => c.id !== id);
-  saveCompaniesList(updated);
+  saveCompaniesList(updated, true);
 
   // Clean up isolated storage slices for the deleted company
   try {
@@ -537,7 +620,7 @@ export function deleteCompanyItem(id: string): CompanyItem[] {
     const nextActiveId = updated.length > 0 ? updated[0].id : DEFAULT_COMPANY.id;
     setActiveCompanyId(nextActiveId);
   }
-  return updated;
+  return getCompaniesList();
 }
 
 export function pruneDayPuantajDetail(day: any): any {

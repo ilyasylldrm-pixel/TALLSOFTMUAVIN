@@ -39,7 +39,11 @@ import {
 } from "lucide-react";
 import { UserProfileData, UserFileMetadata } from "../lib/firebase";
 import { CompanyItem } from "../types";
-import { getCompaniesList } from "../utils/storage";
+import {
+  getCompaniesList,
+  isProtectedCompanyId,
+  isProtectedUserIdentifier,
+} from "../utils/storage";
 import {
   getActivePayrollParameters,
   PayrollYearlyParameters,
@@ -572,15 +576,25 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                               </button>
                             )}
                             {onDeleteCompany && (
-                              <button
-                                type="button"
-                                onClick={() => onDeleteCompany(comp)}
-                                className="px-2 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 rounded text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
-                                title="Şirketi Kalıcı Olarak Sil"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                <span>Sil</span>
-                              </button>
+                              !isProtectedCompanyId(comp.id) && !comp.isDefault ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteCompany(comp)}
+                                  className="px-2 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 rounded text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                                  title="Şirketi Kalıcı Olarak Sil"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Sil</span>
+                                </button>
+                              ) : (
+                                <span
+                                  className="px-2 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[11px] font-semibold inline-flex items-center gap-1 cursor-not-allowed"
+                                  title="Mevcut ana şirketler silinemez"
+                                >
+                                  <Lock className="w-3 h-3" />
+                                  <span>Korunan</span>
+                                </span>
+                              )
                             )}
                           </div>
                         </td>
@@ -941,15 +955,25 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                         </button>
                       )}
                       {onDeleteCompany && (
-                        <button
-                          type="button"
-                          onClick={() => onDeleteCompany(comp)}
-                          className="px-2.5 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
-                          title="Şirketi Kalıcı Olarak Sil"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Şirket Sil</span>
-                        </button>
+                        !isProtectedCompanyId(comp.id) && !comp.isDefault ? (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteCompany(comp)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                            title="Şirketi Kalıcı Olarak Sil"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Şirket Sil</span>
+                          </button>
+                        ) : (
+                          <span
+                            className="px-2.5 py-1 bg-slate-100 text-slate-500 border border-slate-200 text-xs font-semibold rounded-lg flex items-center gap-1 cursor-not-allowed"
+                            title="Mevcut ana şirketler silinemez"
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Korunan</span>
+                          </span>
+                        )
                       )}
                     </div>
                   </div>
@@ -1051,7 +1075,7 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                           >
                             Yetkileri Düzenle
                           </button>
-                          {onDeleteUser && (u.userId !== currentUser?.id && u.email !== currentUser?.email ? (
+                          {onDeleteUser && (u.userId !== currentUser?.id && u.email !== currentUser?.email && !isProtectedUserIdentifier(u) ? (
                             <button
                               onClick={() => onDeleteUser(u)}
                               className="px-2.5 py-1 text-xs font-bold text-rose-700 hover:text-white bg-rose-50 hover:bg-rose-600 rounded-lg border border-rose-200 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
@@ -1061,8 +1085,9 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                               <span>Sil</span>
                             </button>
                           ) : (
-                            <span className="px-2 py-0.5 text-[10px] text-slate-400 bg-slate-100 rounded border border-slate-200 font-medium">
-                              Aktif
+                            <span className="px-2 py-1 text-[10px] text-slate-500 bg-slate-100 rounded border border-slate-200 font-semibold flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              <span>Korunan</span>
                             </span>
                           ))}
                         </div>
