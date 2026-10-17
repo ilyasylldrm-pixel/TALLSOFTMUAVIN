@@ -41,6 +41,8 @@ import {
   getDeletedUserKeys,
   saveDeletedUserKeys,
   isProtectedCompanyId,
+  getStoredData,
+  saveStoredData,
 } from "../utils/storage";
 
 export interface SystemAuditLogItem {
@@ -89,6 +91,137 @@ export interface LocalDbSyncReport {
 const SETTINGS_DOC_ID = "payroll_parameters";
 const BROADCAST_COLLECTION = "broadcast_announcements";
 const AUDIT_COLLECTION = "system_audit_logs";
+
+function mergeRecordsById<T extends { id?: string }>(remoteList?: T[], localList?: T[]): T[] {
+  const map = new Map<string, T>();
+  const remoteArr = Array.isArray(remoteList) ? remoteList : [];
+  const localArr = Array.isArray(localList) ? localList : [];
+  remoteArr.forEach((item, idx) => {
+    if (!item || typeof item !== "object") return;
+    const key = item.id ? String(item.id) : `remote_${idx}`;
+    map.set(key, item);
+  });
+  localArr.forEach((item, idx) => {
+    if (!item || typeof item !== "object") return;
+    const key = item.id ? String(item.id) : `local_${idx}`;
+    const existing = map.get(key);
+    map.set(key, existing ? { ...existing, ...item } : item);
+  });
+  return Array.from(map.values());
+}
+
+function mergeCompanyMetadataNonDestructive(existingComp: any, incomingComp: any): any {
+  if (!existingComp) return incomingComp;
+  if (!incomingComp) return existingComp;
+  const merged: any = { ...existingComp };
+  Object.keys(incomingComp).forEach((key) => {
+    const val = incomingComp[key];
+    if (val !== undefined && val !== null && val !== "") {
+      merged[key] = val;
+    } else if (merged[key] === undefined) {
+      merged[key] = val;
+    }
+  });
+  return merged;
+}
+
+/**
+ * Şirketlerin geçmiş verilerini (fatura, cari hesap, işlem, stok, personel, ayarlar vb.)
+ * hiçbir kaydı silmeden bulut ve yerel veritabanı arasında birleştirir ve korur.
+ */
+export async function preserveAndSyncAllCompaniesHistoricalData(): Promise<void> {
+  const companies = getCompaniesList();
+  for (const comp of companies) {
+    if (!comp?.id) continue;
+    try {
+      const localData = getStoredData(comp.id);
+      const sliceDocRef = doc(db, "system_settings", `company_data_${comp.id}`);
+      let remoteSlice: any = null;
+      try {
+        const snap = await getDoc(sliceDocRef);
+        if (snap.exists()) {
+          remoteSlice = snap.data();
+        }
+      } catch {
+        // Çevrimdışı ise yerel verileri koru
+      }
+
+      if (remoteSlice && typeof remoteSlice === "object") {
+        const mergedContacts = mergeRecordsById(remoteSlice.contacts, localData.contacts);
+        const mergedInvoices = mergeRecordsById(remoteSlice.invoices, localData.invoices);
+        const mergedTransactions = mergeRecordsById(remoteSlice.transactions, localData.transactions);
+        const mergedProducts = mergeRecordsById(remoteSlice.products, localData.products);
+        const mergedAccounts = mergeRecordsById(remoteSlice.accounts, localData.accounts);
+        const mergedEmployees = mergeRecordsById(remoteSlice.employees, localData.employees);
+        const mergedCostItems = mergeRecordsById(remoteSlice.costItems, localData.costItems);
+        const mergedQuotes = mergeRecordsById(remoteSlice.quotes, localData.quotes);
+        const mergedOrders = mergeRecordsById(remoteSlice.orders, localData.orders);
+        const mergedSettings = mergeCompanyMetadataNonDestructive(remoteSlice.settings, localData.settings);
+
+        saveStoredData("CONTACTS", mergedContacts, comp.id);
+        saveStoredData("INVOICES", mergedInvoices, comp.id);
+        saveStoredData("TRANSACTIONS", mergedTransactions, comp.id);
+        saveStoredData("PRODUCTS", mergedProducts, comp.id);
+        saveStoredData("ACCOUNTS", mergedAccounts, comp.id);
+        saveStoredData("EMPLOYEES", mergedEmployees, comp.id);
+        saveStoredData("COST_ITEMS", mergedCostItems, comp.id);
+        saveStoredData("QUOTES", mergedQuotes, comp.id);
+        saveStoredData("ORDERS", mergedOrders, comp.id);
+        saveStoredData("SETTINGS", mergedSettings, comp.id);
+
+        try {
+          await setDoc(
+            sliceDocRef,
+            sanitizeForFirestore({
+              companyId: comp.id,
+              companyName: comp.companyName,
+              settings: mergedSettings,
+              contacts: mergedContacts.slice(0, 300),
+              invoices: mergedInvoices.slice(0, 300),
+              transactions: mergedTransactions.slice(0, 400),
+              products: mergedProducts.slice(0, 300),
+              accounts: mergedAccounts.slice(0, 100),
+              employees: mergedEmployees.slice(0, 200),
+              costItems: mergedCostItems.slice(0, 300),
+              quotes: mergedQuotes.slice(0, 150),
+              orders: mergedOrders.slice(0, 150),
+              updatedAt: new Date().toISOString(),
+            }),
+            { merge: true }
+          );
+        } catch {
+          // Firestore yazma hatası olursa yerel veri korunmaya devam eder
+        }
+      } else {
+        try {
+          await setDoc(
+            sliceDocRef,
+            sanitizeForFirestore({
+              companyId: comp.id,
+              companyName: comp.companyName,
+              settings: localData.settings,
+              contacts: (localData.contacts || []).slice(0, 300),
+              invoices: (localData.invoices || []).slice(0, 300),
+              transactions: (localData.transactions || []).slice(0, 400),
+              products: (localData.products || []).slice(0, 300),
+              accounts: (localData.accounts || []).slice(0, 100),
+              employees: (localData.employees || []).slice(0, 200),
+              costItems: (localData.costItems || []).slice(0, 300),
+              quotes: (localData.quotes || []).slice(0, 150),
+              orders: (localData.orders || []).slice(0, 150),
+              updatedAt: new Date().toISOString(),
+            }),
+            { merge: true }
+          );
+        } catch {
+          // Çevrimdışı ise geç
+        }
+      }
+    } catch {
+      // Şirket dilimi senkronizasyonunda hata olursa mevcut veriye dokunma
+    }
+  }
+}
 
 // 1. Audit Log Ekleme
 export async function logSystemAction(log: Omit<SystemAuditLogItem, "id">): Promise<void> {
@@ -264,7 +397,7 @@ export function subscribeToCentralPayrollParameters(
   }
 }
 
-// 6. Sistem Duyurusu / Güncelleme Yayınlama (Broadcast Updates)
+// 6. Sistem Duyurusu / Güncelleme Yayınlama (Broadcast Updates) - Şirketlerin Eski Verilerini Silmeden Güncellemeyi Dağıtır
 export async function publishBroadcastAnnouncement(
   announcement: Omit<BroadcastAnnouncement, "id" | "createdAt" | "createdBy">,
   authorName: string = "Sistem Yöneticisi"
@@ -276,6 +409,13 @@ export async function publishBroadcastAnnouncement(
     createdAt: nowIso,
     createdBy: authorName
   }));
+
+  // Şirketlerin eski verilerini silmeden güncellemeyi tüm şirketlere ve kullanıcılara dağıt
+  await verifyAndSyncAllUsersLocalDb(
+    0,
+    authorName,
+    `Güncelleme Dağıtıldı (Eski Şirket Verileri Korundu): ${announcement.title}`
+  );
 
   // Audit log ekle
   await logSystemAction({
@@ -418,7 +558,7 @@ export async function verifyAndSyncAllUsersLocalDb(
   const nowIso = new Date().toISOString();
   const syncDocRef = doc(db, "system_settings", "central_sync_state");
 
-  // 0. Önce merkezi Firestore kaydındaki mevcut şirketleri ve kullanıcıları yerel listeyle birleştir (hiçbir mevcut şirket/kullanıcı kaybolmasın)
+  // 0. Önce merkezi Firestore kaydındaki mevcut şirketleri ve kullanıcıları yerel listeyle birleştir (hiçbir mevcut şirket/kullanıcı veya eski veri kaybolmasın)
   try {
     const existingSyncSnap = await getDoc(syncDocRef);
     if (existingSyncSnap.exists()) {
@@ -436,7 +576,32 @@ export async function verifyAndSyncAllUsersLocalDb(
         ]);
       }
       if (Array.isArray(existingData?.companiesRegistry) && existingData.companiesRegistry.length > 0) {
-        saveCompaniesList(existingData.companiesRegistry, false);
+        const localCompanies = getCompaniesList();
+        const deletedCompSet = new Set(getDeletedCompanyIds());
+        const mergedMap = new Map<string, any>();
+        existingData.companiesRegistry.forEach((remoteComp: any) => {
+          if (
+            remoteComp &&
+            remoteComp.id &&
+            (isProtectedCompanyId(remoteComp.id) || !deletedCompSet.has(remoteComp.id))
+          ) {
+            mergedMap.set(remoteComp.id, remoteComp);
+          }
+        });
+        localCompanies.forEach((localComp) => {
+          if (
+            localComp &&
+            localComp.id &&
+            (isProtectedCompanyId(localComp.id) || !deletedCompSet.has(localComp.id))
+          ) {
+            const remoteExisting = mergedMap.get(localComp.id);
+            mergedMap.set(
+              localComp.id,
+              mergeCompanyMetadataNonDestructive(remoteExisting, localComp)
+            );
+          }
+        });
+        saveCompaniesList(Array.from(mergedMap.values()), false);
       }
       if (Array.isArray(existingData?.usersRegistry) && existingData.usersRegistry.length > 0) {
         saveLocalUsersBackup(existingData.usersRegistry, false);
@@ -446,10 +611,13 @@ export async function verifyAndSyncAllUsersLocalDb(
     // Çevrimdışı ise yerel kayıtlarla devam et
   }
 
-  // 1. Tüm kayıtlı şirketlerin ayar, VKN/TCKN, açık adres ve Mysoft yapılandırmalarını senkronize et
+  // 1. Tüm kayıtlı şirketlerin geçmiş verilerini (fatura, cari, işlem, stok, personel) koruyarak birleştir
+  await preserveAndSyncAllCompaniesHistoricalData();
+
+  // 2. Tüm kayıtlı şirketlerin ayar, VKN/TCKN, açık adres ve Mysoft yapılandırmalarını senkronize et
   const { syncedCompaniesCount, companies } = syncAllCompaniesAndUsersData();
 
-  // 2. Tüm şirket ve sistem kullanıcı profillerini doğrula ve senkronize et
+  // 3. Tüm şirket ve sistem kullanıcı profillerini doğrula ve senkronize et
   let effectiveUsersCount = totalUsersCount;
   let syncedUsersList: UserProfileData[] = getLocalUsersBackup();
   try {
@@ -462,14 +630,14 @@ export async function verifyAndSyncAllUsersLocalDb(
     if (effectiveUsersCount <= 0) effectiveUsersCount = Math.max(1, syncedCompaniesCount);
   }
 
-  // 3. Yerel önbellek ve merkezi Firestore parametrelerini tazele
+  // 4. Yerel önbellek ve merkezi Firestore parametrelerini tazele
   try {
     await fetchCentralPayrollParameters();
   } catch (e) {
     console.warn("Merkezi parametre doğrulanırken hata:", e);
   }
 
-  // 4. Merkezi Firestore senkronizasyon durumunu, şirket ve kullanıcı listesini güncelle
+  // 5. Merkezi Firestore senkronizasyon durumunu, şirket ve kullanıcı listesini güncelle
   try {
     await setDoc(
       syncDocRef,
@@ -546,7 +714,7 @@ export function subscribeToCentralSyncState(
             saveDeletedUserKeys(mergedDeletedUsers);
           }
 
-          // 2. Merkezi şirket kaydı geldiyse mevcut şirketleri koruyarak birleştir
+          // 2. Merkezi şirket kaydı geldiyse mevcut şirketleri ve eski verilerini koruyarak birleştir
           const deletedCompSet = new Set(getDeletedCompanyIds());
           if (Array.isArray(data?.companiesRegistry)) {
             try {
@@ -564,7 +732,10 @@ export function subscribeToCentralSyncState(
                   (isProtectedCompanyId(remoteComp.id) || !deletedCompSet.has(remoteComp.id))
                 ) {
                   const existing = mergedMap.get(remoteComp.id);
-                  mergedMap.set(remoteComp.id, existing ? { ...existing, ...remoteComp } : remoteComp);
+                  mergedMap.set(
+                    remoteComp.id,
+                    mergeCompanyMetadataNonDestructive(existing, remoteComp)
+                  );
                 }
               });
               saveCompaniesList(Array.from(mergedMap.values()), false);
@@ -581,6 +752,9 @@ export function subscribeToCentralSyncState(
               // ignore merge warning
             }
           }
+
+          // 4. Şirketlerin eski verilerini silmeden senkronize et
+          void preserveAndSyncAllCompaniesHistoricalData();
 
           const { syncedCompaniesCount } = syncAllCompaniesAndUsersData();
           const incomingUsersCount = Number(data?.totalUsersCount) || Math.max(1, syncedCompaniesCount);
@@ -627,5 +801,6 @@ export function subscribeToCentralSyncState(
     return () => {};
   }
 }
+
 
 

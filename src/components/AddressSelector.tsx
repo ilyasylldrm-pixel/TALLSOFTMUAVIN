@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId } from "react";
+import React, { useState, useEffect, useId, useRef } from "react";
 import { AddressDetails } from "../types";
 import { appendCityDistrictToAddress } from "../utils/storage";
 import {
@@ -49,6 +49,9 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
   const [isLoadingNeighborhoods, setIsLoadingNeighborhoods] = useState<boolean>(false);
   const [isTrAdresOnline, setIsTrAdresOnline] = useState<boolean>(true);
 
+  const latestAddressRef = useRef<AddressDetails>(address);
+  latestAddressRef.current = address;
+
   const uniqueId = useId();
   const mahalleListId = `mahalle-datalist-${uniqueId}`;
   const streetListId = `street-datalist-${uniqueId}`;
@@ -81,29 +84,49 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     };
   }, []);
 
-  // Helper to compile full address string
+  // Helper to compile full address string with İl / İlçe prefix
   const compileAddress = (updated: AddressDetails): string => {
-    const parts: string[] = [];
-    if (updated.street) parts.push(updated.street);
-    if (updated.buildingNo) parts.push(`No:${updated.buildingNo}`);
-    if (updated.doorNo) {
-      parts.push(updated.doorNo.startsWith("D:") ? updated.doorNo : `D:${updated.doorNo}`);
+    const baseParts = [
+      updated.neighborhood,
+      updated.street,
+      updated.buildingNo
+        ? /^(no|bina)/i.test(updated.buildingNo.trim())
+          ? updated.buildingNo.trim()
+          : `No: ${updated.buildingNo.trim()}`
+        : "",
+      updated.doorNo
+        ? /^(d:|daire|kat|no)/i.test(updated.doorNo.trim())
+          ? updated.doorNo.trim()
+          : `D: ${updated.doorNo.trim()}`
+        : "",
+    ].filter(Boolean);
+    let baseAddr = baseParts.join(" ");
+    if (updated.postalCode && baseAddr && !baseAddr.includes(updated.postalCode)) {
+      baseAddr = `${baseAddr} (PK: ${updated.postalCode})`;
     }
-    if (updated.neighborhood) parts.push(updated.neighborhood);
-    if (updated.district && updated.city) {
-      parts.push(`${updated.district} / ${updated.city}`);
-    }
-    if (updated.country && updated.country !== "Türkiye") {
-      parts.push(updated.country);
-    }
-    return parts.join(", ");
+    return appendCityDistrictToAddress(
+      baseAddr || updated.fullAddress || "",
+      updated.city,
+      updated.district,
+      address.city,
+      address.district
+    );
   };
 
   const handleFieldChange = (field: keyof AddressDetails, value: string) => {
-    const updated = {
-      ...address,
+    const currentAddr = latestAddressRef.current;
+    const updated: AddressDetails = {
+      ...currentAddr,
       [field]: value,
     };
+    if (field === "city" && value !== currentAddr.city) {
+      const cityDistricts = getDistrictsForProvince(value);
+      const nextDist =
+        cityDistricts.find((d) => normalizeTurkish(d) === normalizeTurkish(currentAddr.district || "")) ||
+        cityDistricts[0] ||
+        "";
+      updated.district = nextDist;
+    }
     if (field !== "fullAddress") {
       updated.fullAddress = compileAddress(updated);
     }
@@ -121,12 +144,18 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
 
         if (list && list.length > 0) {
           setDistricts(list);
-          // Check if current district is valid for new city
-          const currentValid = list.find(
-            (d) => normalizeTurkish(d.name) === normalizeTurkish(selectedDistrict)
-          );
-          if (!currentValid && list[0]) {
-            handleFieldChange("district", list[0].name);
+          const latestDist = latestAddressRef.current.district || "";
+          if (!latestDist && list[0]) {
+            const updated: AddressDetails = {
+              ...latestAddressRef.current,
+              district: list[0].name,
+            };
+            updated.fullAddress = appendCityDistrictToAddress(
+              updated.fullAddress || "",
+              updated.city,
+              updated.district
+            );
+            onChange(updated);
           }
         } else {
           // Fallback to static 973 districts dataset
@@ -138,8 +167,18 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
             provinceId: parseInt(getProvincePlateCode(selectedCity), 10) || 34,
           }));
           setDistricts(mapped);
-          if (!fallbackList.includes(selectedDistrict) && mapped[0]) {
-            handleFieldChange("district", mapped[0].name);
+          const latestDist = latestAddressRef.current.district || "";
+          if (!latestDist && mapped[0]) {
+            const updated: AddressDetails = {
+              ...latestAddressRef.current,
+              district: mapped[0].name,
+            };
+            updated.fullAddress = appendCityDistrictToAddress(
+              updated.fullAddress || "",
+              updated.city,
+              updated.district
+            );
+            onChange(updated);
           }
         }
       } catch (err) {
@@ -223,6 +262,12 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
   }, [selectedCity, selectedDistrict, districts]);
 
   const currentPlate = getProvincePlateCode(selectedCity);
+  const provinceOptions =
+    provinces.length > 0
+      ? provinces.map((p) => ({ code: p.code, name: p.name }))
+      : ALL_81_PROVINCES_AND_DISTRICTS.map((prov) => ({ code: prov.code, name: prov.name }));
+  const hasSelectedCityOption = provinceOptions.some((p) => p.name === selectedCity);
+  const hasSelectedDistrictOption = districts.some((d) => d.name === selectedDistrict);
 
   const content = (
     <div className="space-y-4 text-xs">
@@ -270,17 +315,16 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
             onChange={(e) => handleFieldChange("city", e.target.value)}
             className="w-full bg-white border border-slate-300 focus:border-indigo-500 rounded-xl p-2 font-semibold text-slate-800 shadow-2xs cursor-pointer"
           >
-            {provinces.length > 0
-              ? provinces.map((p) => (
-                  <option key={p.id} value={p.name}>
-                    {p.code} - {p.name}
-                  </option>
-                ))
-              : ALL_81_PROVINCES_AND_DISTRICTS.map((prov) => (
-                  <option key={prov.code} value={prov.name}>
-                    {prov.code} - {prov.name}
-                  </option>
-                ))}
+            {!hasSelectedCityOption && selectedCity && (
+              <option value={selectedCity}>
+                {currentPlate} - {selectedCity}
+              </option>
+            )}
+            {provinceOptions.map((prov) => (
+              <option key={`${prov.code}-${prov.name}`} value={prov.name}>
+                {prov.code} - {prov.name}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -301,18 +345,20 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
           <select
             value={selectedDistrict}
             onChange={(e) => handleFieldChange("district", e.target.value)}
-            disabled={isLoadingDistricts}
+            disabled={isLoadingDistricts && !selectedDistrict}
             className="w-full bg-white border border-slate-300 focus:border-indigo-500 rounded-xl p-2 font-semibold text-slate-800 shadow-2xs cursor-pointer disabled:bg-slate-50"
           >
-            {districts.length === 0 ? (
-              <option value="">İlçe yükleniyor...</option>
-            ) : (
-              districts.map((dist) => (
-                <option key={dist.id} value={dist.name}>
-                  {dist.name}
-                </option>
-              ))
+            {!selectedDistrict && (
+              <option value="">{isLoadingDistricts ? "İlçe yükleniyor..." : "İlçe Seçiniz"}</option>
             )}
+            {!hasSelectedDistrictOption && selectedDistrict && (
+              <option value={selectedDistrict}>{selectedDistrict}</option>
+            )}
+            {districts.map((dist) => (
+              <option key={`${dist.id}-${dist.name}`} value={dist.name}>
+                {dist.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>

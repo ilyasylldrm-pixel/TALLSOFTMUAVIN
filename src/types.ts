@@ -344,6 +344,12 @@ export interface CompanyItem {
   address?: string;
   city?: string;
   district?: string;
+  neighborhood?: string;
+  street?: string;
+  buildingNo?: string;
+  doorNo?: string;
+  postalCode?: string;
+  addressDetails?: AddressDetails;
   isDefault?: boolean;
   isPassive?: boolean;
   allowedModules?: string[]; // Seçili modüller listesi

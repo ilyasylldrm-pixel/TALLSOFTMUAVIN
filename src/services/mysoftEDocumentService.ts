@@ -6,7 +6,13 @@ import {
   MysoftDocumentFamily,
   MysoftEDocument,
 } from "../types";
-import { getCompaniesList, getStoredData, saveStoredData } from "../utils/storage";
+import {
+  getCompaniesList,
+  getStoredData,
+  saveStoredData,
+  findLocalTaxpayerByVknTckn,
+  parseSeparateAddressFields,
+} from "../utils/storage";
 import { initialMysoftEDocuments } from "../data/mysoftEDocumentMocks";
 import { auth } from "../lib/firebase";
 import {
@@ -2845,9 +2851,54 @@ export async function checkRecipientTaxpayerStatus(
       suggestedProfile: "EARSIVFATURA",
     };
   }
+  const localContact = findLocalTaxpayerByVknTckn(clean);
+  const enrichWithLocalAndNormalizedAddress = (rawStatus: RecipientTaxpayerStatus): RecipientTaxpayerStatus => {
+    const mergedTaxOffice = rawStatus.taxOffice || localContact?.taxOffice || "";
+    const mergedCity = rawStatus.city || localContact?.city || "İstanbul";
+    const mergedDistrict = rawStatus.district || localContact?.district || "";
+    const mergedNeighborhood = rawStatus.neighborhood || localContact?.neighborhood || localContact?.addressDetails?.neighborhood || "";
+    const mergedStreet = rawStatus.street || localContact?.street || localContact?.addressDetails?.street || "";
+    const mergedBuildingNo = rawStatus.buildingNo || localContact?.buildingNo || localContact?.addressDetails?.buildingNo || "";
+    const mergedDoorNo = rawStatus.doorNo || localContact?.addressDetails?.doorNo || "";
+    const mergedPostalCode = rawStatus.postalCode || localContact?.postalCode || localContact?.addressDetails?.postalCode || "";
+    const mergedRawAddress = rawStatus.address || localContact?.address || "";
+
+    const parsedAddr = parseSeparateAddressFields({
+      taxOffice: mergedTaxOffice,
+      city: mergedCity,
+      district: mergedDistrict,
+      neighborhood: mergedNeighborhood,
+      street: mergedStreet,
+      buildingNo: mergedBuildingNo,
+      doorNo: mergedDoorNo,
+      postalCode: mergedPostalCode,
+      address: mergedRawAddress,
+    });
+
+    return {
+      ...rawStatus,
+      title: rawStatus.title || localContact?.companyTitle || localContact?.name,
+      companyTitle: rawStatus.companyTitle || localContact?.companyTitle || rawStatus.title || localContact?.name,
+      name: rawStatus.name || localContact?.name || rawStatus.title,
+      taxOffice: parsedAddr.taxOffice || rawStatus.taxOffice || "Merkez V.D.",
+      city: parsedAddr.city || rawStatus.city || "İstanbul",
+      district: parsedAddr.district || rawStatus.district || "",
+      neighborhood: parsedAddr.neighborhood || rawStatus.neighborhood || "",
+      street: parsedAddr.street || rawStatus.street || "",
+      buildingNo: parsedAddr.buildingNo || rawStatus.buildingNo || "",
+      doorNo: parsedAddr.doorNo || rawStatus.doorNo || "",
+      postalCode: parsedAddr.postalCode || rawStatus.postalCode || "",
+      address: parsedAddr.address || rawStatus.address || "",
+      shippingAddress: rawStatus.shippingAddress || parsedAddr.address || rawStatus.address || "",
+      phone: rawStatus.phone || localContact?.phone || "",
+      email: rawStatus.email || localContact?.email || "",
+      contactPerson: rawStatus.contactPerson || localContact?.contactPerson || "",
+    };
+  };
+
   const cacheKey = `${clean}:${tenantIdentifierNumber || ""}`;
   if (recipientCache.has(cacheKey)) {
-    return recipientCache.get(cacheKey)!;
+    return enrichWithLocalAndNormalizedAddress(recipientCache.get(cacheKey)!);
   }
   try {
     const tenantQuery = tenantIdentifierNumber ? `?tenantIdentifierNumber=${encodeURIComponent(tenantIdentifierNumber)}` : "";
@@ -2858,8 +2909,9 @@ export async function checkRecipientTaxpayerStatus(
     });
     if (res.ok) {
       const data: RecipientTaxpayerStatus = await res.json();
-      recipientCache.set(cacheKey, data);
-      return data;
+      const enriched = enrichWithLocalAndNormalizedAddress(data);
+      recipientCache.set(cacheKey, enriched);
+      return enriched;
     }
   } catch (err) {
     console.warn("Recipient taxpayer check failed, using fallback:", err);
@@ -3012,8 +3064,9 @@ export async function checkRecipientTaxpayerStatus(
     email: known?.email || (isCorporate ? `muhasebe@firma${clean.slice(-4)}.com.tr` : `iletisim@kisi${clean.slice(-4)}.com`),
     contactPerson: known?.contactPerson || (isCorporate ? "Finans & Muhasebe Sorumlusu" : "Müşteri Yetkilisi"),
   };
-  recipientCache.set(cacheKey, fallback);
-  return fallback;
+  const enrichedFallback = enrichWithLocalAndNormalizedAddress(fallback);
+  recipientCache.set(cacheKey, enrichedFallback);
+  return enrichedFallback;
 }
 
 /**

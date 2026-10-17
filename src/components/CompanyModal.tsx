@@ -40,7 +40,12 @@ import {
   toggleModuleSelectionWithSubModules,
 } from "../types";
 import { saveUserProfile, UserProfileData } from "../lib/firebase";
-import { getMysoftTenant, getMysoftMappingDefaults } from "../services/mysoftEDocumentService";
+import {
+  getMysoftTenant,
+  getMysoftMappingDefaults,
+  checkRecipientTaxpayerStatus,
+} from "../services/mysoftEDocumentService";
+import { parseSeparateAddressFields, appendCityDistrictToAddress } from "../utils/storage";
 import { Logo } from "./Logo";
 import { readAndOptimizeLogoFile, clampLogoScale } from "../utils/logoUpload";
 
@@ -96,6 +101,11 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   const [address, setAddress] = useState(initialCompany?.address || "");
   const [city, setCity] = useState(initialCompany?.city || "İstanbul");
   const [district, setDistrict] = useState(initialCompany?.district || "");
+  const [neighborhood, setNeighborhood] = useState(
+    initialCompany?.neighborhood || initialCompany?.addressDetails?.neighborhood || ""
+  );
+  const [isFetchingTaxpayerInfo, setIsFetchingTaxpayerInfo] = useState(false);
+  const [taxpayerFetchFeedback, setTaxpayerFetchFeedback] = useState<string | null>(null);
   const [defaultBankAccountName, setDefaultBankAccountName] = useState(
     initialCompany?.defaultBankAccountName || initialCompany?.companyTitle || initialCompany?.companyName || ""
   );
@@ -251,17 +261,75 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const handleFetchTaxpayerInfo = async (rawIdentifier?: string) => {
+    const clean = String(
+      rawIdentifier ?? (mysoftMatchedType === "vkn" ? vkn || tckn : tckn || vkn)
+    )
+      .replace(/\D/g, "")
+      .trim();
+    if (clean.length !== 10 && clean.length !== 11) return;
+
+    setIsFetchingTaxpayerInfo(true);
+    setTaxpayerFetchFeedback(null);
+    try {
+      const status = await checkRecipientTaxpayerStatus(clean);
+      if (status) {
+        const parsed = parseSeparateAddressFields({
+          taxOffice: status.taxOffice,
+          city: status.city,
+          district: status.district,
+          neighborhood: status.neighborhood,
+          street: status.street,
+          buildingNo: status.buildingNo,
+          doorNo: status.doorNo,
+          postalCode: status.postalCode,
+          address: status.address,
+        });
+        const resolvedTitle = status.companyTitle || status.title || status.name || "";
+        if (resolvedTitle) {
+          setCompanyTitle(resolvedTitle);
+          handleCompanyNameChange(status.name || resolvedTitle);
+        }
+        if (parsed.taxOffice) setTaxOffice(parsed.taxOffice);
+        if (parsed.city) setCity(parsed.city);
+        if (parsed.district) setDistrict(parsed.district);
+        if (parsed.neighborhood) setNeighborhood(parsed.neighborhood);
+        if (parsed.address) setAddress(parsed.address);
+        if (status.phone && !phone) setPhone(status.phone);
+        if (status.email && !email) setEmail(status.email);
+        if (!defaultBankAccountName && resolvedTitle) {
+          setDefaultBankAccountName(resolvedTitle);
+        }
+        setTaxpayerFetchFeedback(
+          `✓ Bilgiler getirildi ve ayrı ayrı yapıştırıldı: Vergi Dairesi (${parsed.taxOffice || "-"}), İl (${parsed.city || "-"}), İlçe (${parsed.district || "-"}), Mahalle (${parsed.neighborhood || "-"}) ve Açık Adres.`
+        );
+      }
+    } catch {
+      setTaxpayerFetchFeedback("⚠️ VKN/TCKN sorgulamasında bilgi alınamadı.");
+    } finally {
+      setIsFetchingTaxpayerInfo(false);
+    }
+  };
+
   // Auto clean digits
   const handleVknChange = (val: string) => {
     const cleaned = val.replace(/\D/g, "").slice(0, 10);
     setVkn(cleaned);
     setMysoftVerifyResult(null);
+    if (cleaned.length === 10) {
+      setMysoftMatchedType("vkn");
+      void handleFetchTaxpayerInfo(cleaned);
+    }
   };
 
   const handleTcknChange = (val: string) => {
     const cleaned = val.replace(/\D/g, "").slice(0, 11);
     setTckn(cleaned);
     setMysoftVerifyResult(null);
+    if (cleaned.length === 11) {
+      setMysoftMatchedType("tckn");
+      void handleFetchTaxpayerInfo(cleaned);
+    }
   };
 
   const handleVerifyWithMysoft = async () => {
@@ -406,6 +474,14 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       address: address.trim() || undefined,
       city: city.trim() || "İstanbul",
       district: district.trim() || undefined,
+      neighborhood: neighborhood.trim() || undefined,
+      addressDetails: {
+        country: "Türkiye",
+        city: city.trim() || "İstanbul",
+        district: district.trim() || "",
+        neighborhood: neighborhood.trim() || "",
+        fullAddress: address.trim() || "",
+      },
       defaultBankAccountName: defaultBankAccountName.trim() || (companyTitle.trim() || cleanName),
       defaultBankName: defaultBankName.trim() || undefined,
       defaultBankIban: defaultBankIban.trim() || undefined,
@@ -704,14 +780,30 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                     {vkn.length}/10
                   </span>
                 </div>
-                <input
-                  type="text"
-                  maxLength={10}
-                  placeholder="Örn: 9876543210"
-                  value={vkn}
-                  onChange={(e) => handleVknChange(e.target.value)}
-                  className="w-full h-9 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono font-bold text-slate-800 dark:text-slate-100 focus:bg-white focus:border-indigo-500 outline-none"
-                />
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    maxLength={10}
+                    placeholder="Örn: 9876543210"
+                    value={vkn}
+                    onChange={(e) => handleVknChange(e.target.value)}
+                    className="w-full h-9 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono font-bold text-slate-800 dark:text-slate-100 focus:bg-white focus:border-indigo-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleFetchTaxpayerInfo(vkn)}
+                    disabled={isFetchingTaxpayerInfo || vkn.length !== 10}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition-all shadow-2xs"
+                    title="VKN ile GİB Mükellef ve Adres Bilgilerini Getir"
+                  >
+                    {isFetchingTaxpayerInfo ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    )}
+                    <span>Bilgileri Getir</span>
+                  </button>
+                </div>
                 <span className="text-[10px] text-slate-400 mt-1 block">Kurumsal / Tüzel Kişi Vergi No</span>
               </div>
 
@@ -726,17 +818,39 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                     {tckn.length}/11
                   </span>
                 </div>
-                <input
-                  type="text"
-                  maxLength={11}
-                  placeholder="Örn: 12345678901"
-                  value={tckn}
-                  onChange={(e) => handleTcknChange(e.target.value)}
-                  className="w-full h-9 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono font-bold text-slate-800 dark:text-slate-100 focus:bg-white focus:border-indigo-500 outline-none"
-                />
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    maxLength={11}
+                    placeholder="Örn: 12345678901"
+                    value={tckn}
+                    onChange={(e) => handleTcknChange(e.target.value)}
+                    className="w-full h-9 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono font-bold text-slate-800 dark:text-slate-100 focus:bg-white focus:border-indigo-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleFetchTaxpayerInfo(tckn)}
+                    disabled={isFetchingTaxpayerInfo || tckn.length !== 11}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition-all shadow-2xs"
+                    title="TCKN ile GİB Mükellef ve Adres Bilgilerini Getir"
+                  >
+                    {isFetchingTaxpayerInfo ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    )}
+                    <span>Bilgileri Getir</span>
+                  </button>
+                </div>
                 <span className="text-[10px] text-slate-400 mt-1 block">Şahıs Şirketi / Gerçek Kişi T.C. Kimlik</span>
               </div>
             </div>
+            {taxpayerFetchFeedback && (
+              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] font-semibold text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{taxpayerFetchFeedback}</span>
+              </div>
+            )}
 
             {/* Admin Eşleştirme Tercihi (Radio) */}
             <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-950 space-y-2">
@@ -1003,7 +1117,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
               Vergi Dairesi & İletişim Detayları
             </h4>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Vergi Dairesi
@@ -1025,7 +1139,13 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                   type="text"
                   placeholder="Örn: İstanbul"
                   value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  onChange={(e) => {
+                    const nextCity = e.target.value;
+                    setCity(nextCity);
+                    setAddress((prev) =>
+                      appendCityDistrictToAddress(prev, nextCity, district, city, district)
+                    );
+                  }}
                   className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
                 />
               </div>
@@ -1038,18 +1158,37 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                   type="text"
                   placeholder="Örn: Şişli"
                   value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
+                  onChange={(e) => {
+                    const nextDist = e.target.value;
+                    setDistrict(nextDist);
+                    setAddress((prev) =>
+                      appendCityDistrictToAddress(prev, city, nextDist, city, district)
+                    );
+                  }}
                   className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
                 />
               </div>
 
-              <div className="sm:col-span-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Mahalle
+                </label>
+                <input
+                  type="text"
+                  placeholder="Örn: Merkez Mahallesi"
+                  value={neighborhood}
+                  onChange={(e) => setNeighborhood(e.target.value)}
+                  className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-4">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Açık Adres
                 </label>
                 <input
                   type="text"
-                  placeholder="Cadde, Mahalle, Sokak, No"
+                  placeholder="İl / İlçe, Mahalle, Cadde, Sokak, No"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"

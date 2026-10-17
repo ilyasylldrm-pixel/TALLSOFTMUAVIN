@@ -850,29 +850,14 @@ export function cleanupOversizedStorage(aggressive = false) {
           keysToRemove.push(key);
         }
       }
-      // 4. In aggressive mode or when storage quota is exceeded, also purge non-essential transient caches
+      // 4. In aggressive mode or when storage quota is exceeded, only purge non-essential UI layout/cache keys
+      // NEVER delete any company data slices (_comp_*) so company historical data is always preserved across updates
       else if (aggressive) {
         if (
           key.startsWith("muavin_col_widths_") ||
           key.startsWith("muavin_col_vis_") ||
           key.startsWith("muavin_table_row_height") ||
-          key.startsWith("tradres_") ||
-          key.startsWith("construction_custom_cost_groups_") ||
-          key.startsWith("construction_cost_packages_") ||
-          key.startsWith("construction_site_summary_")
-        ) {
-          keysToRemove.push(key);
-        } else if (
-          key.includes("_comp_") &&
-          !key.endsWith(`_${activeCompId}`) &&
-          (key.startsWith("muavin_construction_projects_") ||
-            key.startsWith("muavin_food_") ||
-            key.startsWith("muavin_boms_") ||
-            key.startsWith("muavin_work_orders_") ||
-            key.startsWith("muavin_auto_services_") ||
-            key.startsWith("muavin_it_services_") ||
-            key.startsWith("muavin_appliance_services_") ||
-            key.startsWith("muavin_cost_projects_"))
+          key.startsWith("tradres_")
         ) {
           keysToRemove.push(key);
         }
@@ -896,60 +881,40 @@ export function cleanupOversizedStorage(aggressive = false) {
 
 /**
  * Emergency eviction when localStorage is still full after standard aggressive cleanup:
- * evicts the largest non-critical / rebuildable slices first so critical writes (like GitHub config, invoices, settings) always succeed.
+ * evicts only transient UI/font/address caches and NEVER evicts any company's business data slices.
  */
 function evictLargestNonCriticalKeys(protectedKey: string) {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
-    const protectedPrefixes = [
-      "muavin_github_",
-      "muavin_active_user",
-      "muavin_companies_list",
-      "muavin_active_company_id",
-      "muavin_mysoft_tenant_vkn",
-      "muavin_custom_app_modules",
-      "muavin_deleted_companies_registry",
-      "muavin_deleted_users_registry",
-      "muavin_local_users_backup",
-    ];
     const entries: { key: string; size: number; priority: number }[] = [];
     for (let i = 0; i < window.localStorage.length; i++) {
       const k = window.localStorage.key(i);
       if (!k || k === protectedKey) continue;
-      if (protectedPrefixes.some((p) => k.startsWith(p))) continue;
+      const isTransientCache =
+        k.startsWith("tradres_") ||
+        k.startsWith("muavin_font_") ||
+        k.startsWith("muavin_col_widths_") ||
+        k.startsWith("muavin_col_vis_") ||
+        k.startsWith("muavin_table_row_height");
+      if (!isTransientCache) continue;
       const val = window.localStorage.getItem(k) || "";
-      const isSecondaryMockSlice =
-        k.startsWith("muavin_construction_projects") ||
-        k.startsWith("muavin_food_") ||
-        k.startsWith("muavin_boms") ||
-        k.startsWith("muavin_work_orders") ||
-        k.startsWith("muavin_subcontract_orders") ||
-        k.startsWith("muavin_auto_services") ||
-        k.startsWith("muavin_it_services") ||
-        k.startsWith("muavin_appliance_services") ||
-        k.startsWith("muavin_e_documents") ||
-        k.startsWith("muavin_cost_projects") ||
-        k.startsWith("muavin_fixed_assets") ||
-        k.startsWith("muavin_asset_");
       entries.push({
         key: k,
         size: val.length,
-        priority: isSecondaryMockSlice ? 1 : 2,
+        priority: 1,
       });
     }
-    // Sort by priority (1 = secondary/rebuildable first), then largest size first
     entries.sort((a, b) => a.priority - b.priority || b.size - a.size);
     let freed = 0;
     for (const item of entries) {
       try {
-        // Keep in session/memory fallback before removing from localStorage
         const existingVal = window.localStorage.getItem(item.key);
         if (existingVal) {
           memoryStorageFallback.set(item.key, existingVal);
         }
         window.localStorage.removeItem(item.key);
         freed += item.size;
-        if (freed > 1200000) break; // Free ~1.2MB
+        if (freed > 1200000) break;
       } catch (_) {}
     }
   } catch (_) {}
@@ -1105,6 +1070,12 @@ export function getStoredData(targetCompanyId?: string) {
       address: compMeta.address || "",
       city: compMeta.city || "İstanbul",
       district: compMeta.district || "",
+      neighborhood: compMeta.neighborhood || "",
+      street: compMeta.street || "",
+      buildingNo: compMeta.buildingNo || "",
+      doorNo: compMeta.doorNo || "",
+      postalCode: compMeta.postalCode || "",
+      addressDetails: compMeta.addressDetails,
       logoUrl: compMeta.logoUrl || "/logo.svg",
       logoScale: compMeta.logoScale ?? 1,
       mysoftCredentials: {
@@ -1117,6 +1088,15 @@ export function getStoredData(targetCompanyId?: string) {
   if (compMeta) {
     loadedSettings = {
       ...loadedSettings,
+      taxOffice: loadedSettings.taxOffice || compMeta.taxOffice || "Merkez",
+      city: loadedSettings.city || compMeta.city || "İstanbul",
+      district: loadedSettings.district || compMeta.district || "",
+      neighborhood: loadedSettings.neighborhood || compMeta.neighborhood || loadedSettings.addressDetails?.neighborhood || "",
+      street: loadedSettings.street || compMeta.street || loadedSettings.addressDetails?.street || "",
+      buildingNo: loadedSettings.buildingNo || compMeta.buildingNo || loadedSettings.addressDetails?.buildingNo || "",
+      doorNo: loadedSettings.doorNo || compMeta.doorNo || loadedSettings.addressDetails?.doorNo || "",
+      postalCode: loadedSettings.postalCode || compMeta.postalCode || loadedSettings.addressDetails?.postalCode || "",
+      address: loadedSettings.address || compMeta.address || loadedSettings.addressDetails?.fullAddress || "",
       defaultBankAccountName:
         loadedSettings.defaultBankAccountName ||
         compMeta.defaultBankAccountName ||
@@ -1179,7 +1159,8 @@ export function getStoredData(targetCompanyId?: string) {
             country: "Türkiye",
             city: compMeta.city || "İstanbul",
             district: compMeta.district || "Merkez",
-            fullAddress: compMeta.address || `${compMeta.district || "Merkez"} / ${compMeta.city || "İstanbul"}`,
+            neighborhood: compMeta.neighborhood || "",
+            fullAddress: compMeta.address || `${compMeta.city || "İstanbul"} / ${compMeta.district || "Merkez"}`,
           },
           createdAt: new Date().toISOString().split("T")[0],
         },
@@ -1217,7 +1198,8 @@ export function getStoredData(targetCompanyId?: string) {
             country: "Türkiye",
             city: compMeta.city || "İstanbul",
             district: compMeta.district || "Merkez",
-            fullAddress: compMeta.address || `${compMeta.district || "Merkez"} / ${compMeta.city || "İstanbul"}`,
+            neighborhood: compMeta.neighborhood || "",
+            fullAddress: compMeta.address || `${compMeta.city || "İstanbul"} / ${compMeta.district || "Merkez"}`,
           },
           createdAt: new Date().toISOString().split("T")[0],
         },
@@ -1229,18 +1211,7 @@ export function getStoredData(targetCompanyId?: string) {
     leaveRequests: getCompanyScoped<LeaveRequest[]>(STORAGE_KEYS.LEAVE_REQUESTS, initialLeaveRequests, []),
     advanceRequests: getCompanyScoped<AdvanceRequest[]>(STORAGE_KEYS.ADVANCE_REQUESTS, initialAdvanceRequests, []),
     legalDeductions: getCompanyScoped<LegalDeduction[]>(STORAGE_KEYS.LEGAL_DEDUCTIONS, initialLegalDeductions, []),
-    costProjects: (() => {
-      if (isDefault) {
-        const stored = get<CostProject[]>(STORAGE_KEYS.COST_PROJECTS, initialCostProjects);
-        const cleaned = (stored || initialCostProjects || []).map((p) => ({
-          ...p,
-          costItems: [],
-        }));
-        safeSet(STORAGE_KEYS.COST_PROJECTS, cleaned);
-        return cleaned;
-      }
-      return getCompanyScoped<CostProject[]>(STORAGE_KEYS.COST_PROJECTS, [], []);
-    })(),
+    costProjects: getCompanyScoped<CostProject[]>(STORAGE_KEYS.COST_PROJECTS, initialCostProjects, []),
     assetCustodies: getCompanyScoped<AssetCustody[]>(STORAGE_KEYS.ASSET_CUSTODIES, initialAssetCustodies, []),
     boms: getCompanyScoped<BillOfMaterials[]>(STORAGE_KEYS.BOMS, initialBillOfMaterials, []),
     workstations: getCompanyScoped<Workstation[]>(STORAGE_KEYS.WORKSTATIONS, initialWorkstations, []),
@@ -1584,8 +1555,158 @@ export function appendCityDistrictToAddress(
 }
 
 /**
+ * Searches all companies' Cari Hesaplar (CONTACTS) and registered companies (COMPANIES_LIST)
+ * for a matching VKN or TCKN, returning its saved taxOffice, city, district, neighborhood, and open address.
+ */
+export function findLocalTaxpayerByVknTckn(vknTckn: string): Partial<Contact> | null {
+  const clean = String(vknTckn || "").replace(/\D/g, "").trim();
+  if (!clean || (clean.length !== 10 && clean.length !== 11)) return null;
+
+  try {
+    const companies = getCompaniesList();
+    // 1. Check all companies' CONTACTS slices (Cari Hesaplar)
+    for (const comp of companies) {
+      const storageKey = comp.id === DEFAULT_COMPANY.id ? STORAGE_KEYS.CONTACTS : `${STORAGE_KEYS.CONTACTS}_${comp.id}`;
+      const raw = safeGetStorageItem(storageKey);
+      const contactsList: Contact[] = raw ? JSON.parse(raw) : (comp.id === DEFAULT_COMPANY.id ? initialContacts : []);
+      if (Array.isArray(contactsList)) {
+        const matched = contactsList.find(
+          (c) => c && String(c.taxNumber || "").replace(/\D/g, "").trim() === clean
+        );
+        if (matched) {
+          return matched;
+        }
+      }
+    }
+
+    // 2. Check initialContacts fallback
+    const initMatched = initialContacts.find(
+      (c) => c && String(c.taxNumber || "").replace(/\D/g, "").trim() === clean
+    );
+    if (initMatched) return initMatched;
+
+    // 3. Check registered companies list
+    const compMatched = companies.find(
+      (c) =>
+        c &&
+        (String(c.taxNumber || "").replace(/\D/g, "") === clean ||
+          String(c.vkn || "").replace(/\D/g, "") === clean ||
+          String(c.tckn || "").replace(/\D/g, "") === clean ||
+          String(c.tenantIdentifierNumber || "").replace(/\D/g, "") === clean)
+    );
+    if (compMatched) {
+      return {
+        taxNumber: clean,
+        name: compMatched.companyName,
+        companyTitle: compMatched.companyTitle || compMatched.companyName,
+        taxOffice: compMatched.taxOffice,
+        city: compMatched.city,
+        district: compMatched.district,
+        neighborhood: compMatched.neighborhood,
+        street: compMatched.street,
+        buildingNo: compMatched.buildingNo,
+        postalCode: compMatched.postalCode,
+        address: compMatched.address,
+        phone: compMatched.phone,
+        email: compMatched.email,
+      };
+    }
+  } catch {
+    // ignore lookup error
+  }
+  return null;
+}
+
+/**
+ * Normalizes Turkish title case for city/district/neighborhood (e.g. "İSTANBUL" -> "İstanbul", "SELÇUKLU" -> "Selçuklu")
+ */
+export function toTurkishTitleCase(text?: string): string {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  return raw
+    .toLocaleLowerCase("tr-TR")
+    .split(/\s+/)
+    .map((word) => (word ? word.charAt(0).toLocaleUpperCase("tr-TR") + word.slice(1) : ""))
+    .join(" ");
+}
+
+/**
+ * Separates and normalizes Vergi Dairesi, İl, İlçe, Mahalle, and Açık Adres from a taxpayer lookup result.
+ */
+export function parseSeparateAddressFields(input: {
+  taxOffice?: string;
+  city?: string;
+  district?: string;
+  neighborhood?: string;
+  street?: string;
+  buildingNo?: string;
+  doorNo?: string;
+  postalCode?: string;
+  address?: string;
+}): {
+  taxOffice: string;
+  city: string;
+  district: string;
+  neighborhood: string;
+  street: string;
+  buildingNo: string;
+  doorNo: string;
+  postalCode: string;
+  address: string;
+} {
+  const taxOffice = String(input.taxOffice || "").trim();
+  const city = toTurkishTitleCase(input.city) || "İstanbul";
+  const district = toTurkishTitleCase(input.district) || "";
+  let neighborhood = String(input.neighborhood || "").trim();
+  let street = String(input.street || "").trim();
+  const buildingNo = String(input.buildingNo || "").trim();
+  const doorNo = String(input.doorNo || "").trim();
+  const postalCode = String(input.postalCode || "").trim();
+  const rawAddress = String(input.address || "").trim();
+
+  // If neighborhood is missing, try to extract "... Mahallesi" or "... Mah." from rawAddress or street
+  if (!neighborhood) {
+    const sourceText = rawAddress || street;
+    const mahMatch = sourceText.match(/([A-ZÇĞİÖŞÜa-zçğıöşü0-9.\-]+(?:\s+[A-ZÇĞİÖŞÜa-zçğıöşü0-9.\-]+){0,2}\s+(?:Mahallesi|Mah\.|Mah))\b/i);
+    if (mahMatch && mahMatch[1]) {
+      // Remove any leading "İl / İlçe," if captured
+      const candidate = mahMatch[1].replace(/^.*[,/]\s*/, "").trim();
+      if (candidate) {
+        neighborhood = candidate;
+      }
+    }
+  }
+
+  if (neighborhood && !/mah/i.test(neighborhood) && !neighborhood.includes("(")) {
+    neighborhood = `${toTurkishTitleCase(neighborhood)} Mah.`;
+  } else if (neighborhood && neighborhood === neighborhood.toLocaleUpperCase("tr-TR")) {
+    neighborhood = toTurkishTitleCase(neighborhood);
+  }
+
+  // Build open address details if rawAddress is empty
+  const detailParts = [neighborhood, street, buildingNo, doorNo].filter(Boolean);
+  let baseOpenAddr = rawAddress || detailParts.join(" ");
+  if (postalCode && baseOpenAddr && !baseOpenAddr.includes(postalCode)) {
+    baseOpenAddr = `${baseOpenAddr} (PK: ${postalCode})`;
+  }
+  const fullOpenAddress = appendCityDistrictToAddress(baseOpenAddr, city, district);
+
+  return {
+    taxOffice,
+    city,
+    district,
+    neighborhood,
+    street,
+    buildingNo,
+    doorNo,
+    postalCode,
+    address: fullOpenAddress,
+  };
+}
+
+/**
  * Synchronizes schema, Mysoft VKN/TCKN mappings, invoice prefixes, open addresses, and settings
- * across all registered companies and their isolated storage slices.
+ * across all registered companies and their isolated storage slices WITHOUT deleting or overwriting existing company data.
  */
 export function syncAllCompaniesAndUsersData(): {
   syncedCompaniesCount: number;
@@ -1613,7 +1734,7 @@ export function syncAllCompaniesAndUsersData(): {
         eArsivPrefix: (withCreds.eArsivPrefix || "EAR").toUpperCase().slice(0, 3),
       };
 
-      // Sync isolated company settings, contacts, and invoices slice for each company
+      // Non-destructively sync isolated company settings, contacts, and invoices slice for each company
       try {
         const companyData = getStoredData(normalizedComp.id);
         const resolvedLogoUrl =
@@ -1623,6 +1744,13 @@ export function syncAllCompaniesAndUsersData(): {
         const resolvedLogoScale = normalizedComp.logoScale ?? companyData.settings.logoScale ?? 1;
         normalizedComp.logoUrl = resolvedLogoUrl;
         normalizedComp.logoScale = resolvedLogoScale;
+        normalizedComp.companyName = companyData.settings.companyName || normalizedComp.companyName;
+        normalizedComp.companyTitle = companyData.settings.companyTitle || normalizedComp.companyTitle || normalizedComp.companyName;
+        normalizedComp.taxOffice = companyData.settings.taxOffice || normalizedComp.taxOffice || "Merkez";
+        normalizedComp.city = companyData.settings.city || normalizedComp.city || "İstanbul";
+        normalizedComp.district = companyData.settings.district || normalizedComp.district;
+        normalizedComp.neighborhood = companyData.settings.neighborhood || normalizedComp.neighborhood;
+        normalizedComp.address = companyData.settings.address || normalizedComp.address;
 
         const mergedSettings: CompanySettings = {
           ...companyData.settings,
@@ -1632,6 +1760,10 @@ export function syncAllCompaniesAndUsersData(): {
           taxNumber: companyData.settings.taxNumber || normalizedComp.taxNumber,
           vkn: companyData.settings.vkn || normalizedComp.vkn,
           tckn: companyData.settings.tckn || normalizedComp.tckn,
+          city: companyData.settings.city || normalizedComp.city || "İstanbul",
+          district: companyData.settings.district || normalizedComp.district || "",
+          neighborhood: companyData.settings.neighborhood || normalizedComp.neighborhood || "",
+          address: companyData.settings.address || normalizedComp.address || "",
           tenantIdentifierNumber: companyData.settings.tenantIdentifierNumber || normalizedComp.tenantIdentifierNumber,
           mysoftMatchedType: companyData.settings.mysoftMatchedType || normalizedComp.mysoftMatchedType,
           mysoftStatus: companyData.settings.mysoftStatus || normalizedComp.mysoftStatus,

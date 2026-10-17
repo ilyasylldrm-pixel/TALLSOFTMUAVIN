@@ -28,6 +28,8 @@ import {
   deleteCompanyItem,
   setActiveCompanyId,
   isProtectedCompanyId,
+  parseSeparateAddressFields,
+  appendCityDistrictToAddress,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import { checkRecipientTaxpayerStatus } from "../services/mysoftEDocumentService";
@@ -543,6 +545,79 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     onSaveSettings({ ...settings, ...nextProfile });
   };
 
+  const handleFetchProfileTaxpayer = async (rawVkn?: string) => {
+    const clean = String(rawVkn ?? profileForm.taxNumber ?? "").replace(/\D/g, "").trim();
+    if (clean.length !== 10 && clean.length !== 11) return;
+    setIsFetchingTaxpayer(true);
+    setVknFetchFeedback(null);
+    try {
+      const status = await checkRecipientTaxpayerStatus(clean);
+      if (status) {
+        const parsed = parseSeparateAddressFields({
+          taxOffice: status.taxOffice,
+          city: status.city,
+          district: status.district,
+          neighborhood: status.neighborhood,
+          street: status.street,
+          buildingNo: status.buildingNo,
+          doorNo: status.doorNo,
+          postalCode: status.postalCode,
+          address: status.address,
+        });
+        setProfileForm((prev) => {
+          const nextCity = parsed.city || prev.city || "İstanbul";
+          const nextDistrict = parsed.district || prev.district || "";
+          const nextNeighborhood = parsed.neighborhood || prev.neighborhood || "";
+          const nextStreet = parsed.street || prev.street || "";
+          const nextBuildingNo = parsed.buildingNo || prev.buildingNo || "";
+          const nextDoorNo = parsed.doorNo || prev.doorNo || "";
+          const nextPostalCode = parsed.postalCode || prev.postalCode || "";
+          const nextAddress = parsed.address || prev.address || "";
+          return {
+            ...prev,
+            taxNumber: clean,
+            vkn: clean.length === 10 ? clean : prev.vkn,
+            tckn: clean.length === 11 ? clean : prev.tckn,
+            name: status.companyTitle || status.title || prev.name,
+            companyName: status.companyTitle || status.title || prev.companyName,
+            companyTitle: status.companyTitle || status.title || prev.companyTitle,
+            taxOffice: parsed.taxOffice || prev.taxOffice,
+            city: nextCity,
+            district: nextDistrict,
+            neighborhood: nextNeighborhood,
+            street: nextStreet,
+            buildingNo: nextBuildingNo,
+            doorNo: nextDoorNo,
+            postalCode: nextPostalCode,
+            address: nextAddress,
+            phone: status.phone || prev.phone,
+            email: status.email || prev.email,
+            tenantIdentifierNumber: clean,
+            addressDetails: {
+              ...(prev.addressDetails || { country: prev.country || "Türkiye" }),
+              country: prev.country || prev.addressDetails?.country || "Türkiye",
+              city: nextCity,
+              district: nextDistrict,
+              neighborhood: nextNeighborhood,
+              street: nextStreet,
+              buildingNo: nextBuildingNo,
+              doorNo: nextDoorNo,
+              postalCode: nextPostalCode,
+              fullAddress: nextAddress,
+            },
+          };
+        });
+        setVknFetchFeedback(
+          `✓ Bilgiler getirildi ve ayrı ayrı yapıştırıldı: Vergi Dairesi (${parsed.taxOffice || "-"}), İl (${parsed.city || "-"}), İlçe (${parsed.district || "-"}), Mahalle (${parsed.neighborhood || "-"}) ve Açık Adres.`
+        );
+      }
+    } catch {
+      setVknFetchFeedback("⚠️ Firma bilgileri alınamadı.");
+    } finally {
+      setIsFetchingTaxpayer(false);
+    }
+  };
+
   // Save Profile
   const handleSaveProfile = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -577,6 +652,12 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         address: cleanedProfile.address,
         city: cleanedProfile.city,
         district: cleanedProfile.district,
+        neighborhood: cleanedProfile.neighborhood,
+        street: cleanedProfile.street,
+        buildingNo: cleanedProfile.buildingNo,
+        doorNo: cleanedProfile.doorNo,
+        postalCode: cleanedProfile.postalCode,
+        addressDetails: cleanedProfile.addressDetails,
         defaultBankAccountName: cleanedProfile.defaultBankAccountName,
         defaultBankName: cleanedProfile.defaultBankName,
         defaultBankIban: cleanedProfile.defaultBankIban,
@@ -971,19 +1052,17 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           {/* 1. ADRES BİLGİLERİ */}
           <AddressSelector
             title="Merkez Genel Adres Detayları"
-            address={
-              profileForm.addressDetails || {
-                country: profileForm.country || "Türkiye",
-                city: profileForm.city || "İstanbul",
-                district: profileForm.district || "Şişli",
-                neighborhood: profileForm.neighborhood || "Mecidiyeköy",
-                street: profileForm.street || "",
-                buildingNo: profileForm.buildingNo || "",
-                doorNo: profileForm.doorNo || "",
-                postalCode: profileForm.postalCode || "",
-                fullAddress: profileForm.address || "",
-              }
-            }
+            address={{
+              country: profileForm.country || profileForm.addressDetails?.country || "Türkiye",
+              city: profileForm.city || profileForm.addressDetails?.city || "İstanbul",
+              district: profileForm.district ?? profileForm.addressDetails?.district ?? "",
+              neighborhood: profileForm.neighborhood ?? profileForm.addressDetails?.neighborhood ?? "",
+              street: profileForm.street ?? profileForm.addressDetails?.street ?? "",
+              buildingNo: profileForm.buildingNo ?? profileForm.addressDetails?.buildingNo ?? "",
+              doorNo: profileForm.doorNo ?? profileForm.addressDetails?.doorNo ?? "",
+              postalCode: profileForm.postalCode ?? profileForm.addressDetails?.postalCode ?? "",
+              fullAddress: profileForm.address ?? profileForm.addressDetails?.fullAddress ?? "",
+            }}
             onChange={(updatedDetails) => {
               setProfileForm((prev) => ({
                 ...prev,
@@ -1064,71 +1143,46 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div>
+              <div className="sm:col-span-2">
                 <label className="block font-bold text-slate-700 mb-1">
-                  Vergi Dairesi
+                  VKN / TCKN No
                 </label>
-                <input
-                  type="text"
-                  value={profileForm.taxOffice}
-                  onChange={(e) => setProfileForm({ ...profileForm, taxOffice: e.target.value })}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-bold text-slate-700">
-                    VKN / TCKN No
-                  </label>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const clean = String(profileForm.taxNumber || "").replace(/\D/g, "").trim();
-                      if (clean.length !== 10 && clean.length !== 11) return;
-                      setIsFetchingTaxpayer(true);
-                      setVknFetchFeedback(null);
-                      try {
-                        const status = await checkRecipientTaxpayerStatus(clean);
-                        if (status) {
-                          setProfileForm((prev) => ({
-                            ...prev,
-                            name: status.companyTitle || status.title || prev.name,
-                            companyName: status.companyTitle || status.title || prev.companyName,
-                            companyTitle: status.companyTitle || status.title || prev.companyTitle,
-                            taxOffice: status.taxOffice || prev.taxOffice,
-                            city: status.city || prev.city,
-                            district: status.district || prev.district,
-                            address: status.address || prev.address,
-                            tenantIdentifierNumber: clean,
-                          }));
-                          setVknFetchFeedback(
-                            status.isEFaturaUser
-                              ? `🟢 GİB e-Fatura Mükellefi: ${status.companyTitle || status.name} (Bilgiler Mysoft'tan dolduruldu)`
-                              : `🔵 e-Arşiv: ${status.companyTitle || status.name} (Bilgiler Mysoft'tan dolduruldu)`
-                          );
-                        }
-                      } catch {
-                        setVknFetchFeedback("⚠️ Mysoft'tan firma bilgisi alınamadı.");
-                      } finally {
-                        setIsFetchingTaxpayer(false);
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    maxLength={11}
+                    value={profileForm.taxNumber}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setProfileForm({ ...profileForm, taxNumber: val });
+                      const clean = val.replace(/\D/g, "").trim();
+                      if (clean.length === 10 || clean.length === 11) {
+                        void handleFetchProfileTaxpayer(clean);
                       }
                     }}
-                    disabled={isFetchingTaxpayer || !profileForm.taxNumber || (profileForm.taxNumber.replace(/\D/g, "").length !== 10 && profileForm.taxNumber.replace(/\D/g, "").length !== 11)}
-                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer disabled:opacity-40"
-                    title="GİB & Mysoft'tan resmi şirket unvanı, vergi dairesi ve adresini çek"
+                    placeholder="10 haneli VKN veya 11 haneli TCKN..."
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleFetchProfileTaxpayer()}
+                    disabled={
+                      isFetchingTaxpayer ||
+                      !profileForm.taxNumber ||
+                      (profileForm.taxNumber.replace(/\D/g, "").length !== 10 &&
+                        profileForm.taxNumber.replace(/\D/g, "").length !== 11)
+                    }
+                    className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition-all shadow-2xs"
+                    title="VKN/TCKN ile GİB Mükellef ve Adres Bilgilerini Getir"
                   >
-                    {isFetchingTaxpayer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                    <span>Mysoft'tan Getir</span>
+                    {isFetchingTaxpayer ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    )}
+                    <span>Bilgileri Getir</span>
                   </button>
                 </div>
-                <input
-                  type="text"
-                  value={profileForm.taxNumber}
-                  onChange={(e) => setProfileForm({ ...profileForm, taxNumber: e.target.value })}
-                  placeholder="10 VKN veya 11 TCKN..."
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
                 {vknFetchFeedback && (
                   <p className="text-[11px] font-semibold text-emerald-700 mt-1 animate-fadeIn">
                     {vknFetchFeedback}
@@ -1138,27 +1192,168 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Ticaret Sicil No
+                  Vergi Dairesi
                 </label>
                 <input
                   type="text"
-                  value={profileForm.tradeRegisterNo || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, tradeRegisterNo: e.target.value })}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                  value={profileForm.taxOffice || ""}
+                  onChange={(e) => setProfileForm({ ...profileForm, taxOffice: e.target.value })}
+                  placeholder="Vergi Dairesi..."
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  MERSİS No
+                  Ticaret Sicil / MERSİS No
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Sicil No"
+                    value={profileForm.tradeRegisterNo || ""}
+                    onChange={(e) => setProfileForm({ ...profileForm, tradeRegisterNo: e.target.value })}
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                  />
+                  <input
+                    type="text"
+                    placeholder="MERSİS No"
+                    value={profileForm.mersisNo || ""}
+                    onChange={(e) => setProfileForm({ ...profileForm, mersisNo: e.target.value })}
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* VKN/TCKN Sorgulamasından Gelen Ayrı Ayrı İl, İlçe, Mahalle ve Açık Adres Alanları */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  İl
                 </label>
                 <input
                   type="text"
-                  value={profileForm.mersisNo || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, mersisNo: e.target.value })}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                  value={profileForm.city || ""}
+                  onChange={(e) => {
+                    const nextCity = e.target.value;
+                    setProfileForm((prev) => {
+                      const nextAddress = appendCityDistrictToAddress(
+                        prev.address || "",
+                        nextCity,
+                        prev.district,
+                        prev.city,
+                        prev.district
+                      );
+                      return {
+                        ...prev,
+                        city: nextCity,
+                        address: nextAddress,
+                        addressDetails: {
+                          ...(prev.addressDetails || { country: prev.country || "Türkiye" }),
+                          city: nextCity,
+                          district: prev.district || "",
+                          neighborhood: prev.neighborhood || "",
+                          fullAddress: nextAddress,
+                        },
+                      };
+                    });
+                  }}
+                  placeholder="İl..."
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  İlçe
+                </label>
+                <input
+                  type="text"
+                  value={profileForm.district || ""}
+                  onChange={(e) => {
+                    const nextDistrict = e.target.value;
+                    setProfileForm((prev) => {
+                      const nextAddress = appendCityDistrictToAddress(
+                        prev.address || "",
+                        prev.city,
+                        nextDistrict,
+                        prev.city,
+                        prev.district
+                      );
+                      return {
+                        ...prev,
+                        district: nextDistrict,
+                        address: nextAddress,
+                        addressDetails: {
+                          ...(prev.addressDetails || { country: prev.country || "Türkiye" }),
+                          city: prev.city || "İstanbul",
+                          district: nextDistrict,
+                          neighborhood: prev.neighborhood || "",
+                          fullAddress: nextAddress,
+                        },
+                      };
+                    });
+                  }}
+                  placeholder="İlçe..."
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Mahalle
+                </label>
+                <input
+                  type="text"
+                  value={profileForm.neighborhood || ""}
+                  onChange={(e) => {
+                    const nextNeighborhood = e.target.value;
+                    setProfileForm((prev) => ({
+                      ...prev,
+                      neighborhood: nextNeighborhood,
+                      addressDetails: {
+                        ...(prev.addressDetails || {
+                          country: prev.country || "Türkiye",
+                          city: prev.city || "İstanbul",
+                          district: prev.district || "",
+                        }),
+                        neighborhood: nextNeighborhood,
+                      },
+                    }));
+                  }}
+                  placeholder="Mahalle..."
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Açık Adres
+              </label>
+              <textarea
+                rows={2}
+                value={profileForm.address || ""}
+                onChange={(e) => {
+                  const nextAddr = e.target.value;
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    address: nextAddr,
+                    addressDetails: {
+                      ...(prev.addressDetails || {
+                        country: prev.country || "Türkiye",
+                        city: prev.city || "İstanbul",
+                        district: prev.district || "",
+                        neighborhood: prev.neighborhood || "",
+                      }),
+                      fullAddress: nextAddr,
+                    },
+                  }));
+                }}
+                placeholder="İl / İlçe, Mahalle, Cadde/Sokak, Bina ve Kapı No..."
+                className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-medium focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+              />
             </div>
 
             <div className="rounded-lg border border-[#c6cdff] bg-[#eaedff]/50 p-4 space-y-3">
