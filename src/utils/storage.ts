@@ -1075,16 +1075,6 @@ export function getStoredData(targetCompanyId?: string) {
   const compMeta = getCompaniesList().find((c) => c.id === activeCompId) || DEFAULT_COMPANY;
   if (isDefault) {
     loadedSettings = get<CompanySettings>(STORAGE_KEYS.SETTINGS, initialCompanySettings);
-    if (
-      loadedSettings &&
-      (loadedSettings.companyTitle?.includes("Muavin Bilişim Teknolojileri") ||
-       loadedSettings.companyName?.includes("Muavin Bilişim"))
-    ) {
-      if (loadedSettings.companyName !== "MUAVİN BİLİŞİM TEKN.DAN.A.Ş.") {
-        loadedSettings.companyName = "MUAVİN BİLİŞİM TEKN.DAN.A.Ş.";
-        safeSet(STORAGE_KEYS.SETTINGS, loadedSettings);
-      }
-    }
   } else {
     const initialForNewCompany: CompanySettings = {
       ...initialCompanySettings,
@@ -1106,6 +1096,9 @@ export function getStoredData(targetCompanyId?: string) {
       eArsivPrefix: compMeta.eArsivPrefix || "EAR",
       eArsivNextNumber: compMeta.eArsivNextNumber || undefined,
       defaultInvoicePrefix: compMeta.eFaturaPrefix || "GIB",
+      defaultBankAccountName: compMeta.defaultBankAccountName || compMeta.companyTitle || compMeta.companyName || "",
+      defaultBankName: compMeta.defaultBankName || initialCompanySettings.defaultBankName,
+      defaultBankIban: compMeta.defaultBankIban || initialCompanySettings.defaultBankIban,
       phone: compMeta.phone || "",
       email: compMeta.email || "",
       website: compMeta.website || "",
@@ -1124,20 +1117,26 @@ export function getStoredData(targetCompanyId?: string) {
   if (compMeta) {
     loadedSettings = {
       ...loadedSettings,
+      defaultBankAccountName:
+        loadedSettings.defaultBankAccountName ||
+        compMeta.defaultBankAccountName ||
+        loadedSettings.companyTitle ||
+        loadedSettings.companyName ||
+        "",
       logoUrl:
         compMeta.logoUrl && compMeta.logoUrl !== "/logo.svg"
           ? compMeta.logoUrl
           : loadedSettings.logoUrl || compMeta.logoUrl || "/logo.svg",
       logoScale: compMeta.logoScale ?? loadedSettings.logoScale ?? 1,
       tenantIdentifierNumber:
-        compMeta.tenantIdentifierNumber || loadedSettings.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
-      mysoftStatus: compMeta.mysoftStatus || loadedSettings.mysoftStatus,
-      eFaturaPrefix: compMeta.eFaturaPrefix || loadedSettings.eFaturaPrefix || "GIB",
-      eFaturaNextNumber: compMeta.eFaturaNextNumber || loadedSettings.eFaturaNextNumber,
-      eArsivPrefix: compMeta.eArsivPrefix || loadedSettings.eArsivPrefix || "EAR",
-      eArsivNextNumber: compMeta.eArsivNextNumber || loadedSettings.eArsivNextNumber,
+        loadedSettings.tenantIdentifierNumber || compMeta.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
+      mysoftStatus: loadedSettings.mysoftStatus || compMeta.mysoftStatus,
+      eFaturaPrefix: loadedSettings.eFaturaPrefix || compMeta.eFaturaPrefix || "GIB",
+      eFaturaNextNumber: loadedSettings.eFaturaNextNumber || compMeta.eFaturaNextNumber,
+      eArsivPrefix: loadedSettings.eArsivPrefix || compMeta.eArsivPrefix || "EAR",
+      eArsivNextNumber: loadedSettings.eArsivNextNumber || compMeta.eArsivNextNumber,
       defaultInvoicePrefix:
-        compMeta.eFaturaPrefix || loadedSettings.eFaturaPrefix || loadedSettings.defaultInvoicePrefix || "GIB",
+        loadedSettings.defaultInvoicePrefix || loadedSettings.eFaturaPrefix || compMeta.eFaturaPrefix || "GIB",
     };
   }
 
@@ -1588,20 +1587,28 @@ export function syncAllCompaniesAndUsersData(): {
 
         const mergedSettings: CompanySettings = {
           ...companyData.settings,
-          companyName: normalizedComp.companyName || companyData.settings.companyName,
-          companyTitle: normalizedComp.companyTitle || normalizedComp.companyName || companyData.settings.companyTitle,
-          taxOffice: normalizedComp.taxOffice || companyData.settings.taxOffice || "Merkez",
-          taxNumber: normalizedComp.taxNumber || companyData.settings.taxNumber,
-          vkn: normalizedComp.vkn || companyData.settings.vkn,
-          tckn: normalizedComp.tckn || companyData.settings.tckn,
-          tenantIdentifierNumber: normalizedComp.tenantIdentifierNumber || companyData.settings.tenantIdentifierNumber,
-          mysoftMatchedType: normalizedComp.mysoftMatchedType || companyData.settings.mysoftMatchedType,
-          mysoftStatus: normalizedComp.mysoftStatus || companyData.settings.mysoftStatus,
-          eFaturaPrefix: normalizedComp.eFaturaPrefix || companyData.settings.eFaturaPrefix || "GIB",
-          eFaturaNextNumber: normalizedComp.eFaturaNextNumber || companyData.settings.eFaturaNextNumber,
-          eArsivPrefix: normalizedComp.eArsivPrefix || companyData.settings.eArsivPrefix || "EAR",
-          eArsivNextNumber: normalizedComp.eArsivNextNumber || companyData.settings.eArsivNextNumber,
-          defaultInvoicePrefix: normalizedComp.eFaturaPrefix || companyData.settings.defaultInvoicePrefix || "GIB",
+          companyName: companyData.settings.companyName || normalizedComp.companyName,
+          companyTitle: companyData.settings.companyTitle || normalizedComp.companyTitle || normalizedComp.companyName,
+          taxOffice: companyData.settings.taxOffice || normalizedComp.taxOffice || "Merkez",
+          taxNumber: companyData.settings.taxNumber || normalizedComp.taxNumber,
+          vkn: companyData.settings.vkn || normalizedComp.vkn,
+          tckn: companyData.settings.tckn || normalizedComp.tckn,
+          tenantIdentifierNumber: companyData.settings.tenantIdentifierNumber || normalizedComp.tenantIdentifierNumber,
+          mysoftMatchedType: companyData.settings.mysoftMatchedType || normalizedComp.mysoftMatchedType,
+          mysoftStatus: companyData.settings.mysoftStatus || normalizedComp.mysoftStatus,
+          eFaturaPrefix: companyData.settings.eFaturaPrefix || normalizedComp.eFaturaPrefix || "GIB",
+          eFaturaNextNumber: companyData.settings.eFaturaNextNumber || normalizedComp.eFaturaNextNumber,
+          eArsivPrefix: companyData.settings.eArsivPrefix || normalizedComp.eArsivPrefix || "EAR",
+          eArsivNextNumber: companyData.settings.eArsivNextNumber || normalizedComp.eArsivNextNumber,
+          defaultInvoicePrefix: companyData.settings.defaultInvoicePrefix || normalizedComp.eFaturaPrefix || "GIB",
+          defaultBankAccountName:
+            companyData.settings.defaultBankAccountName ||
+            normalizedComp.defaultBankAccountName ||
+            companyData.settings.companyTitle ||
+            normalizedComp.companyTitle ||
+            "",
+          defaultBankName: companyData.settings.defaultBankName || normalizedComp.defaultBankName,
+          defaultBankIban: companyData.settings.defaultBankIban || normalizedComp.defaultBankIban,
           logoUrl: resolvedLogoUrl,
           logoScale: resolvedLogoScale,
         };

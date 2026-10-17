@@ -31,6 +31,10 @@ export interface Contact {
   pkAlias?: string;
   gbAlias?: string;
   activityStatus?: string;
+  bankAccountName?: string; // Banka Hesap Adı / Alıcı Hesap Sahibi Ünvanı
+  bankName?: string;
+  bankBranch?: string;
+  iban?: string;
   notes?: string;
   createdAt: string;
 }
@@ -267,6 +271,7 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "company_settings", name: "↳ Sistem Ayarları", description: "Genel sistem ayarları, çoklu şirket ve Mysoft VKN/TCKN eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_companies", name: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Çoklu şirket tanımlama ve şirketler arası geçiş", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_mysoft", name: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef VKN/TCKN ve seri eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
+  { id: "company_logs", name: "↳ Log İzleme Ekranı (Mysoft API)", description: "Mysoft e-Fatura/e-Belge teknik hata dökümü ve çözüm önerileri ekranı", category: "core", parentId: "company", isSubModule: true, badge: "Canlı Log" },
 
   // Ana Modül: E-İşlemler
   { id: "e_services", name: "E-İşlemler (GİB / Portal)", description: "GİB portalı, e-Arşiv, SGK ve e-Devlet sorgulama", category: "commercial", badge: "Resmi" },
@@ -280,6 +285,7 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "waybills_receipt", name: "↳ Gelen e-İrsaliyeler", description: "Tedarikçilerden gelen e-İrsaliye belgeleri", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
   { id: "waybills_dispatch", name: "↳ Giden e-İrsaliyeler", description: "Müşterilere düzenlenen giden e-İrsaliyeler", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
   { id: "waybills", name: "↳ İrsaliye Oluştur (Yerel)", description: "Sevk ve tesellüm irsaliyesi oluşturma ve faturaya aktarma", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Alt Modül" },
+  { id: "e_document_logs", name: "↳ Log İzleme Ekranı (E-Fatura)", description: "E-Fatura gönderim ve Mysoft API teknik hata log izleme ekranı", category: "commercial", parentId: "invoices", isSubModule: true, badge: "Canlı Log" },
 
   // Ana Modül: Sipariş & Proforma & Alt Modülleri
   { id: "orders_module", name: "Sipariş & Proforma Fatura", description: "Alınan/verilen siparişler ve proforma teklifler ana modülü", category: "commercial" },
@@ -355,6 +361,9 @@ export interface CompanyItem {
   eArsivPrefix?: string;
   eArsivNextNumber?: string;
   defaultInvoicePrefix?: string;
+  defaultBankAccountName?: string;
+  defaultBankName?: string;
+  defaultBankIban?: string;
   logoUrl?: string;
   logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
   createdAt: string;
@@ -378,6 +387,7 @@ export interface Invoice {
   paymentMethod?: InvoicePaymentMethod; // "nakit" = Nakit, "cari" = Cari (Açık Hesap), "kredi_karti" = Kredi Kartı, "eft_havale" = EFT & Havale
   paymentAccountId?: string; // Tahsilat / Ödeme Kasa veya Banka/POS Hesabı ID
   paymentAccountName?: string; // Tahsilat / Ödeme Kasa veya Banka/POS Hesabı Adı
+  paymentBankName?: string; // Banka Adı
   paymentIban?: string; // EFT & Havale için seçilen/girilen IBAN bilgisi
   expenseCategory?: string; // Ana Masraf / Gider Kalemi
   contactId: string;
@@ -469,6 +479,7 @@ export type AccountType = "cash" | "bank" | "credit_card" | "pos" | string;
 export interface Account {
   id: string;
   name: string; // ör: Merkez TL Kasası, Garanti Ticari TL, Ziraat USD
+  accountHolderName?: string; // Banka Hesap Sahibi / Hesap Adı
   type: AccountType;
   currency: string; // TRY, USD, EUR
   balance: number;
@@ -760,6 +771,7 @@ export interface CompanySettings {
   website: string;
   logoUrl?: string;
   logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
+  defaultBankAccountName?: string;
   defaultBankIban?: string;
   iban?: string; // Alias for defaultBankIban
   defaultBankName?: string;
@@ -1143,6 +1155,7 @@ export type AppModuleKey =
   | "company_branches"
   | "company_warehouses"
   | "company_settings"
+  | "company_logs"
   | "e_services"
   | "invoices"
   | "invoices_sales"
@@ -1152,6 +1165,7 @@ export type AppModuleKey =
   | "waybills_receipt"
   | "waybills_dispatch"
   | "waybills"
+  | "e_document_logs"
   | "orders_module"
   | "orders"
   | "quotes"
@@ -1773,6 +1787,7 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "company_settings", label: "↳ Sistem Ayarları", description: "Firma bazlı parametreler, çoklu şirket, Mysoft eşleştirme ve yedekleme", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_companies", label: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Kurumsal şirket, şahıs işletmesi ve test şirketleri yönetimi", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_mysoft", label: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef ve ön ek (prefix) eşleştirme", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_logs", label: "↳ Log İzleme Ekranı (Mysoft API)", description: "Mysoft API teknik hata dökümü ve çözüm önerileri ekranı", category: "Yönetim", parentKey: "company", isSubModule: true },
 
   // E-İşlemler
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
@@ -1786,6 +1801,7 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "waybills_receipt", label: "↳ Gelen e-İrsaliyeler", description: "Gelen e-İrsaliye belgeleri", category: "Ticari", parentKey: "invoices", isSubModule: true },
   { key: "waybills_dispatch", label: "↳ Giden e-İrsaliyeler", description: "Giden e-İrsaliye belgeleri", category: "Ticari", parentKey: "invoices", isSubModule: true },
   { key: "waybills", label: "↳ İrsaliye Oluştur", description: "Sevk irsaliyesi oluşturma ve faturaya dönüştürme", category: "Ticari", parentKey: "invoices", isSubModule: true },
+  { key: "e_document_logs", label: "↳ Log İzleme Ekranı (E-Fatura)", description: "Mysoft e-Belge API teknik hata ve çözüm izleme konsolu", category: "Ticari", parentKey: "invoices", isSubModule: true },
 
   // Sipariş & Proforma & Alt Modülleri
   { key: "orders_module", label: "Sipariş & Proforma", description: "Müşteri siparişleri ve proforma teklifler (Ana Modül)", category: "Ticari" },
@@ -1939,6 +1955,8 @@ export function isModuleOrSubModuleAllowed(
 ): boolean {
   if (isAdminOrSysAdmin(currentUser)) return true;
   if (moduleKey === "admin") return false;
+  // Log İzleme Ekranı tüm şirketler ve kullanıcılar için her zaman görünür
+  if (moduleKey === "company_logs" || moduleKey === "e_document_logs") return true;
 
   // 1. Şirket bazlı modül ve alt modül kısıtlaması
   if (activeCompany?.moduleRestrictionEnabled && Array.isArray(activeCompany.allowedModules)) {

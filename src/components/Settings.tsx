@@ -741,6 +741,51 @@ export const Settings: React.FC<SettingsProps> = ({
               </div>
             </div>
 
+            {/* Varsayılan Banka & Hesap Adı Bilgileri */}
+            <div className="pt-3 border-t border-slate-100">
+              <div className="text-[11px] font-bold text-slate-700 mb-2">
+                Faturaya Basılacak Varsayılan Banka &amp; Hesap Adı Bilgileri
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Hesap Adı (Alıcı / Hesap Sahibi Ünvanı)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={formData.companyTitle || formData.companyName || "Örn: Şirket Ticari TL Hesabı"}
+                    value={formData.defaultBankAccountName ?? ""}
+                    onChange={(e) => setFormData({ ...formData, defaultBankAccountName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Banka Adı ve Şubesi
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Örn: Garanti BBVA - Merkez Şb."
+                    value={formData.defaultBankName || ""}
+                    onChange={(e) => setFormData({ ...formData, defaultBankName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    IBAN Numarası
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="TR00 0000 0000 0000 0000 0000 00"
+                    value={formData.defaultBankIban || ""}
+                    onChange={(e) => setFormData({ ...formData, defaultBankIban: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="pt-3 border-t border-slate-100 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">

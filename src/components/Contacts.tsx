@@ -448,6 +448,10 @@ export const Contacts: React.FC<ContactsProps> = ({
     email: string;
     shippingAddress: string;
     isSameShippingAddress: boolean;
+    bankAccountName: string;
+    bankName: string;
+    bankBranch: string;
+    iban: string;
     notes: string;
     isEFaturaUser?: boolean;
     pkAlias?: string;
@@ -474,6 +478,10 @@ export const Contacts: React.FC<ContactsProps> = ({
     email: "",
     shippingAddress: "",
     isSameShippingAddress: true,
+    bankAccountName: "",
+    bankName: "",
+    bankBranch: "",
+    iban: "",
     notes: "",
     isEFaturaUser: undefined,
     pkAlias: undefined,
@@ -821,6 +829,10 @@ export const Contacts: React.FC<ContactsProps> = ({
         email: contact.email || "",
         shippingAddress: contact.shippingAddress || "",
         isSameShippingAddress: !contact.shippingAddress || contact.shippingAddress === contact.address,
+        bankAccountName: contact.bankAccountName || contact.companyTitle || contact.name || "",
+        bankName: contact.bankName || "",
+        bankBranch: contact.bankBranch || "",
+        iban: contact.iban || "",
         notes: contact.notes || "",
         isEFaturaUser: contact.isEFaturaUser,
         pkAlias: contact.pkAlias,
@@ -879,6 +891,10 @@ export const Contacts: React.FC<ContactsProps> = ({
         email: "",
         shippingAddress: defaultAddr,
         isSameShippingAddress: true,
+        bankAccountName: "",
+        bankName: "",
+        bankBranch: "",
+        iban: "",
         notes: "",
         isEFaturaUser: undefined,
         pkAlias: undefined,
@@ -929,6 +945,10 @@ export const Contacts: React.FC<ContactsProps> = ({
       street: formData.street,
       buildingNo: formData.buildingNo,
       postalCode: formData.postalCode,
+      bankAccountName: formData.bankAccountName || finalName,
+      bankName: formData.bankName,
+      bankBranch: formData.bankBranch,
+      iban: formData.iban,
       notes: formData.notes,
       isEFaturaUser: formData.isEFaturaUser,
       pkAlias: formData.pkAlias,
@@ -2685,6 +2705,83 @@ export const Contacts: React.FC<ContactsProps> = ({
                         />
                       </div>
                     )}
+                  </div>
+
+                  {/* 6.5 BANKA BİLGİLERİ (HESAP ADI, BANKA ADI, ŞUBE, IBAN) */}
+                  <div
+                    className="space-y-3 p-4 rounded-2xl border"
+                    style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
+                  >
+                    <div
+                      className="flex items-center justify-between border-b pb-2"
+                      style={{ borderColor: theme.cardBorder }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Landmark className="w-4 h-4 text-purple-600" />
+                        <span className="text-xs font-bold" style={{ color: theme.pageText }}>
+                          Banka Bilgileri (Hesap Adı, Banka &amp; IBAN)
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400">Tahsilat &amp; EFT/Havale için</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold mb-1" style={{ color: theme.pageText }}>
+                          Hesap Adı (Alıcı / Hesap Sahibi)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder={formData.companyTitle || formData.name || "Örn: Ticari TL Hesabı / Firma Ünvanı"}
+                          value={formData.bankAccountName}
+                          onChange={(e) => setFormData({ ...formData, bankAccountName: e.target.value })}
+                          className="w-full rounded-xl p-2 text-xs font-semibold border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold mb-1" style={{ color: theme.pageText }}>
+                          Banka Adı
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Örn: Garanti BBVA, İş Bankası..."
+                          value={formData.bankName}
+                          onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                          className="w-full rounded-xl p-2 text-xs border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold mb-1" style={{ color: theme.pageText }}>
+                          Şube Adı / Kodu
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Örn: Kadıköy Ticari Şb."
+                          value={formData.bankBranch}
+                          onChange={(e) => setFormData({ ...formData, bankBranch: e.target.value })}
+                          className="w-full rounded-xl p-2 text-xs border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold mb-1" style={{ color: theme.pageText }}>
+                          IBAN Numarası
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="TR00 0000 0000 0000 0000 0000 00"
+                          value={formData.iban}
+                          onChange={(e) => setFormData({ ...formData, iban: e.target.value })}
+                          className="w-full rounded-xl p-2 text-xs font-mono border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {/* 7. Özel Notlar */}

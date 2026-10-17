@@ -307,6 +307,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const bankAcc = accounts.find((a) => a.type === "bank");
     return bankAcc?.iban || companySettings.defaultBankIban || companySettings.iban || "";
   });
+  const [paymentAccountHolderName, setPaymentAccountHolderName] = useState<string>(() => {
+    const bankAcc = accounts.find((a) => a.type === "bank");
+    return (
+      bankAcc?.accountHolderName ||
+      companySettings.defaultBankAccountName ||
+      companySettings.companyTitle ||
+      companySettings.companyName ||
+      ""
+    );
+  });
   const [includeIbanInNotes, setIncludeIbanInNotes] = useState<boolean>(true);
   const invoiceLogoInputRef = React.useRef<HTMLInputElement | null>(null);
   const [logoUploadNotice, setLogoUploadNotice] = useState<string | null>(null);
@@ -1197,6 +1207,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
     if (defaultCashAcc) {
       setPaymentAccountId(defaultCashAcc.id);
     }
+    const defaultBankAcc = accounts.find((a) => a.type === "bank") || accounts[0];
+    setPaymentAccountHolderName(
+      defaultBankAcc?.accountHolderName ||
+        companySettings.defaultBankAccountName ||
+        companySettings.companyTitle ||
+        companySettings.companyName ||
+        ""
+    );
     setTaxModalItem(null);
     setTaxModalInitialTab(undefined);
     setFormDocKind(docKind);
@@ -1286,6 +1304,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
       const acc = accounts.find((a) => a.id === inv.paymentAccountId) || accounts.find((a) => a.type === "bank");
       setPaymentIban(acc?.iban || companySettings.defaultBankIban || companySettings.iban || "");
     }
+    const editAcc = accounts.find((a) => a.id === inv.paymentAccountId) || accounts.find((a) => a.type === "bank");
+    setPaymentAccountHolderName(
+      inv.paymentAccountHolderName ||
+        editAcc?.accountHolderName ||
+        companySettings.defaultBankAccountName ||
+        companySettings.companyTitle ||
+        companySettings.companyName ||
+        ""
+    );
     setTaxModalItem(null);
     setTaxModalInitialTab(undefined);
     setFormDocKind(inv.docKind || "invoice");
@@ -2018,8 +2045,19 @@ export const Invoices: React.FC<InvoicesProps> = ({
       paymentMethod === "eft_havale"
         ? (paymentIban.trim() || selectedPaymentAccount?.iban || companySettings.defaultBankIban || companySettings.iban || "")
         : undefined;
+    const effectiveAccountHolder =
+      paymentMethod === "eft_havale"
+        ? (paymentAccountHolderName.trim() ||
+            selectedPaymentAccount?.accountHolderName ||
+            companySettings.defaultBankAccountName ||
+            companySettings.companyTitle ||
+            companySettings.companyName ||
+            "")
+        : undefined;
     if (paymentMethod === "eft_havale" && includeIbanInNotes && effectiveIban && !finalNotes.includes(effectiveIban)) {
-      const bankNote = `EFT / Havale Banka Bilgisi: ${selectedPaymentAccount?.name ? `${selectedPaymentAccount.name} - ` : ""}IBAN: ${effectiveIban}`;
+      const holderPart = effectiveAccountHolder ? `Hesap Adı: ${effectiveAccountHolder} - ` : "";
+      const bankPart = selectedPaymentAccount?.name ? `${selectedPaymentAccount.name} - ` : "";
+      const bankNote = `EFT / Havale Banka Bilgisi: ${holderPart}${bankPart}IBAN: ${effectiveIban}`;
       finalNotes = finalNotes ? `${finalNotes} | ${bankNote}` : bankNote;
     }
 
@@ -2036,6 +2074,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       paymentMethod,
       paymentAccountId: isImmediatePayment ? selectedPaymentAccount?.id : undefined,
       paymentAccountName: isImmediatePayment ? selectedPaymentAccount?.name : undefined,
+      paymentAccountHolderName: effectiveAccountHolder || undefined,
       paymentIban: effectiveIban || undefined,
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       contactId: finalContactId,
@@ -5051,7 +5090,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         </label>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
                           <label className="block text-[11px] font-bold text-sky-950 mb-1">
                             EFT / Havale Tahsilatının İşleneceği Banka Hesabı *
@@ -5065,6 +5104,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 const selectedAcc = accounts.find((a) => a.id === nextId);
                                 if (selectedAcc?.iban) {
                                   setPaymentIban(selectedAcc.iban);
+                                }
+                                if (selectedAcc?.accountHolderName || selectedAcc?.name) {
+                                  setPaymentAccountHolderName(
+                                    selectedAcc.accountHolderName ||
+                                      companySettings.defaultBankAccountName ||
+                                      companySettings.companyTitle ||
+                                      companySettings.companyName ||
+                                      selectedAcc.name
+                                  );
                                 }
                               }}
                               className="w-full bg-white border border-sky-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
@@ -5086,6 +5134,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               Varsayılan Banka Hesabı (Otomatik Ödendi Olarak İşlenir)
                             </div>
                           )}
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-sky-950 mb-1">
+                            Banka Hesap Adı (Alıcı / Hesap Sahibi Ünvanı)
+                          </label>
+                          <input
+                            type="text"
+                            value={paymentAccountHolderName}
+                            onChange={(e) => setPaymentAccountHolderName(e.target.value)}
+                            placeholder={
+                              companySettings.defaultBankAccountName ||
+                              companySettings.companyTitle ||
+                              companySettings.companyName ||
+                              "Örn: Şirket Ticari Ünvanı / Hesap Adı"
+                            }
+                            className="w-full bg-white border border-sky-200 rounded-xl p-2 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
+                          />
                         </div>
 
                         <div>

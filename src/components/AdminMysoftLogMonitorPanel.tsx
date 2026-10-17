@@ -32,7 +32,15 @@ import {
 } from "../services/mysoftInvoicePayload";
 import { fetchMysoftDiagnosticLogs } from "../services/mysoftEDocumentService";
 
-export const AdminMysoftLogMonitorPanel: React.FC = () => {
+interface AdminMysoftLogMonitorPanelProps {
+  companyName?: string;
+  companyTaxNumber?: string;
+}
+
+export const AdminMysoftLogMonitorPanel: React.FC<AdminMysoftLogMonitorPanelProps> = ({
+  companyName,
+  companyTaxNumber,
+}) => {
   const [logs, setLogs] = useState<MysoftDiagnosticLogEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -249,12 +257,21 @@ export const AdminMysoftLogMonitorPanel: React.FC = () => {
       <div className="bg-slate-900 rounded-2xl p-6 text-white border border-slate-800 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs text-amber-300 font-semibold">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-amber-300 font-semibold">
               <Terminal className="w-4 h-4" />
-              <span>Mysoft E-Belge API Tanılama & Null-Guard İzleme Merkezi</span>
+              <span>Mysoft E-Belge API Tanılama & Null-Guard Log İzleme Merkezi</span>
+              {companyName && (
+                <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white border border-white/20 text-[11px] font-bold inline-flex items-center gap-1.5">
+                  <Building2 className="w-3 h-3 text-sky-300" />
+                  <span>{companyName}</span>
+                  {companyTaxNumber && (
+                    <span className="font-mono text-amber-300">({companyTaxNumber})</span>
+                  )}
+                </span>
+              )}
             </div>
             <h2 className="text-xl font-bold text-white">
-              Teknik Hata Dökümü ve Çözüm Önerisi Konsolu
+              Log İzleme Ekranı — Teknik Hata Dökümü ve Çözüm Önerisi Konsolu
             </h2>
             <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
               Mysoft .NET API katmanından dönen{" "}

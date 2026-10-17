@@ -96,6 +96,11 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   const [address, setAddress] = useState(initialCompany?.address || "");
   const [city, setCity] = useState(initialCompany?.city || "İstanbul");
   const [district, setDistrict] = useState(initialCompany?.district || "");
+  const [defaultBankAccountName, setDefaultBankAccountName] = useState(
+    initialCompany?.defaultBankAccountName || initialCompany?.companyTitle || initialCompany?.companyName || ""
+  );
+  const [defaultBankName, setDefaultBankName] = useState(initialCompany?.defaultBankName || "");
+  const [defaultBankIban, setDefaultBankIban] = useState(initialCompany?.defaultBankIban || "");
   const [logoUrl, setLogoUrl] = useState(initialCompany?.logoUrl || "/logo.svg");
   const [logoScale, setLogoScale] = useState<number>(clampLogoScale(initialCompany?.logoScale ?? 1));
   const modalLogoInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -350,40 +355,29 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   };
 
   const handleSubmit = async (makeActiveImmediately: boolean) => {
-    const cleanName = companyName.trim() || companyTitle.trim();
-    if (!cleanName) {
-      setErrorMsg("Lütfen şirket adını (kısa ad) veya ticari unvanını belirtin.");
-      return;
-    }
-    if (vkn.trim() && vkn.trim().length !== 10) {
-      setErrorMsg("Vergi Kimlik Numarası (VKN) tam 10 haneli olmalıdır.");
-      return;
-    }
-    if (tckn.trim() && tckn.trim().length !== 11) {
-      setErrorMsg("T.C. Kimlik Numarası (TCKN) tam 11 haneli olmalıdır.");
-      return;
-    }
+    const cleanName =
+      companyName.trim() ||
+      companyTitle.trim() ||
+      initialCompany?.companyName ||
+      initialCompany?.companyTitle ||
+      "Firma";
 
-    if (createLoginAccount) {
-      if (!loginUsername.trim()) {
-        setErrorMsg("Lütfen uygulamaya giriş için bir kullanıcı adı belirleyin.");
-        return;
-      }
-      if (!loginPassword.trim()) {
-        setErrorMsg("Lütfen uygulamaya giriş için bir şifre belirleyin.");
-        return;
-      }
-    }
+    const effectiveUsername = createLoginAccount
+      ? loginUsername.trim() || initialCompany?.loginUsername || suggestUsername(cleanName)
+      : undefined;
+    const effectivePassword = createLoginAccount
+      ? loginPassword.trim() || initialCompany?.loginPasswordPlain || "Muavin2026!"
+      : undefined;
 
     const selectedTenantNumber =
       mysoftMatchedType === "vkn"
-        ? vkn.trim() || tckn.trim() || "1111111111"
-        : tckn.trim() || vkn.trim() || "1111111111";
+        ? vkn.trim() || tckn.trim() || initialCompany?.taxNumber || "1111111111"
+        : tckn.trim() || vkn.trim() || initialCompany?.taxNumber || "1111111111";
     const companyId = initialCompany?.id || `comp_${Date.now()}`;
     const targetModules = moduleRestrictionEnabled ? allowedModules : SYSTEM_COMPANY_MODULES.map((m) => m.id);
 
-    const finalLoginUser = createLoginAccount && loginUsername.trim() ? loginUsername.trim().toLowerCase() : undefined;
-    const finalLoginPass = createLoginAccount && loginPassword.trim() ? loginPassword.trim() : undefined;
+    const finalLoginUser = effectiveUsername ? effectiveUsername.toLowerCase() : undefined;
+    const finalLoginPass = effectivePassword;
     const finalLoginEmail = createLoginAccount
       ? (loginEmail.trim() || `${finalLoginUser}@muavin.com`).toLowerCase()
       : undefined;
@@ -404,7 +398,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       tckn: tckn.trim() || (mysoftMatchedType === "tckn" ? selectedTenantNumber : undefined),
       mysoftMatchedType,
       tenantIdentifierNumber: selectedTenantNumber,
-      mysoftStatus: mysoftVerifyResult?.success ? "verified" : "pending",
+      mysoftStatus: mysoftVerifyResult?.success ? "verified" : initialCompany?.mysoftStatus || "pending",
       mysoftTenantName: mysoftVerifyResult?.title || (companyTitle.trim() || cleanName),
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
@@ -412,6 +406,9 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       address: address.trim() || undefined,
       city: city.trim() || "İstanbul",
       district: district.trim() || undefined,
+      defaultBankAccountName: defaultBankAccountName.trim() || (companyTitle.trim() || cleanName),
+      defaultBankName: defaultBankName.trim() || undefined,
+      defaultBankIban: defaultBankIban.trim() || undefined,
       isDefault: initialCompany?.isDefault || false,
       moduleRestrictionEnabled,
       allowedModules: targetModules,
@@ -1096,6 +1093,52 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                   onChange={(e) => setWebsite(e.target.value)}
                   className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
                 />
+              </div>
+            </div>
+
+            {/* Banka Bilgileri (Hesap Adı, Banka Adı, IBAN) */}
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
+              <h5 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Building className="w-3.5 h-3.5 text-[#0f6bae]" />
+                Banka Bilgileri (Hesap Adı, Banka Adı ve IBAN)
+              </h5>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Hesap Adı (Alıcı / Hesap Sahibi)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={companyTitle || companyName || "Örn: Şirket Ticari TL Hesabı"}
+                    value={defaultBankAccountName}
+                    onChange={(e) => setDefaultBankAccountName(e.target.value)}
+                    className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:border-[#0f6bae] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Banka Adı ve Şubesi
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Örn: Garanti BBVA - Merkez Şb."
+                    value={defaultBankName}
+                    onChange={(e) => setDefaultBankName(e.target.value)}
+                    className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    IBAN Numarası
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="TR00 0000 0000 0000 0000 0000 00"
+                    value={defaultBankIban}
+                    onChange={(e) => setDefaultBankIban(e.target.value)}
+                    className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono focus:border-[#0f6bae] outline-none"
+                  />
+                </div>
               </div>
             </div>
           </div>

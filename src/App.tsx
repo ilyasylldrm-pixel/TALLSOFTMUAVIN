@@ -162,7 +162,8 @@ import { FinanceSubModule } from "./components/Accounts";
 import { useDataGridRowHighlight } from "./hooks/useDataGridRowHighlight";
 import { useDataGridRowResizing } from "./hooks/useDataGridRowResizing";
 import { useDataGridColumnResizing } from "./hooks/useDataGridColumnResizing";
-import { fetchCloudLogo, subscribeToCloudLogo } from "./services/cloudBrandingService";
+import { fetchCloudLogo, saveCloudLogo, subscribeToCloudLogo } from "./services/cloudBrandingService";
+import { AdminMysoftLogMonitorPanel } from "./components/AdminMysoftLogMonitorPanel";
 
 const TabLoadingSkeleton = () => (
   <div className="p-6 max-w-7xl mx-auto space-y-6 animate-pulse">
@@ -212,19 +213,30 @@ export default function App() {
       writeStoredMysoftTenantVkn(comp.tenantIdentifierNumber || comp.vkn || comp.tckn);
       freshData.settings = {
         ...freshData.settings,
-        companyName: comp.companyName,
-        companyTitle: comp.companyTitle || comp.companyName,
-        taxOffice: comp.taxOffice || "Merkez",
-        taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || freshData.settings.taxNumber,
-        vkn: comp.vkn,
-        tckn: comp.tckn,
-        mysoftMatchedType: comp.mysoftMatchedType,
-        tenantIdentifierNumber: comp.tenantIdentifierNumber,
-        mysoftStatus: comp.mysoftStatus,
-        eFaturaPrefix: comp.eFaturaPrefix,
-        eFaturaNextNumber: comp.eFaturaNextNumber,
-        eArsivPrefix: comp.eArsivPrefix,
-        eArsivNextNumber: comp.eArsivNextNumber,
+        companyName: comp.companyName || freshData.settings.companyName,
+        name: comp.companyName || freshData.settings.name,
+        companyTitle: comp.companyTitle || comp.companyName || freshData.settings.companyTitle,
+        title: comp.companyTitle || comp.companyName || freshData.settings.title,
+        taxOffice: comp.taxOffice || freshData.settings.taxOffice || "Merkez",
+        taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || comp.taxNumber || freshData.settings.taxNumber,
+        vkn: comp.vkn ?? freshData.settings.vkn,
+        tckn: comp.tckn ?? freshData.settings.tckn,
+        phone: comp.phone ?? freshData.settings.phone,
+        email: comp.email ?? freshData.settings.email,
+        website: comp.website ?? freshData.settings.website,
+        address: comp.address ?? freshData.settings.address,
+        city: comp.city ?? freshData.settings.city,
+        district: comp.district ?? freshData.settings.district,
+        defaultBankAccountName: comp.defaultBankAccountName ?? freshData.settings.defaultBankAccountName,
+        defaultBankName: comp.defaultBankName ?? freshData.settings.defaultBankName,
+        defaultBankIban: comp.defaultBankIban ?? freshData.settings.defaultBankIban,
+        mysoftMatchedType: comp.mysoftMatchedType ?? freshData.settings.mysoftMatchedType,
+        tenantIdentifierNumber: comp.tenantIdentifierNumber ?? freshData.settings.tenantIdentifierNumber,
+        mysoftStatus: comp.mysoftStatus ?? freshData.settings.mysoftStatus,
+        eFaturaPrefix: comp.eFaturaPrefix ?? freshData.settings.eFaturaPrefix,
+        eFaturaNextNumber: comp.eFaturaNextNumber ?? freshData.settings.eFaturaNextNumber,
+        eArsivPrefix: comp.eArsivPrefix ?? freshData.settings.eArsivPrefix,
+        eArsivNextNumber: comp.eArsivNextNumber ?? freshData.settings.eArsivNextNumber,
         defaultInvoicePrefix: comp.eFaturaPrefix || freshData.settings.defaultInvoicePrefix,
         logoUrl:
           comp.logoUrl && comp.logoUrl !== "/logo.svg"
@@ -268,31 +280,51 @@ export default function App() {
     const targetSettingsData = getStoredData(comp.id);
     const updatedTargetSettings: CompanySettings = {
       ...targetSettingsData.settings,
-      companyName: comp.companyName,
-      companyTitle: comp.companyTitle,
-      taxOffice: comp.taxOffice,
-      taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || targetSettingsData.settings.taxNumber,
-      vkn: comp.vkn,
-      tckn: comp.tckn,
-      mysoftMatchedType: comp.mysoftMatchedType,
-      tenantIdentifierNumber: comp.tenantIdentifierNumber,
-      mysoftStatus: comp.mysoftStatus,
-      eFaturaPrefix: comp.eFaturaPrefix,
-      eFaturaNextNumber: comp.eFaturaNextNumber,
-      eArsivPrefix: comp.eArsivPrefix,
-      eArsivNextNumber: comp.eArsivNextNumber,
+      companyName: comp.companyName || targetSettingsData.settings.companyName,
+      name: comp.companyName || targetSettingsData.settings.name,
+      companyTitle: comp.companyTitle || comp.companyName || targetSettingsData.settings.companyTitle,
+      title: comp.companyTitle || comp.companyName || targetSettingsData.settings.title,
+      taxOffice: comp.taxOffice || targetSettingsData.settings.taxOffice,
+      taxNumber:
+        comp.tenantIdentifierNumber ||
+        comp.vkn ||
+        comp.tckn ||
+        comp.taxNumber ||
+        targetSettingsData.settings.taxNumber,
+      vkn: comp.vkn ?? targetSettingsData.settings.vkn,
+      tckn: comp.tckn ?? targetSettingsData.settings.tckn,
+      phone: comp.phone ?? targetSettingsData.settings.phone,
+      email: comp.email ?? targetSettingsData.settings.email,
+      website: comp.website ?? targetSettingsData.settings.website,
+      address: comp.address ?? targetSettingsData.settings.address,
+      city: comp.city ?? targetSettingsData.settings.city,
+      district: comp.district ?? targetSettingsData.settings.district,
+      defaultBankAccountName: comp.defaultBankAccountName ?? targetSettingsData.settings.defaultBankAccountName,
+      defaultBankName: comp.defaultBankName ?? targetSettingsData.settings.defaultBankName,
+      defaultBankIban: comp.defaultBankIban ?? targetSettingsData.settings.defaultBankIban,
+      mysoftMatchedType: comp.mysoftMatchedType ?? targetSettingsData.settings.mysoftMatchedType,
+      tenantIdentifierNumber: comp.tenantIdentifierNumber ?? targetSettingsData.settings.tenantIdentifierNumber,
+      mysoftStatus: comp.mysoftStatus ?? targetSettingsData.settings.mysoftStatus,
+      eFaturaPrefix: comp.eFaturaPrefix ?? targetSettingsData.settings.eFaturaPrefix,
+      eFaturaNextNumber: comp.eFaturaNextNumber ?? targetSettingsData.settings.eFaturaNextNumber,
+      eArsivPrefix: comp.eArsivPrefix ?? targetSettingsData.settings.eArsivPrefix,
+      eArsivNextNumber: comp.eArsivNextNumber ?? targetSettingsData.settings.eArsivNextNumber,
       defaultInvoicePrefix: comp.eFaturaPrefix || targetSettingsData.settings.defaultInvoicePrefix,
       logoUrl: comp.logoUrl || targetSettingsData.settings.logoUrl || "/logo.svg",
       logoScale: comp.logoScale ?? targetSettingsData.settings.logoScale ?? 1,
       mysoftCredentials: {
-        tenantIdentifierNumber: comp.tenantIdentifierNumber,
+        ...targetSettingsData.settings.mysoftCredentials,
+        tenantIdentifierNumber: comp.tenantIdentifierNumber || targetSettingsData.settings.tenantIdentifierNumber,
       },
     };
     saveStoredData("SETTINGS", updatedTargetSettings, comp.id);
     if (activeCompanyId === comp.id) {
       setData((prev) => ({
         ...prev,
-        settings: updatedTargetSettings,
+        settings: {
+          ...prev.settings,
+          ...updatedTargetSettings,
+        },
       }));
       writeStoredMysoftTenantVkn(comp.tenantIdentifierNumber || comp.vkn || comp.tckn);
     }
@@ -1962,17 +1994,23 @@ export default function App() {
       const updatedList = updateCompanyItem({
         ...existingComp,
         companyName: newSettings.companyName || existingComp.companyName,
+        name: newSettings.companyName || existingComp.name,
         companyTitle: newSettings.companyTitle || newSettings.companyName || existingComp.companyTitle,
-        taxOffice: newSettings.taxOffice || existingComp.taxOffice,
-        taxNumber: newSettings.taxNumber || existingComp.taxNumber,
-        vkn: newSettings.vkn || existingComp.vkn,
-        tckn: newSettings.tckn || existingComp.tckn,
-        phone: newSettings.phone || existingComp.phone,
-        email: newSettings.email || existingComp.email,
-        website: newSettings.website || existingComp.website,
-        address: newSettings.address || existingComp.address,
-        city: newSettings.city || existingComp.city,
-        district: newSettings.district || existingComp.district,
+        title: newSettings.companyTitle || newSettings.companyName || existingComp.title,
+        taxOffice: newSettings.taxOffice ?? existingComp.taxOffice,
+        taxNumber: newSettings.taxNumber ?? existingComp.taxNumber,
+        vkn: newSettings.vkn ?? existingComp.vkn,
+        tckn: newSettings.tckn ?? existingComp.tckn,
+        phone: newSettings.phone ?? existingComp.phone,
+        email: newSettings.email ?? existingComp.email,
+        website: newSettings.website ?? existingComp.website,
+        address: newSettings.address ?? existingComp.address,
+        city: newSettings.city ?? existingComp.city,
+        district: newSettings.district ?? existingComp.district,
+        defaultBankAccountName: newSettings.defaultBankAccountName ?? existingComp.defaultBankAccountName,
+        defaultBankName: newSettings.defaultBankName ?? existingComp.defaultBankName,
+        defaultBankIban: newSettings.defaultBankIban ?? existingComp.defaultBankIban,
+        tenantIdentifierNumber: newSettings.tenantIdentifierNumber ?? existingComp.tenantIdentifierNumber,
         logoUrl: newSettings.logoUrl || "/logo.svg",
         logoScale: newSettings.logoScale ?? 1,
       });
@@ -2268,6 +2306,9 @@ export default function App() {
         return "Firma Bilgileri - Sistem Ayarları (Şirketler & Çoklu Şirket)";
       case "company_mysoft":
         return "Firma Bilgileri - Sistem Ayarları (Mysoft Eşleştirme)";
+      case "company_logs":
+      case "e_document_logs":
+        return "Log İzleme Ekranı (Mysoft API & Teknik Hata Konsolu)";
       case "company_settings":
       case "settings":
         return "Firma Bilgileri - Sistem Ayarları";
@@ -2285,7 +2326,7 @@ export default function App() {
     companies.find((c) => c.id === activeCompanyId) || companies[0] || null;
 
   const isCurrentTabAuthorized = (tab: NavItem): boolean => {
-    if (tab === "dashboard") return true;
+    if (tab === "dashboard" || tab === "company_logs" || tab === "e_document_logs") return true;
     if (tab === "admin") return isAdminOrSysAdmin(currentUser);
 
     const tabPermissionMap: Record<string, { key: string; parent?: string }> = {
@@ -2491,6 +2532,19 @@ export default function App() {
               globalSearchTerm={searchTerm}
               onImportInvoice={handleImportMysoftInvoice}
             />
+          )}
+
+          {currentTab === "e_document_logs" && (
+            <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+              <AdminMysoftLogMonitorPanel
+                companyName={data.settings.companyName}
+                companyTaxNumber={
+                  data.settings.tenantIdentifierNumber ||
+                  data.settings.taxNumber ||
+                  readStoredMysoftTenantVkn()
+                }
+              />
+            </div>
           )}
 
           {currentTab === "quotes" && (
@@ -2839,7 +2893,7 @@ export default function App() {
             />
           )}
 
-          {["company", "company_profile", "company_companies", "company_mysoft", "company_branches", "company_warehouses", "company_settings", "settings"].includes(currentTab) && (
+          {["company", "company_profile", "company_companies", "company_mysoft", "company_branches", "company_warehouses", "company_settings", "company_logs", "settings"].includes(currentTab) && (
             <CompanyManagement
               settings={data.settings}
               branches={data.branches || []}
@@ -2866,6 +2920,8 @@ export default function App() {
                   ? "companies"
                   : currentTab === "company_mysoft"
                   ? "mysoft"
+                  : currentTab === "company_logs"
+                  ? "logs"
                   : currentTab === "company_branches"
                   ? "branches"
                   : currentTab === "company_warehouses"
@@ -2877,6 +2933,7 @@ export default function App() {
               onSelectSubTab={(tab) => {
                 if (tab === "companies") setCurrentTab("company_companies");
                 else if (tab === "mysoft") setCurrentTab("company_mysoft");
+                else if (tab === "logs") setCurrentTab("company_logs");
                 else if (tab === "branches") setCurrentTab("company_branches");
                 else if (tab === "warehouses") setCurrentTab("company_warehouses");
                 else if (tab === "settings") setCurrentTab("company_settings");

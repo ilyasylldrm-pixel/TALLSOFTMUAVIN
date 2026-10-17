@@ -1168,9 +1168,12 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   // New Account Form State
   const [accName, setAccName] = useState("");
+  const [accAccountHolderName, setAccAccountHolderName] = useState("");
   const [accType, setAccType] = useState<"cash" | "bank">("bank");
   const [accCurrency, setAccCurrency] = useState("TRY");
   const [accBankName, setAccBankName] = useState("");
+  const [accBranchName, setAccBranchName] = useState("");
+  const [accAccountNumber, setAccAccountNumber] = useState("");
   const [accIban, setAccIban] = useState("");
   const [accInitialBalance, setAccInitialBalance] = useState(0);
 
@@ -1222,22 +1225,38 @@ export const Accounts: React.FC<AccountsProps> = ({
   // Handlers
   const handleSaveAccount = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!String(accName || "").trim()) return;
+    const resolvedName =
+      String(accName || "").trim() ||
+      String(accAccountHolderName || "").trim() ||
+      (accType === "bank" && String(accBankName || "").trim()
+        ? `${accBankName.trim()} (${accCurrency})`
+        : accType === "cash"
+        ? `Nakit Kasa (${accCurrency})`
+        : `Banka Hesabı (${accCurrency})`);
 
     const newAcc: Account = {
       id: "acc_" + Date.now(),
-      name: accName,
+      name: resolvedName,
+      accountHolderName:
+        accType === "bank"
+          ? String(accAccountHolderName || accName || companySettings?.companyTitle || companySettings?.companyName || "").trim() || undefined
+          : undefined,
       type: accType,
       currency: accCurrency,
       balance: accInitialBalance,
-      bankName: accType === "bank" ? accBankName : undefined,
-      iban: accType === "bank" ? accIban : undefined,
+      bankName: accType === "bank" ? accBankName.trim() || undefined : undefined,
+      branchName: accType === "bank" ? accBranchName.trim() || undefined : undefined,
+      accountNumber: accType === "bank" ? accAccountNumber.trim() || undefined : undefined,
+      iban: accType === "bank" ? accIban.trim() || undefined : undefined,
     };
 
     onAddAccount(newAcc);
     handleBackToList();
     setAccName("");
+    setAccAccountHolderName("");
     setAccBankName("");
+    setAccBranchName("");
+    setAccAccountNumber("");
     setAccIban("");
     setAccInitialBalance(0);
   };
@@ -2184,30 +2203,98 @@ export const Accounts: React.FC<AccountsProps> = ({
 
                 {accType === "bank" && (
                   <>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Banka Adı
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Örn: Yapı Kredi, Garanti BBVA, İş Bankası..."
-                        value={accBankName}
-                        onChange={(e) => setAccBankName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-purple-500"
-                      />
-                    </div>
+                    <div className="md:col-span-2 bg-purple-50/40 border border-purple-200/80 rounded-2xl p-4 space-y-4">
+                      <div className="text-xs font-extrabold text-purple-950 flex items-center justify-between border-b border-purple-200/60 pb-2">
+                        <span>Banka Hesap Bilgileri</span>
+                        <span className="text-[10px] font-semibold text-purple-700 bg-white px-2 py-0.5 rounded border border-purple-200">
+                          Hesap Adı & IBAN Tanımı
+                        </span>
+                      </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        IBAN Numarası
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="TR00 0000 0000 0000 0000 0000 00"
-                        value={accIban}
-                        onChange={(e) => setAccIban(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs font-bold text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-purple-500"
-                      />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Hesap Adı (Banka Hesap Tanımı) *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Örn: Garanti Ticari TL Hesabı, İş Bankası Ana Hesap..."
+                            value={accName}
+                            onChange={(e) => setAccName(e.target.value)}
+                            className="w-full bg-white border border-purple-200 rounded-xl p-3 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Hesap Sahibi Ünvanı / Alıcı Hesap Adı
+                          </label>
+                          <input
+                            type="text"
+                            placeholder={companySettings?.companyTitle || companySettings?.companyName || "Örn: Şirket Resmi Ticari Ünvanı"}
+                            value={accAccountHolderName}
+                            onChange={(e) => {
+                              setAccAccountHolderName(e.target.value);
+                              if (!accName.trim()) {
+                                setAccName(e.target.value);
+                              }
+                            }}
+                            className="w-full bg-white border border-purple-200 rounded-xl p-3 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Banka Adı
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Örn: Yapı Kredi, Garanti BBVA, İş Bankası..."
+                            value={accBankName}
+                            onChange={(e) => setAccBankName(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Şube Adı / Şube Kodu
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Örn: Ticari Şube / 1245"
+                            value={accBranchName}
+                            onChange={(e) => setAccBranchName(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                            IBAN Numarası
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="TR00 0000 0000 0000 0000 0000 00"
+                            value={accIban}
+                            onChange={(e) => setAccIban(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-3 font-mono text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Hesap Numarası
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Örn: 12345678"
+                            value={accAccountNumber}
+                            onChange={(e) => setAccAccountNumber(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-3 font-mono text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}
@@ -2353,6 +2440,24 @@ export const Accounts: React.FC<AccountsProps> = ({
 
                 {editingAccount.type !== "cash" && (
                   <>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Banka Hesap Adı / Alıcı Hesap Sahibi Ünvanı
+                      </label>
+                      <input
+                        type="text"
+                        value={editingAccount.accountHolderName ?? editingAccount.name ?? ""}
+                        onChange={(e) =>
+                          setEditingAccount({
+                            ...editingAccount,
+                            accountHolderName: e.target.value,
+                          })
+                        }
+                        placeholder="Örn: Şirket Ünvanı veya Banka Hesap Adı"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1.5">Banka Adı</label>
                       <input
@@ -4027,6 +4132,24 @@ export const Accounts: React.FC<AccountsProps> = ({
 
               {editingAccount.type !== "cash" && (
                 <>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Banka Hesap Adı / Alıcı Hesap Sahibi Ünvanı
+                    </label>
+                    <input
+                      type="text"
+                      value={editingAccount.accountHolderName ?? editingAccount.name ?? ""}
+                      onChange={(e) =>
+                        setEditingAccount({
+                          ...editingAccount,
+                          accountHolderName: e.target.value,
+                        })
+                      }
+                      placeholder="Örn: Şirket Ünvanı veya Banka Hesap Adı"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Banka Adı</label>
