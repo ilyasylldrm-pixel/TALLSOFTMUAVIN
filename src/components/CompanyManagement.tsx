@@ -37,7 +37,7 @@ import {
   CloudBrandingConfig,
   DEFAULT_CLOUD_BRANDING,
 } from "../services/cloudBrandingService";
-import { readAndOptimizeLogoFile } from "../utils/logoUpload";
+import { readAndOptimizeLogoFile, clampLogoScale } from "../utils/logoUpload";
 import {
   Building2,
   Building,
@@ -391,26 +391,41 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   const [cloudSyncStatus, setCloudSyncStatus] = useState<string | null>(null);
   const [cloudBranding, setCloudBranding] = useState<CloudBrandingConfig | null>(null);
 
-  // Cloud Console'dan başlangıçta logoyu çek
+  // Cloud Console'dan başlangıçta aktif şirketin logosunu çek
   React.useEffect(() => {
-    fetchCloudLogo().then((branding) => {
-      if (branding) {
-        setCloudBranding(branding);
-        if (branding.logoUrl && !profileForm.logoUrl) {
-          setProfileForm((prev) => ({ ...prev, logoUrl: branding.logoUrl }));
-        }
+    const applyForActiveCompany = (branding: CloudBrandingConfig | null) => {
+      if (!branding) return;
+      setCloudBranding(branding);
+      const currentCompId = activeCompanyId || getActiveCompanyId();
+      const compEntry = branding.companyLogos?.[currentCompId];
+      const targetLogo =
+        compEntry?.logoUrl ||
+        (currentCompId === "comp_default" ? branding.logoUrl : undefined);
+      const targetScale = compEntry?.logoScale ?? branding.logoScale;
+      if (targetLogo) {
+        setProfileForm((prev) => {
+          if (prev.logoUrl && prev.logoUrl !== "/logo.svg") {
+            return prev;
+          }
+          return {
+            ...prev,
+            logoUrl: targetLogo,
+            logoScale: prev.logoScale ?? targetScale ?? 1,
+          };
+        });
       }
+    };
+
+    fetchCloudLogo().then((branding) => {
+      applyForActiveCompany(branding);
     });
 
     const unsubscribe = subscribeToCloudLogo((branding) => {
-      if (branding) {
-        setCloudBranding(branding);
-        setProfileForm((prev) => ({ ...prev, logoUrl: branding.logoUrl }));
-      }
+      applyForActiveCompany(branding);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [activeCompanyId]);
 
   // Google Cloud Console'dan Logoyu Çek Buton Olayı
   const handleFetchFromCloudConsole = async () => {
@@ -418,11 +433,15 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     setCloudSyncStatus(null);
     try {
       const res = await fetchCloudLogo();
-      if (res?.logoUrl) {
+      const currentCompId = activeCompanyId || getActiveCompanyId();
+      const compEntry = res?.companyLogos?.[currentCompId];
+      const fetchedUrl = compEntry?.logoUrl || res?.logoUrl;
+      const fetchedScale = clampLogoScale(compEntry?.logoScale ?? res?.logoScale ?? 1);
+      if (fetchedUrl) {
         setCloudBranding(res);
-        setProfileForm((prev) => ({ ...prev, logoUrl: res.logoUrl }));
-        onSaveSettings({ ...settings, ...profileForm, logoUrl: res.logoUrl });
-        setCloudSyncStatus("Logo Google Cloud Console Firestore veritabanından başarıyla çekildi!");
+        setProfileForm((prev) => ({ ...prev, logoUrl: fetchedUrl, logoScale: fetchedScale }));
+        onSaveSettings({ ...settings, ...profileForm, logoUrl: fetchedUrl, logoScale: fetchedScale });
+        setCloudSyncStatus("Şirket logosu Google Cloud Console Firestore veritabanından başarıyla çekildi!");
       } else {
         setCloudSyncStatus("Cloud Console bağlantısı sağlandı.");
       }
@@ -440,13 +459,20 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     setCloudSyncStatus(null);
     try {
       const targetUrl = profileForm.logoUrl || "/logo.svg";
-      const saved = await saveCloudLogo(targetUrl, {
-        brandName: profileForm.companyName || "E-MUAVİN",
-        description: "Cloud Console üzerinden güncellenen kurumsal logo",
-      });
+      const targetScale = clampLogoScale(profileForm.logoScale ?? 1);
+      const currentCompId = activeCompanyId || getActiveCompanyId();
+      const saved = await saveCloudLogo(
+        targetUrl,
+        {
+          brandName: profileForm.companyName || "E-MUAVİN",
+          logoScale: targetScale,
+          description: "Cloud Console üzerinden güncellenen şirket kurumsal logosu",
+        },
+        currentCompId
+      );
       setCloudBranding(saved);
-      onSaveSettings({ ...settings, ...profileForm, logoUrl: targetUrl });
-      setCloudSyncStatus("Logo Google Cloud Console Firestore veritabanına kaydedildi!");
+      onSaveSettings({ ...settings, ...profileForm, logoUrl: targetUrl, logoScale: targetScale });
+      setCloudSyncStatus("Şirket logosu ve ölçeği Google Cloud Console Firestore veritabanına kaydedildi!");
     } catch (err: any) {
       setCloudSyncStatus("Kaydetme hatası: " + (err?.message || "Bilinmiyor"));
     } finally {
@@ -464,15 +490,21 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     setCloudSyncStatus(null);
     try {
       const optimizedDataUrl = await readAndOptimizeLogoFile(file);
-      const nextProfile = { ...profileForm, logoUrl: optimizedDataUrl };
+      const currentCompId = activeCompanyId || getActiveCompanyId();
+      const nextProfile = { ...profileForm, logoUrl: optimizedDataUrl, logoScale: 1 };
       setProfileForm(nextProfile);
       onSaveSettings({ ...settings, ...nextProfile });
-      const saved = await saveCloudLogo(optimizedDataUrl, {
-        brandName: profileForm.companyName || "E-MUAVİN",
-        description: `Bilgisayardan yüklenen kurumsal logo (${file.name})`,
-      });
+      const saved = await saveCloudLogo(
+        optimizedDataUrl,
+        {
+          brandName: profileForm.companyName || "E-MUAVİN",
+          logoScale: 1,
+          description: `Bilgisayardan yüklenen kurumsal logo (${file.name})`,
+        },
+        currentCompId
+      );
       setCloudBranding(saved);
-      setCloudSyncStatus(`"${file.name}" bilgisayarınızdan başarıyla yüklendi ve tüm modüllere uygulandı!`);
+      setCloudSyncStatus(`"${file.name}" Muavin logosu ölçüsüne uyarlanarak şirket logonuz olarak kaydedildi!`);
     } catch (err: any) {
       setCloudSyncStatus("Logo yükleme hatası: " + (err?.message || "Geçersiz dosya formatı"));
     } finally {
@@ -480,6 +512,13 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       e.target.value = "";
       setTimeout(() => setCloudSyncStatus(null), 5000);
     }
+  };
+
+  const handleAdjustLogoScale = (nextScaleValue: number) => {
+    const clamped = clampLogoScale(nextScaleValue);
+    const nextProfile = { ...profileForm, logoScale: clamped };
+    setProfileForm(nextProfile);
+    onSaveSettings({ ...settings, ...nextProfile });
   };
 
   // Save Profile
@@ -1134,19 +1173,77 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Logo Önizleme Kartları */}
               <div className="lg:col-span-5 space-y-3">
-                <label className="block font-bold text-slate-700">Canlı Logo Önizleme</label>
+                <label className="block font-bold text-slate-700">
+                  Canlı Şirket Logosu Önizleme ({profileForm.companyName || "Aktif Şirket"})
+                </label>
                 <div className="grid grid-cols-2 gap-3">
                   {/* Koyu Arka Plan Önizleme */}
-                  <div className="bg-[#0A192F] p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center text-center gap-2 min-h-[110px] shadow-xs">
-                    <Logo size="lg" src={profileForm.logoUrl || "/logo.svg"} />
+                  <div className="bg-[#0A192F] p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center text-center gap-2 min-h-[110px] shadow-xs overflow-hidden">
+                    <Logo
+                      size="lg"
+                      src={profileForm.logoUrl || "/logo.svg"}
+                      scale={profileForm.logoScale ?? 1}
+                    />
                     <span className="text-[10px] font-semibold text-slate-400">Koyu Tema (Sidebar)</span>
                   </div>
 
                   {/* Açık Arka Plan Önizleme */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-center gap-2 min-h-[110px] shadow-xs">
-                    <Logo size="lg" src={profileForm.logoUrl || "/logo.svg"} />
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-center gap-2 min-h-[110px] shadow-xs overflow-hidden">
+                    <Logo
+                      size="lg"
+                      src={profileForm.logoUrl || "/logo.svg"}
+                      scale={profileForm.logoScale ?? 1}
+                    />
                     <span className="text-[10px] font-semibold text-slate-500">Açık Tema (Fatura / Belge)</span>
                   </div>
+                </div>
+
+                {/* Muavin Logosuna Büyült veya Küçült Kontrol Kutusu */}
+                <div className="bg-blue-50/70 rounded-xl p-3 border border-blue-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-800">
+                      Muavin Logosuna Büyült / Küçült
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-[#0f6bae] text-white font-mono text-[10px] font-bold">
+                      %{Math.round(clampLogoScale(profileForm.logoScale ?? 1) * 100)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleAdjustLogoScale(clampLogoScale(profileForm.logoScale ?? 1) - 0.1)}
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold cursor-pointer"
+                    >
+                      - Küçült
+                    </button>
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={1.5}
+                      step={0.05}
+                      value={clampLogoScale(profileForm.logoScale ?? 1)}
+                      onChange={(e) => handleAdjustLogoScale(Number(e.target.value))}
+                      className="flex-1 accent-[#0f6bae] cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAdjustLogoScale(1)}
+                      className="px-2 py-1.5 bg-blue-100 hover:bg-blue-200 text-[#0f6bae] rounded-lg text-[10px] font-bold cursor-pointer"
+                      title="Tam Muavin Logosu Boyutuna Eşitle (%100)"
+                    >
+                      %100
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAdjustLogoScale(clampLogoScale(profileForm.logoScale ?? 1) + 0.1)}
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold cursor-pointer"
+                    >
+                      + Büyült
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Yüklenen logo otomatik olarak Muavin logosu (200x50 px) çerçevesine sığdırılır; buradan büyütebilir veya küçültebilirsiniz.
+                  </p>
                 </div>
 
                 <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-200 text-[11px] text-slate-600 space-y-1">
@@ -1178,10 +1275,10 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                     <div>
                       <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
                         <Upload className="w-4 h-4 text-[#0f6bae]" />
-                        Bilgisayardan Kurumsal Logo Yükle
+                        Şirkete Özel Logo Yükle ({profileForm.companyName || "Aktif Şirket"})
                       </span>
                       <p className="text-[11px] text-slate-600 mt-0.5">
-                        Bilgisayarınızdaki PNG, JPG, WEBP veya SVG formatındaki şirket logonuzu seçerek doğrudan yükleyin.
+                        Bilgisayarınızdaki PNG, JPG, WEBP veya SVG formatındaki şirket logonuzu seçin; Muavin logosu boyutuna otomatik büyültülür/küçültülür.
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

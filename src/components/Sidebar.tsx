@@ -245,7 +245,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="min-w-0 flex-1 flex flex-col justify-center">
           <Logo
             size="lg"
-            src={settings.logoUrl || "/logo.svg"}
+            src={activeCompany?.logoUrl || settings.logoUrl || "/logo.svg"}
+            scale={activeCompany?.logoScale ?? settings.logoScale}
             variant={theme.sidebarBg !== "#ffffff" ? "light" : "default"}
             className="w-[200px] h-[50px] object-contain"
             imageClassName="ml-[11px] mt-[11px]"
@@ -679,7 +680,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Logo
             size="md"
             showText={false}
-            src={settings.logoUrl || "/favicon.svg"}
+            src={activeCompany?.logoUrl || settings.logoUrl || "/favicon.svg"}
+            scale={activeCompany?.logoScale ?? settings.logoScale}
             variant={theme.sidebarBg !== "#ffffff" ? "light" : "default"}
           />
         </button>

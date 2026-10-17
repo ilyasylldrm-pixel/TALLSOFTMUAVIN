@@ -42,8 +42,9 @@ import {
 } from "lucide-react";
 import { GitHubSyncPanel } from "./GitHubSyncPanel";
 import { Logo } from "./Logo";
-import { readAndOptimizeLogoFile } from "../utils/logoUpload";
+import { readAndOptimizeLogoFile, clampLogoScale } from "../utils/logoUpload";
 import { saveCloudLogo } from "../services/cloudBrandingService";
+import { getActiveCompanyId } from "../utils/storage";
 
 interface SettingsProps {
   settings: CompanySettings;
@@ -91,10 +92,14 @@ export const Settings: React.FC<SettingsProps> = ({
     if (!file) return;
     try {
       const optimizedDataUrl = await readAndOptimizeLogoFile(file);
-      const updated = { ...formData, logoUrl: optimizedDataUrl };
+      const updated = { ...formData, logoUrl: optimizedDataUrl, logoScale: 1 };
       setFormData(updated);
       onSaveSettings(updated);
-      saveCloudLogo(optimizedDataUrl, updated.companyName).catch(() => {});
+      saveCloudLogo(
+        optimizedDataUrl,
+        { brandName: updated.companyName, logoScale: 1 },
+        getActiveCompanyId()
+      ).catch(() => {});
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 3000);
     } catch (err: any) {
@@ -102,6 +107,13 @@ export const Settings: React.FC<SettingsProps> = ({
     } finally {
       e.target.value = "";
     }
+  };
+
+  const handleAdjustSettingsLogoScale = (nextScale: number) => {
+    const clamped = clampLogoScale(nextScale);
+    const updated = { ...formData, logoScale: clamped };
+    setFormData(updated);
+    onSaveSettings(updated);
   };
 
   const loadTelemetry = async () => {
@@ -729,49 +741,98 @@ export const Settings: React.FC<SettingsProps> = ({
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-center shrink-0">
-                  <Logo size="sm" src={formData.logoUrl || "/logo.svg"} />
+            <div className="pt-3 border-t border-slate-100 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-center shrink-0 min-w-[156px] min-h-[52px]">
+                    <Logo
+                      size="sm"
+                      src={formData.logoUrl || "/logo.svg"}
+                      scale={formData.logoScale ?? 1}
+                    />
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-900 block">
+                      Şirkete Özel Fatura & Sistem Logosu ({formData.companyName || "Aktif Şirket"})
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Yüklenen logo görseli otomatik olarak Muavin logosu ölçüsüne (200x50 px) uyarlanır; dilerseniz aşağıdan büyültebilir veya küçültebilirsiniz.
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <span className="font-bold text-slate-900 block">
-                    Kurumsal Fatura & Sistem Logosu (Bilgisayardan Yükle)
-                  </span>
-                  <span className="text-[11px] text-slate-500">
-                    Fatura çıktılarında ve sol menüde yer alacak şirket logonuzu bilgisayarınızdan seçebilirsiniz (PNG, JPG, SVG, WEBP).
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <input
-                  ref={settingsLogoInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
-                  onChange={handleSettingsLogoFileUpload}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => settingsLogoInputRef.current?.click()}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-xl font-bold text-xs shadow-xs cursor-pointer transition-all"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Bilgisayardan Logo Yükle</span>
-                </button>
-                {formData.logoUrl && formData.logoUrl !== "/logo.svg" && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    ref={settingsLogoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
+                    onChange={handleSettingsLogoFileUpload}
+                    className="hidden"
+                  />
                   <button
                     type="button"
-                    onClick={() => {
-                      const reset = { ...formData, logoUrl: "/logo.svg" };
-                      setFormData(reset);
-                      onSaveSettings(reset);
-                    }}
-                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs border border-slate-200 cursor-pointer transition-all"
+                    onClick={() => settingsLogoInputRef.current?.click()}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-xl font-bold text-xs shadow-xs cursor-pointer transition-all"
                   >
-                    Sıfırla
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Bilgisayardan Logo Yükle</span>
                   </button>
-                )}
+                  {formData.logoUrl && formData.logoUrl !== "/logo.svg" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const reset = { ...formData, logoUrl: "/logo.svg", logoScale: 1 };
+                        setFormData(reset);
+                        onSaveSettings(reset);
+                      }}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs border border-slate-200 cursor-pointer transition-all"
+                    >
+                      Sıfırla
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Muavin Logosuna Büyült / Küçült Kontrolleri */}
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                  <Sliders className="w-3.5 h-3.5 text-[#0f6bae]" />
+                  <span>Muavin Logosu Ölçeği:</span>
+                  <span className="px-1.5 py-0.5 rounded bg-blue-100 text-[#0f6bae] font-mono font-bold">
+                    %{Math.round(clampLogoScale(formData.logoScale ?? 1) * 100)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustSettingsLogoScale(clampLogoScale(formData.logoScale ?? 1) - 0.1)}
+                    className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700 cursor-pointer"
+                  >
+                    - Küçült
+                  </button>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={1.5}
+                    step={0.05}
+                    value={clampLogoScale(formData.logoScale ?? 1)}
+                    onChange={(e) => handleAdjustSettingsLogoScale(Number(e.target.value))}
+                    className="w-24 accent-[#0f6bae] cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustSettingsLogoScale(1)}
+                    className="px-2 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-[10px] font-bold text-[#0f6bae] cursor-pointer"
+                  >
+                    Muavin Boyutu (%100)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustSettingsLogoScale(clampLogoScale(formData.logoScale ?? 1) + 0.1)}
+                    className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700 cursor-pointer"
+                  >
+                    + Büyült
+                  </button>
+                </div>
               </div>
             </div>
           </div>

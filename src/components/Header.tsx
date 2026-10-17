@@ -136,7 +136,8 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Logo
             size="sm"
-            src={logoUrl || "/logo.svg"}
+            src={activeCompany?.logoUrl || logoUrl || "/logo.svg"}
+            scale={activeCompany?.logoScale}
             variant={theme.headerBg !== "#ffffff" && theme.headerBg !== "#faf8ff" ? "light" : "default"}
             className="max-h-7 sm:max-h-8"
           />

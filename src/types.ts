@@ -356,6 +356,7 @@ export interface CompanyItem {
   eArsivNextNumber?: string;
   defaultInvoicePrefix?: string;
   logoUrl?: string;
+  logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
   createdAt: string;
 }
 
@@ -758,6 +759,7 @@ export interface CompanySettings {
   email: string;
   website: string;
   logoUrl?: string;
+  logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
   defaultBankIban?: string;
   iban?: string; // Alias for defaultBankIban
   defaultBankName?: string;

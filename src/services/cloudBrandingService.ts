@@ -12,9 +12,17 @@ import { db, sanitizeForFirestore } from "../lib/firebase";
 import { safeSetStorageItem } from "../utils/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
 
+export interface CompanyCloudLogoEntry {
+  logoUrl: string;
+  logoScale?: number;
+  brandName?: string;
+  updatedAt?: string;
+}
+
 export interface CloudBrandingConfig {
   brandName: string;
   logoUrl: string;
+  logoScale?: number;
   logoLightUrl?: string;
   faviconUrl?: string;
   primaryColor?: string;
@@ -25,11 +33,13 @@ export interface CloudBrandingConfig {
   updatedAt?: string;
   updatedBy?: string;
   description?: string;
+  companyLogos?: Record<string, CompanyCloudLogoEntry>;
 }
 
 export const DEFAULT_CLOUD_BRANDING: CloudBrandingConfig = {
   brandName: "E-MUAVİN",
   logoUrl: "/logo.svg",
+  logoScale: 1,
   logoLightUrl: "/logo-light.svg",
   faviconUrl: "/favicon.svg",
   primaryColor: "#0A192F",
@@ -38,7 +48,8 @@ export const DEFAULT_CLOUD_BRANDING: CloudBrandingConfig = {
   databaseId: (firebaseConfig as any).firestoreDatabaseId || "ai-studio-muavinnmuhasebep-7117d5a6-2ef7-49fe-b6a7-4c0cdc615038",
   projectId: firebaseConfig.projectId || "yachty-courier-bt3g1",
   updatedAt: new Date().toISOString(),
-  description: "E-MUAVİN Kurumsal Logo & Marka Kimliği (Cloud Console Senkronize)"
+  description: "E-MUAVİN Kurumsal Logo & Marka Kimliği (Cloud Console Senkronize)",
+  companyLogos: {}
 };
 
 const BRANDING_DOC_PATH = {
@@ -53,12 +64,9 @@ function safeSaveBrandingToStorage(config: CloudBrandingConfig) {
   if (typeof window === "undefined") return;
 
   // Aşırı büyük data URL/base64 logolar varsa önbellek için hafifletilmiş kopya üret
-  let configToCache: CloudBrandingConfig = config;
-  if (config.logoUrl && config.logoUrl.startsWith("data:") && config.logoUrl.length > 350000) {
-    configToCache = {
-      ...config,
-      logoUrl: "/logo.svg"
-    };
+  let configToCache: CloudBrandingConfig = { ...config };
+  if (configToCache.logoUrl && configToCache.logoUrl.startsWith("data:") && configToCache.logoUrl.length > 350000) {
+    configToCache.logoUrl = "/logo.svg";
   }
 
   const serialized = JSON.stringify(configToCache);
@@ -79,6 +87,10 @@ export async function fetchCloudLogo(): Promise<CloudBrandingConfig> {
       const merged: CloudBrandingConfig = {
         ...DEFAULT_CLOUD_BRANDING,
         ...data,
+        companyLogos: {
+          ...(DEFAULT_CLOUD_BRANDING.companyLogos || {}),
+          ...(data.companyLogos || {})
+        },
         updatedAt: data.updatedAt || new Date().toISOString()
       };
       safeSaveBrandingToStorage(merged);
@@ -119,7 +131,11 @@ export function subscribeToCloudLogo(
           const data = snapshot.data() as Partial<CloudBrandingConfig>;
           const config: CloudBrandingConfig = {
             ...DEFAULT_CLOUD_BRANDING,
-            ...data
+            ...data,
+            companyLogos: {
+              ...(DEFAULT_CLOUD_BRANDING.companyLogos || {}),
+              ...(data.companyLogos || {})
+            }
           };
           safeSaveBrandingToStorage(config);
           onUpdate(config);
@@ -139,19 +155,49 @@ export function subscribeToCloudLogo(
 }
 
 /**
- * Logoyu ve kurumsal kimlik ayarlarını Google Cloud Console (Firestore) üzerine kaydeder.
+ * Logoyu ve kurumsal kimlik ayarlarını Google Cloud Console (Firestore) üzerine şirket bazlı kaydeder.
  */
 export async function saveCloudLogo(
   logoUrl: string,
-  extraConfig?: Partial<CloudBrandingConfig>
+  extraConfig?: Partial<CloudBrandingConfig> | string,
+  companyId?: string
 ): Promise<CloudBrandingConfig> {
   const brandingRef = doc(db, BRANDING_DOC_PATH.collection, BRANDING_DOC_PATH.id);
   const now = new Date().toISOString();
 
+  const normalizedExtra: Partial<CloudBrandingConfig> =
+    typeof extraConfig === "string" ? { brandName: extraConfig } : extraConfig || {};
+
+  let existingCompanyLogos: Record<string, CompanyCloudLogoEntry> = {};
+  if (typeof window !== "undefined") {
+    try {
+      const cached = window.localStorage?.getItem("muavin_cloud_branding");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed.companyLogos === "object") {
+          existingCompanyLogos = { ...parsed.companyLogos };
+        }
+      }
+    } catch {}
+  }
+
+  const targetCompanyId = companyId || "comp_default";
+  const updatedCompanyLogos: Record<string, CompanyCloudLogoEntry> = {
+    ...existingCompanyLogos,
+    ...(normalizedExtra.companyLogos || {}),
+    [targetCompanyId]: {
+      logoUrl: logoUrl || "/logo.svg",
+      logoScale: normalizedExtra.logoScale ?? existingCompanyLogos[targetCompanyId]?.logoScale ?? 1,
+      brandName: normalizedExtra.brandName || existingCompanyLogos[targetCompanyId]?.brandName || "E-MUAVİN",
+      updatedAt: now
+    }
+  };
+
   const payload: CloudBrandingConfig = {
     ...DEFAULT_CLOUD_BRANDING,
-    ...extraConfig,
-    logoUrl,
+    ...normalizedExtra,
+    logoUrl: targetCompanyId === "comp_default" ? logoUrl : normalizedExtra.logoUrl || DEFAULT_CLOUD_BRANDING.logoUrl,
+    companyLogos: updatedCompanyLogos,
     updatedAt: now,
     source: "Google Cloud Console"
   };

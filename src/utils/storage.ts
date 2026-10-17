@@ -1112,7 +1112,8 @@ export function getStoredData(targetCompanyId?: string) {
       address: compMeta.address || "",
       city: compMeta.city || "İstanbul",
       district: compMeta.district || "",
-      logoUrl: "",
+      logoUrl: compMeta.logoUrl || "/logo.svg",
+      logoScale: compMeta.logoScale ?? 1,
       mysoftCredentials: {
         tenantIdentifierNumber: compMeta.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
       },
@@ -1123,6 +1124,11 @@ export function getStoredData(targetCompanyId?: string) {
   if (compMeta) {
     loadedSettings = {
       ...loadedSettings,
+      logoUrl:
+        compMeta.logoUrl && compMeta.logoUrl !== "/logo.svg"
+          ? compMeta.logoUrl
+          : loadedSettings.logoUrl || compMeta.logoUrl || "/logo.svg",
+      logoScale: compMeta.logoScale ?? loadedSettings.logoScale ?? 1,
       tenantIdentifierNumber:
         compMeta.tenantIdentifierNumber || loadedSettings.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
       mysoftStatus: compMeta.mysoftStatus || loadedSettings.mysoftStatus,
@@ -1572,6 +1578,14 @@ export function syncAllCompaniesAndUsersData(): {
       // Sync isolated company settings, contacts, and invoices slice for each company
       try {
         const companyData = getStoredData(normalizedComp.id);
+        const resolvedLogoUrl =
+          normalizedComp.logoUrl && normalizedComp.logoUrl !== "/logo.svg"
+            ? normalizedComp.logoUrl
+            : companyData.settings.logoUrl || normalizedComp.logoUrl || "/logo.svg";
+        const resolvedLogoScale = normalizedComp.logoScale ?? companyData.settings.logoScale ?? 1;
+        normalizedComp.logoUrl = resolvedLogoUrl;
+        normalizedComp.logoScale = resolvedLogoScale;
+
         const mergedSettings: CompanySettings = {
           ...companyData.settings,
           companyName: normalizedComp.companyName || companyData.settings.companyName,
@@ -1588,6 +1602,8 @@ export function syncAllCompaniesAndUsersData(): {
           eArsivPrefix: normalizedComp.eArsivPrefix || companyData.settings.eArsivPrefix || "EAR",
           eArsivNextNumber: normalizedComp.eArsivNextNumber || companyData.settings.eArsivNextNumber,
           defaultInvoicePrefix: normalizedComp.eFaturaPrefix || companyData.settings.defaultInvoicePrefix || "GIB",
+          logoUrl: resolvedLogoUrl,
+          logoScale: resolvedLogoScale,
         };
         saveStoredData("SETTINGS", mergedSettings, normalizedComp.id);
 

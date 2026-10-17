@@ -226,7 +226,13 @@ export default function App() {
         eArsivPrefix: comp.eArsivPrefix,
         eArsivNextNumber: comp.eArsivNextNumber,
         defaultInvoicePrefix: comp.eFaturaPrefix || freshData.settings.defaultInvoicePrefix,
+        logoUrl:
+          comp.logoUrl && comp.logoUrl !== "/logo.svg"
+            ? comp.logoUrl
+            : freshData.settings.logoUrl || comp.logoUrl || "/logo.svg",
+        logoScale: comp.logoScale ?? freshData.settings.logoScale ?? 1,
       };
+      saveStoredData("SETTINGS", freshData.settings, comp.id);
     }
     setData(freshData);
   };
@@ -234,6 +240,13 @@ export default function App() {
   const handleAddCompany = (newComp: CompanyItem, makeActiveImmediately = true) => {
     const updatedList = addCompanyItem(newComp);
     setCompanies(updatedList);
+    if (newComp.logoUrl && newComp.logoUrl !== "/logo.svg") {
+      saveCloudLogo(
+        newComp.logoUrl,
+        { brandName: newComp.companyName, logoScale: newComp.logoScale ?? 1 },
+        newComp.id
+      ).catch(() => {});
+    }
     if (makeActiveImmediately) {
       handleSelectCompany(newComp.id, updatedList);
     }
@@ -247,29 +260,39 @@ export default function App() {
   const handleUpdateCompany = (comp: CompanyItem) => {
     const updatedList = updateCompanyItem(comp);
     setCompanies(updatedList);
+    saveCloudLogo(
+      comp.logoUrl || "/logo.svg",
+      { brandName: comp.companyName, logoScale: comp.logoScale ?? 1 },
+      comp.id
+    ).catch(() => {});
+    const targetSettingsData = getStoredData(comp.id);
+    const updatedTargetSettings: CompanySettings = {
+      ...targetSettingsData.settings,
+      companyName: comp.companyName,
+      companyTitle: comp.companyTitle,
+      taxOffice: comp.taxOffice,
+      taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || targetSettingsData.settings.taxNumber,
+      vkn: comp.vkn,
+      tckn: comp.tckn,
+      mysoftMatchedType: comp.mysoftMatchedType,
+      tenantIdentifierNumber: comp.tenantIdentifierNumber,
+      mysoftStatus: comp.mysoftStatus,
+      eFaturaPrefix: comp.eFaturaPrefix,
+      eFaturaNextNumber: comp.eFaturaNextNumber,
+      eArsivPrefix: comp.eArsivPrefix,
+      eArsivNextNumber: comp.eArsivNextNumber,
+      defaultInvoicePrefix: comp.eFaturaPrefix || targetSettingsData.settings.defaultInvoicePrefix,
+      logoUrl: comp.logoUrl || targetSettingsData.settings.logoUrl || "/logo.svg",
+      logoScale: comp.logoScale ?? targetSettingsData.settings.logoScale ?? 1,
+      mysoftCredentials: {
+        tenantIdentifierNumber: comp.tenantIdentifierNumber,
+      },
+    };
+    saveStoredData("SETTINGS", updatedTargetSettings, comp.id);
     if (activeCompanyId === comp.id) {
       setData((prev) => ({
         ...prev,
-        settings: {
-          ...prev.settings,
-          companyName: comp.companyName,
-          companyTitle: comp.companyTitle,
-          taxOffice: comp.taxOffice,
-          taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || prev.settings.taxNumber,
-          vkn: comp.vkn,
-          tckn: comp.tckn,
-          mysoftMatchedType: comp.mysoftMatchedType,
-          tenantIdentifierNumber: comp.tenantIdentifierNumber,
-          mysoftStatus: comp.mysoftStatus,
-          eFaturaPrefix: comp.eFaturaPrefix,
-          eFaturaNextNumber: comp.eFaturaNextNumber,
-          eArsivPrefix: comp.eArsivPrefix,
-          eArsivNextNumber: comp.eArsivNextNumber,
-          defaultInvoicePrefix: comp.eFaturaPrefix || prev.settings.defaultInvoicePrefix,
-          mysoftCredentials: {
-            tenantIdentifierNumber: comp.tenantIdentifierNumber,
-          },
-        },
+        settings: updatedTargetSettings,
       }));
       writeStoredMysoftTenantVkn(comp.tenantIdentifierNumber || comp.vkn || comp.tckn);
     }
@@ -382,63 +405,88 @@ export default function App() {
     cleanupOversizedStorage();
   }, []);
 
-  // Google Cloud Console: Logoyu ve kurumsal kimlik ayarlarını Firestore'dan çek ve canlı dinle
+  // Google Cloud Console: Şirket bazlı logoyu ve kurumsal kimlik ayarlarını Firestore'dan çek ve canlı dinle
   useEffect(() => {
+    let isMounted = true;
+
+    const applyCloudBranding = (branding: any) => {
+      if (!isMounted || !branding) return;
+      const activeId = getActiveCompanyId();
+      const companyMap = branding.companyLogos || {};
+
+      if (Object.keys(companyMap).length > 0) {
+        const currentList = getCompaniesList();
+        let listChanged = false;
+        currentList.forEach((comp) => {
+          const entry = companyMap[comp.id];
+          if (entry && entry.logoUrl) {
+            const shouldUseCloudLogo =
+              (!comp.logoUrl || comp.logoUrl === "/logo.svg") && entry.logoUrl !== "/logo.svg";
+            const nextLogo = shouldUseCloudLogo ? entry.logoUrl : comp.logoUrl || entry.logoUrl;
+            const nextScale = comp.logoScale ?? entry.logoScale ?? 1;
+            if (nextLogo !== comp.logoUrl || nextScale !== comp.logoScale) {
+              updateCompanyItem({ ...comp, logoUrl: nextLogo, logoScale: nextScale });
+              listChanged = true;
+            }
+          }
+        });
+        if (listChanged) {
+          setCompanies(getCompaniesList());
+        }
+      }
+
+      const activeComp = getCompaniesList().find((c) => c.id === activeId);
+      const cloudEntryForActive = companyMap[activeId];
+      const targetLogoUrl =
+        (activeComp?.logoUrl && activeComp.logoUrl !== "/logo.svg" ? activeComp.logoUrl : undefined) ||
+        cloudEntryForActive?.logoUrl ||
+        (activeId === "comp_default" ? branding.logoUrl : undefined) ||
+        activeComp?.logoUrl ||
+        "/logo.svg";
+      const targetScale =
+        activeComp?.logoScale ?? cloudEntryForActive?.logoScale ?? branding.logoScale ?? 1;
+
+      setData((prev) => {
+        const currentLogo = prev.settings?.logoUrl;
+        const currentScale = prev.settings?.logoScale ?? 1;
+        if (
+          targetLogoUrl === "/logo.svg" &&
+          currentLogo &&
+          currentLogo !== "/logo.svg"
+        ) {
+          return prev;
+        }
+        if (currentLogo !== targetLogoUrl || currentScale !== targetScale) {
+          const nextSettings = {
+            ...prev.settings,
+            logoUrl: targetLogoUrl,
+            logoScale: targetScale,
+          };
+          saveStoredData("SETTINGS", nextSettings, activeId);
+          return {
+            ...prev,
+            settings: nextSettings,
+          };
+        }
+        return prev;
+      });
+    };
+
     // 1. İlk açılışta Cloud Console'dan çek
     fetchCloudLogo().then((branding) => {
-      if (branding?.logoUrl) {
-        setData((prev) => {
-          // Kullanıcının bilgisayardan yüklediği özel logo varsa, varsayılan "/logo.svg" ile ezme
-          if (
-            branding.logoUrl === "/logo.svg" &&
-            prev.settings?.logoUrl &&
-            prev.settings.logoUrl !== "/logo.svg"
-          ) {
-            return prev;
-          }
-          if (prev.settings?.logoUrl !== branding.logoUrl) {
-            return {
-              ...prev,
-              settings: {
-                ...prev.settings,
-                logoUrl: branding.logoUrl,
-              },
-            };
-          }
-          return prev;
-        });
-      }
+      applyCloudBranding(branding);
     });
 
     // 2. Cloud Console Firestore (system_settings/branding) gerçek zamanlı güncellemelerini dinle
     const unsubscribe = subscribeToCloudLogo((branding) => {
-      if (branding?.logoUrl) {
-        setData((prev) => {
-          if (
-            branding.logoUrl === "/logo.svg" &&
-            prev.settings?.logoUrl &&
-            prev.settings.logoUrl !== "/logo.svg"
-          ) {
-            return prev;
-          }
-          if (prev.settings?.logoUrl !== branding.logoUrl) {
-            return {
-              ...prev,
-              settings: {
-                ...prev.settings,
-                logoUrl: branding.logoUrl,
-              },
-            };
-          }
-          return prev;
-        });
-      }
+      applyCloudBranding(branding);
     });
 
     return () => {
+      isMounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [activeCompanyId]);
 
   const handleOpenAuthModal = (mode: "login" | "register") => {
     setAuthModalMode(mode);
@@ -1908,6 +1956,37 @@ export default function App() {
   };
 
   const handleSaveSettings = (newSettings: CompanySettings) => {
+    const targetCompanyId = getActiveCompanyId();
+    const existingComp = getCompaniesList().find((c) => c.id === targetCompanyId);
+    if (existingComp) {
+      const updatedList = updateCompanyItem({
+        ...existingComp,
+        companyName: newSettings.companyName || existingComp.companyName,
+        companyTitle: newSettings.companyTitle || newSettings.companyName || existingComp.companyTitle,
+        taxOffice: newSettings.taxOffice || existingComp.taxOffice,
+        taxNumber: newSettings.taxNumber || existingComp.taxNumber,
+        vkn: newSettings.vkn || existingComp.vkn,
+        tckn: newSettings.tckn || existingComp.tckn,
+        phone: newSettings.phone || existingComp.phone,
+        email: newSettings.email || existingComp.email,
+        website: newSettings.website || existingComp.website,
+        address: newSettings.address || existingComp.address,
+        city: newSettings.city || existingComp.city,
+        district: newSettings.district || existingComp.district,
+        logoUrl: newSettings.logoUrl || "/logo.svg",
+        logoScale: newSettings.logoScale ?? 1,
+      });
+      setCompanies(updatedList);
+    }
+    saveCloudLogo(
+      newSettings.logoUrl || "/logo.svg",
+      {
+        brandName: newSettings.companyName,
+        logoScale: newSettings.logoScale ?? 1,
+      },
+      targetCompanyId
+    ).catch(() => {});
+
     setData((prev) => {
       let updatedEmployees = prev.employees;
       if (newSettings.applyAllowancesToAllEmployees !== false) {
@@ -1918,15 +1997,20 @@ export default function App() {
           foodAllowance: newFood,
           roadAllowance: newRoad,
         }));
-        saveStoredData("EMPLOYEES", updatedEmployees);
+        saveStoredData("EMPLOYEES", updatedEmployees, targetCompanyId);
       }
-      saveStoredData("SETTINGS", newSettings);
+      saveStoredData("SETTINGS", newSettings, targetCompanyId);
       return {
         ...prev,
         settings: newSettings,
         employees: updatedEmployees,
       };
     });
+    void verifyAndSyncAllUsersLocalDb(
+      0,
+      currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      `Şirket Ayarları ve Logosu Güncellendi (${newSettings.companyName || targetCompanyId})`
+    );
   };
 
   const handleResetDemoData = () => {
