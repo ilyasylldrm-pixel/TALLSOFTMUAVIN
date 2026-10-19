@@ -1,7 +1,14 @@
-import React from "react";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { Logo } from "../Logo";
+import {
+  registerDetailHistoryEntry,
+  updateDetailBackHandler,
+  triggerDetailBack,
+  subscribeBrowserNav,
+  navigateBrowserForward,
+} from "../../utils/browserNavigation";
 
 export interface BreadcrumbItem {
   label: string;
@@ -37,6 +44,48 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
   logoUrl,
 }) => {
   const { theme } = useTheme();
+  const detailIdRef = useRef<string>(
+    `detail_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  );
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+
+  const [canGoForward, setCanGoForward] = useState(false);
+
+  useEffect(() => {
+    updateDetailBackHandler(detailIdRef.current, () => onBackRef.current());
+  }, [onBack]);
+
+  useEffect(() => {
+    const unregister = registerDetailHistoryEntry(detailIdRef.current, () => {
+      onBackRef.current();
+    });
+    const unsubNav = subscribeBrowserNav((snap) => {
+      setCanGoForward(snap.canGoForward);
+    });
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+        if (activeTag === "input" || activeTag === "textarea" || activeTag === "select") {
+          return;
+        }
+        e.preventDefault();
+        triggerDetailBack(detailIdRef.current, () => onBackRef.current());
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      unsubNav();
+      unregister();
+    };
+  }, []);
+
+  const handleBackButtonClick = () => {
+    triggerDetailBack(detailIdRef.current, () => onBackRef.current());
+  };
 
   return (
     <div
@@ -52,23 +101,40 @@ export const DetailPageLayout: React.FC<DetailPageLayoutProps> = ({
           {/* Breadcrumb row & Back button & Action buttons */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2">
             <div className="flex items-center gap-2 text-xs min-w-0 max-w-full">
-              <button
-                type="button"
-                onClick={onBack}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer active:scale-95 shadow-2xs group border shrink-0 text-xs"
-                style={{
-                  backgroundColor: theme.cardBg,
-                  borderColor: theme.cardBorder,
-                  color: theme.pageText,
-                }}
-                title="Geri Dön (ESC)"
-              >
-                <ArrowLeft className="w-3.5 h-3.5 text-slate-400 group-hover:text-primary group-hover:-translate-x-0.5 transition-all shrink-0" />
-                <span>Geri Dön</span>
-                <span className="hidden md:inline-block text-[10px] px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-400 font-mono">
-                  ESC
-                </span>
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleBackButtonClick}
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer active:scale-95 shadow-2xs group border shrink-0 text-xs"
+                  style={{
+                    backgroundColor: theme.cardBg,
+                    borderColor: theme.cardBorder,
+                    color: theme.pageText,
+                  }}
+                  title="Geri Dön (Tarayıcı Geri / ESC)"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-400 group-hover:text-primary group-hover:-translate-x-0.5 transition-all shrink-0" />
+                  <span>Geri Dön</span>
+                  <span className="hidden md:inline-block text-[10px] px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-400 font-mono">
+                    ESC
+                  </span>
+                </button>
+                {canGoForward && (
+                  <button
+                    type="button"
+                    onClick={() => navigateBrowserForward()}
+                    className="flex items-center justify-center p-1.5 rounded-xl font-bold transition-all cursor-pointer active:scale-95 shadow-2xs group border shrink-0 text-xs"
+                    style={{
+                      backgroundColor: theme.cardBg,
+                      borderColor: theme.cardBorder,
+                      color: theme.pageText,
+                    }}
+                    title="İleri Git (Tarayıcı İleri)"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                  </button>
+                )}
+              </div>
 
               {/* Logo Emblem indicator in Detail Page Header */}
               <div className="hidden md:flex items-center pl-1 shrink-0">

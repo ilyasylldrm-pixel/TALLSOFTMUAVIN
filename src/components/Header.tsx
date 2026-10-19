@@ -12,11 +12,18 @@ import {
   ChevronDown,
   Check,
   UploadCloud,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import { Account, CompanyItem, isAdminOrSysAdmin } from "../types";
 import { UserProfile } from "./AuthModal";
 import { useTheme } from "../context/ThemeContext";
 import { Logo } from "./Logo";
+import {
+  subscribeBrowserNav,
+  navigateBrowserBack,
+  navigateBrowserForward,
+} from "../utils/browserNavigation";
 
 interface HeaderProps {
   title: string;
@@ -63,7 +70,14 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { theme } = useTheme();
   const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
+  const [navState, setNavState] = useState({ canGoBack: false, canGoForward: false });
   const companyDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return subscribeBrowserNav((snap) => {
+      setNavState({ canGoBack: snap.canGoBack, canGoForward: snap.canGoForward });
+    });
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -141,6 +155,38 @@ export const Header: React.FC<HeaderProps> = ({
             variant={theme.headerBg !== "#ffffff" && theme.headerBg !== "#faf8ff" ? "light" : "default"}
             className="max-h-7 sm:max-h-8"
           />
+        </div>
+
+        {/* Browser History Back / Forward Buttons */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => navigateBrowserBack()}
+            disabled={!navState.canGoBack}
+            className="p-1.5 rounded-lg border shadow-2xs transition-all cursor-pointer active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800"
+            style={{
+              borderColor: theme.cardBorder,
+              backgroundColor: theme.cardBg,
+              color: theme.headerText,
+            }}
+            title="Geri Git (Tarayıcı Geri / Alt+Sol Ok)"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => navigateBrowserForward()}
+            disabled={!navState.canGoForward}
+            className="p-1.5 rounded-lg border shadow-2xs transition-all cursor-pointer active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800"
+            style={{
+              borderColor: theme.cardBorder,
+              backgroundColor: theme.cardBg,
+              color: theme.headerText,
+            }}
+            title="İleri Git (Tarayıcı İleri / Alt+Sağ Ok)"
+          >
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Title, Breadcrumb & Subtitle - No overlap */}

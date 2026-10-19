@@ -165,6 +165,13 @@ import { useDataGridRowResizing } from "./hooks/useDataGridRowResizing";
 import { useDataGridColumnResizing } from "./hooks/useDataGridColumnResizing";
 import { fetchCloudLogo, saveCloudLogo, subscribeToCloudLogo } from "./services/cloudBrandingService";
 import { AdminMysoftLogMonitorPanel } from "./components/AdminMysoftLogMonitorPanel";
+import {
+  initBrowserHistory,
+  pushAppNavigationState,
+  onBrowserPopState,
+  navigateBrowserBack,
+  navigateBrowserForward,
+} from "./utils/browserNavigation";
 
 const TabLoadingSkeleton = () => (
   <div className="p-6 max-w-7xl mx-auto space-y-6 animate-pulse">
@@ -287,10 +294,10 @@ export default function App() {
       title: comp.companyTitle || comp.companyName || targetSettingsData.settings.title,
       taxOffice: comp.taxOffice || targetSettingsData.settings.taxOffice,
       taxNumber:
-        comp.tenantIdentifierNumber ||
+        comp.taxNumber ||
         comp.vkn ||
         comp.tckn ||
-        comp.taxNumber ||
+        comp.tenantIdentifierNumber ||
         targetSettingsData.settings.taxNumber,
       vkn: comp.vkn ?? targetSettingsData.settings.vkn,
       tckn: comp.tckn ?? targetSettingsData.settings.tckn,
@@ -361,6 +368,96 @@ export default function App() {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [initialContactIdForInvoice, setInitialContactIdForInvoice] = useState<string | null>(null);
   const [isGitHubPublishOpen, setIsGitHubPublishOpen] = useState(false);
+
+  // Tarayıcı Geri / İleri (History API - popstate & pushState) Senkronizasyonu
+  const historyInitializedRef = useRef(false);
+  const isApplyingPopStateRef = useRef(false);
+
+  useEffect(() => {
+    if (!historyInitializedRef.current) {
+      historyInitializedRef.current = true;
+      const initialHistoryState = initBrowserHistory({
+        tab: currentTab,
+        financeSubTab,
+        selectedConstructionProjectId,
+        activeCompanyId,
+        isQuickAddOpen,
+      });
+
+      // URL / History state'te kayıtlı sekme varsa ilk açılışta geri yükle
+      if (initialHistoryState.tab && initialHistoryState.tab !== currentTab) {
+        isApplyingPopStateRef.current = true;
+        setCurrentTab(initialHistoryState.tab as NavItem);
+        if (initialHistoryState.financeSubTab) {
+          setFinanceSubTab(initialHistoryState.financeSubTab as FinanceSubModule);
+        }
+        if (initialHistoryState.selectedConstructionProjectId !== undefined) {
+          setSelectedConstructionProjectId(initialHistoryState.selectedConstructionProjectId);
+        }
+        setTimeout(() => {
+          isApplyingPopStateRef.current = false;
+        }, 0);
+      }
+    }
+
+    const unsubscribePopState = onBrowserPopState((navState) => {
+      isApplyingPopStateRef.current = true;
+      if (navState.tab) {
+        setCurrentTab(navState.tab as NavItem);
+      }
+      if (navState.financeSubTab) {
+        setFinanceSubTab(navState.financeSubTab as FinanceSubModule);
+      }
+      setSelectedConstructionProjectId(navState.selectedConstructionProjectId ?? null);
+      setIsQuickAddOpen(Boolean(navState.isQuickAddOpen));
+      setIsMobileMenuOpen(false);
+      if (navState.activeCompanyId && navState.activeCompanyId !== getActiveCompanyId()) {
+        handleSelectCompany(navState.activeCompanyId);
+      }
+      setTimeout(() => {
+        isApplyingPopStateRef.current = false;
+      }, 0);
+    });
+
+    // Klavye kısayolları: Alt+Sol Ok (Geri), Alt+Sağ Ok (İleri)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInputFocused =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+
+      if (e.altKey && !isInputFocused) {
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          navigateBrowserBack();
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          navigateBrowserForward();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      unsubscribePopState();
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  // Sekme, alt sekme, şantiye projesi, hızlı işlem veya aktif şirket değiştiğinde tarayıcı geçmişine (history) ekle
+  useEffect(() => {
+    if (!historyInitializedRef.current || isApplyingPopStateRef.current) return;
+    pushAppNavigationState({
+      tab: currentTab,
+      financeSubTab,
+      selectedConstructionProjectId,
+      activeCompanyId,
+      isQuickAddOpen,
+    });
+  }, [currentTab, financeSubTab, selectedConstructionProjectId, activeCompanyId, isQuickAddOpen]);
 
   // Restore GitHub PAT from browser localStorage after container restarts & sync all companies/users
   const githubAutoSyncedRef = useRef(false);
@@ -1996,47 +2093,67 @@ export default function App() {
 
   const handleSaveSettings = (newSettings: CompanySettings) => {
     const targetCompanyId = getActiveCompanyId();
+    const cleanTaxDigits = String(newSettings.taxNumber || "").replace(/\D/g, "");
+    const normalizedSettings: CompanySettings = {
+      ...newSettings,
+      vkn: cleanTaxDigits.length === 10 ? cleanTaxDigits : newSettings.vkn,
+      tckn: cleanTaxDigits.length === 11 ? cleanTaxDigits : newSettings.tckn,
+      defaultBankAccountName:
+        newSettings.defaultBankAccountName !== undefined && newSettings.defaultBankAccountName !== ""
+          ? newSettings.defaultBankAccountName
+          : newSettings.companyTitle || newSettings.companyName || "",
+    };
+
+    // Persist SETTINGS immediately before any synchronous reads
+    saveStoredData("SETTINGS", normalizedSettings, targetCompanyId);
+
     const existingComp = getCompaniesList().find((c) => c.id === targetCompanyId);
     if (existingComp) {
       const updatedList = updateCompanyItem({
         ...existingComp,
-        companyName: newSettings.companyName || existingComp.companyName,
-        name: newSettings.companyName || existingComp.name,
-        companyTitle: newSettings.companyTitle || newSettings.companyName || existingComp.companyTitle,
-        title: newSettings.companyTitle || newSettings.companyName || existingComp.title,
-        taxOffice: newSettings.taxOffice ?? existingComp.taxOffice,
-        taxNumber: newSettings.taxNumber ?? existingComp.taxNumber,
-        vkn: newSettings.vkn ?? existingComp.vkn,
-        tckn: newSettings.tckn ?? existingComp.tckn,
-        phone: newSettings.phone ?? existingComp.phone,
-        email: newSettings.email ?? existingComp.email,
-        website: newSettings.website ?? existingComp.website,
-        address: newSettings.address ?? existingComp.address,
-        city: newSettings.city ?? existingComp.city,
-        district: newSettings.district ?? existingComp.district,
-        defaultBankAccountName: newSettings.defaultBankAccountName ?? existingComp.defaultBankAccountName,
-        defaultBankName: newSettings.defaultBankName ?? existingComp.defaultBankName,
-        defaultBankIban: newSettings.defaultBankIban ?? existingComp.defaultBankIban,
-        tenantIdentifierNumber: newSettings.tenantIdentifierNumber ?? existingComp.tenantIdentifierNumber,
-        logoUrl: newSettings.logoUrl || "/logo.svg",
-        logoScale: newSettings.logoScale ?? 1,
+        companyName: normalizedSettings.companyName || existingComp.companyName,
+        name: normalizedSettings.companyName || existingComp.name,
+        companyTitle: normalizedSettings.companyTitle || normalizedSettings.companyName || existingComp.companyTitle,
+        title: normalizedSettings.companyTitle || normalizedSettings.companyName || existingComp.title,
+        taxOffice: normalizedSettings.taxOffice ?? existingComp.taxOffice,
+        taxNumber: normalizedSettings.taxNumber ?? existingComp.taxNumber,
+        vkn: cleanTaxDigits.length === 10 ? cleanTaxDigits : (normalizedSettings.vkn ?? existingComp.vkn),
+        tckn: cleanTaxDigits.length === 11 ? cleanTaxDigits : (normalizedSettings.tckn ?? existingComp.tckn),
+        phone: normalizedSettings.phone ?? existingComp.phone,
+        email: normalizedSettings.email ?? existingComp.email,
+        website: normalizedSettings.website ?? existingComp.website,
+        address: normalizedSettings.address ?? existingComp.address,
+        city: normalizedSettings.city ?? existingComp.city,
+        district: normalizedSettings.district ?? existingComp.district,
+        neighborhood: normalizedSettings.neighborhood ?? existingComp.neighborhood,
+        street: normalizedSettings.street ?? existingComp.street,
+        buildingNo: normalizedSettings.buildingNo ?? existingComp.buildingNo,
+        doorNo: normalizedSettings.doorNo ?? existingComp.doorNo,
+        postalCode: normalizedSettings.postalCode ?? existingComp.postalCode,
+        addressDetails: normalizedSettings.addressDetails ?? existingComp.addressDetails,
+        defaultBankAccountName: normalizedSettings.defaultBankAccountName ?? existingComp.defaultBankAccountName,
+        defaultBankName: normalizedSettings.defaultBankName ?? existingComp.defaultBankName,
+        defaultBankIban: normalizedSettings.defaultBankIban ?? existingComp.defaultBankIban,
+        tenantIdentifierNumber: normalizedSettings.tenantIdentifierNumber ?? existingComp.tenantIdentifierNumber,
+        logoUrl: normalizedSettings.logoUrl || "/logo.svg",
+        logoScale: normalizedSettings.logoScale ?? 1,
       });
       setCompanies(updatedList);
     }
     saveCloudLogo(
-      newSettings.logoUrl || "/logo.svg",
+      normalizedSettings.logoUrl || "/logo.svg",
       {
-        brandName: newSettings.companyName,
-        logoScale: newSettings.logoScale ?? 1,
+        brandName: normalizedSettings.companyName,
+        logoScale: normalizedSettings.logoScale ?? 1,
       },
       targetCompanyId
     ).catch(() => {});
 
     setData((prev) => {
       let updatedEmployees = prev.employees;
-      if (newSettings.applyAllowancesToAllEmployees !== false) {
-        const newFood = newSettings.defaultFoodAllowance ?? 5500;
-        const newRoad = newSettings.defaultRoadAllowance ?? 2500;
+      if (normalizedSettings.applyAllowancesToAllEmployees !== false) {
+        const newFood = normalizedSettings.defaultFoodAllowance ?? 5500;
+        const newRoad = normalizedSettings.defaultRoadAllowance ?? 2500;
         updatedEmployees = (prev.employees || []).map((emp) => ({
           ...emp,
           foodAllowance: newFood,
@@ -2044,17 +2161,45 @@ export default function App() {
         }));
         saveStoredData("EMPLOYEES", updatedEmployees, targetCompanyId);
       }
-      saveStoredData("SETTINGS", newSettings, targetCompanyId);
+
+      // Sync the main (Merkez) branch address with the updated company settings
+      let updatedBranches = prev.branches;
+      if (Array.isArray(prev.branches) && prev.branches.length > 0 && normalizedSettings.address) {
+        updatedBranches = prev.branches.map((br) => {
+          if (!br.isMain) return br;
+          return {
+            ...br,
+            phone: normalizedSettings.phone || br.phone,
+            email: normalizedSettings.email || br.email,
+            address: {
+              ...br.address,
+              country: normalizedSettings.country || br.address?.country || "Türkiye",
+              city: normalizedSettings.city || br.address?.city || "İstanbul",
+              district: normalizedSettings.district ?? br.address?.district ?? "",
+              neighborhood: normalizedSettings.neighborhood ?? br.address?.neighborhood ?? "",
+              street: normalizedSettings.street ?? br.address?.street ?? "",
+              buildingNo: normalizedSettings.buildingNo ?? br.address?.buildingNo ?? "",
+              doorNo: normalizedSettings.doorNo ?? br.address?.doorNo ?? "",
+              postalCode: normalizedSettings.postalCode ?? br.address?.postalCode ?? "",
+              fullAddress: normalizedSettings.address || br.address?.fullAddress || "",
+            },
+          };
+        });
+        saveStoredData("BRANCHES", updatedBranches, targetCompanyId);
+      }
+
+      saveStoredData("SETTINGS", normalizedSettings, targetCompanyId);
       return {
         ...prev,
-        settings: newSettings,
+        settings: normalizedSettings,
+        branches: updatedBranches,
         employees: updatedEmployees,
       };
     });
     void verifyAndSyncAllUsersLocalDb(
       0,
       currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-      `Şirket Ayarları ve Logosu Güncellendi (${newSettings.companyName || targetCompanyId})`
+      `Şirket Ayarları ve Logosu Güncellendi (${normalizedSettings.companyName || targetCompanyId})`
     );
   };
 

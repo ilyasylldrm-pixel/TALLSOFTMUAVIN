@@ -552,6 +552,118 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     onSaveSettings({ ...settings, ...nextProfile });
   };
 
+  const autoSaveTimerRef = React.useRef< ReturnType<typeof setTimeout> | null >(null);
+
+  const persistProfileSettings = React.useCallback(
+    (sourceForm: CompanySettings, showSavedFeedback = true) => {
+      const resolvedName = (sourceForm.companyName || sourceForm.companyTitle || "Aktif Şirket").trim();
+      const resolvedTitle = (sourceForm.companyTitle || sourceForm.companyName || resolvedName).trim();
+      const cleanTax = String(sourceForm.taxNumber || "").replace(/\D/g, "").trim();
+      const resolvedBankHolder =
+        sourceForm.defaultBankAccountName && sourceForm.defaultBankAccountName.trim()
+          ? sourceForm.defaultBankAccountName
+          : resolvedTitle;
+
+      const cleanedProfile: CompanySettings = {
+        ...sourceForm,
+        companyName: resolvedName,
+        name: resolvedName,
+        companyTitle: resolvedTitle,
+        title: resolvedTitle,
+        vkn: cleanTax.length === 10 ? cleanTax : sourceForm.vkn,
+        tckn: cleanTax.length === 11 ? cleanTax : sourceForm.tckn,
+        defaultBankAccountName: resolvedBankHolder,
+        defaultBankName: sourceForm.defaultBankName ?? "",
+        defaultBankIban: sourceForm.defaultBankIban ?? "",
+      };
+
+      onSaveSettings(cleanedProfile);
+
+      // Merkez şube adresini de Resmi Şirket Kimlik / Merkez Adresi ile senkronize et
+      const mainBranch = branches.find((b) => b.isMain);
+      if (mainBranch && cleanedProfile.address) {
+        onUpdateBranch({
+          ...mainBranch,
+          phone: cleanedProfile.phone || mainBranch.phone,
+          email: cleanedProfile.email || mainBranch.email,
+          address: {
+            ...mainBranch.address,
+            country: cleanedProfile.country || mainBranch.address?.country || "Türkiye",
+            city: cleanedProfile.city || mainBranch.address?.city || "İstanbul",
+            district: cleanedProfile.district ?? mainBranch.address?.district ?? "",
+            neighborhood: cleanedProfile.neighborhood ?? mainBranch.address?.neighborhood ?? "",
+            street: cleanedProfile.street ?? mainBranch.address?.street ?? "",
+            buildingNo: cleanedProfile.buildingNo ?? mainBranch.address?.buildingNo ?? "",
+            doorNo: cleanedProfile.doorNo ?? mainBranch.address?.doorNo ?? "",
+            postalCode: cleanedProfile.postalCode ?? mainBranch.address?.postalCode ?? "",
+            fullAddress: cleanedProfile.address,
+          },
+        });
+      }
+
+      const activeComp = effectiveCompanies.find((c) => c.id === currentActiveCompanyId);
+      if (activeComp) {
+        const updatedComp: CompanyItem = {
+          ...activeComp,
+          companyName: cleanedProfile.companyName,
+          name: cleanedProfile.companyName,
+          companyTitle: cleanedProfile.companyTitle,
+          title: cleanedProfile.companyTitle,
+          taxOffice: cleanedProfile.taxOffice || activeComp.taxOffice,
+          taxNumber: cleanedProfile.taxNumber || activeComp.taxNumber,
+          vkn: cleanTax.length === 10 ? cleanTax : activeComp.vkn,
+          tckn: cleanTax.length === 11 ? cleanTax : activeComp.tckn,
+          phone: cleanedProfile.phone,
+          email: cleanedProfile.email,
+          website: cleanedProfile.website,
+          address: cleanedProfile.address,
+          city: cleanedProfile.city,
+          district: cleanedProfile.district,
+          neighborhood: cleanedProfile.neighborhood,
+          street: cleanedProfile.street,
+          buildingNo: cleanedProfile.buildingNo,
+          doorNo: cleanedProfile.doorNo,
+          postalCode: cleanedProfile.postalCode,
+          addressDetails: cleanedProfile.addressDetails,
+          defaultBankAccountName: cleanedProfile.defaultBankAccountName,
+          defaultBankName: cleanedProfile.defaultBankName,
+          defaultBankIban: cleanedProfile.defaultBankIban,
+          tenantIdentifierNumber: cleanedProfile.tenantIdentifierNumber || activeComp.tenantIdentifierNumber,
+          logoUrl: cleanedProfile.logoUrl || activeComp.logoUrl,
+          logoScale: cleanedProfile.logoScale ?? activeComp.logoScale,
+        };
+        const updatedList = updateCompanyItem(updatedComp);
+        setLocalCompanies(updatedList);
+      }
+
+      if (showSavedFeedback) {
+        setIsSaved(true);
+        setTimeout(() => setIsSaved(false), 3500);
+      }
+    },
+    [branches, currentActiveCompanyId, effectiveCompanies, onSaveSettings, onUpdateBranch]
+  );
+
+  const updateAndAutoSaveProfile = React.useCallback(
+    (updater: CompanySettings | ((prev: CompanySettings) => CompanySettings), immediate = false) => {
+      setProfileForm((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        if (autoSaveTimerRef.current) {
+          clearTimeout(autoSaveTimerRef.current);
+        }
+        if (immediate) {
+          setTimeout(() => persistProfileSettings(next, true), 0);
+        } else {
+          autoSaveTimerRef.current = setTimeout(() => {
+            persistProfileSettings(next, true);
+          }, 400);
+        }
+        return next;
+      });
+    },
+    [persistProfileSettings]
+  );
+
   const handleFetchProfileTaxpayer = async (rawVkn?: string) => {
     const clean = String(rawVkn ?? profileForm.taxNumber ?? "").replace(/\D/g, "").trim();
     if (clean.length !== 10 && clean.length !== 11) return;
@@ -571,7 +683,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           postalCode: status.postalCode,
           address: status.address,
         });
-        setProfileForm((prev) => {
+        updateAndAutoSaveProfile((prev) => {
           const nextCity = parsed.city || prev.city || "İstanbul";
           const nextDistrict = parsed.district || prev.district || "";
           const nextNeighborhood = parsed.neighborhood || prev.neighborhood || "";
@@ -580,6 +692,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           const nextDoorNo = parsed.doorNo || prev.doorNo || "";
           const nextPostalCode = parsed.postalCode || prev.postalCode || "";
           const nextAddress = parsed.address || prev.address || "";
+          const nextTitle = status.companyTitle || status.title || prev.companyTitle;
           return {
             ...prev,
             taxNumber: clean,
@@ -587,7 +700,8 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             tckn: clean.length === 11 ? clean : prev.tckn,
             name: status.companyTitle || status.title || prev.name,
             companyName: status.companyTitle || status.title || prev.companyName,
-            companyTitle: status.companyTitle || status.title || prev.companyTitle,
+            companyTitle: nextTitle,
+            defaultBankAccountName: prev.defaultBankAccountName || nextTitle,
             taxOffice: parsed.taxOffice || prev.taxOffice,
             city: nextCity,
             district: nextDistrict,
@@ -613,9 +727,9 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
               fullAddress: nextAddress,
             },
           };
-        });
+        }, true);
         setVknFetchFeedback(
-          `✓ Bilgiler getirildi ve ayrı ayrı yapıştırıldı: Vergi Dairesi (${parsed.taxOffice || "-"}), İl (${parsed.city || "-"}), İlçe (${parsed.district || "-"}), Mahalle (${parsed.neighborhood || "-"}) ve Açık Adres.`
+          `✓ Bilgiler getirildi ve otomatik kaydedildi: Vergi Dairesi (${parsed.taxOffice || "-"}), İl (${parsed.city || "-"}), İlçe (${parsed.district || "-"}), Mahalle (${parsed.neighborhood || "-"}) ve Açık Adres.`
         );
       }
     } catch {
@@ -628,59 +742,10 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   // Save Profile
   const handleSaveProfile = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const resolvedName = (profileForm.companyName || profileForm.companyTitle || "Aktif Şirket").trim();
-    const resolvedTitle = (profileForm.companyTitle || profileForm.companyName || resolvedName).trim();
-    const cleanedProfile: CompanySettings = {
-      ...profileForm,
-      companyName: resolvedName,
-      name: resolvedName,
-      companyTitle: resolvedTitle,
-      title: resolvedTitle,
-      defaultBankAccountName:
-        profileForm.defaultBankAccountName !== undefined
-          ? profileForm.defaultBankAccountName
-          : resolvedTitle,
-    };
-    setProfileForm(cleanedProfile);
-    onSaveSettings(cleanedProfile);
-    const activeComp = effectiveCompanies.find((c) => c.id === currentActiveCompanyId);
-    if (activeComp) {
-      const updatedComp: CompanyItem = {
-        ...activeComp,
-        companyName: cleanedProfile.companyName,
-        name: cleanedProfile.companyName,
-        companyTitle: cleanedProfile.companyTitle,
-        title: cleanedProfile.companyTitle,
-        taxOffice: cleanedProfile.taxOffice || activeComp.taxOffice,
-        taxNumber: cleanedProfile.taxNumber || activeComp.taxNumber,
-        phone: cleanedProfile.phone,
-        email: cleanedProfile.email,
-        website: cleanedProfile.website,
-        address: cleanedProfile.address,
-        city: cleanedProfile.city,
-        district: cleanedProfile.district,
-        neighborhood: cleanedProfile.neighborhood,
-        street: cleanedProfile.street,
-        buildingNo: cleanedProfile.buildingNo,
-        doorNo: cleanedProfile.doorNo,
-        postalCode: cleanedProfile.postalCode,
-        addressDetails: cleanedProfile.addressDetails,
-        defaultBankAccountName: cleanedProfile.defaultBankAccountName,
-        defaultBankName: cleanedProfile.defaultBankName,
-        defaultBankIban: cleanedProfile.defaultBankIban,
-        tenantIdentifierNumber: cleanedProfile.tenantIdentifierNumber || activeComp.tenantIdentifierNumber,
-        logoUrl: cleanedProfile.logoUrl || activeComp.logoUrl,
-        logoScale: cleanedProfile.logoScale ?? activeComp.logoScale,
-      };
-      if (onUpdateCompany) {
-        onUpdateCompany(updatedComp);
-      } else {
-        const updatedList = updateCompanyItem(updatedComp);
-        setLocalCompanies(updatedList);
-      }
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
     }
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3500);
+    persistProfileSettings(profileForm, true);
   };
 
   // Open Branch Detail
@@ -1070,7 +1135,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
               fullAddress: profileForm.address ?? profileForm.addressDetails?.fullAddress ?? "",
             }}
             onChange={(updatedDetails) => {
-              setProfileForm((prev) => ({
+              updateAndAutoSaveProfile((prev) => ({
                 ...prev,
                 city: updatedDetails.city,
                 district: updatedDetails.district,
@@ -1093,7 +1158,13 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 <ShieldCheck className="w-4 h-4 text-[#0f6bae]" /> Resmi Şirket Kimlik Bilgileri
               </span>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] text-slate-500 font-normal">Faturaya ve resmi belgelere basılacak detaylar</span>
+                {isSaved && (
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-bold flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" />
+                    Bilgiler Kaydedildi
+                  </span>
+                )}
+                <span className="text-[10px] text-slate-500 font-normal">Değişiklik yapıldığında otomatik ve kalıcı olarak kaydedilir</span>
                 <button
                   type="button"
                   onClick={() => handleSaveProfile()}
@@ -1113,7 +1184,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 <input
                   type="text"
                   value={profileForm.companyName || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, companyName: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, companyName: val }));
+                  }}
+                  onBlur={() => handleSaveProfile()}
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-bold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
@@ -1124,7 +1199,10 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 </label>
                 <select
                   value={profileForm.taxpayerType || "Anonim Şirket"}
-                  onChange={(e) => setProfileForm({ ...profileForm, taxpayerType: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, taxpayerType: val }), true);
+                  }}
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold cursor-pointer focus:bg-white focus:border-[#0f6bae]"
                 >
                   {TAXPAYER_TYPES.map((type) => (
@@ -1142,7 +1220,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 <input
                   type="text"
                   value={profileForm.companyTitle || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, companyTitle: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, companyTitle: val }));
+                  }}
+                  onBlur={() => handleSaveProfile()}
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
@@ -1160,12 +1242,13 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                     value={profileForm.taxNumber}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setProfileForm({ ...profileForm, taxNumber: val });
+                      updateAndAutoSaveProfile((prev) => ({ ...prev, taxNumber: val }));
                       const clean = val.replace(/\D/g, "").trim();
                       if (clean.length === 10 || clean.length === 11) {
                         void handleFetchProfileTaxpayer(clean);
                       }
                     }}
+                    onBlur={() => handleSaveProfile()}
                     placeholder="10 haneli VKN veya 11 haneli TCKN..."
                     className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                   />
@@ -1203,7 +1286,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 <input
                   type="text"
                   value={profileForm.taxOffice || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, taxOffice: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, taxOffice: val }));
+                  }}
+                  onBlur={() => handleSaveProfile()}
                   placeholder="Vergi Dairesi..."
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
@@ -1218,14 +1305,22 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                     type="text"
                     placeholder="Sicil No"
                     value={profileForm.tradeRegisterNo || ""}
-                    onChange={(e) => setProfileForm({ ...profileForm, tradeRegisterNo: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      updateAndAutoSaveProfile((prev) => ({ ...prev, tradeRegisterNo: val }));
+                    }}
+                    onBlur={() => handleSaveProfile()}
                     className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                   />
                   <input
                     type="text"
                     placeholder="MERSİS No"
                     value={profileForm.mersisNo || ""}
-                    onChange={(e) => setProfileForm({ ...profileForm, mersisNo: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      updateAndAutoSaveProfile((prev) => ({ ...prev, mersisNo: val }));
+                    }}
+                    onBlur={() => handleSaveProfile()}
                     className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                   />
                 </div>
@@ -1243,7 +1338,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   value={profileForm.city || ""}
                   onChange={(e) => {
                     const nextCity = e.target.value;
-                    setProfileForm((prev) => {
+                    updateAndAutoSaveProfile((prev) => {
                       const nextAddress = appendCityDistrictToAddress(
                         prev.address || "",
                         nextCity,
@@ -1265,6 +1360,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                       };
                     });
                   }}
+                  onBlur={() => handleSaveProfile()}
                   placeholder="İl..."
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
@@ -1279,7 +1375,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   value={profileForm.district || ""}
                   onChange={(e) => {
                     const nextDistrict = e.target.value;
-                    setProfileForm((prev) => {
+                    updateAndAutoSaveProfile((prev) => {
                       const nextAddress = appendCityDistrictToAddress(
                         prev.address || "",
                         prev.city,
@@ -1301,6 +1397,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                       };
                     });
                   }}
+                  onBlur={() => handleSaveProfile()}
                   placeholder="İlçe..."
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
@@ -1315,7 +1412,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   value={profileForm.neighborhood || ""}
                   onChange={(e) => {
                     const nextNeighborhood = e.target.value;
-                    setProfileForm((prev) => ({
+                    updateAndAutoSaveProfile((prev) => ({
                       ...prev,
                       neighborhood: nextNeighborhood,
                       addressDetails: {
@@ -1328,6 +1425,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                       },
                     }));
                   }}
+                  onBlur={() => handleSaveProfile()}
                   placeholder="Mahalle..."
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
@@ -1343,7 +1441,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 value={profileForm.address || ""}
                 onChange={(e) => {
                   const nextAddr = e.target.value;
-                  setProfileForm((prev) => ({
+                  updateAndAutoSaveProfile((prev) => ({
                     ...prev,
                     address: nextAddr,
                     addressDetails: {
@@ -1357,6 +1455,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                     },
                   }));
                 }}
+                onBlur={() => handleSaveProfile()}
                 placeholder="İl / İlçe, Mahalle, Cadde/Sokak, Bina ve Kapı No..."
                 className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-medium focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
               />
@@ -1377,14 +1476,17 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 variant="compact"
                 hintVkn={profileForm.tenantIdentifierNumber}
                 onSelect={(vkn) =>
-                  setProfileForm((prev) => ({
-                    ...prev,
-                    tenantIdentifierNumber: vkn,
-                    mysoftCredentials: {
-                      ...prev.mysoftCredentials,
+                  updateAndAutoSaveProfile(
+                    (prev) => ({
+                      ...prev,
                       tenantIdentifierNumber: vkn,
-                    },
-                  }))
+                      mysoftCredentials: {
+                        ...prev.mysoftCredentials,
+                        tenantIdentifierNumber: vkn,
+                      },
+                    }),
+                    true
+                  )
                 }
               />
               {profileForm.tenantIdentifierNumber && (
@@ -1402,7 +1504,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 <input
                   type="text"
                   value={profileForm.phone}
-                  onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, phone: val }));
+                  }}
+                  onBlur={() => handleSaveProfile()}
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
@@ -1414,7 +1520,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 <input
                   type="text"
                   value={profileForm.email || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, email: val }));
+                  }}
+                  onBlur={() => handleSaveProfile()}
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
@@ -1426,7 +1536,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 <input
                   type="text"
                   value={profileForm.website || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, website: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, website: val }));
+                  }}
+                  onBlur={() => handleSaveProfile()}
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
@@ -1436,9 +1550,17 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           {/* Banka IBAN & Hesap Adı Detayları */}
           <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-2xs space-y-4 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
-              <h3 className="text-sm font-extrabold text-slate-900">
-                Faturaya Basılacak Varsayılan Banka Bilgileri
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Faturaya Basılacak Varsayılan Banka Bilgileri
+                </h3>
+                {isSaved && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    Kaydedildi
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => handleSaveProfile()}
@@ -1452,27 +1574,39 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Hesap Adı (Alıcı / Hesap Sahibi Ünvanı)
+                  Banka Adı (ve Şubesi)
                 </label>
                 <input
                   type="text"
-                  placeholder={profileForm.companyTitle || profileForm.companyName || "Örn: Muavin Bilişim A.Ş. - TL Hesabı"}
-                  value={profileForm.defaultBankAccountName ?? ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, defaultBankAccountName: e.target.value })}
+                  placeholder="Örn: Garanti BBVA - Levent Ticari Şb."
+                  value={profileForm.defaultBankName || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, defaultBankName: val }));
+                  }}
+                  onBlur={() => handleSaveProfile()}
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Banka Adı ve Şubesi
+                  Hesap Sahibi (Alıcı / Hesap Adı Ünvanı)
                 </label>
                 <input
                   type="text"
-                  placeholder="Örn: Garanti BBVA - Levent Ticari Şb."
-                  value={profileForm.defaultBankName || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, defaultBankName: e.target.value })}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                  placeholder={profileForm.companyTitle || profileForm.companyName || "Örn: Muavin Bilişim A.Ş."}
+                  value={
+                    profileForm.defaultBankAccountName !== undefined
+                      ? profileForm.defaultBankAccountName
+                      : profileForm.companyTitle || profileForm.companyName || ""
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, defaultBankAccountName: val }));
+                  }}
+                  onBlur={() => handleSaveProfile()}
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
 
@@ -1484,9 +1618,46 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   type="text"
                   placeholder="TR00 0000 0000 0000 0000 0000 00"
                   value={profileForm.defaultBankIban || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, defaultBankIban: e.target.value })}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateAndAutoSaveProfile((prev) => ({ ...prev, defaultBankIban: val }));
+                  }}
+                  onBlur={() => handleSaveProfile()}
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono font-bold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
+              </div>
+            </div>
+
+            {/* Faturada Görünecek Banka Adı, Hesap Sahibi ve IBAN Canlı Gösterim Kartı */}
+            <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1 flex-1 min-w-0">
+                <div className="text-[10px] font-extrabold uppercase tracking-wider text-sky-900 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-sky-700" />
+                  <span>Faturaya Basılacak Varsayılan Banka Bilgileri Gösterimi</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 text-xs">
+                  <div className="bg-white/90 border border-sky-100 rounded-lg px-3 py-2">
+                    <span className="text-[10px] font-bold text-slate-500 block">Banka Adı:</span>
+                    <span className="font-extrabold text-slate-900">
+                      {profileForm.defaultBankName || "Belirtilmedi"}
+                    </span>
+                  </div>
+                  <div className="bg-white/90 border border-sky-100 rounded-lg px-3 py-2">
+                    <span className="text-[10px] font-bold text-slate-500 block">Hesap Sahibi:</span>
+                    <span className="font-extrabold text-slate-900">
+                      {profileForm.defaultBankAccountName ||
+                        profileForm.companyTitle ||
+                        profileForm.companyName ||
+                        "Belirtilmedi"}
+                    </span>
+                  </div>
+                  <div className="bg-white/90 border border-sky-100 rounded-lg px-3 py-2">
+                    <span className="text-[10px] font-bold text-slate-500 block">IBAN:</span>
+                    <span className="font-mono font-extrabold text-sky-950">
+                      {profileForm.defaultBankIban || "Belirtilmedi"}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

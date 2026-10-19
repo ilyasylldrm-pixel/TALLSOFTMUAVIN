@@ -402,6 +402,7 @@ export function buildMysoftInvoiceOutboxPayload(
     gbAlias: options.gbAlias?.trim() && !isFabricatedDefaultAlias(options.gbAlias) ? options.gbAlias.trim() : undefined,
     notes: (() => {
       const noteList: { note: string }[] = [];
+      const rawNoteText = String(invoice.notes || "");
       if (invoice.paymentMethod) {
         const pmLabel =
           invoice.paymentMethod === "nakit"
@@ -411,18 +412,40 @@ export function buildMysoftInvoiceOutboxPayload(
             : invoice.paymentMethod === "eft_havale"
             ? "EFT / Havale (Banka Transferi)"
             : "Cari Hesap (Açık Hesap / Vadeli)";
-        const rawNoteText = String(invoice.notes || "");
         if (!rawNoteText.includes("Ödeme Yöntemi:")) {
           noteList.push({
             note: `Ödeme Yöntemi: ${pmLabel}${invoice.paymentAccountName && invoice.paymentMethod !== "cari" ? ` (${invoice.paymentAccountName})` : ""}${invoice.paymentIban && invoice.paymentMethod === "eft_havale" ? ` - IBAN: ${invoice.paymentIban}` : ""}`,
           });
         }
       }
-      const rawNoteText = String(invoice.notes || "");
-      if (invoice.branchName && !rawNoteText.includes(invoice.branchName)) {
+      const effBranchName = (invoice.branchName || "Merkez").trim();
+      const effBranchCode = (invoice.branchCode || "").trim();
+      const effBranchAddr = (invoice.branchAddress || company.address || "").trim();
+      if ((effBranchName || effBranchAddr) && !rawNoteText.includes("Düzenleyen Şube:") && !rawNoteText.includes("Düzenleyen Merkez")) {
         noteList.push({
-          note: `Düzenleyen Şube: ${invoice.branchName}${invoice.branchCode ? ` (${invoice.branchCode})` : ""}${invoice.branchAddress ? ` - Adres: ${invoice.branchAddress}` : ""}`,
+          note: `Düzenleyen Merkez / Şube: ${effBranchName}${effBranchCode ? ` (${effBranchCode})` : ""}${effBranchAddr ? ` - Adres: ${effBranchAddr}` : ""}`,
         });
+      }
+      const effBankName = (invoice.paymentAccountName || company.defaultBankName || company.bankName || "").trim();
+      const effBankHolder = (
+        invoice.paymentAccountHolderName ||
+        company.defaultBankAccountName ||
+        company.companyTitle ||
+        company.companyName ||
+        ""
+      ).trim();
+      const effBankIban = (invoice.paymentIban || company.defaultBankIban || company.iban || "").trim();
+      if ((effBankName || effBankIban) && !rawNoteText.includes(effBankIban || "IBAN:")) {
+        const bankParts = [
+          effBankName ? `Banka Adı: ${effBankName}` : "",
+          effBankHolder ? `Hesap Sahibi: ${effBankHolder}` : "",
+          effBankIban ? `IBAN: ${effBankIban}` : "",
+        ].filter(Boolean);
+        if (bankParts.length > 0) {
+          noteList.push({
+            note: `Banka Bilgileri: ${bankParts.join(" | ")}`,
+          });
+        }
       }
       const buyerBranchName = invoice.customerBranchName || contact.branchName;
       const buyerBranchCode = invoice.customerBranchCode || contact.branchCode;
@@ -431,8 +454,8 @@ export function buildMysoftInvoiceOutboxPayload(
           note: `Alıcı Şube: ${buyerBranchName}${buyerBranchCode ? ` (${buyerBranchCode})` : ""}`,
         });
       }
-      if (String(invoice.notes || "").trim()) {
-        noteList.push({ note: String(invoice.notes || "").trim() });
+      if (rawNoteText.trim()) {
+        noteList.push({ note: rawNoteText.trim() });
       }
       return noteList.length > 0 ? noteList : undefined;
     })(),

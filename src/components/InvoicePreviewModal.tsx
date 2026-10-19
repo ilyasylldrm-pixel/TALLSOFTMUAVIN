@@ -696,13 +696,45 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   </p>
                 </div>
 
-                {companySettings?.defaultBankIban && (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+                {(invoice.paymentIban ||
+                  companySettings?.defaultBankIban ||
+                  companySettings?.iban ||
+                  companySettings?.defaultBankName ||
+                  companySettings?.defaultBankAccountName) && (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
                     <span className="text-[10px] font-bold uppercase text-slate-500 block">
-                      BANKA HESAP BİLGİLERİ (HAVALE / EFT)
+                      FATURAYA BASILACAK VARSAYILAN BANKA BİLGİLERİ (HAVALE / EFT)
                     </span>
-                    <p className="font-bold text-slate-800">{companySettings.defaultBankName}</p>
-                    <p className="font-mono text-slate-900 font-bold">{companySettings.defaultBankIban}</p>
+                    <div className="space-y-1">
+                      <p className="text-slate-700">
+                        <span className="font-semibold text-slate-500">Banka Adı:</span>{" "}
+                        <strong className="text-slate-900">
+                          {invoice.paymentAccountName ||
+                            companySettings?.defaultBankName ||
+                            companySettings?.bankName ||
+                            "-"}
+                        </strong>
+                      </p>
+                      <p className="text-slate-700">
+                        <span className="font-semibold text-slate-500">Hesap Sahibi:</span>{" "}
+                        <strong className="text-slate-900">
+                          {invoice.paymentAccountHolderName ||
+                            companySettings?.defaultBankAccountName ||
+                            companySettings?.companyTitle ||
+                            companySettings?.companyName ||
+                            "-"}
+                        </strong>
+                      </p>
+                      <p className="text-slate-700">
+                        <span className="font-semibold text-slate-500">IBAN:</span>{" "}
+                        <strong className="font-mono text-slate-900">
+                          {invoice.paymentIban ||
+                            companySettings?.defaultBankIban ||
+                            companySettings?.iban ||
+                            "-"}
+                        </strong>
+                      </p>
+                    </div>
                   </div>
                 )}
 

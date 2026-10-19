@@ -35,6 +35,7 @@ export const initialCompanySettings: CompanySettings = {
   email: "info@muavin.com.tr",
   website: "www.muavin.com.tr",
   logoUrl: "",
+  defaultBankAccountName: "Muavin Bilişim Teknolojileri ve Danışmanlık Anonim Şirketi",
   defaultBankName: "Garanti BBVA - Levent Ticari Şubesi",
   defaultBankIban: "TR33 0006 2000 0000 0012 3456 78",
   currency: "₺",

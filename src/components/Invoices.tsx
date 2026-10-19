@@ -384,10 +384,89 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const lastQueriedManualVknRef = React.useRef<string>("");
 
   // Şube Bilgileri: 1. Düzenleyen Şirket Şubesi, 2. Müşteri / Alıcı Şubesi (Adreste görünür)
+  const effectiveBranchesList = React.useMemo(() => {
+    const compOpenAddr =
+      [
+        companySettings.neighborhood,
+        companySettings.street,
+        companySettings.buildingNo ? `No:${companySettings.buildingNo}` : "",
+        companySettings.doorNo ? `D:${companySettings.doorNo}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ") ||
+      companySettings.address ||
+      "";
+    const compCity = companySettings.city || "İstanbul";
+    const compDistrict = companySettings.district || "";
+    const compFullAddr = [compOpenAddr, [compDistrict, compCity].filter(Boolean).join(" / ")]
+      .filter(Boolean)
+      .join(" ");
+
+    const hasMain = branches.some((b) => b.isMain);
+    const syncedList = branches.map((b) => {
+      if (!b.isMain) return b;
+      const isPlaceholderAddr =
+        !b.address?.fullAddress ||
+        b.address.fullAddress.includes("Esentepe Mah. Büyükdere Cad. No:199");
+      if (compOpenAddr && isPlaceholderAddr) {
+        return {
+          ...b,
+          address: {
+            ...b.address,
+            city: compCity,
+            district: compDistrict || b.address?.district || "",
+            neighborhood: companySettings.neighborhood || b.address?.neighborhood || "",
+            street: companySettings.street || b.address?.street || "",
+            buildingNo: companySettings.buildingNo || b.address?.buildingNo || "",
+            doorNo: companySettings.doorNo || b.address?.doorNo || "",
+            postalCode: companySettings.postalCode || b.address?.postalCode || "",
+            fullAddress: compFullAddr || b.address?.fullAddress || "",
+          },
+        };
+      }
+      return b;
+    });
+
+    if (!hasMain) {
+      return [
+        {
+          id: "__MERKEZ__",
+          companyId: companySettings.id || "comp_default",
+          name: "Merkez",
+          code: "MRK-01",
+          isMain: true,
+          status: "active" as const,
+          address: {
+            country: companySettings.country || "Türkiye",
+            city: compCity,
+            district: compDistrict,
+            neighborhood: companySettings.neighborhood || "",
+            street: companySettings.street || "",
+            buildingNo: companySettings.buildingNo || "",
+            doorNo: companySettings.doorNo || "",
+            postalCode: companySettings.postalCode || "",
+            fullAddress: compFullAddr,
+          },
+          contact: {
+            phone: companySettings.phone || "",
+            email: companySettings.email || "",
+          },
+          createdAt: new Date().toISOString().split("T")[0],
+        },
+        ...syncedList,
+      ];
+    }
+    return syncedList;
+  }, [branches, companySettings]);
+
   const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
-    const mainBr = branches.find((b) => b.isMain && b.status !== "passive") || branches.find((b) => b.status !== "passive");
-    return mainBr?.id || "";
+    const mainBr =
+      branches.find((b) => b.isMain && b.status !== "passive") ||
+      branches.find((b) => b.status !== "passive");
+    return mainBr?.id || "__MERKEZ__";
   });
+  const [customBranchAddressOverride, setCustomBranchAddressOverride] = useState<string>("");
+
   const [customerBranchName, setCustomerBranchName] = useState<string>(() => {
     const initContact = contacts.find(
       (c) => c.id === (initialContactIdForNewInvoice || contacts[0]?.id)
@@ -402,33 +481,68 @@ export const Invoices: React.FC<InvoicesProps> = ({
   });
 
   const selectedCompanyBranch = React.useMemo(
-    () => branches.find((b) => b.id === selectedBranchId) || null,
-    [branches, selectedBranchId]
+    () =>
+      effectiveBranchesList.find((b) => b.id === selectedBranchId) ||
+      effectiveBranchesList.find((b) => b.isMain) ||
+      effectiveBranchesList[0] ||
+      null,
+    [effectiveBranchesList, selectedBranchId]
   );
 
-  const resolvedCompanyBranchAddress = React.useMemo(() => {
+  const computedCompanyBranchAddress = React.useMemo(() => {
+    const compOpenAddr =
+      [
+        companySettings.neighborhood,
+        companySettings.street,
+        companySettings.buildingNo ? `No:${companySettings.buildingNo}` : "",
+        companySettings.doorNo ? `D:${companySettings.doorNo}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ") ||
+      companySettings.address ||
+      "";
+
     if (!selectedCompanyBranch) {
       return appendCityDistrictToAddress(
-        companySettings.address,
+        compOpenAddr,
         companySettings.city,
         companySettings.district
       );
     }
     const brAddr = selectedCompanyBranch.address;
-    const rawOpen =
-      brAddr?.fullAddress ||
-      [brAddr?.neighborhood, brAddr?.street, brAddr?.buildingNo, brAddr?.doorNo]
-        .filter(Boolean)
-        .join(" ") ||
-      companySettings.address;
+    const branchStructuredOpen = [
+      brAddr?.neighborhood,
+      brAddr?.street,
+      brAddr?.buildingNo ? `No:${brAddr.buildingNo}` : "",
+      brAddr?.doorNo ? `D:${brAddr.doorNo}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const rawOpen = selectedCompanyBranch.isMain
+      ? compOpenAddr || brAddr?.fullAddress || branchStructuredOpen
+      : brAddr?.fullAddress || branchStructuredOpen || compOpenAddr;
+
+    const targetCity = selectedCompanyBranch.isMain
+      ? companySettings.city || brAddr?.city
+      : brAddr?.city || companySettings.city;
+    const targetDistrict = selectedCompanyBranch.isMain
+      ? companySettings.district || brAddr?.district
+      : brAddr?.district || companySettings.district;
+
     return formatAddressWithBranch(
       rawOpen,
-      brAddr?.city || companySettings.city,
-      brAddr?.district || companySettings.district,
+      targetCity,
+      targetDistrict,
       selectedCompanyBranch.name,
       selectedCompanyBranch.code
     );
   }, [selectedCompanyBranch, companySettings]);
+
+  const resolvedCompanyBranchAddress = React.useMemo(
+    () => (customBranchAddressOverride.trim() ? customBranchAddressOverride.trim() : computedCompanyBranchAddress),
+    [customBranchAddressOverride, computedCompanyBranchAddress]
+  );
 
   const applyQueriedTaxpayerToManualForm = useCallback(
     (status: RecipientTaxpayerStatus, queriedTaxNo?: string) => {
@@ -1459,11 +1573,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setFormDocKind(inv.docKind || "invoice");
 
     const defaultCompanyBranch =
-      branches.find((b) => b.id === inv.branchId) ||
-      branches.find((b) => b.isMain && b.status !== "passive") ||
-      branches.find((b) => b.status !== "passive") ||
-      branches[0];
-    setSelectedBranchId(defaultCompanyBranch?.id || "");
+      effectiveBranchesList.find((b) => b.id === inv.branchId) ||
+      effectiveBranchesList.find((b) => b.isMain && b.status !== "passive") ||
+      effectiveBranchesList.find((b) => b.status !== "passive") ||
+      effectiveBranchesList[0];
+    setSelectedBranchId(defaultCompanyBranch?.id || "__MERKEZ__");
+    setCustomBranchAddressOverride(inv.branchAddress || "");
 
     const matchedContact = contacts.find((c) => c.id === inv.contactId);
     const isManual = Boolean(
@@ -1760,8 +1875,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
       docKind: forcedType ? formDocKind : "invoice",
       paymentMethod,
       paymentAccountId: isImmediatePayment ? paymentAccountId : undefined,
-      paymentAccountName: isImmediatePayment ? selectedPaymentAccount?.name : undefined,
-      paymentIban: effectiveIban || undefined,
+      paymentAccountName:
+        (isImmediatePayment ? selectedPaymentAccount?.name : undefined) ||
+        companySettings.defaultBankName ||
+        companySettings.bankName ||
+        undefined,
+      paymentAccountHolderName:
+        paymentAccountHolderName.trim() ||
+        selectedPaymentAccount?.accountHolderName ||
+        companySettings.defaultBankAccountName ||
+        companySettings.companyTitle ||
+        companySettings.companyName ||
+        undefined,
+      paymentIban:
+        effectiveIban ||
+        companySettings.defaultBankIban ||
+        companySettings.iban ||
+        undefined,
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       branchId: selectedCompanyBranch?.id,
       branchName: selectedCompanyBranch?.name,
@@ -2318,9 +2448,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
       docKind: editingInvoiceId ? formDocKind : forcedType ? formDocKind : "invoice",
       paymentMethod,
       paymentAccountId: isImmediatePayment ? selectedPaymentAccount?.id : undefined,
-      paymentAccountName: isImmediatePayment ? selectedPaymentAccount?.name : undefined,
-      paymentAccountHolderName: effectiveAccountHolder || undefined,
-      paymentIban: effectiveIban || undefined,
+      paymentAccountName:
+        (isImmediatePayment ? selectedPaymentAccount?.name : undefined) ||
+        companySettings.defaultBankName ||
+        companySettings.bankName ||
+        undefined,
+      paymentAccountHolderName:
+        effectiveAccountHolder ||
+        companySettings.defaultBankAccountName ||
+        companySettings.companyTitle ||
+        companySettings.companyName ||
+        undefined,
+      paymentIban:
+        effectiveIban ||
+        companySettings.defaultBankIban ||
+        companySettings.iban ||
+        undefined,
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       branchId: selectedCompanyBranch?.id,
       branchName: selectedCompanyBranch?.name,
@@ -3860,51 +4003,140 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
               {/* Top Controls & Selected Cari / Müşteri Information */}
               <div className="space-y-3.5 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                {/* 0. Faturayı Düzenleyen Şube & Şube Adresi Seçimi (Gelir / Satış ve Gider Faturalarında Adreste Görünür) */}
-                {branches.length > 0 && (
-                  <div className="bg-white p-3 rounded-xl border border-purple-200/80 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                {/* 0. Faturayı Kesilen / Düzenleyen Şube & Merkez Adresi Seçimi */}
+                <div className="bg-white p-3.5 rounded-xl border border-purple-200/90 shadow-2xs space-y-3">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                     <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
                         <Building2 className="w-4 h-4" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-extrabold text-slate-900">
-                            {invType === "sales" ? "Faturayı Kesilen / Düzenleyen Şube:" : "İşlemin Yapıldığı Şirket Şubesi:"}
+                            {invType === "sales"
+                              ? "Faturayı Kesilen / Düzenleyen Şube:"
+                              : "İşlemin Yapıldığı Şirket Şubesi:"}
                           </span>
                           {selectedCompanyBranch && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                              {selectedCompanyBranch.name} ({selectedCompanyBranch.code})
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${
+                                selectedCompanyBranch.isMain
+                                  ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                  : "bg-purple-50 text-purple-700 border-purple-200"
+                              }`}
+                            >
+                              {selectedCompanyBranch.isMain ? "🏢 MERKEZ: " : "🏬 ŞUBE: "}
+                              {selectedCompanyBranch.name}
+                              {selectedCompanyBranch.code ? ` (${selectedCompanyBranch.code})` : ""}
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-1 flex-wrap">
-                          <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
-                          <span className="font-medium">Faturada Görünecek Şube Adresi:</span>
-                          <strong className="text-slate-900">
-                            {resolvedCompanyBranchAddress || "Merkez adres bilgisi"}
-                          </strong>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Merkez veya şube seçildiğinde seçilen merkez veya şubenin adresi gösterilir ve fatura bu adres ile gönderilir.
                         </p>
                       </div>
                     </div>
-                    <div className="w-full lg:w-72 shrink-0">
+
+                    <div className="w-full lg:w-80 shrink-0">
+                      <label className="block text-[10px] font-bold text-purple-800 uppercase tracking-wider mb-1">
+                        Merkez / Şube Seçimi
+                      </label>
                       <select
-                        value={selectedBranchId}
-                        onChange={(e) => setSelectedBranchId(e.target.value)}
-                        className="w-full bg-slate-50 hover:bg-white border border-purple-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 shadow-2xs cursor-pointer"
+                        value={selectedCompanyBranch?.id || selectedBranchId}
+                        onChange={(e) => {
+                          setSelectedBranchId(e.target.value);
+                          setCustomBranchAddressOverride("");
+                        }}
+                        className="w-full bg-purple-50/50 hover:bg-white border border-purple-300 focus:border-purple-600 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 shadow-2xs cursor-pointer"
                       >
-                        {branches
+                        {effectiveBranchesList
                           .filter((b) => b.status !== "passive" || b.id === selectedBranchId)
-                          .map((b) => (
-                            <option key={b.id} value={b.id}>
-                              {b.isMain ? "🏢 [MERKEZ] " : "🏬 [ŞUBE] "}
-                              {b.name} ({b.code}) - {[b.address?.district, b.address?.city].filter(Boolean).join("/")}
-                            </option>
-                          ))}
+                          .map((b) => {
+                            const brCity = b.isMain
+                              ? companySettings.city || b.address?.city
+                              : b.address?.city || companySettings.city;
+                            const brDist = b.isMain
+                              ? companySettings.district || b.address?.district
+                              : b.address?.district || companySettings.district;
+                            const locStr = [brDist, brCity].filter(Boolean).join("/");
+                            return (
+                              <option key={b.id} value={b.id}>
+                                {b.isMain ? "🏢 [MERKEZ] " : "🏬 [ŞUBE] "}
+                                {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
+                              </option>
+                            );
+                          })}
                       </select>
                     </div>
                   </div>
-                )}
+
+                  {/* Seçilen Merkez veya Şubenin Adres Gösterimi ve Fatura Gönderim Kutusu */}
+                  <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-[11px] font-extrabold text-purple-950 flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          <span>
+                            Seçilen {selectedCompanyBranch?.isMain ? "Merkez" : "Şube"} Adresi (Faturada Gösterilecek ve Gönderilecek Adres):
+                          </span>
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                          ✓ Faturaya Otomatik Yansır
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={customBranchAddressOverride !== "" ? customBranchAddressOverride : (computedCompanyBranchAddress || "Merkez adres bilgisi")}
+                        onChange={(e) => setCustomBranchAddressOverride(e.target.value)}
+                        placeholder="Seçilen merkez veya şube adresi..."
+                        className="w-full bg-white border border-purple-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      />
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                        <span>
+                          <strong>Birim:</strong>{" "}
+                          {selectedCompanyBranch?.isMain ? "Merkez" : "Şube"} ({selectedCompanyBranch?.name || "Merkez"}
+                          {selectedCompanyBranch?.code ? ` - ${selectedCompanyBranch.code}` : ""})
+                        </span>
+                        <span>•</span>
+                        <span>
+                          <strong>İlçe / İl:</strong>{" "}
+                          {[
+                            selectedCompanyBranch?.isMain
+                              ? companySettings.district || selectedCompanyBranch?.address?.district
+                              : selectedCompanyBranch?.address?.district || companySettings.district,
+                            selectedCompanyBranch?.isMain
+                              ? companySettings.city || selectedCompanyBranch?.address?.city
+                              : selectedCompanyBranch?.address?.city || companySettings.city,
+                          ]
+                            .filter(Boolean)
+                            .join(" / ") || "-"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {invType === "sales" && (
+                      <div className="shrink-0 flex items-center gap-2">
+                        <button
+                          type="submit"
+                          disabled={isSavingMysoft}
+                          className="w-full md:w-auto px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95"
+                          title="Seçilen merkez veya şube adresiyle faturayı kaydet ve gönder"
+                        >
+                          {isSavingMysoft ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Send className="w-3.5 h-3.5" />
+                          )}
+                          <span>
+                            {sendToMysoft
+                              ? "Seçilen Adresle Faturayı Gönder"
+                              : "Seçilen Adresle Faturayı Kes"}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* 1. Müşteri Seçim Modu: Kayıtlı Cari vs Elle Giriş */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
@@ -5799,6 +6031,56 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {/* Faturaya Basılacak Varsayılan Banka Bilgileri Gösterimi (Banka Adı, Hesap Sahibi, IBAN) */}
+                  <div className="mt-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap border-b border-slate-200 pb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-800">
+                        <Landmark className="w-4 h-4 text-purple-600" />
+                        <span>Faturaya Basılacak Varsayılan Banka Bilgileri</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
+                        Banka Adı • Hesap Sahibi • IBAN
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                          Banka Adı
+                        </span>
+                        <p className="font-bold text-slate-900 mt-0.5">
+                          {(paymentMethod === "eft_havale" &&
+                            accounts.find((a) => a.id === paymentAccountId)?.name) ||
+                            companySettings.defaultBankName ||
+                            companySettings.bankName ||
+                            "Belirtilmemiş"}
+                        </p>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                          Hesap Sahibi
+                        </span>
+                        <p className="font-bold text-slate-900 mt-0.5">
+                          {paymentAccountHolderName.trim() ||
+                            companySettings.defaultBankAccountName ||
+                            companySettings.companyTitle ||
+                            companySettings.companyName ||
+                            "Belirtilmemiş"}
+                        </p>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                          IBAN Numarası
+                        </span>
+                        <p className="font-mono font-bold text-purple-900 mt-0.5">
+                          {paymentIban.trim() ||
+                            companySettings.defaultBankIban ||
+                            companySettings.iban ||
+                            "Belirtilmemiş"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {invType === "sales" && formDocKind === "invoice" && (!editingInvoiceId || isEditingDraft) && (

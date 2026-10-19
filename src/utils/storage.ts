@@ -1103,6 +1103,16 @@ export function getStoredData(targetCompanyId?: string) {
         loadedSettings.companyTitle ||
         loadedSettings.companyName ||
         "",
+      defaultBankName:
+        loadedSettings.defaultBankName ||
+        compMeta.defaultBankName ||
+        initialCompanySettings.defaultBankName ||
+        "",
+      defaultBankIban:
+        loadedSettings.defaultBankIban ||
+        compMeta.defaultBankIban ||
+        initialCompanySettings.defaultBankIban ||
+        "",
       logoUrl:
         compMeta.logoUrl && compMeta.logoUrl !== "/logo.svg"
           ? compMeta.logoUrl
@@ -1120,6 +1130,41 @@ export function getStoredData(targetCompanyId?: string) {
     };
   }
 
+  const syncMainBranchWithSettings = (branchList: Branch[]): Branch[] => {
+    if (!Array.isArray(branchList) || branchList.length === 0) return branchList;
+    return branchList.map((br) => {
+      if (!br.isMain) return br;
+      const isUntouchedDemoMain =
+        !br.address?.fullAddress ||
+        br.address.fullAddress.includes("Büyükdere Cad. No:199") ||
+        br.address.fullAddress === `${compMeta?.city || "İstanbul"} / ${compMeta?.district || "Merkez"}`;
+      if (isUntouchedDemoMain && loadedSettings.address) {
+        return {
+          ...br,
+          name:
+            br.name === "Genel Merkez (Levent)" && loadedSettings.district
+              ? `Genel Merkez (${loadedSettings.district})`
+              : br.name,
+          phone: loadedSettings.phone || br.phone,
+          email: loadedSettings.email || br.email,
+          address: {
+            ...br.address,
+            country: loadedSettings.country || br.address?.country || "Türkiye",
+            city: loadedSettings.city || br.address?.city || "İstanbul",
+            district: loadedSettings.district || br.address?.district || "",
+            neighborhood: loadedSettings.neighborhood || br.address?.neighborhood || "",
+            street: loadedSettings.street || br.address?.street || "",
+            buildingNo: loadedSettings.buildingNo || br.address?.buildingNo || "",
+            doorNo: loadedSettings.doorNo || br.address?.doorNo || "",
+            postalCode: loadedSettings.postalCode || br.address?.postalCode || "",
+            fullAddress: loadedSettings.address,
+          },
+        };
+      }
+      return br;
+    });
+  };
+
   return {
     settings: loadedSettings,
     contacts: normalizedContacts,
@@ -1135,32 +1180,40 @@ export function getStoredData(targetCompanyId?: string) {
     branches: (() => {
       if (isDefault) {
         const stored = get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches);
-        return Array.isArray(stored) && stored.length > 0 ? stored : initialBranches;
+        const list = Array.isArray(stored) && stored.length > 0 ? stored : initialBranches;
+        return syncMainBranchWithSettings(list);
       }
       const scopedKey = `${STORAGE_KEYS.BRANCHES}_${activeCompId}`;
       const existingRaw = safeGetStorageItem(scopedKey);
       if (existingRaw) {
         try {
           const parsed = JSON.parse(existingRaw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) return syncMainBranchWithSettings(parsed);
         } catch (_) {}
       }
       const defaultBranchForComp: Branch[] = [
         {
           id: `br_main_${activeCompId}`,
-          code: "SUB-001",
-          name: `${compMeta.companyName || "İşletme"} - Merkez Şube`,
+          code: "MRK-001",
+          name: `${loadedSettings.companyName || compMeta.companyName || "İşletme"} - Merkez`,
           isMain: true,
           managerName: compMeta.companyType === "sahis" ? (compMeta.companyName?.split("-")[0]?.trim() || "İşletme Sahibi") : "Şube Müdürü",
-          phone: compMeta.phone || "+90 (212) 000 00 00",
-          email: compMeta.email || "",
+          phone: loadedSettings.phone || compMeta.phone || "+90 (212) 000 00 00",
+          email: loadedSettings.email || compMeta.email || "",
           status: "active",
           address: {
             country: "Türkiye",
-            city: compMeta.city || "İstanbul",
-            district: compMeta.district || "Merkez",
-            neighborhood: compMeta.neighborhood || "",
-            fullAddress: compMeta.address || `${compMeta.city || "İstanbul"} / ${compMeta.district || "Merkez"}`,
+            city: loadedSettings.city || compMeta.city || "İstanbul",
+            district: loadedSettings.district || compMeta.district || "Merkez",
+            neighborhood: loadedSettings.neighborhood || compMeta.neighborhood || "",
+            street: loadedSettings.street || compMeta.street || "",
+            buildingNo: loadedSettings.buildingNo || compMeta.buildingNo || "",
+            doorNo: loadedSettings.doorNo || compMeta.doorNo || "",
+            postalCode: loadedSettings.postalCode || compMeta.postalCode || "",
+            fullAddress:
+              loadedSettings.address ||
+              compMeta.address ||
+              `${loadedSettings.city || compMeta.city || "İstanbul"} / ${loadedSettings.district || compMeta.district || "Merkez"}`,
           },
           createdAt: new Date().toISOString().split("T")[0],
         },
@@ -1778,6 +1831,12 @@ export function syncAllCompaniesAndUsersData(): {
       // Non-destructively sync isolated company settings, contacts, and invoices slice for each company
       try {
         const companyData = getStoredData(normalizedComp.id);
+        const settingsTax = String(companyData.settings.taxNumber || "").replace(/\D/g, "");
+        if (settingsTax.length === 10 || settingsTax.length === 11) {
+          normalizedComp.taxNumber = settingsTax;
+          if (settingsTax.length === 10) normalizedComp.vkn = settingsTax;
+          if (settingsTax.length === 11) normalizedComp.tckn = settingsTax;
+        }
         const resolvedLogoUrl =
           normalizedComp.logoUrl && normalizedComp.logoUrl !== "/logo.svg"
             ? normalizedComp.logoUrl
@@ -1792,6 +1851,13 @@ export function syncAllCompaniesAndUsersData(): {
         normalizedComp.district = companyData.settings.district || normalizedComp.district;
         normalizedComp.neighborhood = companyData.settings.neighborhood || normalizedComp.neighborhood;
         normalizedComp.address = companyData.settings.address || normalizedComp.address;
+        normalizedComp.defaultBankAccountName =
+          companyData.settings.defaultBankAccountName ||
+          normalizedComp.defaultBankAccountName ||
+          companyData.settings.companyTitle ||
+          normalizedComp.companyTitle;
+        normalizedComp.defaultBankName = companyData.settings.defaultBankName || normalizedComp.defaultBankName;
+        normalizedComp.defaultBankIban = companyData.settings.defaultBankIban || normalizedComp.defaultBankIban;
 
         const mergedSettings: CompanySettings = {
           ...companyData.settings,
