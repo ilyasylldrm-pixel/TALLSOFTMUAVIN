@@ -590,21 +590,21 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             <div className="border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar w-full">
               <table className="w-full text-left text-xs min-w-[650px]">
                 <thead>
-                  <tr className="bg-slate-900 text-white font-bold uppercase text-[10px] tracking-wider">
-                    <th className="py-2.5 px-3">Sıra</th>
-                    <th className="py-2.5 px-3">Mal / Hizmet Açıklaması</th>
-                    <th className="py-2.5 px-3 text-center">Miktar</th>
-                    <th className="py-2.5 px-3 text-center">Birim</th>
-                    <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
+                  <tr className="bg-sky-100 text-sky-950 border-b border-sky-200 font-bold uppercase text-[10px] tracking-wider">
+                    <th className="py-2.5 px-3 bg-sky-100">Sıra</th>
+                    <th className="py-2.5 px-3 bg-sky-100">Mal / Hizmet Açıklaması</th>
+                    <th className="py-2.5 px-3 text-center bg-sky-100">Miktar</th>
+                    <th className="py-2.5 px-3 text-center bg-sky-100">Birim</th>
+                    <th className="py-2.5 px-3 text-right bg-sky-100">Birim Fiyat</th>
                     {hasDiscounts && (
                       <>
-                        <th className="py-2.5 px-3 text-right">İskonto</th>
-                        <th className="py-2.5 px-3 text-center">İskonto %</th>
+                        <th className="py-2.5 px-3 text-right bg-sky-100">İskonto</th>
+                        <th className="py-2.5 px-3 text-center bg-sky-100">İskonto %</th>
                       </>
                     )}
-                    <th className="py-2.5 px-3 text-center">KDV %</th>
-                    <th className="py-2.5 px-3 text-right">KDV Tutarı</th>
-                    <th className="py-2.5 px-3 text-right">Toplam Tutar</th>
+                    <th className="py-2.5 px-3 text-center bg-sky-100">KDV %</th>
+                    <th className="py-2.5 px-3 text-right bg-sky-100">KDV Tutarı</th>
+                    <th className="py-2.5 px-3 text-right bg-sky-100">Toplam Tutar</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
