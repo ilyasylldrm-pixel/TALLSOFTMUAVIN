@@ -400,6 +400,18 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
       existing.unshift(user);
     }
     saveLocalUsersBackup(existing);
+
+    // Sync to server-side cross-device cloud store immediately
+    if (typeof window !== "undefined") {
+      fetch("/api/cloud-sync/system", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companiesRegistry: getCompaniesList(),
+          usersRegistry: getLocalUsersBackup(),
+        }),
+      }).catch(() => {});
+    }
   } catch (e) {
     console.warn("Local user sync error:", e);
   }
@@ -484,7 +496,25 @@ function enrichUserProfileCredentials(user: UserProfileData, companies: ReturnTy
 
 // Admin Operations: Get all users from Firestore with local backup union and company users
 export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
-  // 0. Check central_sync_state in Firestore so existing companies & users from central cloud registry are never lost
+  // 0a. Pull from server-side cross-device cloud store first (instant, quota-free)
+  if (typeof window !== "undefined") {
+    try {
+      const resp = await fetch("/api/cloud-sync/state");
+      if (resp.ok) {
+        const srv = await resp.json();
+        if (Array.isArray(srv?.companiesRegistry) && srv.companiesRegistry.length > 0) {
+          saveCompaniesList(srv.companiesRegistry, false);
+        }
+        if (Array.isArray(srv?.usersRegistry) && srv.usersRegistry.length > 0) {
+          saveLocalUsersBackup(srv.usersRegistry, false);
+        }
+      }
+    } catch {
+      // ignore offline
+    }
+  }
+
+  // 0b. Check central_sync_state in Firestore so existing companies & users from central cloud registry are never lost
   try {
     const syncSnap = await getDoc(doc(db, "system_settings", "central_sync_state"));
     if (syncSnap.exists()) {

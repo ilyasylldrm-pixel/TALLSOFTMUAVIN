@@ -7530,6 +7530,189 @@ ${JSON.stringify(
     res.status(500).json({ success: false, error: err.message || "Veri \xE7ekme hatas\u0131." });
   }
 });
+var CLOUD_SYNC_FILE_PATH = import_path4.default.join(process.cwd(), "data", "cloud_sync_store.json");
+var memoryCloudSyncStore = (() => {
+  try {
+    if (import_fs4.default.existsSync(CLOUD_SYNC_FILE_PATH)) {
+      const raw = import_fs4.default.readFileSync(CLOUD_SYNC_FILE_PATH, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        return {
+          companiesRegistry: Array.isArray(parsed.companiesRegistry) ? parsed.companiesRegistry : [],
+          usersRegistry: Array.isArray(parsed.usersRegistry) ? parsed.usersRegistry : [],
+          deletedCompanyIds: Array.isArray(parsed.deletedCompanyIds) ? parsed.deletedCompanyIds : [],
+          deletedUserKeys: Array.isArray(parsed.deletedUserKeys) ? parsed.deletedUserKeys : [],
+          companiesData: parsed.companiesData && typeof parsed.companiesData === "object" ? parsed.companiesData : {},
+          updatedAt: parsed.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Cloud sync store disk okuma uyar\u0131s\u0131:", err);
+  }
+  return {
+    companiesRegistry: [],
+    usersRegistry: [],
+    deletedCompanyIds: [],
+    deletedUserKeys: [],
+    companiesData: {},
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+})();
+function persistServerCloudSyncStore() {
+  try {
+    const dir = import_path4.default.dirname(CLOUD_SYNC_FILE_PATH);
+    if (!import_fs4.default.existsSync(dir)) {
+      import_fs4.default.mkdirSync(dir, { recursive: true });
+    }
+    import_fs4.default.writeFileSync(CLOUD_SYNC_FILE_PATH, JSON.stringify(memoryCloudSyncStore), "utf-8");
+  } catch (err) {
+    console.warn("Cloud sync store diske yaz\u0131lamad\u0131:", err);
+  }
+}
+app.get("/api/cloud-sync/state", (req, res) => {
+  const companyId = typeof req.query.companyId === "string" ? req.query.companyId.trim() : "";
+  const companySlice = companyId ? memoryCloudSyncStore.companiesData[companyId] || null : null;
+  res.json({
+    success: true,
+    companiesRegistry: memoryCloudSyncStore.companiesRegistry,
+    usersRegistry: memoryCloudSyncStore.usersRegistry,
+    deletedCompanyIds: memoryCloudSyncStore.deletedCompanyIds,
+    deletedUserKeys: memoryCloudSyncStore.deletedUserKeys,
+    companyData: companySlice?.data || null,
+    companyUpdatedAt: companySlice?.updatedAt || null,
+    allCompaniesData: companyId ? void 0 : memoryCloudSyncStore.companiesData,
+    updatedAt: memoryCloudSyncStore.updatedAt
+  });
+});
+app.post("/api/cloud-sync/system", (req, res) => {
+  try {
+    const { companiesRegistry, usersRegistry, deletedCompanyIds, deletedUserKeys } = req.body || {};
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    if (Array.isArray(deletedCompanyIds)) {
+      memoryCloudSyncStore.deletedCompanyIds = Array.from(
+        /* @__PURE__ */ new Set([...memoryCloudSyncStore.deletedCompanyIds, ...deletedCompanyIds.map((x) => String(x || "").trim()).filter(Boolean)])
+      );
+    }
+    if (Array.isArray(deletedUserKeys)) {
+      memoryCloudSyncStore.deletedUserKeys = Array.from(
+        /* @__PURE__ */ new Set([...memoryCloudSyncStore.deletedUserKeys, ...deletedUserKeys.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)])
+      );
+    }
+    const delCompSet = new Set(memoryCloudSyncStore.deletedCompanyIds);
+    const delUserSet = new Set(memoryCloudSyncStore.deletedUserKeys);
+    if (Array.isArray(companiesRegistry)) {
+      const compMap = /* @__PURE__ */ new Map();
+      memoryCloudSyncStore.companiesRegistry.forEach((c) => {
+        if (c && c.id && !delCompSet.has(c.id)) compMap.set(c.id, c);
+      });
+      companiesRegistry.forEach((c) => {
+        if (c && c.id && !delCompSet.has(c.id)) {
+          const existing = compMap.get(c.id);
+          compMap.set(c.id, existing ? { ...existing, ...c } : c);
+        }
+      });
+      memoryCloudSyncStore.companiesRegistry = Array.from(compMap.values());
+    }
+    if (Array.isArray(usersRegistry)) {
+      const userMap = /* @__PURE__ */ new Map();
+      memoryCloudSyncStore.usersRegistry.forEach((u) => {
+        if (!u) return;
+        const key = String(u.email || u.userId || u.username || "").trim().toLowerCase();
+        if (key && !delUserSet.has(key)) userMap.set(key, u);
+      });
+      usersRegistry.forEach((u) => {
+        if (!u) return;
+        const key = String(u.email || u.userId || u.username || "").trim().toLowerCase();
+        if (key && !delUserSet.has(key)) {
+          const existing = userMap.get(key);
+          userMap.set(key, existing ? { ...existing, ...u } : u);
+        }
+      });
+      memoryCloudSyncStore.usersRegistry = Array.from(userMap.values());
+    }
+    memoryCloudSyncStore.updatedAt = nowIso;
+    persistServerCloudSyncStore();
+    res.json({
+      success: true,
+      companiesCount: memoryCloudSyncStore.companiesRegistry.length,
+      usersCount: memoryCloudSyncStore.usersRegistry.length,
+      updatedAt: nowIso
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err?.message || "Sistem senkronizasyon hatas\u0131" });
+  }
+});
+app.post("/api/cloud-sync/company", (req, res) => {
+  try {
+    const { companyId, companyMeta, data, updatedAt } = req.body || {};
+    const cleanId = String(companyId || "").trim();
+    if (!cleanId || !data || typeof data !== "object") {
+      return res.status(400).json({ success: false, error: "Ge\xE7ersiz \u015Firket verisi" });
+    }
+    const nowIso = updatedAt || (/* @__PURE__ */ new Date()).toISOString();
+    const existingEntry = memoryCloudSyncStore.companiesData[cleanId];
+    const existingData = existingEntry?.data || {};
+    const mergedSettings = {
+      ...existingData.settings || {},
+      ...data.settings || {}
+    };
+    memoryCloudSyncStore.companiesData[cleanId] = {
+      data: {
+        ...existingData,
+        ...data,
+        settings: mergedSettings
+      },
+      updatedAt: nowIso
+    };
+    if (companyMeta && companyMeta.id) {
+      const idx = memoryCloudSyncStore.companiesRegistry.findIndex((c) => c && c.id === companyMeta.id);
+      if (idx >= 0) {
+        memoryCloudSyncStore.companiesRegistry[idx] = {
+          ...memoryCloudSyncStore.companiesRegistry[idx],
+          ...companyMeta
+        };
+      } else {
+        memoryCloudSyncStore.companiesRegistry.push(companyMeta);
+      }
+    } else if (mergedSettings) {
+      const idx = memoryCloudSyncStore.companiesRegistry.findIndex((c) => c && c.id === cleanId);
+      if (idx >= 0) {
+        memoryCloudSyncStore.companiesRegistry[idx] = {
+          ...memoryCloudSyncStore.companiesRegistry[idx],
+          companyName: mergedSettings.companyName || memoryCloudSyncStore.companiesRegistry[idx].companyName,
+          companyTitle: mergedSettings.companyTitle || memoryCloudSyncStore.companiesRegistry[idx].companyTitle,
+          taxOffice: mergedSettings.taxOffice ?? memoryCloudSyncStore.companiesRegistry[idx].taxOffice,
+          taxNumber: mergedSettings.taxNumber ?? memoryCloudSyncStore.companiesRegistry[idx].taxNumber,
+          tradeRegisterNo: mergedSettings.tradeRegisterNo ?? "",
+          mersisNo: mergedSettings.mersisNo ?? "",
+          taxpayerType: mergedSettings.taxpayerType ?? memoryCloudSyncStore.companiesRegistry[idx].taxpayerType,
+          phone: mergedSettings.phone ?? memoryCloudSyncStore.companiesRegistry[idx].phone,
+          email: mergedSettings.email ?? memoryCloudSyncStore.companiesRegistry[idx].email,
+          website: mergedSettings.website ?? memoryCloudSyncStore.companiesRegistry[idx].website,
+          address: mergedSettings.address ?? memoryCloudSyncStore.companiesRegistry[idx].address,
+          city: mergedSettings.city ?? memoryCloudSyncStore.companiesRegistry[idx].city,
+          district: mergedSettings.district ?? memoryCloudSyncStore.companiesRegistry[idx].district,
+          neighborhood: mergedSettings.neighborhood ?? memoryCloudSyncStore.companiesRegistry[idx].neighborhood,
+          defaultBankAccountName: mergedSettings.defaultBankAccountName ?? memoryCloudSyncStore.companiesRegistry[idx].defaultBankAccountName,
+          defaultBankName: mergedSettings.defaultBankName ?? memoryCloudSyncStore.companiesRegistry[idx].defaultBankName,
+          defaultBankIban: mergedSettings.defaultBankIban ?? memoryCloudSyncStore.companiesRegistry[idx].defaultBankIban,
+          logoUrl: mergedSettings.logoUrl ?? memoryCloudSyncStore.companiesRegistry[idx].logoUrl,
+          logoScale: mergedSettings.logoScale ?? memoryCloudSyncStore.companiesRegistry[idx].logoScale
+        };
+      }
+    }
+    memoryCloudSyncStore.updatedAt = nowIso;
+    persistServerCloudSyncStore();
+    res.json({
+      success: true,
+      companyId: cleanId,
+      updatedAt: nowIso
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err?.message || "\u015Eirket verisi senkronizasyon hatas\u0131" });
+  }
+});
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

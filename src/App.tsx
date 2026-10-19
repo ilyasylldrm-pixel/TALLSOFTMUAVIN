@@ -114,6 +114,8 @@ import {
 import {
   verifyAndSyncAllUsersLocalDb,
   subscribeToCentralSyncState,
+  pullLatestCompanyDataFromCloud,
+  pushCompanyDataToCloud,
 } from "./services/systemSyncService";
 import { deleteUserProfile } from "./lib/firebase";
 import { readStoredMysoftTenantVkn, writeStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
@@ -225,16 +227,25 @@ export default function App() {
         name: comp.companyName || freshData.settings.name,
         companyTitle: comp.companyTitle || comp.companyName || freshData.settings.companyTitle,
         title: comp.companyTitle || comp.companyName || freshData.settings.title,
+        taxpayerType: comp.taxpayerType ?? freshData.settings.taxpayerType,
         taxOffice: comp.taxOffice || freshData.settings.taxOffice || "Merkez",
         taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || comp.taxNumber || freshData.settings.taxNumber,
         vkn: comp.vkn ?? freshData.settings.vkn,
         tckn: comp.tckn ?? freshData.settings.tckn,
+        tradeRegisterNo: comp.tradeRegisterNo ?? freshData.settings.tradeRegisterNo ?? "",
+        mersisNo: comp.mersisNo ?? freshData.settings.mersisNo ?? "",
         phone: comp.phone ?? freshData.settings.phone,
         email: comp.email ?? freshData.settings.email,
         website: comp.website ?? freshData.settings.website,
         address: comp.address ?? freshData.settings.address,
         city: comp.city ?? freshData.settings.city,
         district: comp.district ?? freshData.settings.district,
+        neighborhood: comp.neighborhood ?? freshData.settings.neighborhood,
+        street: comp.street ?? freshData.settings.street,
+        buildingNo: comp.buildingNo ?? freshData.settings.buildingNo,
+        doorNo: comp.doorNo ?? freshData.settings.doorNo,
+        postalCode: comp.postalCode ?? freshData.settings.postalCode,
+        addressDetails: comp.addressDetails ?? freshData.settings.addressDetails,
         defaultBankAccountName: comp.defaultBankAccountName ?? freshData.settings.defaultBankAccountName,
         defaultBankName: comp.defaultBankName ?? freshData.settings.defaultBankName,
         defaultBankIban: comp.defaultBankIban ?? freshData.settings.defaultBankIban,
@@ -270,10 +281,12 @@ export default function App() {
     if (makeActiveImmediately) {
       handleSelectCompany(newComp.id, updatedList);
     }
+    void pushCompanyDataToCloud(newComp.id);
     void verifyAndSyncAllUsersLocalDb(
       0,
       "Sistem Yöneticisi",
-      `Yeni Şirket Eklendi (${newComp.companyName}) ve Tüm Kullanıcılara Gönderildi`
+      `Yeni Şirket Eklendi (${newComp.companyName}) ve Tüm Kullanıcılara Gönderildi`,
+      true
     );
   };
 
@@ -292,6 +305,7 @@ export default function App() {
       name: comp.companyName || targetSettingsData.settings.name,
       companyTitle: comp.companyTitle || comp.companyName || targetSettingsData.settings.companyTitle,
       title: comp.companyTitle || comp.companyName || targetSettingsData.settings.title,
+      taxpayerType: comp.taxpayerType ?? targetSettingsData.settings.taxpayerType,
       taxOffice: comp.taxOffice || targetSettingsData.settings.taxOffice,
       taxNumber:
         comp.taxNumber ||
@@ -301,6 +315,8 @@ export default function App() {
         targetSettingsData.settings.taxNumber,
       vkn: comp.vkn ?? targetSettingsData.settings.vkn,
       tckn: comp.tckn ?? targetSettingsData.settings.tckn,
+      tradeRegisterNo: comp.tradeRegisterNo ?? targetSettingsData.settings.tradeRegisterNo ?? "",
+      mersisNo: comp.mersisNo ?? targetSettingsData.settings.mersisNo ?? "",
       phone: comp.phone ?? targetSettingsData.settings.phone,
       email: comp.email ?? targetSettingsData.settings.email,
       website: comp.website ?? targetSettingsData.settings.website,
@@ -342,10 +358,12 @@ export default function App() {
       }));
       writeStoredMysoftTenantVkn(comp.tenantIdentifierNumber || comp.vkn || comp.tckn);
     }
+    void pushCompanyDataToCloud(comp.id);
     void verifyAndSyncAllUsersLocalDb(
       0,
       "Sistem Yöneticisi",
-      `Şirket Bilgileri Güncellendi (${comp.companyName}) ve Tüm Kullanıcılara Gönderildi`
+      `Şirket Bilgileri Güncellendi (${comp.companyName}) ve Tüm Kullanıcılara Gönderildi`,
+      true
     );
   };
 
@@ -360,7 +378,8 @@ export default function App() {
     void verifyAndSyncAllUsersLocalDb(
       0,
       "Sistem Yöneticisi",
-      "Şirket Kalıcı Olarak Silindi ve Yönetici Panelinde Kaydedildi"
+      "Şirket Kalıcı Olarak Silindi ve Yönetici Panelinde Kaydedildi",
+      true
     );
   };
 
@@ -461,6 +480,9 @@ export default function App() {
 
   // Restore GitHub PAT from browser localStorage after container restarts & sync all companies/users
   const githubAutoSyncedRef = useRef(false);
+  const isInitialCloudPullCompleteRef = useRef(false);
+  const cloudPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (githubAutoSyncedRef.current) return;
     githubAutoSyncedRef.current = true;
@@ -470,11 +492,26 @@ export default function App() {
       setCompanies(synced.companies);
     }
     setData(getStoredData(getActiveCompanyId()));
-    void verifyAndSyncAllUsersLocalDb(
-      0,
-      "Sistem Yöneticisi",
-      "Tüm Şirketler ve Kullanıcılar Senkronize Edildi"
-    );
+
+    pullLatestCompanyDataFromCloud(undefined, true)
+      .then(() =>
+        verifyAndSyncAllUsersLocalDb(
+          0,
+          "Sistem Yöneticisi",
+          "Tüm Şirketler ve Kullanıcılar Senkronize Edildi",
+          false
+        )
+      )
+      .then(() => {
+        const freshCompanies = getCompaniesList();
+        setCompanies(freshCompanies);
+        const currentActive = getActiveCompanyId();
+        setData(getStoredData(currentActive));
+        isInitialCloudPullCompleteRef.current = true;
+      })
+      .catch(() => {
+        isInitialCloudPullCompleteRef.current = true;
+      });
 
     const handleCentralSync = () => {
       const freshCompanies = getCompaniesList();
@@ -483,7 +520,11 @@ export default function App() {
       setData(getStoredData(currentActive));
     };
     window.addEventListener("muavin:central-sync-broadcast", handleCentralSync);
-    const unsubscribeCentralSync = subscribeToCentralSyncState();
+    const unsubscribeCentralSync = subscribeToCentralSyncState(() => {
+      pullLatestCompanyDataFromCloud(getActiveCompanyId(), true).finally(() => {
+        handleCentralSync();
+      });
+    });
 
     const savedToken = localStorage.getItem("muavin_github_pat")?.trim();
     const savedRepo = localStorage.getItem("muavin_github_repo_url")?.trim();
@@ -666,6 +707,22 @@ export default function App() {
   useEffect(() => { if (data.itServices) saveStoredData("IT_SERVICES", data.itServices, activeCompanyId); }, [data.itServices, activeCompanyId]);
   useEffect(() => { if (data.applianceServices) saveStoredData("APPLIANCE_SERVICES", data.applianceServices, activeCompanyId); }, [data.applianceServices, activeCompanyId]);
   useEffect(() => { if (data.constructionProjects) saveStoredData("CONSTRUCTION_PROJECTS", data.constructionProjects, activeCompanyId); }, [data.constructionProjects, activeCompanyId]);
+
+  // Şirket kullanıcısı herhangi bir değişiklik yaptığında (fatura, cari, şube, depo, ayarlar vb.) bulut deposuna otomatik senkronize et
+  useEffect(() => {
+    if (!isInitialCloudPullCompleteRef.current) return;
+    if (cloudPushTimerRef.current) {
+      clearTimeout(cloudPushTimerRef.current);
+    }
+    cloudPushTimerRef.current = setTimeout(() => {
+      void pushCompanyDataToCloud(activeCompanyId, data);
+    }, 600);
+    return () => {
+      if (cloudPushTimerRef.current) {
+        clearTimeout(cloudPushTimerRef.current);
+      }
+    };
+  }, [data, activeCompanyId]);
 
   // Auto & IT & Appliance & Construction Service Handlers
   const handleUpdateAutoServices = (services: AutoServiceRecord[]) => {
@@ -2098,6 +2155,8 @@ export default function App() {
       ...newSettings,
       vkn: cleanTaxDigits.length === 10 ? cleanTaxDigits : newSettings.vkn,
       tckn: cleanTaxDigits.length === 11 ? cleanTaxDigits : newSettings.tckn,
+      tradeRegisterNo: (newSettings.tradeRegisterNo ?? "").trim(),
+      mersisNo: (newSettings.mersisNo ?? "").trim(),
       defaultBankAccountName:
         newSettings.defaultBankAccountName !== undefined && newSettings.defaultBankAccountName !== ""
           ? newSettings.defaultBankAccountName
@@ -2115,10 +2174,13 @@ export default function App() {
         name: normalizedSettings.companyName || existingComp.name,
         companyTitle: normalizedSettings.companyTitle || normalizedSettings.companyName || existingComp.companyTitle,
         title: normalizedSettings.companyTitle || normalizedSettings.companyName || existingComp.title,
+        taxpayerType: normalizedSettings.taxpayerType ?? existingComp.taxpayerType,
         taxOffice: normalizedSettings.taxOffice ?? existingComp.taxOffice,
         taxNumber: normalizedSettings.taxNumber ?? existingComp.taxNumber,
         vkn: cleanTaxDigits.length === 10 ? cleanTaxDigits : (normalizedSettings.vkn ?? existingComp.vkn),
         tckn: cleanTaxDigits.length === 11 ? cleanTaxDigits : (normalizedSettings.tckn ?? existingComp.tckn),
+        tradeRegisterNo: normalizedSettings.tradeRegisterNo,
+        mersisNo: normalizedSettings.mersisNo,
         phone: normalizedSettings.phone ?? existingComp.phone,
         email: normalizedSettings.email ?? existingComp.email,
         website: normalizedSettings.website ?? existingComp.website,
@@ -2189,17 +2251,20 @@ export default function App() {
       }
 
       saveStoredData("SETTINGS", normalizedSettings, targetCompanyId);
-      return {
+      const nextState = {
         ...prev,
         settings: normalizedSettings,
         branches: updatedBranches,
         employees: updatedEmployees,
       };
+      void pushCompanyDataToCloud(targetCompanyId, nextState);
+      return nextState;
     });
     void verifyAndSyncAllUsersLocalDb(
       0,
       currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-      `Şirket Ayarları ve Logosu Güncellendi (${normalizedSettings.companyName || targetCompanyId})`
+      `Şirket Ayarları ve Logosu Güncellendi (${normalizedSettings.companyName || targetCompanyId})`,
+      true
     );
   };
 
@@ -3252,9 +3317,15 @@ export default function App() {
         onLoginSuccess={(user) => {
           setCurrentUser(user);
           setAuthModalOpen(false);
-          if (user.companyId) {
-            handleSelectCompany(user.companyId);
-          }
+          const latestCompanies = getCompaniesList();
+          setCompanies(latestCompanies);
+          const targetId = user.companyId || getActiveCompanyId();
+          handleSelectCompany(targetId, latestCompanies);
+          void pullLatestCompanyDataFromCloud(targetId, true).then(() => {
+            const refreshedCompanies = getCompaniesList();
+            setCompanies(refreshedCompanies);
+            handleSelectCompany(targetId, refreshedCompanies);
+          });
         }}
         initialMode={authModalMode}
         canClose={!!currentUser}

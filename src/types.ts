@@ -339,6 +339,9 @@ export interface CompanyItem {
   mysoftStatus?: "verified" | "pending" | "unmatched";
   mysoftTenantName?: string;
   companyType?: "limited" | "anonim" | "sahis" | "diger";
+  taxpayerType?: string;
+  tradeRegisterNo?: string;
+  mersisNo?: string;
   phone?: string;
   email?: string;
   website?: string;

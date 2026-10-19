@@ -112,19 +112,294 @@ function mergeRecordsById<T extends { id?: string }>(remoteList?: T[], localList
   return Array.from(map.values());
 }
 
+const CLEARABLE_COMPANY_FIELDS = new Set<string>([
+  "mersisNo",
+  "tradeRegisterNo",
+  "defaultBankName",
+  "defaultBankIban",
+  "defaultBankAccountName",
+  "phone",
+  "email",
+  "website",
+  "address",
+  "district",
+  "neighborhood",
+  "street",
+  "buildingNo",
+  "doorNo",
+  "postalCode",
+]);
+
 function mergeCompanyMetadataNonDestructive(existingComp: any, incomingComp: any): any {
   if (!existingComp) return incomingComp;
   if (!incomingComp) return existingComp;
   const merged: any = { ...existingComp };
   Object.keys(incomingComp).forEach((key) => {
     const val = incomingComp[key];
-    if (val !== undefined && val !== null && val !== "") {
-      merged[key] = val;
-    } else if (merged[key] === undefined) {
-      merged[key] = val;
+    if (val !== undefined && val !== null) {
+      if (val !== "" || CLEARABLE_COMPANY_FIELDS.has(key) || merged[key] === undefined) {
+        merged[key] = val;
+      }
     }
   });
   return merged;
+}
+
+const COMPANY_SLICE_MAPPING: Array<{ dataKey: string; storageKey: any; maxItems?: number }> = [
+  { dataKey: "contacts", storageKey: "CONTACTS", maxItems: 500 },
+  { dataKey: "accounts", storageKey: "ACCOUNTS", maxItems: 200 },
+  { dataKey: "invoices", storageKey: "INVOICES", maxItems: 500 },
+  { dataKey: "transactions", storageKey: "TRANSACTIONS", maxItems: 600 },
+  { dataKey: "products", storageKey: "PRODUCTS", maxItems: 500 },
+  { dataKey: "quotes", storageKey: "QUOTES", maxItems: 250 },
+  { dataKey: "orders", storageKey: "ORDERS", maxItems: 250 },
+  { dataKey: "waybills", storageKey: "WAYBILLS", maxItems: 250 },
+  { dataKey: "cheques", storageKey: "CHEQUES", maxItems: 250 },
+  { dataKey: "promissoryNotes", storageKey: "PROMISSORY_NOTES", maxItems: 250 },
+  { dataKey: "branches", storageKey: "BRANCHES", maxItems: 100 },
+  { dataKey: "warehouses", storageKey: "WAREHOUSES", maxItems: 100 },
+  { dataKey: "employees", storageKey: "EMPLOYEES", maxItems: 300 },
+  { dataKey: "leaveRequests", storageKey: "LEAVE_REQUESTS", maxItems: 300 },
+  { dataKey: "advanceRequests", storageKey: "ADVANCE_REQUESTS", maxItems: 300 },
+  { dataKey: "legalDeductions", storageKey: "LEGAL_DEDUCTIONS", maxItems: 300 },
+  { dataKey: "costProjects", storageKey: "COST_PROJECTS", maxItems: 200 },
+  { dataKey: "assetCustodies", storageKey: "ASSET_CUSTODIES", maxItems: 200 },
+  { dataKey: "boms", storageKey: "BOMS", maxItems: 200 },
+  { dataKey: "workstations", storageKey: "WORKSTATIONS", maxItems: 200 },
+  { dataKey: "routings", storageKey: "ROUTINGS", maxItems: 200 },
+  { dataKey: "workOrders", storageKey: "WORK_ORDERS", maxItems: 200 },
+  { dataKey: "subcontractOrders", storageKey: "SUBCONTRACT_ORDERS", maxItems: 200 },
+  { dataKey: "autoServices", storageKey: "AUTO_SERVICES", maxItems: 200 },
+  { dataKey: "itServices", storageKey: "IT_SERVICES", maxItems: 200 },
+  { dataKey: "applianceServices", storageKey: "APPLIANCE_SERVICES", maxItems: 200 },
+  { dataKey: "constructionProjects", storageKey: "CONSTRUCTION_PROJECTS", maxItems: 150 },
+  { dataKey: "foodRecipes", storageKey: "FOOD_RECIPES", maxItems: 200 },
+  { dataKey: "foodMenus", storageKey: "FOOD_MENUS", maxItems: 200 },
+  { dataKey: "foodProductionOrders", storageKey: "FOOD_PRODUCTION_ORDERS", maxItems: 200 },
+  { dataKey: "foodDispatches", storageKey: "FOOD_DISPATCHES", maxItems: 200 },
+  { dataKey: "foodWitnessSamples", storageKey: "FOOD_SAMPLES", maxItems: 200 },
+  { dataKey: "fixedAssets", storageKey: "FIXED_ASSETS", maxItems: 200 },
+  { dataKey: "assetMaintenances", storageKey: "ASSET_MAINTENANCES", maxItems: 200 },
+  { dataKey: "assetDisposals", storageKey: "ASSET_DISPOSALS", maxItems: 200 },
+];
+
+/**
+ * Aktif şirketin tüm güncel verilerini (ayarlar, şubeler, depolar, faturalar, cariler, kasa/banka, stok vb.)
+ * hem sunucu tarafı kalıcı bulut deposuna (/api/cloud-sync/company) hem de Firestore'a gönderir.
+ */
+export async function pushCompanyDataToCloud(companyId: string, overrideData?: any): Promise<void> {
+  const cleanId = String(companyId || "").trim();
+  if (!cleanId) return;
+  const nowIso = new Date().toISOString();
+  const fullData = overrideData || getStoredData(cleanId);
+  const compMeta = getCompaniesList().find((c) => c.id === cleanId);
+
+  const payloadSlices: Record<string, any> = {
+    settings: {
+      ...fullData.settings,
+      tradeRegisterNo: fullData.settings?.tradeRegisterNo ?? "",
+      mersisNo: fullData.settings?.mersisNo ?? "",
+    },
+  };
+  COMPANY_SLICE_MAPPING.forEach(({ dataKey, maxItems }) => {
+    if (Array.isArray(fullData[dataKey])) {
+      payloadSlices[dataKey] = maxItems ? fullData[dataKey].slice(0, maxItems) : fullData[dataKey];
+    }
+  });
+
+  safeSetStorageItem(`muavin_company_updated_at_${cleanId}`, nowIso);
+
+  // 1. Sunucu tarafı kalıcı bulut deposuna anında yaz (kota sınırı yoktur)
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/cloud-sync/company", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: cleanId,
+          companyMeta: compMeta,
+          data: payloadSlices,
+          updatedAt: nowIso,
+        }),
+      });
+    } catch {
+      // Sunucu çevrimdışı ise devam et
+    }
+  }
+
+  // 2. Firestore kotası müsaitse Firestore'a da yaz
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const sliceDocRef = doc(db, "system_settings", `company_data_${cleanId}`);
+      await setDoc(
+        sliceDocRef,
+        sanitizeForFirestore({
+          companyId: cleanId,
+          companyName: compMeta?.companyName || fullData.settings?.companyName || "Şirket",
+          ...payloadSlices,
+          updatedAt: nowIso,
+        }),
+        { merge: true }
+      );
+    } catch (writeErr) {
+      checkAndMarkFirestoreQuotaError(writeErr);
+    }
+  }
+}
+
+/**
+ * Şirket kullanıcısı başka bir cihazdan giriş yaptığında veya uygulama açıldığında
+ * ilgili şirketin (veya tüm şirketlerin) en son kaydedilmiş tüm bilgilerini sunucu ve buluttan çekip yerel depolamaya uygular.
+ */
+export async function pullLatestCompanyDataFromCloud(
+  targetCompanyId?: string,
+  preferRemoteState: boolean = true
+): Promise<boolean> {
+  let anyUpdated = false;
+  const targetId = String(targetCompanyId || "").trim();
+
+  // 1. Sunucu tarafı /api/cloud-sync/state uç noktasından en güncel kayıtları çek
+  let serverState: any = null;
+  if (typeof window !== "undefined") {
+    try {
+      const url = targetId
+        ? `/api/cloud-sync/state?companyId=${encodeURIComponent(targetId)}`
+        : `/api/cloud-sync/state`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        serverState = await resp.json();
+      }
+    } catch {
+      // ignore fetch error
+    }
+  }
+
+  if (serverState) {
+    if (Array.isArray(serverState.deletedCompanyIds) && serverState.deletedCompanyIds.length > 0) {
+      saveDeletedCompanyIds([...getDeletedCompanyIds(), ...serverState.deletedCompanyIds]);
+    }
+    if (Array.isArray(serverState.deletedUserKeys) && serverState.deletedUserKeys.length > 0) {
+      saveDeletedUserKeys([...getDeletedUserKeys(), ...serverState.deletedUserKeys]);
+    }
+    if (Array.isArray(serverState.companiesRegistry) && serverState.companiesRegistry.length > 0) {
+      const localCompanies = getCompaniesList();
+      const deletedCompSet = new Set(getDeletedCompanyIds());
+      const mergedMap = new Map<string, any>();
+      localCompanies.forEach((c) => {
+        if (c && c.id && (isProtectedCompanyId(c.id) || !deletedCompSet.has(c.id))) {
+          mergedMap.set(c.id, c);
+        }
+      });
+      serverState.companiesRegistry.forEach((remoteComp: any) => {
+        if (remoteComp && remoteComp.id && (isProtectedCompanyId(remoteComp.id) || !deletedCompSet.has(remoteComp.id))) {
+          const existing = mergedMap.get(remoteComp.id);
+          mergedMap.set(remoteComp.id, mergeCompanyMetadataNonDestructive(existing, remoteComp));
+        }
+      });
+      saveCompaniesList(Array.from(mergedMap.values()), false);
+      anyUpdated = true;
+    }
+    if (Array.isArray(serverState.usersRegistry) && serverState.usersRegistry.length > 0) {
+      saveLocalUsersBackup(serverState.usersRegistry, false);
+    }
+  }
+
+  // 2. İlgili şirket(ler) için hem sunucu hem Firestore verisini kontrol et ve en güncel olanı uygula
+  const companiesToPull = targetId
+    ? [{ id: targetId }]
+    : getCompaniesList().map((c) => ({ id: c.id }));
+
+  for (const comp of companiesToPull) {
+    if (!comp?.id) continue;
+    const cid = comp.id;
+
+    const serverSlice =
+      targetId && cid === targetId
+        ? serverState?.companyData
+          ? { ...serverState.companyData, updatedAt: serverState.companyUpdatedAt }
+          : null
+        : serverState?.allCompaniesData?.[cid]
+        ? { ...serverState.allCompaniesData[cid].data, updatedAt: serverState.allCompaniesData[cid].updatedAt }
+        : null;
+
+    let firestoreSlice: any = null;
+    if (!isFirestoreWriteQuotaExhausted()) {
+      try {
+        const snap = await getDoc(doc(db, "system_settings", `company_data_${cid}`));
+        if (snap.exists()) {
+          firestoreSlice = snap.data();
+        }
+      } catch (readErr) {
+        checkAndMarkFirestoreQuotaError(readErr);
+      }
+    }
+
+    // Hangi bulut kaynağının daha yeni olduğunu belirle
+    let chosenRemote: any = null;
+    if (serverSlice && firestoreSlice) {
+      const sTime = serverSlice.updatedAt ? new Date(serverSlice.updatedAt).getTime() : 0;
+      const fTime = firestoreSlice.updatedAt ? new Date(firestoreSlice.updatedAt).getTime() : 0;
+      chosenRemote = sTime >= fTime ? { ...firestoreSlice, ...serverSlice } : { ...serverSlice, ...firestoreSlice };
+    } else {
+      chosenRemote = serverSlice || firestoreSlice;
+    }
+
+    if (chosenRemote && typeof chosenRemote === "object") {
+      const localData = getStoredData(cid);
+      if (chosenRemote.settings && typeof chosenRemote.settings === "object") {
+        // Buluttan gelen settings içindeki değerler (boş bırakılan mersisNo / tradeRegisterNo dahil) önceliklidir
+        const mergedSettings = mergeCompanyMetadataNonDestructive(localData.settings, chosenRemote.settings);
+        if ("tradeRegisterNo" in chosenRemote.settings) {
+          mergedSettings.tradeRegisterNo = chosenRemote.settings.tradeRegisterNo ?? "";
+        }
+        if ("mersisNo" in chosenRemote.settings) {
+          mergedSettings.mersisNo = chosenRemote.settings.mersisNo ?? "";
+        }
+        saveStoredData("SETTINGS", mergedSettings, cid);
+      }
+
+      COMPANY_SLICE_MAPPING.forEach(({ dataKey, storageKey }) => {
+        const remoteArr = chosenRemote[dataKey];
+        if (Array.isArray(remoteArr)) {
+          if (preferRemoteState) {
+            // Başka bir cihazdan giriş yapıldığında buluttaki en güncel listeyi birebir getir
+            // (Yerelde sadece bulutta henüz olmayan yeni kayıt varsa birleştir)
+            const localArr = Array.isArray((localData as any)[dataKey]) ? (localData as any)[dataKey] : [];
+            const hasLocalUserSavedTimestamp = Boolean(safeGetStorageItem(`muavin_company_updated_at_${cid}`));
+            const finalArr = hasLocalUserSavedTimestamp
+              ? mergeRecordsById(localArr, remoteArr)
+              : remoteArr;
+            saveStoredData(storageKey, finalArr, cid);
+          } else {
+            const mergedArr = mergeRecordsById((localData as any)[dataKey], remoteArr);
+            saveStoredData(storageKey, mergedArr, cid);
+          }
+        }
+      });
+
+      if (chosenRemote.updatedAt) {
+        safeSetStorageItem(`muavin_company_updated_at_${cid}`, chosenRemote.updatedAt);
+      }
+      anyUpdated = true;
+    }
+  }
+
+  if (anyUpdated) {
+    syncAllCompaniesAndUsersData();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("muavin:central-sync-broadcast", {
+          detail: {
+            type: "company_cloud_pull",
+            companyId: targetId || "all",
+            timestamp: new Date().toISOString(),
+          },
+        })
+      );
+    }
+  }
+
+  return anyUpdated;
 }
 
 /**
@@ -132,99 +407,12 @@ function mergeCompanyMetadataNonDestructive(existingComp: any, incomingComp: any
  * hiçbir kaydı silmeden bulut ve yerel veritabanı arasında birleştirir ve korur.
  */
 export async function preserveAndSyncAllCompaniesHistoricalData(writeToCloud: boolean = false): Promise<void> {
-  if (isFirestoreWriteQuotaExhausted()) return;
-  const companies = getCompaniesList();
-  for (const comp of companies) {
-    if (!comp?.id) continue;
-    try {
-      const localData = getStoredData(comp.id);
-      const sliceDocRef = doc(db, "system_settings", `company_data_${comp.id}`);
-      let remoteSlice: any = null;
-      try {
-        const snap = await getDoc(sliceDocRef);
-        if (snap.exists()) {
-          remoteSlice = snap.data();
-        }
-      } catch (readErr) {
-        checkAndMarkFirestoreQuotaError(readErr);
-        // Çevrimdışı ise yerel verileri koru
-      }
-
-      if (remoteSlice && typeof remoteSlice === "object") {
-        const mergedContacts = mergeRecordsById(remoteSlice.contacts, localData.contacts);
-        const mergedInvoices = mergeRecordsById(remoteSlice.invoices, localData.invoices);
-        const mergedTransactions = mergeRecordsById(remoteSlice.transactions, localData.transactions);
-        const mergedProducts = mergeRecordsById(remoteSlice.products, localData.products);
-        const mergedAccounts = mergeRecordsById(remoteSlice.accounts, localData.accounts);
-        const mergedEmployees = mergeRecordsById(remoteSlice.employees, localData.employees);
-        const mergedCostItems = mergeRecordsById(remoteSlice.costItems, localData.costItems);
-        const mergedQuotes = mergeRecordsById(remoteSlice.quotes, localData.quotes);
-        const mergedOrders = mergeRecordsById(remoteSlice.orders, localData.orders);
-        const mergedSettings = mergeCompanyMetadataNonDestructive(remoteSlice.settings, localData.settings);
-
-        saveStoredData("CONTACTS", mergedContacts, comp.id);
-        saveStoredData("INVOICES", mergedInvoices, comp.id);
-        saveStoredData("TRANSACTIONS", mergedTransactions, comp.id);
-        saveStoredData("PRODUCTS", mergedProducts, comp.id);
-        saveStoredData("ACCOUNTS", mergedAccounts, comp.id);
-        saveStoredData("EMPLOYEES", mergedEmployees, comp.id);
-        saveStoredData("COST_ITEMS", mergedCostItems, comp.id);
-        saveStoredData("QUOTES", mergedQuotes, comp.id);
-        saveStoredData("ORDERS", mergedOrders, comp.id);
-        saveStoredData("SETTINGS", mergedSettings, comp.id);
-
-        if (writeToCloud && !isFirestoreWriteQuotaExhausted()) {
-          try {
-            await setDoc(
-              sliceDocRef,
-              sanitizeForFirestore({
-                companyId: comp.id,
-                companyName: comp.companyName,
-                settings: mergedSettings,
-                contacts: mergedContacts.slice(0, 300),
-                invoices: mergedInvoices.slice(0, 300),
-                transactions: mergedTransactions.slice(0, 400),
-                products: mergedProducts.slice(0, 300),
-                accounts: mergedAccounts.slice(0, 100),
-                employees: mergedEmployees.slice(0, 200),
-                costItems: mergedCostItems.slice(0, 300),
-                quotes: mergedQuotes.slice(0, 150),
-                orders: mergedOrders.slice(0, 150),
-                updatedAt: new Date().toISOString(),
-              }),
-              { merge: true }
-            );
-          } catch (writeErr) {
-            checkAndMarkFirestoreQuotaError(writeErr);
-          }
-        }
-      } else if (writeToCloud && !isFirestoreWriteQuotaExhausted()) {
-        try {
-          await setDoc(
-            sliceDocRef,
-            sanitizeForFirestore({
-              companyId: comp.id,
-              companyName: comp.companyName,
-              settings: localData.settings,
-              contacts: (localData.contacts || []).slice(0, 300),
-              invoices: (localData.invoices || []).slice(0, 300),
-              transactions: (localData.transactions || []).slice(0, 400),
-              products: (localData.products || []).slice(0, 300),
-              accounts: (localData.accounts || []).slice(0, 100),
-              employees: (localData.employees || []).slice(0, 200),
-              costItems: (localData.costItems || []).slice(0, 300),
-              quotes: (localData.quotes || []).slice(0, 150),
-              orders: (localData.orders || []).slice(0, 150),
-              updatedAt: new Date().toISOString(),
-            }),
-            { merge: true }
-          );
-        } catch (writeErr) {
-          checkAndMarkFirestoreQuotaError(writeErr);
-        }
-      }
-    } catch {
-      // Şirket dilimi senkronizasyonunda hata olursa mevcut veriye dokunma
+  await pullLatestCompanyDataFromCloud(undefined, true);
+  if (writeToCloud) {
+    const companies = getCompaniesList();
+    for (const comp of companies) {
+      if (!comp?.id) continue;
+      await pushCompanyDataToCloud(comp.id);
     }
   }
 }
@@ -674,7 +862,25 @@ export async function verifyAndSyncAllUsersLocalDb(
     console.warn("Merkezi parametre doğrulanırken hata:", e);
   }
 
-  // 5. Merkezi Firestore senkronizasyon durumunu sadece açıkça buluta yazma istendiğinde ve kota müsaitse güncelle
+  // 5a. Sunucu tarafı kalıcı bulut deposuna her zaman yaz (kota sınırı yoktur)
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/cloud-sync/system", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companiesRegistry: companies,
+          usersRegistry: syncedUsersList,
+          deletedCompanyIds: getDeletedCompanyIds(),
+          deletedUserKeys: getDeletedUserKeys(),
+        }),
+      });
+    } catch {
+      // ignore offline
+    }
+  }
+
+  // 5b. Merkezi Firestore senkronizasyon durumunu açıkça buluta yazma istendiğinde ve kota müsaitse güncelle
   if (writeToCloud && !isFirestoreWriteQuotaExhausted()) {
     try {
       await setDoc(

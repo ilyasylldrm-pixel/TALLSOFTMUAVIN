@@ -1053,6 +1053,9 @@ export function getStoredData(targetCompanyId?: string) {
       vknTckn: compMeta.taxNumber || compMeta.vkn || compMeta.tckn || "",
       vkn: compMeta.vkn || "",
       tckn: compMeta.tckn || "",
+      taxpayerType: compMeta.taxpayerType || initialCompanySettings.taxpayerType,
+      tradeRegisterNo: compMeta.tradeRegisterNo ?? "",
+      mersisNo: compMeta.mersisNo ?? "",
       mysoftMatchedType: compMeta.mysoftMatchedType || "vkn",
       tenantIdentifierNumber: compMeta.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
       mysoftStatus: compMeta.mysoftStatus || "unmatched",
@@ -1062,8 +1065,8 @@ export function getStoredData(targetCompanyId?: string) {
       eArsivNextNumber: compMeta.eArsivNextNumber || undefined,
       defaultInvoicePrefix: compMeta.eFaturaPrefix || "GIB",
       defaultBankAccountName: compMeta.defaultBankAccountName || compMeta.companyTitle || compMeta.companyName || "",
-      defaultBankName: compMeta.defaultBankName || initialCompanySettings.defaultBankName,
-      defaultBankIban: compMeta.defaultBankIban || initialCompanySettings.defaultBankIban,
+      defaultBankName: compMeta.defaultBankName ?? initialCompanySettings.defaultBankName,
+      defaultBankIban: compMeta.defaultBankIban ?? initialCompanySettings.defaultBankIban,
       phone: compMeta.phone || "",
       email: compMeta.email || "",
       website: compMeta.website || "",
@@ -1086,9 +1089,21 @@ export function getStoredData(targetCompanyId?: string) {
   }
 
   if (compMeta) {
+    const cleanTradeReg =
+      loadedSettings.tradeRegisterNo === "384910-5"
+        ? (compMeta.tradeRegisterNo ?? "")
+        : (loadedSettings.tradeRegisterNo !== undefined ? loadedSettings.tradeRegisterNo : (compMeta.tradeRegisterNo ?? ""));
+    const cleanMersis =
+      loadedSettings.mersisNo === "0847029103800001"
+        ? (compMeta.mersisNo ?? "")
+        : (loadedSettings.mersisNo !== undefined ? loadedSettings.mersisNo : (compMeta.mersisNo ?? ""));
+
     loadedSettings = {
       ...loadedSettings,
       taxOffice: loadedSettings.taxOffice || compMeta.taxOffice || "Merkez",
+      taxpayerType: loadedSettings.taxpayerType || compMeta.taxpayerType || "Anonim Şirket",
+      tradeRegisterNo: cleanTradeReg,
+      mersisNo: cleanMersis,
       city: loadedSettings.city || compMeta.city || "İstanbul",
       district: loadedSettings.district || compMeta.district || "",
       neighborhood: loadedSettings.neighborhood || compMeta.neighborhood || loadedSettings.addressDetails?.neighborhood || "",
@@ -1104,15 +1119,13 @@ export function getStoredData(targetCompanyId?: string) {
         loadedSettings.companyName ||
         "",
       defaultBankName:
-        loadedSettings.defaultBankName ||
-        compMeta.defaultBankName ||
-        initialCompanySettings.defaultBankName ||
-        "",
+        loadedSettings.defaultBankName !== undefined
+          ? loadedSettings.defaultBankName
+          : compMeta.defaultBankName || initialCompanySettings.defaultBankName || "",
       defaultBankIban:
-        loadedSettings.defaultBankIban ||
-        compMeta.defaultBankIban ||
-        initialCompanySettings.defaultBankIban ||
-        "",
+        loadedSettings.defaultBankIban !== undefined
+          ? loadedSettings.defaultBankIban
+          : compMeta.defaultBankIban || initialCompanySettings.defaultBankIban || "",
       logoUrl:
         compMeta.logoUrl && compMeta.logoUrl !== "/logo.svg"
           ? compMeta.logoUrl
@@ -1847,30 +1860,51 @@ export function syncAllCompaniesAndUsersData(): {
         normalizedComp.companyName = companyData.settings.companyName || normalizedComp.companyName;
         normalizedComp.companyTitle = companyData.settings.companyTitle || normalizedComp.companyTitle || normalizedComp.companyName;
         normalizedComp.taxOffice = companyData.settings.taxOffice || normalizedComp.taxOffice || "Merkez";
+        normalizedComp.taxpayerType = companyData.settings.taxpayerType || normalizedComp.taxpayerType;
+        normalizedComp.tradeRegisterNo =
+          companyData.settings.tradeRegisterNo !== undefined
+            ? companyData.settings.tradeRegisterNo
+            : (normalizedComp.tradeRegisterNo ?? "");
+        normalizedComp.mersisNo =
+          companyData.settings.mersisNo !== undefined
+            ? companyData.settings.mersisNo
+            : (normalizedComp.mersisNo ?? "");
         normalizedComp.city = companyData.settings.city || normalizedComp.city || "İstanbul";
-        normalizedComp.district = companyData.settings.district || normalizedComp.district;
-        normalizedComp.neighborhood = companyData.settings.neighborhood || normalizedComp.neighborhood;
-        normalizedComp.address = companyData.settings.address || normalizedComp.address;
+        normalizedComp.district = companyData.settings.district ?? normalizedComp.district;
+        normalizedComp.neighborhood = companyData.settings.neighborhood ?? normalizedComp.neighborhood;
+        normalizedComp.address = companyData.settings.address ?? normalizedComp.address;
+        normalizedComp.phone = companyData.settings.phone ?? normalizedComp.phone;
+        normalizedComp.email = companyData.settings.email ?? normalizedComp.email;
+        normalizedComp.website = companyData.settings.website ?? normalizedComp.website;
         normalizedComp.defaultBankAccountName =
           companyData.settings.defaultBankAccountName ||
           normalizedComp.defaultBankAccountName ||
           companyData.settings.companyTitle ||
           normalizedComp.companyTitle;
-        normalizedComp.defaultBankName = companyData.settings.defaultBankName || normalizedComp.defaultBankName;
-        normalizedComp.defaultBankIban = companyData.settings.defaultBankIban || normalizedComp.defaultBankIban;
+        normalizedComp.defaultBankName =
+          companyData.settings.defaultBankName !== undefined
+            ? companyData.settings.defaultBankName
+            : normalizedComp.defaultBankName;
+        normalizedComp.defaultBankIban =
+          companyData.settings.defaultBankIban !== undefined
+            ? companyData.settings.defaultBankIban
+            : normalizedComp.defaultBankIban;
 
         const mergedSettings: CompanySettings = {
           ...companyData.settings,
           companyName: companyData.settings.companyName || normalizedComp.companyName,
           companyTitle: companyData.settings.companyTitle || normalizedComp.companyTitle || normalizedComp.companyName,
           taxOffice: companyData.settings.taxOffice || normalizedComp.taxOffice || "Merkez",
+          taxpayerType: companyData.settings.taxpayerType || normalizedComp.taxpayerType || "Anonim Şirket",
+          tradeRegisterNo: normalizedComp.tradeRegisterNo ?? "",
+          mersisNo: normalizedComp.mersisNo ?? "",
           taxNumber: companyData.settings.taxNumber || normalizedComp.taxNumber,
           vkn: companyData.settings.vkn || normalizedComp.vkn,
           tckn: companyData.settings.tckn || normalizedComp.tckn,
           city: companyData.settings.city || normalizedComp.city || "İstanbul",
-          district: companyData.settings.district || normalizedComp.district || "",
-          neighborhood: companyData.settings.neighborhood || normalizedComp.neighborhood || "",
-          address: companyData.settings.address || normalizedComp.address || "",
+          district: companyData.settings.district ?? normalizedComp.district ?? "",
+          neighborhood: companyData.settings.neighborhood ?? normalizedComp.neighborhood ?? "",
+          address: companyData.settings.address ?? normalizedComp.address ?? "",
           tenantIdentifierNumber: companyData.settings.tenantIdentifierNumber || normalizedComp.tenantIdentifierNumber,
           mysoftMatchedType: companyData.settings.mysoftMatchedType || normalizedComp.mysoftMatchedType,
           mysoftStatus: companyData.settings.mysoftStatus || normalizedComp.mysoftStatus,
@@ -1885,8 +1919,14 @@ export function syncAllCompaniesAndUsersData(): {
             companyData.settings.companyTitle ||
             normalizedComp.companyTitle ||
             "",
-          defaultBankName: companyData.settings.defaultBankName || normalizedComp.defaultBankName,
-          defaultBankIban: companyData.settings.defaultBankIban || normalizedComp.defaultBankIban,
+          defaultBankName:
+            companyData.settings.defaultBankName !== undefined
+              ? companyData.settings.defaultBankName
+              : normalizedComp.defaultBankName,
+          defaultBankIban:
+            companyData.settings.defaultBankIban !== undefined
+              ? companyData.settings.defaultBankIban
+              : normalizedComp.defaultBankIban,
           logoUrl: resolvedLogoUrl,
           logoScale: resolvedLogoScale,
         };

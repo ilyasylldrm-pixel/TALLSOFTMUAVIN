@@ -40,7 +40,56 @@ import {
 } from "../lib/firebase";
 import { AppModuleKey } from "../types";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
-import { safeSetStorageItem } from "../utils/storage";
+import { safeSetStorageItem, getCompaniesList, setActiveCompanyId } from "../utils/storage";
+import { pullLatestCompanyDataFromCloud } from "../services/systemSyncService";
+
+async function syncAndResolveCompanyForUserLogin(profile: UserProfile): Promise<UserProfile> {
+  try {
+    // 1. Önce sunucu ve buluttan en güncel şirket listesini ve varsa hedef şirketin verilerini çek
+    await pullLatestCompanyDataFromCloud(profile.companyId, true);
+
+    const companies = getCompaniesList();
+    let matchedComp = profile.companyId
+      ? companies.find((c) => c.id === profile.companyId)
+      : undefined;
+
+    if (!matchedComp && profile.taxNumber) {
+      const cleanTax = String(profile.taxNumber).replace(/\D/g, "").trim();
+      if (cleanTax.length >= 10) {
+        matchedComp = companies.find(
+          (c) =>
+            String(c.taxNumber || "").replace(/\D/g, "") === cleanTax ||
+            String(c.vkn || "").replace(/\D/g, "") === cleanTax ||
+            String(c.tckn || "").replace(/\D/g, "") === cleanTax ||
+            String(c.tenantIdentifierNumber || "").replace(/\D/g, "") === cleanTax
+        );
+      }
+    }
+
+    if (!matchedComp && profile.companyName) {
+      const cleanName = profile.companyName.trim().toLocaleLowerCase("tr-TR");
+      matchedComp = companies.find(
+        (c) =>
+          (c.companyName || "").trim().toLocaleLowerCase("tr-TR") === cleanName ||
+          (c.companyTitle || "").trim().toLocaleLowerCase("tr-TR") === cleanName
+      );
+    }
+
+    if (matchedComp) {
+      if (profile.companyId !== matchedComp.id) {
+        profile.companyId = matchedComp.id;
+        await pullLatestCompanyDataFromCloud(matchedComp.id, true);
+      }
+      profile.companyName = matchedComp.companyName || profile.companyName;
+      profile.taxNumber =
+        matchedComp.taxNumber || matchedComp.vkn || matchedComp.tckn || profile.taxNumber;
+      setActiveCompanyId(matchedComp.id);
+    }
+  } catch (e) {
+    console.warn("Cross-device login sync warning:", e);
+  }
+  return profile;
+}
 
 export interface UserProfile {
   id: string;
@@ -388,11 +437,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           console.error("Firestore user profile save error:", dbErr);
         }
 
-        safeSetStorageItem("muavin_active_user", JSON.stringify(finalProfile), !rememberMe);
+        const syncedProfile = await syncAndResolveCompanyForUserLogin(finalProfile);
+        safeSetStorageItem("muavin_active_user", JSON.stringify(syncedProfile), !rememberMe);
 
         setPassword("");
         setSubmitting(false);
-        onLoginSuccess(finalProfile);
+        onLoginSuccess(syncedProfile);
         onClose();
         return;
       }
@@ -480,11 +530,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         createdByAdmin: true,
       };
 
-      safeSetStorageItem("muavin_active_user", JSON.stringify(finalProfile), !rememberMe);
+      const syncedProfile = await syncAndResolveCompanyForUserLogin(finalProfile);
+      safeSetStorageItem("muavin_active_user", JSON.stringify(syncedProfile), !rememberMe);
 
       setPassword("");
       setSubmitting(false);
-      onLoginSuccess(finalProfile);
+      onLoginSuccess(syncedProfile);
       onClose();
     } catch (err: any) {
       console.error("Auth submit error:", err);
@@ -552,10 +603,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         createdByAdmin: true,
       });
 
-      safeSetStorageItem("muavin_active_user", JSON.stringify(finalProfile), !rememberMe);
+      const syncedProfile = await syncAndResolveCompanyForUserLogin(finalProfile);
+      safeSetStorageItem("muavin_active_user", JSON.stringify(syncedProfile), !rememberMe);
 
       setSubmitting(false);
-      onLoginSuccess(finalProfile);
+      onLoginSuccess(syncedProfile);
       onClose();
     } catch (err: any) {
       console.error("Google sign in error:", err);
