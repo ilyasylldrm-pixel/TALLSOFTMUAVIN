@@ -2511,6 +2511,7 @@ export default function App() {
               contacts={data.contacts}
               products={data.products}
               accounts={data.accounts}
+              branches={data.branches || []}
               companySettings={data.settings}
               globalSearchTerm={searchTerm}
               forcedType={

@@ -3,6 +3,7 @@ import { Invoice, InvoiceItem, CompanySettings, Contact, getContactAccountCode }
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { getCurrencySymbol, formatDate, exportElementToPDF, printHtmlElement, exportToExcel } from "../utils/exportUtils";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
+import { formatAddressWithBranch } from "../utils/storage";
 import {
   computeInvoiceTotals,
   formatWithholdingBadge,
@@ -129,28 +130,38 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   const contactName = invoice.contactName || contact?.name || "Belirtilmemiş Müşteri / Tedarikçi";
   const contactTaxOffice = invoice.taxOffice || contact?.taxOffice || "-";
   const contactTaxNo = invoice.taxNumber || contact?.taxNumber || "-";
-  const rawContactAddress = (invoice.customerAddress || contact?.address || "").trim();
+  const customerBranchName = (invoice.customerBranchName || contact?.branchName || "").trim();
+  const customerBranchCode = (invoice.customerBranchCode || contact?.branchCode || "").trim();
+  const rawContactAddress = (
+    invoice.customerAddress ||
+    contact?.address ||
+    [contact?.neighborhood, contact?.street, contact?.buildingNo, contact?.doorNo]
+      .filter(Boolean)
+      .join(" ") ||
+    ""
+  ).trim();
   const contactCity = (invoice.customerCity || contact?.city || "").trim();
   const contactDistrict = (invoice.customerDistrict || contact?.district || "").trim();
-  const contactLocationTag = [contactDistrict, contactCity].filter(Boolean).join(" / ");
-  const contactAddress = (() => {
-    if (!rawContactAddress) {
-      return contactLocationTag || "Adres Belirtilmemiş";
-    }
-    const lowerAddr = rawContactAddress.toLocaleLowerCase("tr-TR");
-    const hasCity = contactCity && lowerAddr.includes(contactCity.toLocaleLowerCase("tr-TR"));
-    const hasDistrict = contactDistrict && lowerAddr.includes(contactDistrict.toLocaleLowerCase("tr-TR"));
-    if (hasCity && (hasDistrict || !contactDistrict)) {
-      return rawContactAddress;
-    }
-    if (!hasCity && !hasDistrict && contactLocationTag) {
-      return `${rawContactAddress}, ${contactLocationTag}`;
-    }
-    if (!hasCity && contactCity) {
-      return `${rawContactAddress} / ${contactCity}`;
-    }
-    return rawContactAddress;
-  })();
+  const contactAddress =
+    formatAddressWithBranch(
+      rawContactAddress,
+      contactCity,
+      contactDistrict,
+      customerBranchName,
+      customerBranchCode
+    ) || "Adres Belirtilmemiş";
+  const sellerBranchName = (invoice.branchName || "").trim();
+  const sellerBranchCode = (invoice.branchCode || "").trim();
+  const sellerAddress =
+    formatAddressWithBranch(
+      invoice.branchAddress || companySettings?.address,
+      invoice.branchCity || companySettings?.city,
+      invoice.branchDistrict || companySettings?.district,
+      sellerBranchName,
+      sellerBranchCode
+    ) ||
+    [companySettings?.address, companySettings?.city].filter(Boolean).join(", ") ||
+    "Adres bilgisi girilmemiş";
   const contactPhone = invoice.customerPhone || contact?.phone || "-";
   const contactEmail = invoice.customerEmail || contact?.email || "-";
   const isManualCustomer = invoice.isManualCustomer || (!contact && !invoice.contactId?.startsWith("cnt_"));
@@ -440,8 +451,13 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                 <p className="text-xs font-medium text-slate-600 max-w-sm">
                   {companySettings?.companyTitle || companySettings?.companyName}
                 </p>
+                {sellerBranchName && (
+                  <p className="text-xs font-bold text-purple-800">
+                    Şube: {sellerBranchName}{sellerBranchCode ? ` (${sellerBranchCode})` : ""}
+                  </p>
+                )}
                 <p className="text-xs text-slate-500">
-                  {companySettings?.address || "Adres bilgisi girilmemiş"}, {companySettings?.city || ""}
+                  {sellerAddress}
                 </p>
                 <p className="text-xs text-slate-500">
                   Tel: {companySettings?.phone || "-"} | E-posta: {companySettings?.email || "-"}
@@ -519,9 +535,16 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               {/* Seller */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                <span className="text-[10px] font-black uppercase text-indigo-700 block tracking-wider">
-                  SATICI BİLGİLERİ
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-indigo-700 block tracking-wider">
+                    SATICI BİLGİLERİ
+                  </span>
+                  {sellerBranchName && (
+                    <span className="font-mono text-[10px] bg-purple-100 text-purple-800 border border-purple-200 font-bold px-1.5 py-0.5 rounded">
+                      Şube: {sellerBranchName}{sellerBranchCode ? ` (${sellerBranchCode})` : ""}
+                    </span>
+                  )}
+                </div>
                 <p className="font-extrabold text-slate-900">
                   {companySettings?.companyTitle || companySettings?.companyName}
                 </p>
@@ -539,24 +562,33 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                 {companySettings?.mersisNo && (
                   <p className="text-slate-600">Mersis No: {companySettings.mersisNo}</p>
                 )}
-                <p className="text-slate-500 pt-1">{companySettings?.address || "-"}</p>
+                <p className="text-slate-600 font-medium pt-1">
+                  <strong>Adres:</strong> {sellerAddress}
+                </p>
               </div>
 
               {/* Buyer */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-1">
                   <span className="text-[10px] font-black uppercase text-indigo-700 block tracking-wider">
                     ALICI / MÜŞTERİ BİLGİLERİ
                   </span>
-                  {isManualCustomer ? (
-                    <span className="font-mono text-[10px] bg-amber-100 text-amber-800 border border-amber-200 font-bold px-1.5 py-0.5 rounded">
-                      Münferit / Elle Giriş
-                    </span>
-                  ) : accountCode ? (
-                    <span className="font-mono text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded">
-                      Cari Kodu: {accountCode}
-                    </span>
-                  ) : null}
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {customerBranchName && (
+                      <span className="font-mono text-[10px] bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold px-1.5 py-0.5 rounded">
+                        Şube: {customerBranchName}{customerBranchCode ? ` (${customerBranchCode})` : ""}
+                      </span>
+                    )}
+                    {isManualCustomer ? (
+                      <span className="font-mono text-[10px] bg-amber-100 text-amber-800 border border-amber-200 font-bold px-1.5 py-0.5 rounded">
+                        Münferit / Elle Giriş
+                      </span>
+                    ) : accountCode ? (
+                      <span className="font-mono text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded">
+                        Cari Kodu: {accountCode}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="font-extrabold text-slate-900">{contactName}</p>
                 <p className="text-slate-600">
@@ -565,8 +597,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                 <p className="text-slate-600">
                   VKN / TCKN: <strong>{contactTaxNo}</strong>
                 </p>
-                <p className="text-slate-500">
-                  {contactAddress}
+                <p className="text-slate-600 font-medium">
+                  <strong>Adres:</strong> {contactAddress}
                 </p>
                 <p className="text-slate-500">
                   Tel: {contactPhone} {contactEmail && contactEmail !== "-" ? `| E-posta: ${contactEmail}` : ""}

@@ -17,7 +17,7 @@ import { DataImportModal } from "./common/DataImportModal";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, generateAccountStatementAutoTablePDF, printAccountStatementPDF, printHtmlElement, exportElementToPDFWithPrintStyling, LedgerSummaryData, exportToExcel, exportToPDF } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
-import { appendCityDistrictToAddress } from "../utils/storage";
+import { appendCityDistrictToAddress, formatAddressWithBranch } from "../utils/storage";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -442,6 +442,8 @@ export const Contacts: React.FC<ContactsProps> = ({
     buildingNo: string;
     doorNo: string;
     postalCode: string;
+    branchName: string;
+    branchCode: string;
     address: string;
     contactPerson: string;
     phone: string;
@@ -472,6 +474,8 @@ export const Contacts: React.FC<ContactsProps> = ({
     buildingNo: "No: 12",
     doorNo: "D: 4",
     postalCode: "34710",
+    branchName: "",
+    branchCode: "",
     address: "",
     contactPerson: "",
     phone: "",
@@ -692,7 +696,9 @@ export const Contacts: React.FC<ContactsProps> = ({
     dist: string,
     ct: string,
     door?: string,
-    pc?: string
+    pc?: string,
+    brName?: string,
+    brCode?: string
   ) => {
     const parts = [];
     if (nh && nh !== "Diğer") parts.push(nh.endsWith("Mah.") || nh.endsWith("Mahallesi") ? nh : `${nh} Mah.`);
@@ -707,7 +713,9 @@ export const Contacts: React.FC<ContactsProps> = ({
     if (pc) {
       full = `${full} (PK: ${pc})`;
     }
-    return full;
+    const effectiveBrName = brName !== undefined ? brName : formData.branchName;
+    const effectiveBrCode = brCode !== undefined ? brCode : formData.branchCode;
+    return formatAddressWithBranch(full, ct, dist !== "Diğer" ? dist : "", effectiveBrName, effectiveBrCode);
   };
 
   // Synchronize address when location dropdowns change
@@ -823,7 +831,15 @@ export const Contacts: React.FC<ContactsProps> = ({
         buildingNo: contact.buildingNo || "",
         doorNo: "",
         postalCode: contact.postalCode || "",
-        address: contact.address || "",
+        branchName: contact.branchName || "",
+        branchCode: contact.branchCode || "",
+        address: formatAddressWithBranch(
+          contact.address || "",
+          ct,
+          dist !== "Diğer" ? dist : "",
+          contact.branchName,
+          contact.branchCode
+        ),
         contactPerson: contact.contactPerson || "",
         phone: contact.phone || contact.mobile || "",
         email: contact.email || "",
@@ -868,7 +884,7 @@ export const Contacts: React.FC<ContactsProps> = ({
       const defaultSt = "Bağdat Caddesi";
       const defaultBld = "No: 12";
       const defaultTaxOffice = "Kadıköy V.D.";
-      const defaultAddr = compileAddress(defaultNh, defaultSt, defaultBld, defaultDist, defaultCity, "D: 4", "34710");
+      const defaultAddr = compileAddress(defaultNh, defaultSt, defaultBld, defaultDist, defaultCity, "D: 4", "34710", "", "");
 
       setFormData({
         accountCode: "",
@@ -885,6 +901,8 @@ export const Contacts: React.FC<ContactsProps> = ({
         buildingNo: defaultBld,
         doorNo: "D: 4",
         postalCode: "34710",
+        branchName: "",
+        branchCode: "",
         address: defaultAddr,
         contactPerson: "",
         phone: "",
@@ -915,10 +933,12 @@ export const Contacts: React.FC<ContactsProps> = ({
     if (!finalName) return;
 
     const accountCode = currentComputedAccountCode;
-    const effectiveOpenAddress = appendCityDistrictToAddress(
-      formData.address || compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode),
+    const effectiveOpenAddress = formatAddressWithBranch(
+      formData.address || compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode, formData.branchName, formData.branchCode),
       formData.city,
-      formData.district !== "Diğer" ? formData.district : ""
+      formData.district !== "Diğer" ? formData.district : "",
+      formData.branchName,
+      formData.branchCode
     );
     const finalShippingAddress = formData.isSameShippingAddress
       ? effectiveOpenAddress
@@ -939,6 +959,8 @@ export const Contacts: React.FC<ContactsProps> = ({
       email: formData.email,
       address: effectiveOpenAddress,
       shippingAddress: finalShippingAddress,
+      branchName: formData.branchName.trim() || undefined,
+      branchCode: formData.branchCode.trim() || undefined,
       city: formData.city,
       district: formData.district,
       neighborhood: formData.neighborhood,
@@ -2552,7 +2574,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                           value={formData.postalCode}
                           onChange={(e) => {
                             const val = e.target.value;
-                            const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, val);
+                            const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, val, formData.branchName, formData.branchCode);
                             setFormData(prev => ({ ...prev, postalCode: val, address: newAddr }));
                           }}
                           className="w-full rounded-xl p-2 text-xs border"
@@ -2561,10 +2583,62 @@ export const Contacts: React.FC<ContactsProps> = ({
                       </div>
                     </div>
 
+                    {/* Şube Bilgileri (Şube Adı & Şube Kodu - Adreste Otomatik Görünür) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                      <div className="sm:col-span-8">
+                        <label className="block text-[11px] font-semibold mb-1 flex items-center justify-between" style={{ color: theme.pageText }}>
+                          <span className="flex items-center gap-1">
+                            <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                            <span>Şube Adı / Birim Bilgisi (Fatura Adresinde Görünür)</span>
+                          </span>
+                          <span className="text-[10px] font-normal text-purple-600">İsteğe bağlı</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="ör: Merkez Şube, Kadıköy Şubesi, Gebze Depo Şubesi"
+                          value={formData.branchName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode, val, formData.branchCode);
+                            setFormData(prev => ({
+                              ...prev,
+                              branchName: val,
+                              address: newAddr,
+                              shippingAddress: prev.isSameShippingAddress ? newAddr : prev.shippingAddress,
+                            }));
+                          }}
+                          className="w-full rounded-xl p-2 text-xs font-semibold border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                        />
+                      </div>
+                      <div className="sm:col-span-4">
+                        <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
+                          Şube Kodu
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="ör: SUB-01"
+                          value={formData.branchCode}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode, formData.branchName, val);
+                            setFormData(prev => ({
+                              ...prev,
+                              branchCode: val,
+                              address: newAddr,
+                              shippingAddress: prev.isSameShippingAddress ? newAddr : prev.shippingAddress,
+                            }));
+                          }}
+                          className="w-full rounded-xl p-2 text-xs font-mono border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                        />
+                      </div>
+                    </div>
+
                     {/* Tam Açık Adres */}
                     <div>
                       <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
-                        Tam Açık Adres (Fatura &amp; Tebligat Adresi)
+                        Tam Açık Adres (Fatura &amp; Tebligat Adresi - Şube Bilgisi Dahil)
                       </label>
                       <textarea
                         rows={2}
@@ -2579,10 +2653,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                         }}
                         onBlur={() => {
                           setFormData(prev => {
-                            const syncedAddr = appendCityDistrictToAddress(
+                            const syncedAddr = formatAddressWithBranch(
                               prev.address,
                               prev.city,
-                              prev.district !== "Diğer" ? prev.district : ""
+                              prev.district !== "Diğer" ? prev.district : "",
+                              prev.branchName,
+                              prev.branchCode
                             );
                             return {
                               ...prev,

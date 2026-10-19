@@ -1555,6 +1555,47 @@ export function appendCityDistrictToAddress(
 }
 
 /**
+ * Formats an open address with city, district, and branch information (Şube Adı / Şube Kodu)
+ * so that branch details visibly appear inside the address text without duplication.
+ */
+export function formatAddressWithBranch(
+  rawAddress?: string,
+  city?: string,
+  district?: string,
+  branchName?: string,
+  branchCode?: string
+): string {
+  const baseAddr = appendCityDistrictToAddress(rawAddress, city, district);
+  const cleanBranchName = String(branchName || "").trim();
+  const cleanBranchCode = String(branchCode || "").trim();
+  if (!cleanBranchName && !cleanBranchCode) {
+    return baseAddr;
+  }
+
+  const branchLabel = cleanBranchName
+    ? cleanBranchCode && !cleanBranchName.toLocaleLowerCase("tr-TR").includes(cleanBranchCode.toLocaleLowerCase("tr-TR"))
+      ? `Şube: ${cleanBranchName} (${cleanBranchCode})`
+      : cleanBranchName.toLocaleLowerCase("tr-TR").startsWith("şube")
+      ? cleanBranchName
+      : `Şube: ${cleanBranchName}`
+    : `Şube Kodu: ${cleanBranchCode}`;
+
+  if (!baseAddr) {
+    return branchLabel;
+  }
+
+  const lowerAddr = baseAddr.toLocaleLowerCase("tr-TR");
+  if (
+    (cleanBranchName && lowerAddr.includes(cleanBranchName.toLocaleLowerCase("tr-TR"))) ||
+    lowerAddr.includes(branchLabel.toLocaleLowerCase("tr-TR"))
+  ) {
+    return baseAddr;
+  }
+
+  return `${baseAddr} — ${branchLabel}`;
+}
+
+/**
  * Searches all companies' Cari Hesaplar (CONTACTS) and registered companies (COMPANIES_LIST)
  * for a matching VKN or TCKN, returning its saved taxOffice, city, district, neighborhood, and open address.
  */

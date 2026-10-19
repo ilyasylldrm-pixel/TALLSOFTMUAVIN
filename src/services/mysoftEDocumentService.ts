@@ -2943,6 +2943,8 @@ export interface RecipientTaxpayerStatus {
   postalCode?: string;
   address?: string;
   shippingAddress?: string;
+  branchName?: string;
+  branchCode?: string;
   phone?: string;
   email?: string;
   contactPerson?: string;
@@ -2984,6 +2986,8 @@ export async function checkRecipientTaxpayerStatus(
     const mergedDoorNo = rawStatus.doorNo || localContact?.addressDetails?.doorNo || "";
     const mergedPostalCode = rawStatus.postalCode || localContact?.postalCode || localContact?.addressDetails?.postalCode || "";
     const mergedRawAddress = rawStatus.address || localContact?.address || "";
+    const mergedBranchName = rawStatus.branchName || localContact?.branchName || "";
+    const mergedBranchCode = rawStatus.branchCode || localContact?.branchCode || "";
 
     const parsedAddr = parseSeparateAddressFields({
       taxOffice: mergedTaxOffice,
@@ -3012,6 +3016,8 @@ export async function checkRecipientTaxpayerStatus(
       postalCode: parsedAddr.postalCode || rawStatus.postalCode || "",
       address: parsedAddr.address || rawStatus.address || "",
       shippingAddress: rawStatus.shippingAddress || parsedAddr.address || rawStatus.address || "",
+      branchName: mergedBranchName || undefined,
+      branchCode: mergedBranchCode || undefined,
       phone: rawStatus.phone || localContact?.phone || "",
       email: rawStatus.email || localContact?.email || "",
       contactPerson: rawStatus.contactPerson || localContact?.contactPerson || "",

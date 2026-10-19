@@ -4,6 +4,7 @@ import { getContactAccountCode } from "../types";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { getCurrencySymbol, formatDate } from "../utils/exportUtils";
 import { computeInvoiceTotals, formatWithholdingBadge } from "../utils/taxCalculationService";
+import { formatAddressWithBranch } from "../utils/storage";
 import { Logo } from "./Logo";
 
 export interface InvoiceLivePreviewProps {
@@ -36,6 +37,15 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
 
   const contactName =
     invoice.contactName || contact?.name || "Müşteri seçilmedi";
+  const customerBranchName = invoice.customerBranchName || contact?.branchName;
+  const customerBranchCode = invoice.customerBranchCode || contact?.branchCode;
+  const customerFullAddress = formatAddressWithBranch(
+    invoice.customerAddress || contact?.address,
+    invoice.customerCity || contact?.city,
+    invoice.customerDistrict || contact?.district,
+    customerBranchName,
+    customerBranchCode
+  );
   const isReceipt = invoice.docKind === "receipt";
 
   const isTevkifat = invoice.invoiceProfileType === "TEVKIFAT" || totalWithholding > 0;
@@ -68,9 +78,19 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
           <p className="font-extrabold text-slate-900 mt-1 truncate">
             {companySettings?.companyName || "Firma"}
           </p>
+          {invoice.branchName && (
+            <p className="text-purple-700 font-bold truncate">
+              Şube: {invoice.branchName}{invoice.branchCode ? ` (${invoice.branchCode})` : ""}
+            </p>
+          )}
           <p className="text-slate-500 truncate">
             VKN: {companySettings?.taxNumber || "-"}
           </p>
+          {(invoice.branchAddress || companySettings?.address) && (
+            <p className="text-slate-500 truncate">
+              {invoice.branchAddress || companySettings?.address}
+            </p>
+          )}
         </div>
         <div className="text-right shrink-0">
           <span className="inline-block bg-slate-900 text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase">
@@ -108,14 +128,26 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-2">
           <p className="text-[9px] font-black uppercase text-indigo-700">Alıcı</p>
           <p className="font-bold truncate">{contactName}</p>
+          {customerBranchName && (
+            <p className="text-indigo-700 font-bold truncate">
+              Şube: {customerBranchName}{customerBranchCode ? ` (${customerBranchCode})` : ""}
+            </p>
+          )}
           <p className="text-slate-600">VKN: {contact?.taxNumber || invoice.taxNumber || "-"}</p>
+          {customerFullAddress && (
+            <p className="text-slate-500 truncate mt-0.5" title={customerFullAddress}>
+              {customerFullAddress}
+            </p>
+          )}
         </div>
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-2">
-          <p className="text-[9px] font-black uppercase text-indigo-700">Cari</p>
+          <p className="text-[9px] font-black uppercase text-indigo-700">Cari & Adres</p>
           <p className="font-mono font-bold">
             {contact ? getContactAccountCode(contact) : "-"}
           </p>
-          <p className="text-slate-600 truncate">{contact?.city || ""}</p>
+          <p className="text-slate-600 truncate">
+            {customerFullAddress || contact?.city || invoice.customerCity || ""}
+          </p>
         </div>
       </div>
 

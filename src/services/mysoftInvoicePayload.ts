@@ -418,6 +418,19 @@ export function buildMysoftInvoiceOutboxPayload(
           });
         }
       }
+      const rawNoteText = String(invoice.notes || "");
+      if (invoice.branchName && !rawNoteText.includes(invoice.branchName)) {
+        noteList.push({
+          note: `Düzenleyen Şube: ${invoice.branchName}${invoice.branchCode ? ` (${invoice.branchCode})` : ""}${invoice.branchAddress ? ` - Adres: ${invoice.branchAddress}` : ""}`,
+        });
+      }
+      const buyerBranchName = invoice.customerBranchName || contact.branchName;
+      const buyerBranchCode = invoice.customerBranchCode || contact.branchCode;
+      if (buyerBranchName && !rawNoteText.includes(buyerBranchName)) {
+        noteList.push({
+          note: `Alıcı Şube: ${buyerBranchName}${buyerBranchCode ? ` (${buyerBranchCode})` : ""}`,
+        });
+      }
       if (String(invoice.notes || "").trim()) {
         noteList.push({ note: String(invoice.notes || "").trim() });
       }
@@ -430,7 +443,18 @@ export function buildMysoftInvoiceOutboxPayload(
       countryName: "TÜRKİYE",
       cityName: contact.city || invoice.customerCity || "İstanbul",
       citySubdivision: contact.district || invoice.customerDistrict || "Merkez",
-      streetName: contact.address || invoice.customerAddress || undefined,
+      streetName: (() => {
+        const rawStreet = (invoice.customerAddress || contact.address || "").trim();
+        const bName = (invoice.customerBranchName || contact.branchName || "").trim();
+        const bCode = (invoice.customerBranchCode || contact.branchCode || "").trim();
+        if (!bName && !bCode) return rawStreet || undefined;
+        const bLabel = bName && bCode ? `Şube: ${bName} (${bCode})` : bName ? `Şube: ${bName}` : `Şube Kodu: ${bCode}`;
+        if (!rawStreet) return bLabel;
+        if (rawStreet.toLocaleLowerCase("tr-TR").includes((bName || bCode).toLocaleLowerCase("tr-TR"))) {
+          return rawStreet;
+        }
+        return `${rawStreet} (${bLabel})`;
+      })(),
       telephone1: contact.phone || invoice.customerPhone || undefined,
       email1: contact.email || invoice.customerEmail || undefined,
       personInfo,

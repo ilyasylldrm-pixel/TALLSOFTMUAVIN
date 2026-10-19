@@ -18,6 +18,8 @@ export interface Contact {
   email?: string;
   address?: string;
   shippingAddress?: string; // Sevkiyat / Depo / Teslimat Adresi
+  branchName?: string; // Müşteri / Cari Şube Adı veya Birimi
+  branchCode?: string; // Müşteri / Cari Şube Kodu
   city?: string;
   district?: string; // İlçe
   neighborhood?: string; // Mahalle
@@ -428,9 +430,17 @@ export interface Invoice {
   customerAddress?: string;
   customerCity?: string;
   customerDistrict?: string;
+  customerBranchName?: string; // Alıcı / Müşteri Şube Adı
+  customerBranchCode?: string; // Alıcı / Müşteri Şube Kodu
   customerPhone?: string;
   customerEmail?: string;
   isManualCustomer?: boolean;
+  branchId?: string; // Düzenleyen Firma Şube ID
+  branchName?: string; // Düzenleyen Firma Şube Adı
+  branchCode?: string; // Düzenleyen Firma Şube Kodu
+  branchAddress?: string; // Düzenleyen Firma Şube Açık Adresi
+  branchCity?: string; // Düzenleyen Firma Şube İli
+  branchDistrict?: string; // Düzenleyen Firma Şube İlçesi
   issueDate: string; // Fatura Tarihi
   dueDate: string; // Son Ödeme Tarihi
   items: InvoiceItem[];
