@@ -120,7 +120,7 @@ Mysoft’ta “şablon” iki ayrı şeydir; İlyas’ın kastettiği API taraf�
 | `xsltName` / `xsltSetCode` | Görsel şablon — boşsa sunucu portal varsayılanını (`getTenantXslt`) doldurur |
 | `numeratorSetCode` / `prefix` / `docNo` | Numara — set kodu çoğu firmada boş; `getDocumentNumberList` prefix kullanır |
 | `connectorGuid` | **Kullanma.** Mysoft: boş gönderin; alan ileride kaldırılacak (2026-08-25) |
-| `isCalculateByApi` | `false` — Mysoft kuralı: alan geliştirme aşamasındadır, daima `false` gönderilir |
+| `isCalculateByApi` | `true` → tutarları API hesaplar (Swagger: geliştirme aşamasında) |
 
 Muavin gelir faturası formu bu modeli `src/services/mysoftInvoicePayload.ts`
 ile üretir. Gönderimde (`POST /outgoing`) boş `xsltName` / `prefix` müşteri

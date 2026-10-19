@@ -518,6 +518,26 @@ export default function App() {
       setCompanies(freshCompanies);
       const currentActive = getActiveCompanyId();
       setData(getStoredData(currentActive));
+      try {
+        const storedUserRaw =
+          localStorage.getItem("muavin_active_user") ||
+          sessionStorage.getItem("muavin_active_user");
+        if (storedUserRaw) {
+          const parsedU = JSON.parse(storedUserRaw);
+          setCurrentUser((prev) => {
+            if (!prev) return parsedU;
+            if (
+              prev.companyId !== parsedU.companyId ||
+              prev.companyName !== parsedU.companyName ||
+              prev.taxNumber !== parsedU.taxNumber ||
+              JSON.stringify(prev.allowedModules) !== JSON.stringify(parsedU.allowedModules)
+            ) {
+              return parsedU;
+            }
+            return prev;
+          });
+        }
+      } catch {}
     };
     window.addEventListener("muavin:central-sync-broadcast", handleCentralSync);
     const unsubscribeCentralSync = subscribeToCentralSyncState(() => {
@@ -525,6 +545,36 @@ export default function App() {
         handleCentralSync();
       });
     });
+
+    // Sekme odaklandığında (focus/visibility) ve periyodik olarak tüm kullanıcılara sunucu güncellemelerini yansıt
+    let lastKnownServerVersion = 0;
+    const checkServerUpdates = async () => {
+      try {
+        const activeId = getActiveCompanyId();
+        const resp = await fetch(`/api/cloud-sync/state?companyId=${encodeURIComponent(activeId)}`);
+        if (!resp.ok) return;
+        const json = await resp.json();
+        const incomingVersion = Number(json?.version) || 0;
+        if (incomingVersion > 0 && incomingVersion !== lastKnownServerVersion) {
+          lastKnownServerVersion = incomingVersion;
+          await pullLatestCompanyDataFromCloud(activeId, true);
+          handleCentralSync();
+        }
+      } catch {
+        // ignore offline check
+      }
+    };
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        void checkServerUpdates();
+      }
+    };
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+    const pollInterval = setInterval(() => {
+      void checkServerUpdates();
+    }, 15000);
 
     const savedToken = localStorage.getItem("muavin_github_pat")?.trim();
     const savedRepo = localStorage.getItem("muavin_github_repo_url")?.trim();
@@ -547,6 +597,9 @@ export default function App() {
 
     return () => {
       window.removeEventListener("muavin:central-sync-broadcast", handleCentralSync);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+      clearInterval(pollInterval);
       unsubscribeCentralSync();
     };
   }, []);
@@ -571,12 +624,56 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Oturum açan kullanıcının tanımlı bir şirketi varsa aktif şirketi otomatik olarak o şirkete geçir
+  // Oturum açan kullanıcının tanımlı bir şirketi varsa aktif şirketi otomatik olarak o şirkete geçir ve en güncel verilerini yükle
   useEffect(() => {
-    if (currentUser?.companyId && currentUser.companyId !== activeCompanyId) {
-      handleSelectCompany(currentUser.companyId);
+    if (!currentUser) return;
+    const isSysAdmin = isAdminOrSysAdmin(currentUser);
+    let targetComp = currentUser.companyId
+      ? companies.find((c) => c.id === currentUser.companyId)
+      : undefined;
+
+    if (!targetComp && !isSysAdmin) {
+      const cleanEmail = (currentUser.email || "").trim().toLowerCase();
+      const cleanUser = (currentUser.username || "").trim().toLowerCase();
+      const cleanTax = String(currentUser.taxNumber || "").replace(/\D/g, "").trim();
+      const cleanName = (currentUser.companyName || "").trim().toLocaleLowerCase("tr-TR");
+
+      targetComp = companies.find(
+        (c) =>
+          (cleanEmail && (c.loginEmail || c.email || "").trim().toLowerCase() === cleanEmail) ||
+          (cleanUser && (c.loginUsername || "").trim().toLowerCase() === cleanUser) ||
+          (cleanTax.length >= 10 &&
+            (String(c.taxNumber || "").replace(/\D/g, "") === cleanTax ||
+              String(c.vkn || "").replace(/\D/g, "") === cleanTax ||
+              String(c.tckn || "").replace(/\D/g, "") === cleanTax ||
+              String(c.tenantIdentifierNumber || "").replace(/\D/g, "") === cleanTax)) ||
+          (cleanName &&
+            ((c.companyName || "").trim().toLocaleLowerCase("tr-TR") === cleanName ||
+              (c.companyTitle || "").trim().toLocaleLowerCase("tr-TR") === cleanName))
+      );
     }
-  }, [currentUser?.companyId]);
+
+    if (targetComp && (!isSysAdmin || currentUser.companyId === targetComp.id)) {
+      if (currentUser.companyId !== targetComp.id) {
+        const updatedUser = { ...currentUser, companyId: targetComp.id, companyName: targetComp.companyName };
+        setCurrentUser(updatedUser);
+        if (localStorage.getItem("muavin_active_user")) {
+          localStorage.setItem("muavin_active_user", JSON.stringify(updatedUser));
+        }
+        if (sessionStorage.getItem("muavin_active_user")) {
+          sessionStorage.setItem("muavin_active_user", JSON.stringify(updatedUser));
+        }
+      }
+      if (!isSysAdmin && activeCompanyId !== targetComp.id) {
+        handleSelectCompany(targetComp.id, companies);
+        void pullLatestCompanyDataFromCloud(targetComp.id, true).then(() => {
+          const refreshedList = getCompaniesList();
+          setCompanies(refreshedList);
+          handleSelectCompany(targetComp!.id, refreshedList);
+        });
+      }
+    }
+  }, [currentUser, companies, activeCompanyId]);
 
   useEffect(() => {
     cleanupOversizedStorage();

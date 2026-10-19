@@ -60,6 +60,7 @@ import {
   fetchCentralPayrollParameters,
   getLocalDbSyncReport,
   LocalDbSyncReport,
+  verifyAndSyncAllUsersLocalDb,
 } from "../services/systemSyncService";
 
 interface AdminOverviewPanelProps {
@@ -217,8 +218,26 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
     }
   };
 
-  // Trigger manual broadcast pulse to all active tabs/windows
-  const handleForceGlobalSyncPulse = () => {
+  // Trigger manual broadcast pulse to all active tabs/windows and cloud store
+  const handleForceGlobalSyncPulse = async () => {
+    try {
+      await verifyAndSyncAllUsersLocalDb(
+        users.length,
+        currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        "Yapılan Tüm Güncellemeler Tüm Şirket ve Kullanıcılara Yansıtıldı",
+        true
+      );
+      await fetch("/api/cloud-sync/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionName: "Yapılan Tüm Güncellemeler Tüm Şirket ve Kullanıcılara Yansıtıldı",
+          performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        }),
+      });
+    } catch {
+      // ignore offline error
+    }
     window.dispatchEvent(
       new CustomEvent("muavin:central-sync-broadcast", {
         detail: {
@@ -228,7 +247,7 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
         },
       })
     );
-    setBroadcastSuccessNotice("Tüm bağlı istemcilere senkronizasyon ve yenileme sinyali gönderildi.");
+    setBroadcastSuccessNotice("Tüm bağlı istemcilere ve kullanıcı hesaplarına güncelleme ve senkronizasyon sinyali gönderildi.");
     setTimeout(() => setBroadcastSuccessNotice(null), 3500);
   };
 

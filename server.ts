@@ -1742,9 +1742,24 @@ interface ServerCloudSyncStore {
   deletedUserKeys: string[];
   companiesData: Record<string, { data: any; updatedAt: string }>;
   updatedAt: string;
+  version?: number;
+  lastActionSummary?: string;
+  lastUpdatedBy?: string;
 }
 
 const CLOUD_SYNC_FILE_PATH = path.join(process.cwd(), "data", "cloud_sync_store.json");
+
+function sanitizeLegacyDemoIdentity(obj: any): any {
+  if (!obj || typeof obj !== "object") return obj;
+  const copy = { ...obj };
+  if (copy.tradeRegisterNo === "384910-5") {
+    copy.tradeRegisterNo = "";
+  }
+  if (copy.mersisNo === "0847029103800001") {
+    copy.mersisNo = "";
+  }
+  return copy;
+}
 
 let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
   try {
@@ -1752,13 +1767,36 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
       const raw = fs.readFileSync(CLOUD_SYNC_FILE_PATH, "utf-8");
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object") {
+        const rawCompaniesData =
+          parsed.companiesData && typeof parsed.companiesData === "object" ? parsed.companiesData : {};
+        const cleanedCompaniesData: Record<string, { data: any; updatedAt: string }> = {};
+        Object.keys(rawCompaniesData).forEach((cid) => {
+          const entry = rawCompaniesData[cid];
+          if (entry && entry.data) {
+            cleanedCompaniesData[cid] = {
+              updatedAt: entry.updatedAt || new Date().toISOString(),
+              data: {
+                ...entry.data,
+                settings: entry.data.settings
+                  ? sanitizeLegacyDemoIdentity(entry.data.settings)
+                  : entry.data.settings,
+              },
+            };
+          }
+        });
         return {
-          companiesRegistry: Array.isArray(parsed.companiesRegistry) ? parsed.companiesRegistry : [],
+          companiesRegistry: Array.isArray(parsed.companiesRegistry)
+            ? parsed.companiesRegistry.map(sanitizeLegacyDemoIdentity)
+            : [],
           usersRegistry: Array.isArray(parsed.usersRegistry) ? parsed.usersRegistry : [],
           deletedCompanyIds: Array.isArray(parsed.deletedCompanyIds) ? parsed.deletedCompanyIds : [],
           deletedUserKeys: Array.isArray(parsed.deletedUserKeys) ? parsed.deletedUserKeys : [],
-          companiesData: parsed.companiesData && typeof parsed.companiesData === "object" ? parsed.companiesData : {},
+          companiesData: cleanedCompaniesData,
           updatedAt: parsed.updatedAt || new Date().toISOString(),
+          version: Number(parsed.version) || Date.now(),
+          lastActionSummary:
+            parsed.lastActionSummary || "Tüm Şirketler ve Kullanıcılar Güncel Sürümle Senkronize Edildi",
+          lastUpdatedBy: parsed.lastUpdatedBy || "Sistem Yöneticisi",
         };
       }
     }
@@ -1772,6 +1810,9 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
     deletedUserKeys: [],
     companiesData: {},
     updatedAt: new Date().toISOString(),
+    version: Date.now(),
+    lastActionSummary: "Tüm Şirketler ve Kullanıcılar Güncel Sürümle Senkronize Edildi",
+    lastUpdatedBy: "Sistem Yöneticisi",
   };
 })();
 
@@ -1800,12 +1841,22 @@ app.get("/api/cloud-sync/state", (req, res) => {
     companyUpdatedAt: companySlice?.updatedAt || null,
     allCompaniesData: companyId ? undefined : memoryCloudSyncStore.companiesData,
     updatedAt: memoryCloudSyncStore.updatedAt,
+    version: memoryCloudSyncStore.version || Date.now(),
+    lastActionSummary: memoryCloudSyncStore.lastActionSummary,
+    lastUpdatedBy: memoryCloudSyncStore.lastUpdatedBy,
   });
 });
 
 app.post("/api/cloud-sync/system", (req, res) => {
   try {
-    const { companiesRegistry, usersRegistry, deletedCompanyIds, deletedUserKeys } = req.body || {};
+    const {
+      companiesRegistry,
+      usersRegistry,
+      deletedCompanyIds,
+      deletedUserKeys,
+      actionName,
+      performedBy,
+    } = req.body || {};
     const nowIso = new Date().toISOString();
 
     if (Array.isArray(deletedCompanyIds)) {
@@ -1825,12 +1876,12 @@ app.post("/api/cloud-sync/system", (req, res) => {
     if (Array.isArray(companiesRegistry)) {
       const compMap = new Map<string, any>();
       memoryCloudSyncStore.companiesRegistry.forEach((c: any) => {
-        if (c && c.id && !delCompSet.has(c.id)) compMap.set(c.id, c);
+        if (c && c.id && !delCompSet.has(c.id)) compMap.set(c.id, sanitizeLegacyDemoIdentity(c));
       });
       companiesRegistry.forEach((c: any) => {
         if (c && c.id && !delCompSet.has(c.id)) {
           const existing = compMap.get(c.id);
-          compMap.set(c.id, existing ? { ...existing, ...c } : c);
+          compMap.set(c.id, sanitizeLegacyDemoIdentity(existing ? { ...existing, ...c } : c));
         }
       });
       memoryCloudSyncStore.companiesRegistry = Array.from(compMap.values());
@@ -1855,6 +1906,9 @@ app.post("/api/cloud-sync/system", (req, res) => {
     }
 
     memoryCloudSyncStore.updatedAt = nowIso;
+    memoryCloudSyncStore.version = Date.now();
+    if (actionName) memoryCloudSyncStore.lastActionSummary = actionName;
+    if (performedBy) memoryCloudSyncStore.lastUpdatedBy = performedBy;
     persistServerCloudSyncStore();
 
     res.json({
@@ -1862,6 +1916,7 @@ app.post("/api/cloud-sync/system", (req, res) => {
       companiesCount: memoryCloudSyncStore.companiesRegistry.length,
       usersCount: memoryCloudSyncStore.usersRegistry.length,
       updatedAt: nowIso,
+      version: memoryCloudSyncStore.version,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || "Sistem senkronizasyon hatası" });
@@ -1879,10 +1934,10 @@ app.post("/api/cloud-sync/company", (req, res) => {
 
     const existingEntry = memoryCloudSyncStore.companiesData[cleanId];
     const existingData = existingEntry?.data || {};
-    const mergedSettings = {
+    const mergedSettings = sanitizeLegacyDemoIdentity({
       ...(existingData.settings || {}),
       ...(data.settings || {}),
-    };
+    });
 
     memoryCloudSyncStore.companiesData[cleanId] = {
       data: {
@@ -1896,17 +1951,17 @@ app.post("/api/cloud-sync/company", (req, res) => {
     if (companyMeta && companyMeta.id) {
       const idx = memoryCloudSyncStore.companiesRegistry.findIndex((c: any) => c && c.id === companyMeta.id);
       if (idx >= 0) {
-        memoryCloudSyncStore.companiesRegistry[idx] = {
+        memoryCloudSyncStore.companiesRegistry[idx] = sanitizeLegacyDemoIdentity({
           ...memoryCloudSyncStore.companiesRegistry[idx],
           ...companyMeta,
-        };
+        });
       } else {
-        memoryCloudSyncStore.companiesRegistry.push(companyMeta);
+        memoryCloudSyncStore.companiesRegistry.push(sanitizeLegacyDemoIdentity(companyMeta));
       }
     } else if (mergedSettings) {
       const idx = memoryCloudSyncStore.companiesRegistry.findIndex((c: any) => c && c.id === cleanId);
       if (idx >= 0) {
-        memoryCloudSyncStore.companiesRegistry[idx] = {
+        memoryCloudSyncStore.companiesRegistry[idx] = sanitizeLegacyDemoIdentity({
           ...memoryCloudSyncStore.companiesRegistry[idx],
           companyName: mergedSettings.companyName || memoryCloudSyncStore.companiesRegistry[idx].companyName,
           companyTitle: mergedSettings.companyTitle || memoryCloudSyncStore.companiesRegistry[idx].companyTitle,
@@ -1927,20 +1982,49 @@ app.post("/api/cloud-sync/company", (req, res) => {
           defaultBankIban: mergedSettings.defaultBankIban ?? memoryCloudSyncStore.companiesRegistry[idx].defaultBankIban,
           logoUrl: mergedSettings.logoUrl ?? memoryCloudSyncStore.companiesRegistry[idx].logoUrl,
           logoScale: mergedSettings.logoScale ?? memoryCloudSyncStore.companiesRegistry[idx].logoScale,
-        };
+        });
       }
     }
 
     memoryCloudSyncStore.updatedAt = nowIso;
+    memoryCloudSyncStore.version = Date.now();
     persistServerCloudSyncStore();
 
     res.json({
       success: true,
       companyId: cleanId,
       updatedAt: nowIso,
+      version: memoryCloudSyncStore.version,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || "Şirket verisi senkronizasyon hatası" });
+  }
+});
+
+app.post("/api/cloud-sync/broadcast", (req, res) => {
+  try {
+    const { actionName, performedBy } = req.body || {};
+    const nowIso = new Date().toISOString();
+    memoryCloudSyncStore.updatedAt = nowIso;
+    memoryCloudSyncStore.version = Date.now();
+    memoryCloudSyncStore.lastActionSummary =
+      actionName || "Yapılan Tüm Güncellemeler Tüm Şirket ve Kullanıcılara Yansıtıldı";
+    memoryCloudSyncStore.lastUpdatedBy = performedBy || "Sistem Yöneticisi";
+    Object.keys(memoryCloudSyncStore.companiesData).forEach((cid) => {
+      if (memoryCloudSyncStore.companiesData[cid]) {
+        memoryCloudSyncStore.companiesData[cid].updatedAt = nowIso;
+      }
+    });
+    persistServerCloudSyncStore();
+    res.json({
+      success: true,
+      updatedAt: nowIso,
+      version: memoryCloudSyncStore.version,
+      companiesCount: memoryCloudSyncStore.companiesRegistry.length,
+      usersCount: memoryCloudSyncStore.usersRegistry.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || "Yayınlama hatası" });
   }
 });
 

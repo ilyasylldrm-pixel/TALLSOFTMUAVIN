@@ -130,12 +130,25 @@ const CLEARABLE_COMPANY_FIELDS = new Set<string>([
   "postalCode",
 ]);
 
+function sanitizeLegacyDemoFields(obj: any): any {
+  if (!obj || typeof obj !== "object") return obj;
+  const copy = { ...obj };
+  if (copy.tradeRegisterNo === "384910-5") {
+    copy.tradeRegisterNo = "";
+  }
+  if (copy.mersisNo === "0847029103800001") {
+    copy.mersisNo = "";
+  }
+  return copy;
+}
+
 function mergeCompanyMetadataNonDestructive(existingComp: any, incomingComp: any): any {
-  if (!existingComp) return incomingComp;
-  if (!incomingComp) return existingComp;
-  const merged: any = { ...existingComp };
-  Object.keys(incomingComp).forEach((key) => {
-    const val = incomingComp[key];
+  if (!existingComp) return sanitizeLegacyDemoFields(incomingComp);
+  if (!incomingComp) return sanitizeLegacyDemoFields(existingComp);
+  const merged: any = { ...sanitizeLegacyDemoFields(existingComp) };
+  const cleanIncoming = sanitizeLegacyDemoFields(incomingComp);
+  Object.keys(cleanIncoming).forEach((key) => {
+    const val = cleanIncoming[key];
     if (val !== undefined && val !== null) {
       if (val !== "" || CLEARABLE_COMPANY_FIELDS.has(key) || merged[key] === undefined) {
         merged[key] = val;
@@ -348,12 +361,13 @@ export async function pullLatestCompanyDataFromCloud(
       const localData = getStoredData(cid);
       if (chosenRemote.settings && typeof chosenRemote.settings === "object") {
         // Buluttan gelen settings içindeki değerler (boş bırakılan mersisNo / tradeRegisterNo dahil) önceliklidir
-        const mergedSettings = mergeCompanyMetadataNonDestructive(localData.settings, chosenRemote.settings);
-        if ("tradeRegisterNo" in chosenRemote.settings) {
-          mergedSettings.tradeRegisterNo = chosenRemote.settings.tradeRegisterNo ?? "";
+        const cleanRemoteSettings = sanitizeLegacyDemoFields(chosenRemote.settings);
+        const mergedSettings = mergeCompanyMetadataNonDestructive(localData.settings, cleanRemoteSettings);
+        if ("tradeRegisterNo" in cleanRemoteSettings) {
+          mergedSettings.tradeRegisterNo = cleanRemoteSettings.tradeRegisterNo ?? "";
         }
-        if ("mersisNo" in chosenRemote.settings) {
-          mergedSettings.mersisNo = chosenRemote.settings.mersisNo ?? "";
+        if ("mersisNo" in cleanRemoteSettings) {
+          mergedSettings.mersisNo = cleanRemoteSettings.mersisNo ?? "";
         }
         saveStoredData("SETTINGS", mergedSettings, cid);
       }
@@ -362,13 +376,14 @@ export async function pullLatestCompanyDataFromCloud(
         const remoteArr = chosenRemote[dataKey];
         if (Array.isArray(remoteArr)) {
           if (preferRemoteState) {
-            // Başka bir cihazdan giriş yapıldığında buluttaki en güncel listeyi birebir getir
-            // (Yerelde sadece bulutta henüz olmayan yeni kayıt varsa birleştir)
             const localArr = Array.isArray((localData as any)[dataKey]) ? (localData as any)[dataKey] : [];
             const hasLocalUserSavedTimestamp = Boolean(safeGetStorageItem(`muavin_company_updated_at_${cid}`));
-            const finalArr = hasLocalUserSavedTimestamp
-              ? mergeRecordsById(localArr, remoteArr)
-              : remoteArr;
+            const finalArr =
+              remoteArr.length > 0
+                ? hasLocalUserSavedTimestamp
+                  ? mergeRecordsById(remoteArr, localArr)
+                  : remoteArr
+                : localArr;
             saveStoredData(storageKey, finalArr, cid);
           } else {
             const mergedArr = mergeRecordsById((localData as any)[dataKey], remoteArr);
@@ -381,6 +396,60 @@ export async function pullLatestCompanyDataFromCloud(
         safeSetStorageItem(`muavin_company_updated_at_${cid}`, chosenRemote.updatedAt);
       }
       anyUpdated = true;
+    }
+  }
+
+  // Aktif oturumdaki kullanıcının (muavin_active_user) şirket ve yetki bilgilerini de güncel kayıtlarla eşitle
+  if (typeof window !== "undefined") {
+    try {
+      const rawUser =
+        window.localStorage.getItem("muavin_active_user") ||
+        window.sessionStorage.getItem("muavin_active_user");
+      if (rawUser) {
+        const parsedUser = JSON.parse(rawUser);
+        const allUsers = getLocalUsersBackup();
+        const allComps = getCompaniesList();
+        const matchedProfile = allUsers.find(
+          (u) =>
+            (parsedUser.email && u.email?.toLowerCase() === parsedUser.email.toLowerCase()) ||
+            (parsedUser.username && u.username?.toLowerCase() === parsedUser.username.toLowerCase()) ||
+            (parsedUser.id && u.userId === parsedUser.id)
+        );
+        const cleanTax = String(parsedUser.taxNumber || matchedProfile?.taxNumber || "").replace(/\D/g, "");
+        const matchedComp =
+          allComps.find((c) => c.id === (matchedProfile?.companyId || parsedUser.companyId)) ||
+          (cleanTax.length >= 10
+            ? allComps.find(
+                (c) =>
+                  String(c.taxNumber || "").replace(/\D/g, "") === cleanTax ||
+                  String(c.vkn || "").replace(/\D/g, "") === cleanTax ||
+                  String(c.tckn || "").replace(/\D/g, "") === cleanTax ||
+                  String(c.tenantIdentifierNumber || "").replace(/\D/g, "") === cleanTax
+              )
+            : undefined);
+
+        const nextUser = {
+          ...parsedUser,
+          companyId: matchedComp?.id || matchedProfile?.companyId || parsedUser.companyId,
+          companyName: matchedComp?.companyName || matchedProfile?.companyName || parsedUser.companyName,
+          taxNumber:
+            matchedComp?.taxNumber ||
+            matchedComp?.vkn ||
+            matchedComp?.tckn ||
+            matchedProfile?.taxNumber ||
+            parsedUser.taxNumber,
+          allowedModules: matchedProfile?.allowedModules || matchedComp?.allowedModules || parsedUser.allowedModules,
+          role: matchedProfile?.role || parsedUser.role,
+        };
+        if (window.localStorage.getItem("muavin_active_user")) {
+          window.localStorage.setItem("muavin_active_user", JSON.stringify(nextUser));
+        }
+        if (window.sessionStorage.getItem("muavin_active_user")) {
+          window.sessionStorage.setItem("muavin_active_user", JSON.stringify(nextUser));
+        }
+      }
+    } catch {
+      // ignore session sync error
     }
   }
 
@@ -775,7 +844,7 @@ export async function verifyAndSyncAllUsersLocalDb(
   totalUsersCount: number = 0,
   performedBy: string = "Sistem Yöneticisi",
   actionName: string = "Tüm Şirketler ve Kullanıcılar Senkronize Edildi",
-  writeToCloud: boolean = false
+  writeToCloud: boolean = true
 ): Promise<LocalDbSyncReport> {
   const nowIso = new Date().toISOString();
   const syncDocRef = doc(db, "system_settings", "central_sync_state");
@@ -873,6 +942,8 @@ export async function verifyAndSyncAllUsersLocalDb(
           usersRegistry: syncedUsersList,
           deletedCompanyIds: getDeletedCompanyIds(),
           deletedUserKeys: getDeletedUserKeys(),
+          actionName,
+          performedBy,
         }),
       });
     } catch {
