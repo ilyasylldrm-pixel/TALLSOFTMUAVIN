@@ -8,7 +8,12 @@ import {
   onSnapshot,
   serverTimestamp
 } from "firebase/firestore";
-import { db, sanitizeForFirestore } from "../lib/firebase";
+import {
+  db,
+  sanitizeForFirestore,
+  isFirestoreWriteQuotaExhausted,
+  checkAndMarkFirestoreQuotaError,
+} from "../lib/firebase";
 import { safeSetStorageItem } from "../utils/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
 
@@ -96,11 +101,11 @@ export async function fetchCloudLogo(): Promise<CloudBrandingConfig> {
       safeSaveBrandingToStorage(merged);
       return merged;
     } else {
-      // Eğer Cloud Console'da henüz kayıt yoksa varsayılan kurumsal logoyu Cloud Console'a kaydet ve döndür
-      await saveCloudLogo(DEFAULT_CLOUD_BRANDING.logoUrl, DEFAULT_CLOUD_BRANDING);
+      safeSaveBrandingToStorage(DEFAULT_CLOUD_BRANDING);
       return DEFAULT_CLOUD_BRANDING;
     }
   } catch (error) {
+    checkAndMarkFirestoreQuotaError(error);
     console.warn("Cloud Console logo çekme uyarısı (yerel önbellek kullanılacak):", error);
     if (typeof window !== "undefined") {
       const cached = window.localStorage?.getItem("muavin_cloud_branding") || window.sessionStorage?.getItem("muavin_cloud_branding");
@@ -144,6 +149,7 @@ export function subscribeToCloudLogo(
         }
       },
       (error) => {
+        checkAndMarkFirestoreQuotaError(error);
         console.warn("Cloud Console logo canlı dinleme bağlantı uyarısı:", error);
         if (onError) onError(error);
       }
@@ -202,10 +208,13 @@ export async function saveCloudLogo(
     source: "Google Cloud Console"
   };
 
-  try {
-    await setDoc(brandingRef, sanitizeForFirestore(payload), { merge: true });
-  } catch (err) {
-    console.warn("Cloud Console logo Firestore'a kaydedilemedi (yerel mod devrede):", err);
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      await setDoc(brandingRef, sanitizeForFirestore(payload), { merge: true });
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
+      console.warn("Cloud Console logo Firestore'a kaydedilemedi (yerel mod devrede):", err);
+    }
   }
   safeSaveBrandingToStorage(payload);
 

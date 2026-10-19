@@ -23,6 +23,8 @@ import {
   getLocalUsersBackup,
   saveLocalUsersBackup,
   UserProfileData,
+  isFirestoreWriteQuotaExhausted,
+  checkAndMarkFirestoreQuotaError,
 } from "../lib/firebase";
 import {
   PayrollYearlyParameters,
@@ -129,7 +131,8 @@ function mergeCompanyMetadataNonDestructive(existingComp: any, incomingComp: any
  * Şirketlerin geçmiş verilerini (fatura, cari hesap, işlem, stok, personel, ayarlar vb.)
  * hiçbir kaydı silmeden bulut ve yerel veritabanı arasında birleştirir ve korur.
  */
-export async function preserveAndSyncAllCompaniesHistoricalData(): Promise<void> {
+export async function preserveAndSyncAllCompaniesHistoricalData(writeToCloud: boolean = false): Promise<void> {
+  if (isFirestoreWriteQuotaExhausted()) return;
   const companies = getCompaniesList();
   for (const comp of companies) {
     if (!comp?.id) continue;
@@ -142,7 +145,8 @@ export async function preserveAndSyncAllCompaniesHistoricalData(): Promise<void>
         if (snap.exists()) {
           remoteSlice = snap.data();
         }
-      } catch {
+      } catch (readErr) {
+        checkAndMarkFirestoreQuotaError(readErr);
         // Çevrimdışı ise yerel verileri koru
       }
 
@@ -169,30 +173,32 @@ export async function preserveAndSyncAllCompaniesHistoricalData(): Promise<void>
         saveStoredData("ORDERS", mergedOrders, comp.id);
         saveStoredData("SETTINGS", mergedSettings, comp.id);
 
-        try {
-          await setDoc(
-            sliceDocRef,
-            sanitizeForFirestore({
-              companyId: comp.id,
-              companyName: comp.companyName,
-              settings: mergedSettings,
-              contacts: mergedContacts.slice(0, 300),
-              invoices: mergedInvoices.slice(0, 300),
-              transactions: mergedTransactions.slice(0, 400),
-              products: mergedProducts.slice(0, 300),
-              accounts: mergedAccounts.slice(0, 100),
-              employees: mergedEmployees.slice(0, 200),
-              costItems: mergedCostItems.slice(0, 300),
-              quotes: mergedQuotes.slice(0, 150),
-              orders: mergedOrders.slice(0, 150),
-              updatedAt: new Date().toISOString(),
-            }),
-            { merge: true }
-          );
-        } catch {
-          // Firestore yazma hatası olursa yerel veri korunmaya devam eder
+        if (writeToCloud && !isFirestoreWriteQuotaExhausted()) {
+          try {
+            await setDoc(
+              sliceDocRef,
+              sanitizeForFirestore({
+                companyId: comp.id,
+                companyName: comp.companyName,
+                settings: mergedSettings,
+                contacts: mergedContacts.slice(0, 300),
+                invoices: mergedInvoices.slice(0, 300),
+                transactions: mergedTransactions.slice(0, 400),
+                products: mergedProducts.slice(0, 300),
+                accounts: mergedAccounts.slice(0, 100),
+                employees: mergedEmployees.slice(0, 200),
+                costItems: mergedCostItems.slice(0, 300),
+                quotes: mergedQuotes.slice(0, 150),
+                orders: mergedOrders.slice(0, 150),
+                updatedAt: new Date().toISOString(),
+              }),
+              { merge: true }
+            );
+          } catch (writeErr) {
+            checkAndMarkFirestoreQuotaError(writeErr);
+          }
         }
-      } else {
+      } else if (writeToCloud && !isFirestoreWriteQuotaExhausted()) {
         try {
           await setDoc(
             sliceDocRef,
@@ -213,8 +219,8 @@ export async function preserveAndSyncAllCompaniesHistoricalData(): Promise<void>
             }),
             { merge: true }
           );
-        } catch {
-          // Çevrimdışı ise geç
+        } catch (writeErr) {
+          checkAndMarkFirestoreQuotaError(writeErr);
         }
       }
     } catch {
@@ -225,6 +231,7 @@ export async function preserveAndSyncAllCompaniesHistoricalData(): Promise<void>
 
 // 1. Audit Log Ekleme
 export async function logSystemAction(log: Omit<SystemAuditLogItem, "id">): Promise<void> {
+  if (isFirestoreWriteQuotaExhausted()) return;
   try {
     const colRef = collection(db, AUDIT_COLLECTION);
     await addDoc(colRef, sanitizeForFirestore({
@@ -232,6 +239,7 @@ export async function logSystemAction(log: Omit<SystemAuditLogItem, "id">): Prom
       timestamp: log.timestamp || new Date().toISOString()
     }));
   } catch (err) {
+    checkAndMarkFirestoreQuotaError(err);
     console.warn("Audit log yazılamadı (yerel kaydedildi):", err);
   }
 }
@@ -267,18 +275,24 @@ export async function saveCentralPayrollParameters(
     };
 
     // Firestore'da merkezi dokümana yaz
-    const docRef = doc(db, "system_settings", SETTINGS_DOC_ID);
-    await setDoc(
-      docRef,
-      sanitizeForFirestore({
-        settingKey: "payroll_parameters",
-        data: payload,
-        lastUpdated: nowIso,
-        updatedBy: updaterName,
-        version: (payload as any).version ? (payload as any).version + 1 : Date.now()
-      }),
-      { merge: true }
-    );
+    if (!isFirestoreWriteQuotaExhausted()) {
+      try {
+        const docRef = doc(db, "system_settings", SETTINGS_DOC_ID);
+        await setDoc(
+          docRef,
+          sanitizeForFirestore({
+            settingKey: "payroll_parameters",
+            data: payload,
+            lastUpdated: nowIso,
+            updatedBy: updaterName,
+            version: (payload as any).version ? (payload as any).version + 1 : Date.now()
+          }),
+          { merge: true }
+        );
+      } catch (writeErr) {
+        checkAndMarkFirestoreQuotaError(writeErr);
+      }
+    }
 
     // Yerel tarayıcıyı da güncelle
     saveActivePayrollParameters(payload);
@@ -403,18 +417,27 @@ export async function publishBroadcastAnnouncement(
   authorName: string = "Sistem Yöneticisi"
 ): Promise<string> {
   const nowIso = new Date().toISOString();
-  const colRef = collection(db, BROADCAST_COLLECTION);
-  const docRef = await addDoc(colRef, sanitizeForFirestore({
-    ...announcement,
-    createdAt: nowIso,
-    createdBy: authorName
-  }));
+  let newId = `local_ann_${Date.now()}`;
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const colRef = collection(db, BROADCAST_COLLECTION);
+      const docRef = await addDoc(colRef, sanitizeForFirestore({
+        ...announcement,
+        createdAt: nowIso,
+        createdBy: authorName
+      }));
+      newId = docRef.id;
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
+    }
+  }
 
   // Şirketlerin eski verilerini silmeden güncellemeyi tüm şirketlere ve kullanıcılara dağıt
   await verifyAndSyncAllUsersLocalDb(
     0,
     authorName,
-    `Güncelleme Dağıtıldı (Eski Şirket Verileri Korundu): ${announcement.title}`
+    `Güncelleme Dağıtıldı (Eski Şirket Verileri Korundu): ${announcement.title}`,
+    true
   );
 
   // Audit log ekle
@@ -426,7 +449,7 @@ export async function publishBroadcastAnnouncement(
     timestamp: nowIso
   });
 
-  return docRef.id;
+  return newId;
 }
 
 // 7. Sistem Duyurularını Çekme
@@ -475,14 +498,24 @@ export function subscribeToBroadcastAnnouncements(
 
 // 9. Duyuruyu Silme
 export async function deleteBroadcastAnnouncement(id: string): Promise<void> {
-  const docRef = doc(db, BROADCAST_COLLECTION, id);
-  await deleteDoc(docRef);
+  if (isFirestoreWriteQuotaExhausted()) return;
+  try {
+    const docRef = doc(db, BROADCAST_COLLECTION, id);
+    await deleteDoc(docRef);
+  } catch (err) {
+    checkAndMarkFirestoreQuotaError(err);
+  }
 }
 
 // 10. Duyuru Aktiflik Durumunu Değiştirme
 export async function toggleBroadcastAnnouncementActive(id: string, active: boolean): Promise<void> {
-  const docRef = doc(db, BROADCAST_COLLECTION, id);
-  await updateDoc(docRef, { active });
+  if (isFirestoreWriteQuotaExhausted()) return;
+  try {
+    const docRef = doc(db, BROADCAST_COLLECTION, id);
+    await updateDoc(docRef, { active });
+  } catch (err) {
+    checkAndMarkFirestoreQuotaError(err);
+  }
 }
 
 // 11. Kullanıcı Yerel Veritabanı Senkronizasyon Raporu (Sync Status Bar State)
@@ -553,66 +586,70 @@ export function saveLocalDbSyncReport(reportUpdate: Partial<LocalDbSyncReport>):
 export async function verifyAndSyncAllUsersLocalDb(
   totalUsersCount: number = 0,
   performedBy: string = "Sistem Yöneticisi",
-  actionName: string = "Tüm Şirketler ve Kullanıcılar Senkronize Edildi"
+  actionName: string = "Tüm Şirketler ve Kullanıcılar Senkronize Edildi",
+  writeToCloud: boolean = false
 ): Promise<LocalDbSyncReport> {
   const nowIso = new Date().toISOString();
   const syncDocRef = doc(db, "system_settings", "central_sync_state");
 
   // 0. Önce merkezi Firestore kaydındaki mevcut şirketleri ve kullanıcıları yerel listeyle birleştir (hiçbir mevcut şirket/kullanıcı veya eski veri kaybolmasın)
-  try {
-    const existingSyncSnap = await getDoc(syncDocRef);
-    if (existingSyncSnap.exists()) {
-      const existingData = existingSyncSnap.data();
-      if (Array.isArray(existingData?.deletedCompanyIdsV3) && existingData.deletedCompanyIdsV3.length > 0) {
-        saveDeletedCompanyIds([
-          ...getDeletedCompanyIds(),
-          ...existingData.deletedCompanyIdsV3,
-        ]);
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const existingSyncSnap = await getDoc(syncDocRef);
+      if (existingSyncSnap.exists()) {
+        const existingData = existingSyncSnap.data();
+        if (Array.isArray(existingData?.deletedCompanyIdsV3) && existingData.deletedCompanyIdsV3.length > 0) {
+          saveDeletedCompanyIds([
+            ...getDeletedCompanyIds(),
+            ...existingData.deletedCompanyIdsV3,
+          ]);
+        }
+        if (Array.isArray(existingData?.deletedUserKeysV3) && existingData.deletedUserKeysV3.length > 0) {
+          saveDeletedUserKeys([
+            ...getDeletedUserKeys(),
+            ...existingData.deletedUserKeysV3,
+          ]);
+        }
+        if (Array.isArray(existingData?.companiesRegistry) && existingData.companiesRegistry.length > 0) {
+          const localCompanies = getCompaniesList();
+          const deletedCompSet = new Set(getDeletedCompanyIds());
+          const mergedMap = new Map<string, any>();
+          existingData.companiesRegistry.forEach((remoteComp: any) => {
+            if (
+              remoteComp &&
+              remoteComp.id &&
+              (isProtectedCompanyId(remoteComp.id) || !deletedCompSet.has(remoteComp.id))
+            ) {
+              mergedMap.set(remoteComp.id, remoteComp);
+            }
+          });
+          localCompanies.forEach((localComp) => {
+            if (
+              localComp &&
+              localComp.id &&
+              (isProtectedCompanyId(localComp.id) || !deletedCompSet.has(localComp.id))
+            ) {
+              const remoteExisting = mergedMap.get(localComp.id);
+              mergedMap.set(
+                localComp.id,
+                mergeCompanyMetadataNonDestructive(remoteExisting, localComp)
+              );
+            }
+          });
+          saveCompaniesList(Array.from(mergedMap.values()), false);
+        }
+        if (Array.isArray(existingData?.usersRegistry) && existingData.usersRegistry.length > 0) {
+          saveLocalUsersBackup(existingData.usersRegistry, false);
+        }
       }
-      if (Array.isArray(existingData?.deletedUserKeysV3) && existingData.deletedUserKeysV3.length > 0) {
-        saveDeletedUserKeys([
-          ...getDeletedUserKeys(),
-          ...existingData.deletedUserKeysV3,
-        ]);
-      }
-      if (Array.isArray(existingData?.companiesRegistry) && existingData.companiesRegistry.length > 0) {
-        const localCompanies = getCompaniesList();
-        const deletedCompSet = new Set(getDeletedCompanyIds());
-        const mergedMap = new Map<string, any>();
-        existingData.companiesRegistry.forEach((remoteComp: any) => {
-          if (
-            remoteComp &&
-            remoteComp.id &&
-            (isProtectedCompanyId(remoteComp.id) || !deletedCompSet.has(remoteComp.id))
-          ) {
-            mergedMap.set(remoteComp.id, remoteComp);
-          }
-        });
-        localCompanies.forEach((localComp) => {
-          if (
-            localComp &&
-            localComp.id &&
-            (isProtectedCompanyId(localComp.id) || !deletedCompSet.has(localComp.id))
-          ) {
-            const remoteExisting = mergedMap.get(localComp.id);
-            mergedMap.set(
-              localComp.id,
-              mergeCompanyMetadataNonDestructive(remoteExisting, localComp)
-            );
-          }
-        });
-        saveCompaniesList(Array.from(mergedMap.values()), false);
-      }
-      if (Array.isArray(existingData?.usersRegistry) && existingData.usersRegistry.length > 0) {
-        saveLocalUsersBackup(existingData.usersRegistry, false);
-      }
+    } catch (readErr) {
+      checkAndMarkFirestoreQuotaError(readErr);
+      // Çevrimdışı ise yerel kayıtlarla devam et
     }
-  } catch {
-    // Çevrimdışı ise yerel kayıtlarla devam et
   }
 
   // 1. Tüm kayıtlı şirketlerin geçmiş verilerini (fatura, cari, işlem, stok, personel) koruyarak birleştir
-  await preserveAndSyncAllCompaniesHistoricalData();
+  await preserveAndSyncAllCompaniesHistoricalData(writeToCloud);
 
   // 2. Tüm kayıtlı şirketlerin ayar, VKN/TCKN, açık adres ve Mysoft yapılandırmalarını senkronize et
   const { syncedCompaniesCount, companies } = syncAllCompaniesAndUsersData();
@@ -637,29 +674,32 @@ export async function verifyAndSyncAllUsersLocalDb(
     console.warn("Merkezi parametre doğrulanırken hata:", e);
   }
 
-  // 5. Merkezi Firestore senkronizasyon durumunu, şirket ve kullanıcı listesini güncelle
-  try {
-    await setDoc(
-      syncDocRef,
-      sanitizeForFirestore({
-        settingKey: "central_sync_state",
-        lastUpdated: nowIso,
-        updatedBy: performedBy,
-        actionName,
-        syncedCompaniesCount,
-        totalUsersCount: effectiveUsersCount > 0 ? effectiveUsersCount : 1,
-        companiesRegistry: companies,
-        usersRegistry: syncedUsersList,
-        deletedCompanyIds: [],
-        deletedUserKeys: [],
-        deletedCompanyIdsV3: getDeletedCompanyIds(),
-        deletedUserKeysV3: getDeletedUserKeys(),
-        version: Date.now(),
-      }),
-      { merge: true }
-    );
-  } catch {
-    // Firestore çevrimdışı ise yerel senkronizasyon devam eder
+  // 5. Merkezi Firestore senkronizasyon durumunu sadece açıkça buluta yazma istendiğinde ve kota müsaitse güncelle
+  if (writeToCloud && !isFirestoreWriteQuotaExhausted()) {
+    try {
+      await setDoc(
+        syncDocRef,
+        sanitizeForFirestore({
+          settingKey: "central_sync_state",
+          lastUpdated: nowIso,
+          updatedBy: performedBy,
+          actionName,
+          syncedCompaniesCount,
+          totalUsersCount: effectiveUsersCount > 0 ? effectiveUsersCount : 1,
+          companiesRegistry: companies,
+          usersRegistry: syncedUsersList,
+          deletedCompanyIds: [],
+          deletedUserKeys: [],
+          deletedCompanyIdsV3: getDeletedCompanyIds(),
+          deletedUserKeysV3: getDeletedUserKeys(),
+          version: Date.now(),
+        }),
+        { merge: true }
+      );
+    } catch (writeErr) {
+      checkAndMarkFirestoreQuotaError(writeErr);
+      // Firestore çevrimdışı veya kota dolu ise yerel senkronizasyon devam eder
+    }
   }
 
   const updatedReport = saveLocalDbSyncReport({
@@ -753,9 +793,7 @@ export function subscribeToCentralSyncState(
             }
           }
 
-          // 4. Şirketlerin eski verilerini silmeden senkronize et
-          void preserveAndSyncAllCompaniesHistoricalData();
-
+          // 4. Şirketlerin eski verilerini sadece yerel depolama üzerinde birleştir (onSnapshot içinde asla yazma yapma)
           const { syncedCompaniesCount } = syncAllCompaniesAndUsersData();
           const incomingUsersCount = Number(data?.totalUsersCount) || Math.max(1, syncedCompaniesCount);
 

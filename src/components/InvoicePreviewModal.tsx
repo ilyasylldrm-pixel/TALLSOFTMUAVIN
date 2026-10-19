@@ -424,26 +424,6 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-3 mb-2">
                   <Logo size="md" src={companySettings?.logoUrl || "/logo.svg"} />
-                  {onSaveCompanySettings && (
-                    <div className="flex items-center gap-1.5 print:hidden">
-                      <input
-                        ref={logoFileInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
-                        onChange={handleLogoFileChange}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => logoFileInputRef.current?.click()}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 border border-slate-200 hover:border-purple-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
-                        title="Bilgisayardan Logo Yükle / Değiştir"
-                      >
-                        <Upload className="w-3 h-3" />
-                        <span>Logo Yükle</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
                 <h1 className="text-base font-extrabold tracking-tight text-slate-900">
                   {companySettings?.companyName || "FİRMA ÜNVANI"}

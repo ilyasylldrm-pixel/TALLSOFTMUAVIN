@@ -13,6 +13,8 @@ import {
 import {
   getFirestore,
   initializeFirestore,
+  setLogLevel,
+  disableNetwork,
   doc,
   getDocFromServer,
   setDoc,
@@ -65,6 +67,11 @@ const targetDbId =
 
 let firestoreInstance;
 try {
+  setLogLevel("silent");
+} catch {
+  // ignore log level config errors
+}
+try {
   firestoreInstance = initializeFirestore(
     app,
     {
@@ -78,6 +85,61 @@ try {
 }
 
 export const db = firestoreInstance;
+
+const QUOTA_EXHAUSTED_STORAGE_KEY = "muavin_firestore_write_quota_exhausted_ts";
+const QUOTA_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours cooldown when daily quota is hit
+let memoryQuotaExhaustedUntil = 0;
+
+export function isFirestoreWriteQuotaExhausted(): boolean {
+  const now = Date.now();
+  if (memoryQuotaExhaustedUntil > now) return true;
+  if (typeof window !== "undefined") {
+    try {
+      const raw =
+        window.sessionStorage?.getItem(QUOTA_EXHAUSTED_STORAGE_KEY) ||
+        window.localStorage?.getItem(QUOTA_EXHAUSTED_STORAGE_KEY);
+      if (raw) {
+        const until = Number(raw);
+        if (!isNaN(until) && until > now) {
+          memoryQuotaExhaustedUntil = until;
+          return true;
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }
+  return false;
+}
+
+export function checkAndMarkFirestoreQuotaError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error || "");
+  const code = (error as any)?.code || "";
+  if (
+    code === "resource-exhausted" ||
+    msg.includes("resource-exhausted") ||
+    msg.includes("Quota limit exceeded") ||
+    msg.includes("Quota exceeded")
+  ) {
+    const until = Date.now() + QUOTA_COOLDOWN_MS;
+    memoryQuotaExhaustedUntil = until;
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage?.setItem(QUOTA_EXHAUSTED_STORAGE_KEY, String(until));
+        window.localStorage?.setItem(QUOTA_EXHAUSTED_STORAGE_KEY, String(until));
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      void disableNetwork(db);
+    } catch {
+      // ignore network disable error
+    }
+    return true;
+  }
+  return false;
+}
 
 // Error Handling conforming to Firebase Integration Skill
 export enum OperationType {
@@ -131,9 +193,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Validate Connection to Firestore (Non-blocking bootstrap validation)
 if (typeof window !== "undefined") {
   setTimeout(async () => {
+    if (isFirestoreWriteQuotaExhausted()) return;
     try {
       await getDocFromServer(doc(db, "test", "connection"));
     } catch (error) {
+      checkAndMarkFirestoreQuotaError(error);
       if (error instanceof Error && error.message.includes("the client is offline")) {
         console.warn("Firestore: Cihaz/istemci yerel modda çevrimdışı önbellek ile çalışıyor.");
       }
@@ -340,19 +404,22 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
     console.warn("Local user sync error:", e);
   }
 
-  // Persist to Cloud Firestore
-  try {
-    const userRef = doc(db, "users", user.userId);
-    await setDoc(
-      userRef,
-      sanitizeForFirestore({
-        ...user,
-        updatedAt: new Date().toISOString()
-      }),
-      { merge: true }
-    );
-  } catch (cloudErr) {
-    console.warn("Firestore saveUserProfile error, local copy preserved:", cloudErr);
+  // Persist to Cloud Firestore if write quota is available
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const userRef = doc(db, "users", user.userId);
+      await setDoc(
+        userRef,
+        sanitizeForFirestore({
+          ...user,
+          updatedAt: new Date().toISOString()
+        }),
+        { merge: true }
+      );
+    } catch (cloudErr) {
+      checkAndMarkFirestoreQuotaError(cloudErr);
+      console.warn("Firestore saveUserProfile error, local copy preserved:", cloudErr);
+    }
   }
 }
 
@@ -766,47 +833,50 @@ export async function deleteUserProfileAndData(
     }
 
     // 1. Delete user doc(s) from 'users' collection in Firestore (by doc id + matching email/username)
-    try {
-      const userRef = doc(db, "users", userId);
-      await deleteDoc(userRef);
-    } catch {
-      // ignore if doc id doesn't exist
-    }
-
-    try {
-      const usersCol = collection(db, "users");
-      const allSnap = await getDocs(usersCol);
-      const matchingDeletePromises: Promise<void>[] = [];
-      allSnap.forEach((docSnap) => {
-        const d = docSnap.data() as UserProfileData;
-        const dEmail = (d.email || "").trim().toLowerCase();
-        const dUser = (d.username || "").trim().toLowerCase();
-        if (
-          docSnap.id === userId ||
-          d.userId === userId ||
-          (targetEmail && dEmail === targetEmail) ||
-          (targetUsername && dUser === targetUsername)
-        ) {
-          matchingDeletePromises.push(deleteDoc(docSnap.ref));
-        }
-      });
-      if (matchingDeletePromises.length > 0) {
-        await Promise.all(matchingDeletePromises);
-      }
-    } catch {
-      // ignore offline Firestore query error
-    }
-
-    // 2. Optionally delete associated user files from 'user_files' collection
-    if (deleteFiles) {
+    if (!isFirestoreWriteQuotaExhausted()) {
       try {
-        const filesCol = collection(db, "user_files");
-        const q = query(filesCol, where("userId", "==", userId));
-        const snapshot = await getDocs(q);
-        const deletePromises = snapshot.docs.map((docSnap) => deleteDoc(docSnap.ref));
-        await Promise.all(deletePromises);
-      } catch (fileErr) {
-        console.warn("Could not delete user files from user_files collection:", fileErr);
+        const userRef = doc(db, "users", userId);
+        await deleteDoc(userRef);
+      } catch (err) {
+        checkAndMarkFirestoreQuotaError(err);
+      }
+
+      try {
+        const usersCol = collection(db, "users");
+        const allSnap = await getDocs(usersCol);
+        const matchingDeletePromises: Promise<void>[] = [];
+        allSnap.forEach((docSnap) => {
+          const d = docSnap.data() as UserProfileData;
+          const dEmail = (d.email || "").trim().toLowerCase();
+          const dUser = (d.username || "").trim().toLowerCase();
+          if (
+            docSnap.id === userId ||
+            d.userId === userId ||
+            (targetEmail && dEmail === targetEmail) ||
+            (targetUsername && dUser === targetUsername)
+          ) {
+            matchingDeletePromises.push(deleteDoc(docSnap.ref));
+          }
+        });
+        if (matchingDeletePromises.length > 0) {
+          await Promise.all(matchingDeletePromises);
+        }
+      } catch (err) {
+        checkAndMarkFirestoreQuotaError(err);
+      }
+
+      // 2. Optionally delete associated user files from 'user_files' collection
+      if (deleteFiles) {
+        try {
+          const filesCol = collection(db, "user_files");
+          const q = query(filesCol, where("userId", "==", userId));
+          const snapshot = await getDocs(q);
+          const deletePromises = snapshot.docs.map((docSnap) => deleteDoc(docSnap.ref));
+          await Promise.all(deletePromises);
+        } catch (fileErr) {
+          checkAndMarkFirestoreQuotaError(fileErr);
+          console.warn("Could not delete user files from user_files collection:", fileErr);
+        }
       }
     }
   } catch (err) {
@@ -881,13 +951,21 @@ export async function saveUserFile(file: Omit<UserFileMetadata, "id">): Promise<
   if (file.fileData && file.fileData.length > 900000) {
     throw new Error("Veritabanı uyarısı: Dosya boyutu veritabanı doküman limitini (1 MB) aşıyor.");
   }
-  const filesCol = collection(db, "user_files");
-  const sanitized = sanitizeForFirestore({
-    ...file,
-    createdAt: serverTimestamp()
-  });
-  const docRef = await addDoc(filesCol, sanitized);
-  return docRef.id;
+  if (isFirestoreWriteQuotaExhausted()) {
+    return `local_${Date.now()}`;
+  }
+  try {
+    const filesCol = collection(db, "user_files");
+    const sanitized = sanitizeForFirestore({
+      ...file,
+      createdAt: serverTimestamp()
+    });
+    const docRef = await addDoc(filesCol, sanitized);
+    return docRef.id;
+  } catch (err) {
+    checkAndMarkFirestoreQuotaError(err);
+    return `local_${Date.now()}`;
+  }
 }
 
 export async function getUserFiles(userId: string): Promise<UserFileMetadata[]> {
@@ -903,9 +981,11 @@ export async function getUserFiles(userId: string): Promise<UserFileMetadata[]> 
       const data = docSnap.data() as Omit<UserFileMetadata, "id">;
       // If file has expired, purge it in background
       if (data.expiresAt && data.expiresAt <= now) {
-        deleteUserFile(docSnap.id, data.storagePath).catch((err) =>
-          console.warn("Expired file cleanup error:", err)
-        );
+        if (!isFirestoreWriteQuotaExhausted()) {
+          deleteUserFile(docSnap.id, data.storagePath).catch((err) =>
+            console.warn("Expired file cleanup error:", err)
+          );
+        }
         continue;
       }
 
@@ -927,8 +1007,13 @@ export async function deleteUserFile(fileId: string, storagePath?: string): Prom
   if (storagePath) {
     await deleteFileFromStorage(storagePath);
   }
-  const fileRef = doc(db, "user_files", fileId);
-  await deleteDoc(fileRef);
+  if (isFirestoreWriteQuotaExhausted()) return;
+  try {
+    const fileRef = doc(db, "user_files", fileId);
+    await deleteDoc(fileRef);
+  } catch (err) {
+    checkAndMarkFirestoreQuotaError(err);
+  }
 }
 
 // Fallback stubs for legacy token helpers
