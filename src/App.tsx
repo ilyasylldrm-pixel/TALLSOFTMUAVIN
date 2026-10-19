@@ -116,6 +116,12 @@ import {
   subscribeToCentralSyncState,
   pullLatestCompanyDataFromCloud,
   pushCompanyDataToCloud,
+  saveProductToDatabase,
+  deleteProductFromDatabase,
+  saveInvoiceToDatabase,
+  deleteInvoiceFromDatabase,
+  saveTransactionToDatabase,
+  deleteTransactionFromDatabase,
 } from "./services/systemSyncService";
 import { deleteUserProfile } from "./lib/firebase";
 import { readStoredMysoftTenantVkn, writeStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
@@ -1130,6 +1136,7 @@ export default function App() {
   };
 
   const handleUpdateTransaction = (tx: Transaction) => {
+    void saveTransactionToDatabase(tx, activeCompanyId);
     setData((prev) => ({
       ...prev,
       transactions: prev.transactions.map((t) => (t.id === tx.id ? tx : t)),
@@ -1223,6 +1230,7 @@ export default function App() {
   };
 
   const handleAddInvoice = (invoice: Invoice) => {
+    void saveInvoiceToDatabase(invoice, activeCompanyId);
     setData((prev) => {
       const isDraftOrCancelled = invoice.status === "draft" || invoice.status === "cancelled";
 
@@ -1410,6 +1418,7 @@ export default function App() {
   };
 
   const handleUpdateInvoice = (updatedInvoice: Invoice) => {
+    void saveInvoiceToDatabase(updatedInvoice, activeCompanyId);
     setData((prev) => {
       const oldInvoice = prev.invoices.find((i) => i.id === updatedInvoice.id);
       let updatedContacts = prev.contacts;
@@ -1530,6 +1539,7 @@ export default function App() {
   };
 
   const handleDeleteInvoice = (id: string) => {
+    void deleteInvoiceFromDatabase(id, activeCompanyId);
     setData((prev) => ({
       ...prev,
       invoices: prev.invoices.filter((i) => i.id !== id),
@@ -1537,6 +1547,7 @@ export default function App() {
   };
 
   const handleBulkDeleteInvoices = (ids: string[]) => {
+    ids.forEach((id) => void deleteInvoiceFromDatabase(id, activeCompanyId));
     setData((prev) => ({
       ...prev,
       invoices: prev.invoices.filter((i) => !ids.includes(i.id)),
@@ -1544,6 +1555,7 @@ export default function App() {
   };
 
   const handleAddTransaction = (tx: Transaction) => {
+    void saveTransactionToDatabase(tx, activeCompanyId);
     setData((prev) => {
       // Update account balance
       const updatedAccounts = prev.accounts.map((a) => {
@@ -1586,6 +1598,7 @@ export default function App() {
   };
 
   const handleDeleteTransaction = (id: string) => {
+    void deleteTransactionFromDatabase(id, activeCompanyId);
     setData((prev) => ({
       ...prev,
       transactions: prev.transactions.filter((t) => t.id !== id),
@@ -1593,6 +1606,7 @@ export default function App() {
   };
 
   const handleBulkDeleteTransactions = (ids: string[]) => {
+    ids.forEach((id) => void deleteTransactionFromDatabase(id, activeCompanyId));
     setData((prev) => ({
       ...prev,
       transactions: prev.transactions.filter((t) => !ids.includes(t.id)),
@@ -2037,6 +2051,7 @@ export default function App() {
   };
 
   const handleAddProduct = (product: Product) => {
+    void saveProductToDatabase(product, activeCompanyId);
     setData((prev) => ({
       ...prev,
       products: [product, ...prev.products],
@@ -2044,6 +2059,7 @@ export default function App() {
   };
 
   const handleUpdateProduct = (product: Product) => {
+    void saveProductToDatabase(product, activeCompanyId);
     setData((prev) => ({
       ...prev,
       products: prev.products.map((p) => (p.id === product.id ? product : p)),
@@ -2051,6 +2067,7 @@ export default function App() {
   };
 
   const handleDeleteProduct = (id: string) => {
+    void deleteProductFromDatabase(id, activeCompanyId);
     setData((prev) => ({
       ...prev,
       products: prev.products.filter((p) => p.id !== id),
@@ -2058,6 +2075,7 @@ export default function App() {
   };
 
   const handleBulkDeleteProducts = (ids: string[]) => {
+    ids.forEach((id) => void deleteProductFromDatabase(id, activeCompanyId));
     setData((prev) => ({
       ...prev,
       products: prev.products.filter((p) => !ids.includes(p.id)),

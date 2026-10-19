@@ -50,7 +50,7 @@ var init_schema = __esm({
     import_drizzle_orm = require("drizzle-orm");
     users = (0, import_pg_core.pgTable)("users", {
       id: (0, import_pg_core.serial)("id").primaryKey(),
-      uid: (0, import_pg_core.text)("uid").notNull().unique(),
+      uid: (0, import_pg_core.text)("uid").notNull().unique("users_uid_key"),
       // Firebase Auth UID
       email: (0, import_pg_core.text)("email").notNull(),
       fullName: (0, import_pg_core.text)("full_name"),
@@ -181,7 +181,7 @@ var init_schema = __esm({
       notes: (0, import_pg_core.text)("notes"),
       convertedToInvoiceId: (0, import_pg_core.text)("converted_to_invoice_id"),
       convertedToInvoiceNumber: (0, import_pg_core.text)("converted_to_invoice_number"),
-      createdAt: (0, import_pg_core.text)("created_at")
+      createdAt: (0, import_pg_core.text)("createdat")
     });
     cheques = (0, import_pg_core.pgTable)("cheques", {
       id: (0, import_pg_core.text)("id").primaryKey(),
@@ -271,14 +271,64 @@ __export(db_exports, {
   createPool: () => createPool,
   db: () => db
 });
-var import_node_postgres, import_pg, createPool, pool, db;
+function ensureHealthyCloudSqlProxy() {
+  try {
+    const proxyPath = "/app/cloud_sql_proxy";
+    const proxyBinPath = "/app/cloud_sql_proxy.bin";
+    if (import_fs4.default.existsSync(proxyPath) && !import_fs4.default.existsSync(proxyBinPath)) {
+      import_fs4.default.renameSync(proxyPath, proxyBinPath);
+      const wrapperScript = `#!/bin/bash
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --impersonate-service-account=*)
+      ;;
+    *)
+      ARGS+=("$arg")
+      ;;
+  esac
+done
+exec /app/cloud_sql_proxy.bin "\${ARGS[@]}"
+`;
+      import_fs4.default.writeFileSync(proxyPath, wrapperScript, { mode: 493 });
+    }
+    const psOut = (0, import_child_process3.execSync)("ps -ef | grep cloud_sql_proxy | grep -v grep || true", { encoding: "utf8" });
+    if (psOut.includes("--impersonate-service-account=")) {
+      const sqlHost = process.env.SQL_HOST || "";
+      const instanceName = sqlHost.replace("/app/cloudsql/", "").trim();
+      (0, import_child_process3.execSync)("pkill -f cloud_sql_proxy || true");
+      if (instanceName && import_fs4.default.existsSync(proxyBinPath)) {
+        const child = (0, import_child_process3.spawn)(
+          proxyBinPath,
+          [
+            instanceName,
+            "--unix-socket=/app/cloudsql",
+            "--sql-data",
+            "--sql-data-endpoint=sqladmin.googleapis.com",
+            "--sqladmin-api-endpoint=sqladmin.googleapis.com"
+          ],
+          { detached: true, stdio: "ignore" }
+        );
+        child.unref();
+        if (child.pid) {
+          import_fs4.default.writeFileSync("/app/.cloud_sql_proxy.pid", String(child.pid));
+        }
+      }
+    }
+  } catch {
+  }
+}
+var import_node_postgres, import_pg, import_fs4, import_child_process3, createPool, pool, db;
 var init_db = __esm({
   "src/db/index.ts"() {
     import_node_postgres = require("drizzle-orm/node-postgres");
     import_pg = require("pg");
+    import_fs4 = __toESM(require("fs"), 1);
+    import_child_process3 = require("child_process");
     init_schema();
     createPool = () => {
       if (!global._postgresPool) {
+        ensureHealthyCloudSqlProxy();
         global._postgresPool = new import_pg.Pool({
           host: process.env.SQL_HOST,
           user: process.env.SQL_USER,
@@ -287,8 +337,7 @@ var init_db = __esm({
           max: 10,
           connectionTimeoutMillis: 15e3
         });
-        global._postgresPool.on("error", (err) => {
-          console.error("Unexpected error on idle SQL pool client:", err);
+        global._postgresPool.on("error", () => {
         });
       }
       return global._postgresPool;
@@ -3221,7 +3270,7 @@ var MysoftEdocumentClient = class {
       });
       if (error instanceof MysoftApiError && /object reference not set to an instance of an object/i.test(rawErrorMsg)) {
         const detailedMsg = `Mysoft e-Belge sunucusu nesne referans hatas\u0131 d\xF6nd\xFCrd\xFC (${rawErrorMsg}). G\xF6nderilen veri kontrol \xF6zeti \u2014 M\xFCkellef VKN: ${stringOrEmpty(body.tenantIdentifierNumber) || "Eksik"}, Al\u0131c\u0131 VKN/TCKN: ${stringOrEmpty(acc.vknTckn) || "Eksik"} (${stringOrEmpty(acc.accountName) || "\xDCnvan Yok"}), Kalem Say\u0131s\u0131: ${detailCount}, Belge Tipi: ${stringOrEmpty(body.eDocumentType)}/${stringOrEmpty(body.profile)}, \xD6n Ek: ${stringOrEmpty(body.prefix) || "Varsay\u0131lan"}. L\xFCtfen firma VKN, al\u0131c\u0131 VKN/TCKN ve fatura kalem bilgilerini kontrol edin.`;
-        throw new MysoftApiError(detailedMsg, error.status, error.details, error.code);
+        throw new MysoftApiError(error.status, detailedMsg, error.details);
       }
       throw error;
     }
@@ -3826,7 +3875,7 @@ function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig()
   );
   router.get(
     "/diagnostics",
-    run((req) => {
+    run(async (req) => {
       const limit = positiveInt2(queryText(req, "limit")) || 50;
       return {
         logs: client.getDiagnosticLogs(limit)
@@ -5892,8 +5941,581 @@ function getGitHubRouter() {
   return router;
 }
 
+// src/lib/firebase-admin.ts
+var import_app = require("firebase-admin/app");
+var import_auth = require("firebase-admin/auth");
+
+// firebase-applet-config.json
+var firebase_applet_config_default = {
+  projectId: "yachty-courier-bt3g1",
+  appId: "1:147327928693:web:4b4036e1e18b05c7aeeb3c",
+  apiKey: "AIzaSyDG1EvwTQh4Dp0BDzmPsL4cSNrehkPLUXg",
+  authDomain: "yachty-courier-bt3g1.firebaseapp.com",
+  firestoreDatabaseId: "ai-studio-muavinnmuhasebep-7117d5a6-2ef7-49fe-b6a7-4c0cdc615038",
+  storageBucket: "yachty-courier-bt3g1.firebasestorage.app",
+  messagingSenderId: "147327928693",
+  measurementId: "",
+  oAuthClientId: "147327928693-8hahag3lu0s7otts0ap5v2p7ag5hv3ru.apps.googleusercontent.com",
+  recaptchaSiteKey: ""
+};
+
+// src/lib/firebase-admin.ts
+if (!(0, import_app.getApps)().length) {
+  (0, import_app.initializeApp)({
+    projectId: firebase_applet_config_default.projectId
+  });
+}
+var adminAuth = (0, import_auth.getAuth)();
+
+// src/middleware/auth.ts
+var requireAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const fallbackUserId = typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : "";
+  const fallbackUserEmail = typeof req.headers["x-user-email"] === "string" ? req.headers["x-user-email"].trim() : "";
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split("Bearer ")[1].trim();
+    if (token.split(".").length === 3) {
+      try {
+        const decodedToken = await adminAuth.verifyIdToken(token);
+        req.user = decodedToken;
+        return next();
+      } catch (error) {
+        if (!fallbackUserId) {
+          console.error("Error verifying Firebase ID token:", error);
+          return res.status(401).json({ error: "Unauthorized: Invalid token" });
+        }
+      }
+    } else if (token) {
+      req.user = {
+        uid: fallbackUserId || token,
+        email: fallbackUserEmail || `${fallbackUserId || token}@muavin.com`
+      };
+      return next();
+    }
+  }
+  if (fallbackUserId) {
+    req.user = {
+      uid: fallbackUserId,
+      email: fallbackUserEmail || `${fallbackUserId}@muavin.com`
+    };
+    return next();
+  }
+  return res.status(401).json({ error: "Unauthorized: Missing token" });
+};
+
+// src/db/users.ts
+init_db();
+init_schema();
+var import_drizzle_orm2 = require("drizzle-orm");
+async function getOrCreateUser(uid, email, fullName, role) {
+  try {
+    const result = await db.insert(users).values({
+      uid,
+      email,
+      fullName: fullName || null,
+      role: role || "user"
+    }).onConflictDoUpdate({
+      target: users.uid,
+      set: {
+        email,
+        ...fullName ? { fullName } : {},
+        ...role ? { role } : {}
+      }
+    }).returning();
+    return result[0];
+  } catch (error) {
+    console.error("Database query failed in getOrCreateUser:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+
+// src/db/repository.ts
+var import_drizzle_orm3 = require("drizzle-orm");
+init_db();
+init_schema();
+function encodeExtraMeta(notesValue, rawItem) {
+  const baseNotes = typeof notesValue === "string" ? notesValue : "";
+  try {
+    return JSON.stringify({
+      __muavin_meta_v1: true,
+      notes: baseNotes,
+      raw: rawItem
+    });
+  } catch {
+    return baseNotes || null;
+  }
+}
+function decodeExtraMeta(notesCol, fallbackObj) {
+  if (!notesCol) return fallbackObj;
+  if (notesCol.startsWith('{"__muavin_meta_v1":true')) {
+    try {
+      const parsed = JSON.parse(notesCol);
+      if (parsed && parsed.__muavin_meta_v1 && parsed.raw && typeof parsed.raw === "object") {
+        return {
+          ...parsed.raw,
+          ...fallbackObj,
+          notes: parsed.notes ?? fallbackObj.notes ?? ""
+        };
+      }
+    } catch {
+    }
+  }
+  return fallbackObj;
+}
+async function getAllUserAccountingRecords(uid) {
+  try {
+    const [
+      userAccounts,
+      userContacts,
+      userProducts,
+      userInvoices,
+      userTransactions,
+      userOrders,
+      userCheques,
+      userPromissoryNotes,
+      userEmployees
+    ] = await Promise.all([
+      db.select().from(accounts).where((0, import_drizzle_orm3.eq)(accounts.userId, uid)),
+      db.select().from(contacts).where((0, import_drizzle_orm3.eq)(contacts.userId, uid)),
+      db.select().from(products).where((0, import_drizzle_orm3.eq)(products.userId, uid)),
+      db.select().from(invoices).where((0, import_drizzle_orm3.eq)(invoices.userId, uid)),
+      db.select().from(transactions).where((0, import_drizzle_orm3.eq)(transactions.userId, uid)),
+      db.select().from(orders).where((0, import_drizzle_orm3.eq)(orders.userId, uid)),
+      db.select().from(cheques).where((0, import_drizzle_orm3.eq)(cheques.userId, uid)),
+      db.select().from(promissoryNotes).where((0, import_drizzle_orm3.eq)(promissoryNotes.userId, uid)),
+      db.select().from(employees).where((0, import_drizzle_orm3.eq)(employees.userId, uid))
+    ]);
+    return {
+      accounts: userAccounts.map((a) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        currency: a.currency || "TRY",
+        balance: Number(a.balance || 0),
+        accountNumber: a.accountNumber || void 0,
+        iban: a.iban || void 0,
+        bankName: a.bankName || void 0,
+        isDefault: Boolean(a.isDefault)
+      })),
+      contacts: userContacts.map(
+        (c) => decodeExtraMeta(c.notes, {
+          id: c.id,
+          name: c.name,
+          companyTitle: c.companyTitle || void 0,
+          type: c.contactType,
+          contactType: c.contactType,
+          taxOffice: c.taxOffice || "",
+          taxNumber: c.taxNumber || "",
+          email: c.email || "",
+          phone: c.phone || "",
+          address: c.address || "",
+          city: c.city || void 0,
+          district: c.district || void 0,
+          neighborhood: c.neighborhood || void 0,
+          street: c.street || void 0,
+          balance: Number(c.balance || 0),
+          balanceType: c.balanceType || "balanced",
+          notes: c.notes || "",
+          createdAt: c.createdAt || void 0
+        })
+      ),
+      products: userProducts.map((p) => {
+        const wq = p.warehouseQuantities || {};
+        const rawMeta = wq && typeof wq.__rawProduct === "object" ? wq.__rawProduct : {};
+        const cleanWq = { ...wq };
+        delete cleanWq.__rawProduct;
+        return {
+          ...rawMeta,
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          unit: p.unit || "Adet",
+          buyPrice: Number(p.buyPrice || 0),
+          sellPrice: Number(p.sellPrice || 0),
+          vatRate: Number(p.vatRate ?? 20),
+          stockQuantity: Number(p.stockQuantity || 0),
+          minStockAlert: p.minStockAlert !== null ? Number(p.minStockAlert) : 5,
+          category: p.category || "Genel",
+          stockType: p.stockType || "Ticari Mal",
+          barcode: p.barcode || void 0,
+          imeiOrSerialNo: p.imeiOrSerialNo || void 0,
+          warehouseId: p.warehouseId || void 0,
+          warehouseName: p.warehouseName || void 0,
+          warehouseQuantities: Object.keys(cleanWq).length > 0 ? cleanWq : void 0
+        };
+      }),
+      invoices: userInvoices.map(
+        (inv) => decodeExtraMeta(inv.notes, {
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          type: inv.type,
+          contactId: inv.contactId,
+          contactName: inv.contactName,
+          taxNumber: inv.taxNumber || void 0,
+          issueDate: inv.issueDate,
+          dueDate: inv.dueDate,
+          items: Array.isArray(inv.items) ? inv.items : [],
+          subtotal: Number(inv.subtotal || 0),
+          totalVat: Number(inv.totalVat || 0),
+          totalWithholding: Number(inv.totalWithholding || 0),
+          grandTotal: Number(inv.grandTotal || 0),
+          paidAmount: Number(inv.paidAmount || 0),
+          remainingAmount: Number(inv.remainingAmount || 0),
+          status: inv.status || "draft",
+          currency: inv.currency || "TRY",
+          notes: inv.notes || void 0,
+          terms: inv.terms || void 0,
+          createdAt: inv.createdAt || void 0
+        })
+      ),
+      transactions: userTransactions.map(
+        (tx) => decodeExtraMeta(tx.description, {
+          id: tx.id,
+          date: tx.date,
+          type: tx.type,
+          amount: Number(tx.amount || 0),
+          currency: tx.currency || "TRY",
+          accountId: tx.accountId,
+          accountName: tx.accountName,
+          contactId: tx.contactId || void 0,
+          contactName: tx.contactName || void 0,
+          invoiceId: tx.invoiceId || void 0,
+          invoiceNumber: tx.invoiceNumber || void 0,
+          category: tx.category || "Genel",
+          description: tx.description || "",
+          documentNo: tx.documentNo || void 0,
+          receiptImage: tx.receiptImage || void 0,
+          items: Array.isArray(tx.items) ? tx.items : void 0,
+          subtotal: tx.subtotal !== null ? Number(tx.subtotal) : void 0,
+          totalVat: tx.totalVat !== null ? Number(tx.totalVat) : void 0
+        })
+      ),
+      orders: userOrders.map(
+        (ord) => decodeExtraMeta(ord.notes, {
+          id: ord.id,
+          orderNumber: ord.orderNumber,
+          type: ord.type,
+          contactId: ord.contactId,
+          contactName: ord.contactName,
+          contactPhone: ord.contactPhone || void 0,
+          contactEmail: ord.contactEmail || void 0,
+          taxNumber: ord.taxNumber || void 0,
+          orderDate: ord.orderDate,
+          deliveryDate: ord.deliveryDate || void 0,
+          items: Array.isArray(ord.items) ? ord.items : [],
+          subtotal: Number(ord.subtotal || 0),
+          totalVat: Number(ord.totalVat || 0),
+          grandTotal: Number(ord.grandTotal || 0),
+          currency: ord.currency || "TRY",
+          status: ord.status || "pending",
+          warehouseId: ord.warehouseId || void 0,
+          warehouseName: ord.warehouseName || void 0,
+          notes: ord.notes || void 0,
+          convertedToInvoiceId: ord.convertedToInvoiceId || void 0,
+          convertedToInvoiceNumber: ord.convertedToInvoiceNumber || void 0,
+          createdAt: ord.createdAt || void 0
+        })
+      ),
+      cheques: userCheques.map((ch) => ({
+        id: ch.id,
+        type: ch.type,
+        chequeNumber: ch.chequeNumber,
+        bankName: ch.bankName || "",
+        branchName: ch.branchName || "",
+        drawerName: ch.drawerName || "",
+        contactId: ch.contactId || "",
+        contactName: ch.contactName || "",
+        issueDate: ch.issueDate || "",
+        dueDate: ch.dueDate || "",
+        amount: Number(ch.amount || 0),
+        currency: ch.currency || "TRY",
+        status: ch.status || "portfolio",
+        notes: ch.notes || void 0,
+        endorsedToContactId: ch.endorsedToContactId || void 0,
+        endorsedToContactName: ch.endorsedToContactName || void 0,
+        endorsedDate: ch.endorsedDate || void 0
+      })),
+      promissoryNotes: userPromissoryNotes.map((pn) => ({
+        id: pn.id,
+        type: pn.type,
+        noteNumber: pn.noteNumber,
+        debtorName: pn.debtorName || "",
+        contactId: pn.contactId || "",
+        contactName: pn.contactName || "",
+        issueDate: pn.issueDate || "",
+        dueDate: pn.dueDate || "",
+        amount: Number(pn.amount || 0),
+        currency: pn.currency || "TRY",
+        status: pn.status || "portfolio",
+        notes: pn.notes || void 0,
+        endorsedToContactId: pn.endorsedToContactId || void 0,
+        endorsedToContactName: pn.endorsedToContactName || void 0,
+        endorsedDate: pn.endorsedDate || void 0
+      })),
+      employees: userEmployees.map(
+        (emp) => decodeExtraMeta(emp.notes, {
+          id: emp.id,
+          tckn: emp.tckn,
+          fullName: emp.fullName,
+          title: emp.title,
+          department: emp.department,
+          startDate: emp.startDate,
+          endDate: emp.endDate || void 0,
+          terminationCode: emp.terminationCode || void 0,
+          terminationReason: emp.terminationReason || void 0,
+          birthDate: emp.birthDate || void 0,
+          homeAddress: emp.homeAddress || void 0,
+          photoUrl: emp.photoUrl || void 0,
+          phone: emp.phone || "",
+          email: emp.email || "",
+          salaryType: emp.salaryType || "net",
+          salaryAmount: Number(emp.salaryAmount || 0),
+          foodAllowance: Number(emp.foodAllowance || 0),
+          roadAllowance: Number(emp.roadAllowance || 0),
+          hasBes: Boolean(emp.hasBes),
+          sgkOccupationCode: emp.sgkOccupationCode || void 0,
+          iban: emp.iban || "",
+          bankName: emp.bankName || "",
+          emergencyContact: emp.emergencyContact || void 0,
+          emergencyPhone: emp.emergencyPhone || void 0,
+          status: emp.status || "active",
+          annualLeaveAllowance: Number(emp.annualLeaveAllowance ?? 14),
+          usedAnnualLeave: Number(emp.usedAnnualLeave ?? 0),
+          notes: emp.notes || void 0,
+          createdAt: emp.createdAt || void 0
+        })
+      )
+    };
+  } catch (error) {
+    console.error("Database query failed in getAllUserAccountingRecords:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+async function upsertProductRecord(uid, p) {
+  try {
+    const id = String(p.id || `prod_${Date.now()}`);
+    const wqPayload = {
+      ...p.warehouseQuantities && typeof p.warehouseQuantities === "object" ? p.warehouseQuantities : {},
+      __rawProduct: p
+    };
+    const values = {
+      id,
+      userId: uid,
+      code: String(p.code || id),
+      name: String(p.name || "Stok Kart\u0131"),
+      unit: String(p.unit || "Adet"),
+      buyPrice: Number(p.buyPrice || 0),
+      sellPrice: Number(p.sellPrice || 0),
+      vatRate: Number(p.vatRate ?? 20),
+      stockQuantity: Number(p.stockQuantity || 0),
+      minStockAlert: p.minStockAlert !== void 0 ? Number(p.minStockAlert) : 5,
+      category: p.category ? String(p.category) : "Genel",
+      stockType: p.stockType ? String(p.stockType) : "Ticari Mal",
+      barcode: p.barcode ? String(p.barcode) : null,
+      imeiOrSerialNo: p.imeiOrSerialNo ? String(p.imeiOrSerialNo) : null,
+      warehouseId: p.warehouseId ? String(p.warehouseId) : null,
+      warehouseName: p.warehouseName ? String(p.warehouseName) : null,
+      warehouseQuantities: wqPayload
+    };
+    const res = await db.insert(products).values(values).onConflictDoUpdate({
+      target: products.id,
+      set: values
+    }).returning();
+    return res[0];
+  } catch (error) {
+    console.error("Database query failed in upsertProductRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+async function deleteProductRecord(uid, id) {
+  try {
+    await db.delete(products).where((0, import_drizzle_orm3.and)((0, import_drizzle_orm3.eq)(products.id, id), (0, import_drizzle_orm3.eq)(products.userId, uid)));
+  } catch (error) {
+    console.error("Database query failed in deleteProductRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+async function upsertInvoiceRecord(uid, inv) {
+  try {
+    const id = String(inv.id || `inv_${Date.now()}`);
+    const values = {
+      id,
+      userId: uid,
+      invoiceNumber: String(inv.invoiceNumber || id),
+      type: String(inv.type || "sales"),
+      contactId: String(inv.contactId || ""),
+      contactName: String(inv.contactName || ""),
+      taxNumber: inv.taxNumber ? String(inv.taxNumber) : null,
+      issueDate: String(inv.issueDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0]),
+      dueDate: String(inv.dueDate || inv.issueDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0]),
+      items: Array.isArray(inv.items) ? inv.items : [],
+      subtotal: Number(inv.subtotal || 0),
+      totalVat: Number(inv.totalVat || 0),
+      totalWithholding: Number(inv.totalWithholding || 0),
+      grandTotal: Number(inv.grandTotal || 0),
+      paidAmount: Number(inv.paidAmount || 0),
+      remainingAmount: Number(inv.remainingAmount || 0),
+      status: String(inv.status || "draft"),
+      currency: String(inv.currency || "TRY"),
+      notes: encodeExtraMeta(inv.notes, inv),
+      terms: inv.terms ? String(inv.terms) : null,
+      createdAt: inv.createdAt ? String(inv.createdAt) : (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const res = await db.insert(invoices).values(values).onConflictDoUpdate({
+      target: invoices.id,
+      set: values
+    }).returning();
+    return res[0];
+  } catch (error) {
+    console.error("Database query failed in upsertInvoiceRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+async function deleteInvoiceRecord(uid, id) {
+  try {
+    await db.delete(invoices).where((0, import_drizzle_orm3.and)((0, import_drizzle_orm3.eq)(invoices.id, id), (0, import_drizzle_orm3.eq)(invoices.userId, uid)));
+  } catch (error) {
+    console.error("Database query failed in deleteInvoiceRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+async function upsertTransactionRecord(uid, tx) {
+  try {
+    const id = String(tx.id || `tx_${Date.now()}`);
+    const values = {
+      id,
+      userId: uid,
+      date: String(tx.date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0]),
+      type: String(tx.type || "income"),
+      amount: Number(tx.amount || 0),
+      currency: String(tx.currency || "TRY"),
+      accountId: String(tx.accountId || ""),
+      accountName: String(tx.accountName || ""),
+      contactId: tx.contactId ? String(tx.contactId) : null,
+      contactName: tx.contactName ? String(tx.contactName) : null,
+      invoiceId: tx.invoiceId ? String(tx.invoiceId) : null,
+      invoiceNumber: tx.invoiceNumber ? String(tx.invoiceNumber) : null,
+      category: tx.category ? String(tx.category) : "Genel",
+      description: encodeExtraMeta(tx.description, tx),
+      documentNo: tx.documentNo ? String(tx.documentNo) : null,
+      receiptImage: tx.receiptImage ? String(tx.receiptImage) : null,
+      items: Array.isArray(tx.items) ? tx.items : null,
+      subtotal: tx.subtotal !== void 0 ? Number(tx.subtotal) : null,
+      totalVat: tx.totalVat !== void 0 ? Number(tx.totalVat) : null
+    };
+    const res = await db.insert(transactions).values(values).onConflictDoUpdate({
+      target: transactions.id,
+      set: values
+    }).returning();
+    return res[0];
+  } catch (error) {
+    console.error("Database query failed in upsertTransactionRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+async function deleteTransactionRecord(uid, id) {
+  try {
+    await db.delete(transactions).where((0, import_drizzle_orm3.and)((0, import_drizzle_orm3.eq)(transactions.id, id), (0, import_drizzle_orm3.eq)(transactions.userId, uid)));
+  } catch (error) {
+    console.error("Database query failed in deleteTransactionRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+async function upsertContactRecord(uid, c) {
+  try {
+    const id = String(c.id || `cnt_${Date.now()}`);
+    const values = {
+      id,
+      userId: uid,
+      name: String(c.name || ""),
+      companyTitle: c.companyTitle ? String(c.companyTitle) : null,
+      contactType: String(c.type || c.contactType || "customer"),
+      taxOffice: c.taxOffice ? String(c.taxOffice) : null,
+      taxNumber: c.taxNumber || c.vkn || c.tckn ? String(c.taxNumber || c.vkn || c.tckn) : null,
+      email: c.email ? String(c.email) : null,
+      phone: c.phone ? String(c.phone) : null,
+      address: c.address ? String(c.address) : null,
+      city: c.city ? String(c.city) : null,
+      district: c.district ? String(c.district) : null,
+      neighborhood: c.neighborhood ? String(c.neighborhood) : null,
+      street: c.street ? String(c.street) : null,
+      balance: Number(c.balance || 0),
+      balanceType: String(c.balanceType || "balanced"),
+      notes: encodeExtraMeta(c.notes, c),
+      createdAt: c.createdAt ? String(c.createdAt) : (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const res = await db.insert(contacts).values(values).onConflictDoUpdate({
+      target: contacts.id,
+      set: values
+    }).returning();
+    return res[0];
+  } catch (error) {
+    console.error("Database query failed in upsertContactRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+async function upsertAccountRecord(uid, a) {
+  try {
+    const id = String(a.id || `acc_${Date.now()}`);
+    const values = {
+      id,
+      userId: uid,
+      name: String(a.name || ""),
+      type: String(a.type || "cash"),
+      currency: String(a.currency || "TRY"),
+      balance: Number(a.balance || 0),
+      accountNumber: a.accountNumber ? String(a.accountNumber) : null,
+      iban: a.iban ? String(a.iban) : null,
+      bankName: a.bankName ? String(a.bankName) : null,
+      isDefault: Boolean(a.isDefault)
+    };
+    const res = await db.insert(accounts).values(values).onConflictDoUpdate({
+      target: accounts.id,
+      set: values
+    }).returning();
+    return res[0];
+  } catch (error) {
+    console.error("Database query failed in upsertAccountRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+async function syncUserBatchToPostgres(uid, email, payload) {
+  try {
+    await getOrCreateUser(uid, email);
+    if (Array.isArray(payload.accounts)) {
+      for (const acc of payload.accounts) {
+        if (acc && acc.id) await upsertAccountRecord(uid, acc);
+      }
+    }
+    if (Array.isArray(payload.contacts)) {
+      for (const cnt of payload.contacts) {
+        if (cnt && cnt.id) await upsertContactRecord(uid, cnt);
+      }
+    }
+    if (Array.isArray(payload.products)) {
+      for (const prod of payload.products) {
+        if (prod && prod.id) await upsertProductRecord(uid, prod);
+      }
+    }
+    if (Array.isArray(payload.invoices)) {
+      for (const inv of payload.invoices) {
+        if (inv && inv.id) await upsertInvoiceRecord(uid, inv);
+      }
+    }
+    if (Array.isArray(payload.transactions)) {
+      for (const tx of payload.transactions) {
+        if (tx && tx.id) await upsertTransactionRecord(uid, tx);
+      }
+    }
+    return true;
+  } catch (error) {
+    console.error("Database query failed in syncUserBatchToPostgres:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+
 // server.ts
-var import_fs4 = __toESM(require("fs"), 1);
+var import_fs5 = __toESM(require("fs"), 1);
 function loadServerEnv() {
   const cwd = process.cwd();
   for (const candidate of [
@@ -7544,8 +8166,8 @@ function sanitizeLegacyDemoIdentity(obj) {
 }
 var memoryCloudSyncStore = (() => {
   try {
-    if (import_fs4.default.existsSync(CLOUD_SYNC_FILE_PATH)) {
-      const raw = import_fs4.default.readFileSync(CLOUD_SYNC_FILE_PATH, "utf-8");
+    if (import_fs5.default.existsSync(CLOUD_SYNC_FILE_PATH)) {
+      const raw = import_fs5.default.readFileSync(CLOUD_SYNC_FILE_PATH, "utf-8");
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object") {
         const rawCompaniesData = parsed.companiesData && typeof parsed.companiesData === "object" ? parsed.companiesData : {};
@@ -7593,10 +8215,10 @@ var memoryCloudSyncStore = (() => {
 function persistServerCloudSyncStore() {
   try {
     const dir = import_path4.default.dirname(CLOUD_SYNC_FILE_PATH);
-    if (!import_fs4.default.existsSync(dir)) {
-      import_fs4.default.mkdirSync(dir, { recursive: true });
+    if (!import_fs5.default.existsSync(dir)) {
+      import_fs5.default.mkdirSync(dir, { recursive: true });
     }
-    import_fs4.default.writeFileSync(CLOUD_SYNC_FILE_PATH, JSON.stringify(memoryCloudSyncStore), "utf-8");
+    import_fs5.default.writeFileSync(CLOUD_SYNC_FILE_PATH, JSON.stringify(memoryCloudSyncStore), "utf-8");
   } catch (err) {
     console.warn("Cloud sync store diske yaz\u0131lamad\u0131:", err);
   }
@@ -7750,6 +8372,17 @@ app.post("/api/cloud-sync/company", (req, res) => {
     memoryCloudSyncStore.updatedAt = nowIso;
     memoryCloudSyncStore.version = Date.now();
     persistServerCloudSyncStore();
+    const pgUserId = String(req.body?.userId || cleanId).trim();
+    const pgUserEmail = String(req.body?.userEmail || companyMeta?.loginEmail || `${pgUserId}@muavin.com`).trim();
+    syncUserBatchToPostgres(pgUserId, pgUserEmail, {
+      products: data.products,
+      invoices: data.invoices,
+      transactions: data.transactions,
+      contacts: data.contacts,
+      accounts: data.accounts
+    }).catch((dbErr) => {
+      console.warn("PostgreSQL background sync warning:", dbErr?.message);
+    });
     res.json({
       success: true,
       companyId: cleanId,
@@ -7774,6 +8407,28 @@ app.post("/api/cloud-sync/broadcast", (req, res) => {
       }
     });
     persistServerCloudSyncStore();
+    (async () => {
+      for (const usr of memoryCloudSyncStore.usersRegistry) {
+        if (usr?.id && usr?.email) {
+          await getOrCreateUser(String(usr.id), String(usr.email), usr.fullName, usr.role).catch(() => {
+          });
+        }
+      }
+      for (const [cid, entry] of Object.entries(memoryCloudSyncStore.companiesData)) {
+        const cData = entry?.data || {};
+        const compMeta = memoryCloudSyncStore.companiesRegistry.find((c) => c.id === cid);
+        const email = compMeta?.loginEmail || cData?.settings?.email || `${cid}@muavin.com`;
+        await syncUserBatchToPostgres(cid, email, {
+          products: cData.products,
+          invoices: cData.invoices,
+          transactions: cData.transactions,
+          contacts: cData.contacts,
+          accounts: cData.accounts
+        }).catch(() => {
+        });
+      }
+    })().catch(() => {
+    });
     res.json({
       success: true,
       updatedAt: nowIso,
@@ -7783,6 +8438,263 @@ app.post("/api/cloud-sync/broadcast", (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err?.message || "Yay\u0131nlama hatas\u0131" });
+  }
+});
+function mergeUniqueById(primaryList = [], fallbackList = []) {
+  const map = /* @__PURE__ */ new Map();
+  fallbackList.forEach((item, idx) => {
+    if (!item || typeof item !== "object") return;
+    map.set(item.id ? String(item.id) : `fb_${idx}`, item);
+  });
+  primaryList.forEach((item, idx) => {
+    if (!item || typeof item !== "object") return;
+    const key = item.id ? String(item.id) : `pr_${idx}`;
+    const existing = map.get(key);
+    map.set(key, existing ? { ...existing, ...item } : item);
+  });
+  return Array.from(map.values());
+}
+app.get("/api/db/state", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const fallbackCompanyData = memoryCloudSyncStore.companiesData[companyId]?.data || {};
+  try {
+    await getOrCreateUser(uid, email);
+    const pgRecords = await getAllUserAccountingRecords(uid);
+    res.json({
+      success: true,
+      userId: uid,
+      companyId,
+      products: mergeUniqueById(pgRecords.products, fallbackCompanyData.products),
+      invoices: mergeUniqueById(pgRecords.invoices, fallbackCompanyData.invoices),
+      transactions: mergeUniqueById(pgRecords.transactions, fallbackCompanyData.transactions),
+      contacts: mergeUniqueById(pgRecords.contacts, fallbackCompanyData.contacts),
+      accounts: mergeUniqueById(pgRecords.accounts, fallbackCompanyData.accounts),
+      orders: mergeUniqueById(pgRecords.orders, fallbackCompanyData.orders),
+      cheques: mergeUniqueById(pgRecords.cheques, fallbackCompanyData.cheques),
+      promissoryNotes: mergeUniqueById(pgRecords.promissoryNotes, fallbackCompanyData.promissoryNotes),
+      employees: mergeUniqueById(pgRecords.employees, fallbackCompanyData.employees),
+      settings: fallbackCompanyData.settings || null,
+      updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+    });
+  } catch (error) {
+    console.warn("PostgreSQL state fetch fallback active:", error?.message);
+    res.json({
+      success: true,
+      userId: uid,
+      companyId,
+      products: fallbackCompanyData.products || [],
+      invoices: fallbackCompanyData.invoices || [],
+      transactions: fallbackCompanyData.transactions || [],
+      contacts: fallbackCompanyData.contacts || [],
+      accounts: fallbackCompanyData.accounts || [],
+      orders: fallbackCompanyData.orders || [],
+      cheques: fallbackCompanyData.cheques || [],
+      promissoryNotes: fallbackCompanyData.promissoryNotes || [],
+      employees: fallbackCompanyData.employees || [],
+      settings: fallbackCompanyData.settings || null,
+      updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+});
+app.post("/api/db/sync", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const { companyId, products: products2, invoices: invoices2, transactions: transactions2, contacts: contacts2, accounts: accounts2, data } = req.body || {};
+  const targetCompanyId = String(companyId || uid).trim();
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const existingEntry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const mergedSlice = {
+    ...existingEntry,
+    ...data && typeof data === "object" ? data : {},
+    ...Array.isArray(products2) ? { products: products2 } : {},
+    ...Array.isArray(invoices2) ? { invoices: invoices2 } : {},
+    ...Array.isArray(transactions2) ? { transactions: transactions2 } : {},
+    ...Array.isArray(contacts2) ? { contacts: contacts2 } : {},
+    ...Array.isArray(accounts2) ? { accounts: accounts2 } : {}
+  };
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: mergedSlice,
+    updatedAt: nowIso
+  };
+  memoryCloudSyncStore.updatedAt = nowIso;
+  memoryCloudSyncStore.version = Date.now();
+  persistServerCloudSyncStore();
+  try {
+    await syncUserBatchToPostgres(uid, email, {
+      products: mergedSlice.products,
+      invoices: mergedSlice.invoices,
+      transactions: mergedSlice.transactions,
+      contacts: mergedSlice.contacts,
+      accounts: mergedSlice.accounts
+    });
+    res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
+  } catch (error) {
+    console.warn("PostgreSQL batch sync fallback active:", error?.message);
+    res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
+  }
+});
+app.get("/api/db/products", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.products || [];
+  try {
+    const records = await getAllUserAccountingRecords(uid);
+    res.json({ success: true, products: mergeUniqueById(records.products, fallback) });
+  } catch (error) {
+    res.json({ success: true, products: fallback });
+  }
+});
+app.post("/api/db/products", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const { product, companyId } = req.body || {};
+  if (!product || typeof product !== "object") {
+    return res.status(400).json({ error: "Ge\xE7ersiz stok kayd\u0131" });
+  }
+  const targetCompanyId = String(companyId || uid).trim();
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const list = Array.isArray(entry.products) ? [...entry.products] : [];
+  const idx = list.findIndex((item) => item && item.id === product.id);
+  if (idx >= 0) list[idx] = { ...list[idx], ...product };
+  else list.unshift(product);
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: { ...entry, products: list },
+    updatedAt: nowIso
+  };
+  persistServerCloudSyncStore();
+  try {
+    await getOrCreateUser(uid, email);
+    const saved = await upsertProductRecord(uid, product);
+    res.json({ success: true, product: saved });
+  } catch (error) {
+    res.json({ success: true, product });
+  }
+});
+app.delete("/api/db/products/:id", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const id = String(req.params.id || "").trim();
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
+  if (entry && Array.isArray(entry.products)) {
+    entry.products = entry.products.filter((item) => item && item.id !== id);
+    persistServerCloudSyncStore();
+  }
+  try {
+    await deleteProductRecord(uid, id);
+    res.json({ success: true, deletedId: id });
+  } catch (error) {
+    res.json({ success: true, deletedId: id });
+  }
+});
+app.get("/api/db/invoices", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.invoices || [];
+  try {
+    const records = await getAllUserAccountingRecords(uid);
+    res.json({ success: true, invoices: mergeUniqueById(records.invoices, fallback) });
+  } catch (error) {
+    res.json({ success: true, invoices: fallback });
+  }
+});
+app.post("/api/db/invoices", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const { invoice, companyId } = req.body || {};
+  if (!invoice || typeof invoice !== "object") {
+    return res.status(400).json({ error: "Ge\xE7ersiz fatura kayd\u0131" });
+  }
+  const targetCompanyId = String(companyId || uid).trim();
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const list = Array.isArray(entry.invoices) ? [...entry.invoices] : [];
+  const idx = list.findIndex((item) => item && item.id === invoice.id);
+  if (idx >= 0) list[idx] = { ...list[idx], ...invoice };
+  else list.unshift(invoice);
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: { ...entry, invoices: list },
+    updatedAt: nowIso
+  };
+  persistServerCloudSyncStore();
+  try {
+    await getOrCreateUser(uid, email);
+    const saved = await upsertInvoiceRecord(uid, invoice);
+    res.json({ success: true, invoice: saved });
+  } catch (error) {
+    res.json({ success: true, invoice });
+  }
+});
+app.delete("/api/db/invoices/:id", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const id = String(req.params.id || "").trim();
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
+  if (entry && Array.isArray(entry.invoices)) {
+    entry.invoices = entry.invoices.filter((item) => item && item.id !== id);
+    persistServerCloudSyncStore();
+  }
+  try {
+    await deleteInvoiceRecord(uid, id);
+    res.json({ success: true, deletedId: id });
+  } catch (error) {
+    res.json({ success: true, deletedId: id });
+  }
+});
+app.get("/api/db/transactions", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.transactions || [];
+  try {
+    const records = await getAllUserAccountingRecords(uid);
+    res.json({ success: true, transactions: mergeUniqueById(records.transactions, fallback) });
+  } catch (error) {
+    res.json({ success: true, transactions: fallback });
+  }
+});
+app.post("/api/db/transactions", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const { transaction, companyId } = req.body || {};
+  if (!transaction || typeof transaction !== "object") {
+    return res.status(400).json({ error: "Ge\xE7ersiz i\u015Flem kayd\u0131" });
+  }
+  const targetCompanyId = String(companyId || uid).trim();
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const list = Array.isArray(entry.transactions) ? [...entry.transactions] : [];
+  const idx = list.findIndex((item) => item && item.id === transaction.id);
+  if (idx >= 0) list[idx] = { ...list[idx], ...transaction };
+  else list.unshift(transaction);
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: { ...entry, transactions: list },
+    updatedAt: nowIso
+  };
+  persistServerCloudSyncStore();
+  try {
+    await getOrCreateUser(uid, email);
+    const saved = await upsertTransactionRecord(uid, transaction);
+    res.json({ success: true, transaction: saved });
+  } catch (error) {
+    res.json({ success: true, transaction });
+  }
+});
+app.delete("/api/db/transactions/:id", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const id = String(req.params.id || "").trim();
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
+  if (entry && Array.isArray(entry.transactions)) {
+    entry.transactions = entry.transactions.filter((item) => item && item.id !== id);
+    persistServerCloudSyncStore();
+  }
+  try {
+    await deleteTransactionRecord(uid, id);
+    res.json({ success: true, deletedId: id });
+  } catch (error) {
+    res.json({ success: true, deletedId: id });
   }
 });
 async function startServer() {
@@ -7806,7 +8718,7 @@ async function startServer() {
       }
       try {
         const templatePath = import_path4.default.join(process.cwd(), "index.html");
-        let template = import_fs4.default.readFileSync(templatePath, "utf-8");
+        let template = import_fs5.default.readFileSync(templatePath, "utf-8");
         template = await vite.transformIndexHtml(req.originalUrl, template);
         res.status(200).set({
           "Content-Type": "text/html",
@@ -7851,7 +8763,7 @@ async function startServer() {
     console.log(`Muavin Muhasebe sunucusu \xE7al\u0131\u015F\u0131yor: http://0.0.0.0:${PORT}`);
     try {
       const sessionPath = import_path4.default.join(process.cwd(), "data", "whatsapp_sessions", "creds.json");
-      if (import_fs4.default.existsSync(sessionPath)) {
+      if (import_fs5.default.existsSync(sessionPath)) {
         console.log("Mevcut WhatsApp oturumu tespit edildi, ba\u011Flant\u0131 ba\u015Flat\u0131l\u0131yor...");
         whatsAppService.init(true).catch((err) => {
           console.warn("WhatsApp ba\u015Flang\u0131\xE7 ba\u011Flant\u0131 uyar\u0131s\u0131:", err?.message);

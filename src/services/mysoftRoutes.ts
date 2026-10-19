@@ -612,7 +612,7 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
   );
   router.get(
     "/diagnostics",
-    run((req) => {
+    run(async (req) => {
       const limit = positiveInt(queryText(req, "limit")) || 50;
       return {
         logs: client.getDiagnosticLogs(limit),

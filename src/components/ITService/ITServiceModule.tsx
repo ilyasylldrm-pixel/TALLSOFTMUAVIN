@@ -1339,7 +1339,7 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
                     r.serialNumber || "-",
                     r.customerName,
                     r.customerPhone || "-",
-                    formatTRDate(r.entryDate),
+                    r.entryDate || "-",
                     r.customerComplaint || "-",
                     r.diagnosisNotes || "-",
                     formatCurrency(r.partsTotal || 0, "TRY"),

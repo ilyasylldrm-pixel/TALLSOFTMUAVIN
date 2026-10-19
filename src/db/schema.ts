@@ -4,7 +4,7 @@ import { relations } from 'drizzle-orm';
 // Firebase Auth Users table
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  uid: text('uid').notNull().unique(), // Firebase Auth UID
+  uid: text('uid').notNull().unique('users_uid_key'), // Firebase Auth UID
   email: text('email').notNull(),
   fullName: text('full_name'),
   role: text('role').default('user'),
@@ -143,7 +143,7 @@ export const orders = pgTable('orders', {
   notes: text('notes'),
   convertedToInvoiceId: text('converted_to_invoice_id'),
   convertedToInvoiceNumber: text('converted_to_invoice_number'),
-  createdAt: text('created_at'),
+  createdAt: text('createdat'),
 });
 
 // Cheques & Promissory Notes (Çek & Senet)

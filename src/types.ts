@@ -25,6 +25,7 @@ export interface Contact {
   neighborhood?: string; // Mahalle
   street?: string; // Cadde / Sokak
   buildingNo?: string;
+  doorNo?: string;
   postalCode?: string;
   addressDetails?: AddressDetails;
   balance: number; // Pozitif: Alacaklıyız (Müşteri bize borçlu), Negatif: Borçluyuz (Tedarikçiye borcumuz var)
@@ -387,7 +388,7 @@ export interface MysoftCredentials {
  * Aktif şirketin Mysoft VKN/TCKN eşleştirmesi yapılıp yapılmadığını kontrol eder.
  */
 export function isCompanyMysoftMatched(
-  company?: Partial<CompanyItem> | null,
+  company?: (Omit<Partial<CompanyItem>, "mysoftStatus"> & { mysoftStatus?: string }) | null,
   settings?: {
     tenantIdentifierNumber?: string;
     mysoftStatus?: string;
@@ -423,6 +424,7 @@ export interface Invoice {
   paymentMethod?: InvoicePaymentMethod; // "nakit" = Nakit, "cari" = Cari (Açık Hesap), "kredi_karti" = Kredi Kartı, "eft_havale" = EFT & Havale
   paymentAccountId?: string; // Tahsilat / Ödeme Kasa veya Banka/POS Hesabı ID
   paymentAccountName?: string; // Tahsilat / Ödeme Kasa veya Banka/POS Hesabı Adı
+  paymentAccountHolderName?: string; // Alıcı Hesap Sahibi Ünvanı
   paymentBankName?: string; // Banka Adı
   paymentIban?: string; // EFT & Havale için seçilen/girilen IBAN bilgisi
   expenseCategory?: string; // Ana Masraf / Gider Kalemi
@@ -816,6 +818,7 @@ export interface CompanySettings {
   logoUrl?: string;
   logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
   defaultBankAccountName?: string;
+  bankName?: string;
   defaultBankIban?: string;
   iban?: string; // Alias for defaultBankIban
   defaultBankName?: string;
@@ -1998,7 +2001,7 @@ export function isModuleOrSubModuleAllowed(
     moduleRestrictionEnabled?: boolean;
     allowedModules?: string[];
     tenantIdentifierNumber?: string;
-    mysoftStatus?: "active" | "pending" | "none";
+    mysoftStatus?: string;
     eFaturaPrefix?: string;
     eArsivPrefix?: string;
     eFaturaNextNumber?: string;

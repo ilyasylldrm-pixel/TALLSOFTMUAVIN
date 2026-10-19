@@ -2852,7 +2852,7 @@ export class MysoftEdocumentClient {
         /object reference not set to an instance of an object/i.test(rawErrorMsg)
       ) {
         const detailedMsg = `Mysoft e-Belge sunucusu nesne referans hatası döndürdü (${rawErrorMsg}). Gönderilen veri kontrol özeti — Mükellef VKN: ${stringOrEmpty(body.tenantIdentifierNumber) || "Eksik"}, Alıcı VKN/TCKN: ${stringOrEmpty(acc.vknTckn) || "Eksik"} (${stringOrEmpty(acc.accountName) || "Ünvan Yok"}), Kalem Sayısı: ${detailCount}, Belge Tipi: ${stringOrEmpty(body.eDocumentType)}/${stringOrEmpty(body.profile)}, Ön Ek: ${stringOrEmpty(body.prefix) || "Varsayılan"}. Lütfen firma VKN, alıcı VKN/TCKN ve fatura kalem bilgilerini kontrol edin.`;
-        throw new MysoftApiError(detailedMsg, error.status, error.details, error.code);
+        throw new MysoftApiError(error.status, detailedMsg, error.details);
       }
 
       throw error;

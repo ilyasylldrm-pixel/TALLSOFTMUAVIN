@@ -9,6 +9,20 @@ import { whatsAppService } from "./src/services/whatsappService.ts";
 import { getPortalProxyRouter } from "./src/services/portalProxyRoutes.ts";
 import { getExtensionRouter } from "./src/services/extensionRoutes.ts";
 import { getGitHubRouter } from "./src/services/githubRoutes.ts";
+import { requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
+import { getOrCreateUser } from "./src/db/users.ts";
+import {
+  getAllUserAccountingRecords,
+  upsertProductRecord,
+  deleteProductRecord,
+  upsertInvoiceRecord,
+  deleteInvoiceRecord,
+  upsertTransactionRecord,
+  deleteTransactionRecord,
+  upsertContactRecord,
+  upsertAccountRecord,
+  syncUserBatchToPostgres,
+} from "./src/db/repository.ts";
 import fs from "fs";
 
 // Cloud Run / IIS: cwd and sibling files. Avoid import.meta.url so the CJS
@@ -1990,6 +2004,19 @@ app.post("/api/cloud-sync/company", (req, res) => {
     memoryCloudSyncStore.version = Date.now();
     persistServerCloudSyncStore();
 
+    // Also persist records to PostgreSQL (Cloud SQL) scoped by user/company identifier
+    const pgUserId = String(req.body?.userId || cleanId).trim();
+    const pgUserEmail = String(req.body?.userEmail || companyMeta?.loginEmail || `${pgUserId}@muavin.com`).trim();
+    syncUserBatchToPostgres(pgUserId, pgUserEmail, {
+      products: data.products,
+      invoices: data.invoices,
+      transactions: data.transactions,
+      contacts: data.contacts,
+      accounts: data.accounts,
+    }).catch((dbErr) => {
+      console.warn("PostgreSQL background sync warning:", dbErr?.message);
+    });
+
     res.json({
       success: true,
       companyId: cleanId,
@@ -2016,6 +2043,28 @@ app.post("/api/cloud-sync/broadcast", (req, res) => {
       }
     });
     persistServerCloudSyncStore();
+
+    // Synchronize all users and companies into PostgreSQL in the background
+    (async () => {
+      for (const usr of memoryCloudSyncStore.usersRegistry) {
+        if (usr?.id && usr?.email) {
+          await getOrCreateUser(String(usr.id), String(usr.email), usr.fullName, usr.role).catch(() => {});
+        }
+      }
+      for (const [cid, entry] of Object.entries(memoryCloudSyncStore.companiesData)) {
+        const cData = entry?.data || {};
+        const compMeta = memoryCloudSyncStore.companiesRegistry.find((c) => c.id === cid);
+        const email = compMeta?.loginEmail || cData?.settings?.email || `${cid}@muavin.com`;
+        await syncUserBatchToPostgres(cid, email, {
+          products: cData.products,
+          invoices: cData.invoices,
+          transactions: cData.transactions,
+          contacts: cData.contacts,
+          accounts: cData.accounts,
+        }).catch(() => {});
+      }
+    })().catch(() => {});
+
     res.json({
       success: true,
       updatedAt: nowIso,
@@ -2025,6 +2074,294 @@ app.post("/api/cloud-sync/broadcast", (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || "Yayınlama hatası" });
+  }
+});
+
+// ==========================================
+// MERKEZİ VERİTABANI (POSTGRESQL / CLOUD SQL) REST API UÇ NOKTALARI
+// ==========================================
+function mergeUniqueById<T extends { id?: string }>(primaryList: T[] = [], fallbackList: T[] = []): T[] {
+  const map = new Map<string, T>();
+  fallbackList.forEach((item, idx) => {
+    if (!item || typeof item !== "object") return;
+    map.set(item.id ? String(item.id) : `fb_${idx}`, item);
+  });
+  primaryList.forEach((item, idx) => {
+    if (!item || typeof item !== "object") return;
+    const key = item.id ? String(item.id) : `pr_${idx}`;
+    const existing = map.get(key);
+    map.set(key, existing ? { ...existing, ...item } : item);
+  });
+  return Array.from(map.values());
+}
+
+// Kullanıcı giriş yaptığında mevcut stok, fatura, işlem, cari ve hesap verilerini kullanıcı ID'sine göre çeker
+app.get("/api/db/state", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim()
+    ? req.query.companyId.trim()
+    : uid;
+
+  const fallbackCompanyData = memoryCloudSyncStore.companiesData[companyId]?.data || {};
+
+  try {
+    await getOrCreateUser(uid, email);
+    const pgRecords = await getAllUserAccountingRecords(uid);
+
+    res.json({
+      success: true,
+      userId: uid,
+      companyId,
+      products: mergeUniqueById(pgRecords.products, fallbackCompanyData.products),
+      invoices: mergeUniqueById(pgRecords.invoices, fallbackCompanyData.invoices),
+      transactions: mergeUniqueById(pgRecords.transactions, fallbackCompanyData.transactions),
+      contacts: mergeUniqueById(pgRecords.contacts, fallbackCompanyData.contacts),
+      accounts: mergeUniqueById(pgRecords.accounts, fallbackCompanyData.accounts),
+      orders: mergeUniqueById(pgRecords.orders, fallbackCompanyData.orders),
+      cheques: mergeUniqueById(pgRecords.cheques, fallbackCompanyData.cheques),
+      promissoryNotes: mergeUniqueById(pgRecords.promissoryNotes, fallbackCompanyData.promissoryNotes),
+      employees: mergeUniqueById(pgRecords.employees, fallbackCompanyData.employees),
+      settings: fallbackCompanyData.settings || null,
+      updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.warn("PostgreSQL state fetch fallback active:", error?.message);
+    res.json({
+      success: true,
+      userId: uid,
+      companyId,
+      products: fallbackCompanyData.products || [],
+      invoices: fallbackCompanyData.invoices || [],
+      transactions: fallbackCompanyData.transactions || [],
+      contacts: fallbackCompanyData.contacts || [],
+      accounts: fallbackCompanyData.accounts || [],
+      orders: fallbackCompanyData.orders || [],
+      cheques: fallbackCompanyData.cheques || [],
+      promissoryNotes: fallbackCompanyData.promissoryNotes || [],
+      employees: fallbackCompanyData.employees || [],
+      settings: fallbackCompanyData.settings || null,
+      updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || new Date().toISOString(),
+    });
+  }
+});
+
+// Toplu stok, fatura, işlem, cari ve hesap senkronizasyonu (PostgreSQL + Cloud Store)
+app.post("/api/db/sync", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const { companyId, products, invoices, transactions, contacts, accounts, data } = req.body || {};
+  const targetCompanyId = String(companyId || uid).trim();
+  const nowIso = new Date().toISOString();
+
+  const existingEntry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const mergedSlice = {
+    ...existingEntry,
+    ...(data && typeof data === "object" ? data : {}),
+    ...(Array.isArray(products) ? { products } : {}),
+    ...(Array.isArray(invoices) ? { invoices } : {}),
+    ...(Array.isArray(transactions) ? { transactions } : {}),
+    ...(Array.isArray(contacts) ? { contacts } : {}),
+    ...(Array.isArray(accounts) ? { accounts } : {}),
+  };
+
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: mergedSlice,
+    updatedAt: nowIso,
+  };
+  memoryCloudSyncStore.updatedAt = nowIso;
+  memoryCloudSyncStore.version = Date.now();
+  persistServerCloudSyncStore();
+
+  try {
+    await syncUserBatchToPostgres(uid, email, {
+      products: mergedSlice.products,
+      invoices: mergedSlice.invoices,
+      transactions: mergedSlice.transactions,
+      contacts: mergedSlice.contacts,
+      accounts: mergedSlice.accounts,
+    });
+    res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
+  } catch (error: any) {
+    console.warn("PostgreSQL batch sync fallback active:", error?.message);
+    res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
+  }
+});
+
+// Doğrudan Stok (Product) Ekleme / Güncelleme / Silme Uç Noktaları
+app.get("/api/db/products", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.products || [];
+  try {
+    const records = await getAllUserAccountingRecords(uid);
+    res.json({ success: true, products: mergeUniqueById(records.products, fallback) });
+  } catch (error: any) {
+    res.json({ success: true, products: fallback });
+  }
+});
+
+app.post("/api/db/products", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const { product, companyId } = req.body || {};
+  if (!product || typeof product !== "object") {
+    return res.status(400).json({ error: "Geçersiz stok kaydı" });
+  }
+  const targetCompanyId = String(companyId || uid).trim();
+  const nowIso = new Date().toISOString();
+  const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const list: any[] = Array.isArray(entry.products) ? [...entry.products] : [];
+  const idx = list.findIndex((item) => item && item.id === product.id);
+  if (idx >= 0) list[idx] = { ...list[idx], ...product };
+  else list.unshift(product);
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: { ...entry, products: list },
+    updatedAt: nowIso,
+  };
+  persistServerCloudSyncStore();
+
+  try {
+    await getOrCreateUser(uid, email);
+    const saved = await upsertProductRecord(uid, product);
+    res.json({ success: true, product: saved });
+  } catch (error: any) {
+    res.json({ success: true, product });
+  }
+});
+
+app.delete("/api/db/products/:id", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const id = String(req.params.id || "").trim();
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
+  if (entry && Array.isArray(entry.products)) {
+    entry.products = entry.products.filter((item: any) => item && item.id !== id);
+    persistServerCloudSyncStore();
+  }
+  try {
+    await deleteProductRecord(uid, id);
+    res.json({ success: true, deletedId: id });
+  } catch (error: any) {
+    res.json({ success: true, deletedId: id });
+  }
+});
+
+// Doğrudan Fatura (Invoice) Ekleme / Güncelleme / Silme Uç Noktaları
+app.get("/api/db/invoices", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.invoices || [];
+  try {
+    const records = await getAllUserAccountingRecords(uid);
+    res.json({ success: true, invoices: mergeUniqueById(records.invoices, fallback) });
+  } catch (error: any) {
+    res.json({ success: true, invoices: fallback });
+  }
+});
+
+app.post("/api/db/invoices", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const { invoice, companyId } = req.body || {};
+  if (!invoice || typeof invoice !== "object") {
+    return res.status(400).json({ error: "Geçersiz fatura kaydı" });
+  }
+  const targetCompanyId = String(companyId || uid).trim();
+  const nowIso = new Date().toISOString();
+  const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const list: any[] = Array.isArray(entry.invoices) ? [...entry.invoices] : [];
+  const idx = list.findIndex((item) => item && item.id === invoice.id);
+  if (idx >= 0) list[idx] = { ...list[idx], ...invoice };
+  else list.unshift(invoice);
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: { ...entry, invoices: list },
+    updatedAt: nowIso,
+  };
+  persistServerCloudSyncStore();
+
+  try {
+    await getOrCreateUser(uid, email);
+    const saved = await upsertInvoiceRecord(uid, invoice);
+    res.json({ success: true, invoice: saved });
+  } catch (error: any) {
+    res.json({ success: true, invoice });
+  }
+});
+
+app.delete("/api/db/invoices/:id", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const id = String(req.params.id || "").trim();
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
+  if (entry && Array.isArray(entry.invoices)) {
+    entry.invoices = entry.invoices.filter((item: any) => item && item.id !== id);
+    persistServerCloudSyncStore();
+  }
+  try {
+    await deleteInvoiceRecord(uid, id);
+    res.json({ success: true, deletedId: id });
+  } catch (error: any) {
+    res.json({ success: true, deletedId: id });
+  }
+});
+
+// Doğrudan İşlem (Transaction) Ekleme / Güncelleme / Silme Uç Noktaları
+app.get("/api/db/transactions", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.transactions || [];
+  try {
+    const records = await getAllUserAccountingRecords(uid);
+    res.json({ success: true, transactions: mergeUniqueById(records.transactions, fallback) });
+  } catch (error: any) {
+    res.json({ success: true, transactions: fallback });
+  }
+});
+
+app.post("/api/db/transactions", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const email = req.user?.email || `${uid}@muavin.com`;
+  const { transaction, companyId } = req.body || {};
+  if (!transaction || typeof transaction !== "object") {
+    return res.status(400).json({ error: "Geçersiz işlem kaydı" });
+  }
+  const targetCompanyId = String(companyId || uid).trim();
+  const nowIso = new Date().toISOString();
+  const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const list: any[] = Array.isArray(entry.transactions) ? [...entry.transactions] : [];
+  const idx = list.findIndex((item) => item && item.id === transaction.id);
+  if (idx >= 0) list[idx] = { ...list[idx], ...transaction };
+  else list.unshift(transaction);
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: { ...entry, transactions: list },
+    updatedAt: nowIso,
+  };
+  persistServerCloudSyncStore();
+
+  try {
+    await getOrCreateUser(uid, email);
+    const saved = await upsertTransactionRecord(uid, transaction);
+    res.json({ success: true, transaction: saved });
+  } catch (error: any) {
+    res.json({ success: true, transaction });
+  }
+});
+
+app.delete("/api/db/transactions/:id", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const id = String(req.params.id || "").trim();
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
+  if (entry && Array.isArray(entry.transactions)) {
+    entry.transactions = entry.transactions.filter((item: any) => item && item.id !== id);
+    persistServerCloudSyncStore();
+  }
+  try {
+    await deleteTransactionRecord(uid, id);
+    res.json({ success: true, deletedId: id });
+  } catch (error: any) {
+    res.json({ success: true, deletedId: id });
   }
 });
 

@@ -1288,7 +1288,7 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
                     `${r.vehicleBrand} ${r.vehicleModel} (${r.modelYear || "-"})`,
                     r.customerName,
                     r.customerPhone || "-",
-                    formatTRDate(r.entryDate),
+                    r.entryDate || "-",
                     r.currentKm ? `${r.currentKm.toLocaleString("tr-TR")} KM` : "-",
                     r.customerComplaint || "-",
                     r.diagnosisNotes || "-",

@@ -17,6 +17,7 @@ import {
   updateDoc
 } from "firebase/firestore";
 import {
+  auth,
   db,
   sanitizeForFirestore,
   getAllUsersProfiles,
@@ -50,7 +51,7 @@ import {
 export interface SystemAuditLogItem {
   id?: string;
   action: string;
-  category: "Bordro & SGK" | "Kullanıcı & Yetki" | "Evrak & Dosya" | "Sistem & Ayarlar" | "Duyuru";
+  category: "Bordro & SGK" | "Kullanıcı & Yetki" | "Evrak & Dosya" | "Sistem & Ayarlar" | "Duyuru" | "Şirket & Yapılandırma";
   details: string;
   performedBy: string;
   timestamp: string;
@@ -196,9 +197,143 @@ const COMPANY_SLICE_MAPPING: Array<{ dataKey: string; storageKey: any; maxItems?
   { dataKey: "assetDisposals", storageKey: "ASSET_DISPOSALS", maxItems: 200 },
 ];
 
+let memoryFirebaseIdToken: string | null = null;
+
+async function getDatabaseAuthHeaders(companyId?: string): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  let resolvedUid = "";
+  let resolvedEmail = "";
+
+  if (typeof window !== "undefined") {
+    try {
+      const rawUser =
+        window.localStorage.getItem("muavin_active_user") ||
+        window.sessionStorage.getItem("muavin_active_user");
+      if (rawUser) {
+        const parsed = JSON.parse(rawUser);
+        resolvedUid = String(parsed.id || parsed.userId || parsed.companyId || "").trim();
+        resolvedEmail = String(parsed.email || "").trim();
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  if (auth.currentUser) {
+    try {
+      memoryFirebaseIdToken = await auth.currentUser.getIdToken();
+      if (!resolvedUid) resolvedUid = auth.currentUser.uid;
+      if (!resolvedEmail) resolvedEmail = auth.currentUser.email || "";
+    } catch {
+      // fallback to memory token or user id
+    }
+  }
+
+  if (!resolvedUid && companyId) {
+    resolvedUid = companyId;
+  }
+
+  if (memoryFirebaseIdToken) {
+    headers["Authorization"] = `Bearer ${memoryFirebaseIdToken}`;
+  } else if (resolvedUid) {
+    headers["Authorization"] = `Bearer ${resolvedUid}`;
+  }
+
+  if (resolvedUid) headers["x-user-id"] = resolvedUid;
+  if (resolvedEmail) headers["x-user-email"] = resolvedEmail;
+
+  return headers;
+}
+
+export async function saveProductToDatabase(product: any, companyId?: string): Promise<void> {
+  if (typeof window === "undefined" || !product) return;
+  try {
+    const headers = await getDatabaseAuthHeaders(companyId);
+    await fetch("/api/db/products", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ product, companyId }),
+    });
+  } catch {
+    // offline fallback handled by state sync
+  }
+}
+
+export async function deleteProductFromDatabase(productId: string, companyId?: string): Promise<void> {
+  if (typeof window === "undefined" || !productId) return;
+  try {
+    const headers = await getDatabaseAuthHeaders(companyId);
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    await fetch(`/api/db/products/${encodeURIComponent(productId)}${qs}`, {
+      method: "DELETE",
+      headers,
+    });
+  } catch {
+    // offline fallback
+  }
+}
+
+export async function saveInvoiceToDatabase(invoice: any, companyId?: string): Promise<void> {
+  if (typeof window === "undefined" || !invoice) return;
+  try {
+    const headers = await getDatabaseAuthHeaders(companyId);
+    await fetch("/api/db/invoices", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ invoice, companyId }),
+    });
+  } catch {
+    // offline fallback
+  }
+}
+
+export async function deleteInvoiceFromDatabase(invoiceId: string, companyId?: string): Promise<void> {
+  if (typeof window === "undefined" || !invoiceId) return;
+  try {
+    const headers = await getDatabaseAuthHeaders(companyId);
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    await fetch(`/api/db/invoices/${encodeURIComponent(invoiceId)}${qs}`, {
+      method: "DELETE",
+      headers,
+    });
+  } catch {
+    // offline fallback
+  }
+}
+
+export async function saveTransactionToDatabase(transaction: any, companyId?: string): Promise<void> {
+  if (typeof window === "undefined" || !transaction) return;
+  try {
+    const headers = await getDatabaseAuthHeaders(companyId);
+    await fetch("/api/db/transactions", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ transaction, companyId }),
+    });
+  } catch {
+    // offline fallback
+  }
+}
+
+export async function deleteTransactionFromDatabase(transactionId: string, companyId?: string): Promise<void> {
+  if (typeof window === "undefined" || !transactionId) return;
+  try {
+    const headers = await getDatabaseAuthHeaders(companyId);
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    await fetch(`/api/db/transactions/${encodeURIComponent(transactionId)}${qs}`, {
+      method: "DELETE",
+      headers,
+    });
+  } catch {
+    // offline fallback
+  }
+}
+
 /**
  * Aktif şirketin tüm güncel verilerini (ayarlar, şubeler, depolar, faturalar, cariler, kasa/banka, stok vb.)
- * hem sunucu tarafı kalıcı bulut deposuna (/api/cloud-sync/company) hem de Firestore'a gönderir.
+ * hem merkezi PostgreSQL veritabanına (/api/db/sync) hem sunucu bulut deposuna (/api/cloud-sync/company) hem de Firestore'a gönderir.
  */
 export async function pushCompanyDataToCloud(companyId: string, overrideData?: any): Promise<void> {
   const cleanId = String(companyId || "").trim();
@@ -222,19 +357,37 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
 
   safeSetStorageItem(`muavin_company_updated_at_${cleanId}`, nowIso);
 
-  // 1. Sunucu tarafı kalıcı bulut deposuna anında yaz (kota sınırı yoktur)
+  // 1. Merkezi PostgreSQL veritabanı (/api/db/sync) ve sunucu tarafı kalıcı bulut deposuna anında yaz
   if (typeof window !== "undefined") {
     try {
-      await fetch("/api/cloud-sync/company", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: cleanId,
-          companyMeta: compMeta,
-          data: payloadSlices,
-          updatedAt: nowIso,
+      const headers = await getDatabaseAuthHeaders(cleanId);
+      await Promise.all([
+        fetch("/api/cloud-sync/company", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            companyId: cleanId,
+            userId: headers["x-user-id"] || cleanId,
+            userEmail: headers["x-user-email"] || compMeta?.loginEmail || "",
+            companyMeta: compMeta,
+            data: payloadSlices,
+            updatedAt: nowIso,
+          }),
         }),
-      });
+        fetch("/api/db/sync", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            companyId: cleanId,
+            products: payloadSlices.products,
+            invoices: payloadSlices.invoices,
+            transactions: payloadSlices.transactions,
+            contacts: payloadSlices.contacts,
+            accounts: payloadSlices.accounts,
+            data: payloadSlices,
+          }),
+        }),
+      ]);
     } catch {
       // Sunucu çevrimdışı ise devam et
     }
@@ -347,6 +500,20 @@ export async function pullLatestCompanyDataFromCloud(
       }
     }
 
+    // Merkezi PostgreSQL veritabanından (/api/db/state) kullanıcı ID'sine göre kayıtları çek
+    let pgSlice: any = null;
+    if (typeof window !== "undefined") {
+      try {
+        const headers = await getDatabaseAuthHeaders(cid);
+        const pgResp = await fetch(`/api/db/state?companyId=${encodeURIComponent(cid)}`, { headers });
+        if (pgResp.ok) {
+          pgSlice = await pgResp.json();
+        }
+      } catch {
+        // ignore offline error
+      }
+    }
+
     // Hangi bulut kaynağının daha yeni olduğunu belirle
     let chosenRemote: any = null;
     if (serverSlice && firestoreSlice) {
@@ -355,6 +522,24 @@ export async function pullLatestCompanyDataFromCloud(
       chosenRemote = sTime >= fTime ? { ...firestoreSlice, ...serverSlice } : { ...serverSlice, ...firestoreSlice };
     } else {
       chosenRemote = serverSlice || firestoreSlice;
+    }
+
+    if (pgSlice && pgSlice.success) {
+      const base = chosenRemote || {};
+      chosenRemote = {
+        ...base,
+        products: mergeRecordsById(pgSlice.products, base.products),
+        invoices: mergeRecordsById(pgSlice.invoices, base.invoices),
+        transactions: mergeRecordsById(pgSlice.transactions, base.transactions),
+        contacts: mergeRecordsById(pgSlice.contacts, base.contacts),
+        accounts: mergeRecordsById(pgSlice.accounts, base.accounts),
+        orders: mergeRecordsById(pgSlice.orders, base.orders),
+        cheques: mergeRecordsById(pgSlice.cheques, base.cheques),
+        promissoryNotes: mergeRecordsById(pgSlice.promissoryNotes, base.promissoryNotes),
+        employees: mergeRecordsById(pgSlice.employees, base.employees),
+        settings: base.settings || pgSlice.settings,
+        updatedAt: base.updatedAt || pgSlice.updatedAt,
+      };
     }
 
     if (chosenRemote && typeof chosenRemote === "object") {

@@ -28,6 +28,7 @@ import {
   TrendingDown,
   Filter,
   Download,
+  FileSpreadsheet,
   Printer,
   Sliders,
   Sparkles,
