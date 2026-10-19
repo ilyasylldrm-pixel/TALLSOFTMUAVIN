@@ -130,6 +130,7 @@ import {
   Save,
   Upload,
   Landmark,
+  Send,
 } from "lucide-react";
 import { TURKEY_PROVINCES_DATA } from "../data/locationAndTaxData";
 
