@@ -46,6 +46,8 @@ import {
   isProtectedCompanyId,
   getStoredData,
   saveStoredData,
+  sanitizeNonDefaultCompanySlices,
+  syncAccountBalancesFromTransactions,
 } from "../utils/storage";
 
 export interface SystemAuditLogItem {
@@ -203,7 +205,7 @@ async function getDatabaseAuthHeaders(companyId?: string): Promise<Record<string
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  let resolvedUid = "";
+  let resolvedUid = companyId ? String(companyId).trim() : "";
   let resolvedEmail = "";
 
   if (typeof window !== "undefined") {
@@ -213,7 +215,9 @@ async function getDatabaseAuthHeaders(companyId?: string): Promise<Record<string
         window.sessionStorage.getItem("muavin_active_user");
       if (rawUser) {
         const parsed = JSON.parse(rawUser);
-        resolvedUid = String(parsed.id || parsed.userId || parsed.companyId || "").trim();
+        if (!resolvedUid) {
+          resolvedUid = String(parsed.companyId || parsed.id || parsed.userId || "").trim();
+        }
         resolvedEmail = String(parsed.email || "").trim();
       }
     } catch {
@@ -231,10 +235,6 @@ async function getDatabaseAuthHeaders(companyId?: string): Promise<Record<string
     }
   }
 
-  if (!resolvedUid && companyId) {
-    resolvedUid = companyId;
-  }
-
   if (memoryFirebaseIdToken) {
     headers["Authorization"] = `Bearer ${memoryFirebaseIdToken}`;
   } else if (resolvedUid) {
@@ -242,6 +242,7 @@ async function getDatabaseAuthHeaders(companyId?: string): Promise<Record<string
   }
 
   if (resolvedUid) headers["x-user-id"] = resolvedUid;
+  if (companyId) headers["x-company-id"] = String(companyId).trim();
   if (resolvedEmail) headers["x-user-email"] = resolvedEmail;
 
   return headers;
@@ -342,16 +343,33 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
   const fullData = overrideData || getStoredData(cleanId);
   const compMeta = getCompaniesList().find((c) => c.id === cleanId);
 
+  const sanitizedPush = sanitizeNonDefaultCompanySlices(cleanId, {
+    contacts: fullData.contacts,
+    products: fullData.products,
+    invoices: fullData.invoices,
+    accounts: fullData.accounts,
+    transactions: fullData.transactions,
+  });
+
+  const normalizedFullData = {
+    ...fullData,
+    contacts: sanitizedPush.contacts,
+    products: sanitizedPush.products,
+    invoices: sanitizedPush.invoices,
+    accounts: sanitizedPush.accounts,
+    transactions: sanitizedPush.transactions,
+  };
+
   const payloadSlices: Record<string, any> = {
     settings: {
-      ...fullData.settings,
-      tradeRegisterNo: fullData.settings?.tradeRegisterNo ?? "",
-      mersisNo: fullData.settings?.mersisNo ?? "",
+      ...normalizedFullData.settings,
+      tradeRegisterNo: normalizedFullData.settings?.tradeRegisterNo ?? "",
+      mersisNo: normalizedFullData.settings?.mersisNo ?? "",
     },
   };
   COMPANY_SLICE_MAPPING.forEach(({ dataKey, maxItems }) => {
-    if (Array.isArray(fullData[dataKey])) {
-      payloadSlices[dataKey] = maxItems ? fullData[dataKey].slice(0, maxItems) : fullData[dataKey];
+    if (Array.isArray(normalizedFullData[dataKey])) {
+      payloadSlices[dataKey] = maxItems ? normalizedFullData[dataKey].slice(0, maxItems) : normalizedFullData[dataKey];
     }
   });
 
@@ -367,7 +385,7 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
           headers,
           body: JSON.stringify({
             companyId: cleanId,
-            userId: headers["x-user-id"] || cleanId,
+            userId: cleanId,
             userEmail: headers["x-user-email"] || compMeta?.loginEmail || "",
             companyMeta: compMeta,
             data: payloadSlices,
@@ -393,7 +411,7 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
     }
   }
 
-  // 2. Firestore kotası müsaitse Firestore'a da yaz
+  // 2. Firestore kotası müsaitse Firestore'a da yaz (merge: false ile silinen kayıtların geri gelmesini önle)
   if (!isFirestoreWriteQuotaExhausted()) {
     try {
       const sliceDocRef = doc(db, "system_settings", `company_data_${cleanId}`);
@@ -401,11 +419,10 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
         sliceDocRef,
         sanitizeForFirestore({
           companyId: cleanId,
-          companyName: compMeta?.companyName || fullData.settings?.companyName || "Şirket",
+          companyName: compMeta?.companyName || normalizedFullData.settings?.companyName || "Şirket",
           ...payloadSlices,
           updatedAt: nowIso,
-        }),
-        { merge: true }
+        })
       );
     } catch (writeErr) {
       checkAndMarkFirestoreQuotaError(writeErr);
@@ -500,7 +517,7 @@ export async function pullLatestCompanyDataFromCloud(
       }
     }
 
-    // Merkezi PostgreSQL veritabanından (/api/db/state) kullanıcı ID'sine göre kayıtları çek
+    // Merkezi PostgreSQL veritabanından (/api/db/state) şirket ID'sine göre kayıtları çek
     let pgSlice: any = null;
     if (typeof window !== "undefined") {
       try {
@@ -514,7 +531,7 @@ export async function pullLatestCompanyDataFromCloud(
       }
     }
 
-    // Hangi bulut kaynağının daha yeni olduğunu belirle
+    // Hangi bulut kaynağının daha yeni olduğunu belirle (en güncel kaynağın dizileri silinen kayıtları geri getirmemesi için önceliklidir)
     let chosenRemote: any = null;
     if (serverSlice && firestoreSlice) {
       const sTime = serverSlice.updatedAt ? new Date(serverSlice.updatedAt).getTime() : 0;
@@ -524,25 +541,39 @@ export async function pullLatestCompanyDataFromCloud(
       chosenRemote = serverSlice || firestoreSlice;
     }
 
-    if (pgSlice && pgSlice.success) {
-      const base = chosenRemote || {};
+    if (pgSlice && pgSlice.success && !chosenRemote) {
       chosenRemote = {
-        ...base,
-        products: mergeRecordsById(pgSlice.products, base.products),
-        invoices: mergeRecordsById(pgSlice.invoices, base.invoices),
-        transactions: mergeRecordsById(pgSlice.transactions, base.transactions),
-        contacts: mergeRecordsById(pgSlice.contacts, base.contacts),
-        accounts: mergeRecordsById(pgSlice.accounts, base.accounts),
-        orders: mergeRecordsById(pgSlice.orders, base.orders),
-        cheques: mergeRecordsById(pgSlice.cheques, base.cheques),
-        promissoryNotes: mergeRecordsById(pgSlice.promissoryNotes, base.promissoryNotes),
-        employees: mergeRecordsById(pgSlice.employees, base.employees),
-        settings: base.settings || pgSlice.settings,
-        updatedAt: base.updatedAt || pgSlice.updatedAt,
+        products: pgSlice.products,
+        invoices: pgSlice.invoices,
+        transactions: pgSlice.transactions,
+        contacts: pgSlice.contacts,
+        accounts: pgSlice.accounts,
+        orders: pgSlice.orders,
+        cheques: pgSlice.cheques,
+        promissoryNotes: pgSlice.promissoryNotes,
+        employees: pgSlice.employees,
+        settings: pgSlice.settings,
+        updatedAt: pgSlice.updatedAt,
       };
     }
 
     if (chosenRemote && typeof chosenRemote === "object") {
+      const sanitizedRemote = sanitizeNonDefaultCompanySlices(cid, {
+        contacts: chosenRemote.contacts,
+        products: chosenRemote.products,
+        invoices: chosenRemote.invoices,
+        accounts: chosenRemote.accounts,
+        transactions: chosenRemote.transactions,
+      });
+      chosenRemote = {
+        ...chosenRemote,
+        contacts: sanitizedRemote.contacts,
+        products: sanitizedRemote.products,
+        invoices: sanitizedRemote.invoices,
+        accounts: sanitizedRemote.accounts,
+        transactions: sanitizedRemote.transactions,
+      };
+
       const localData = getStoredData(cid);
       if (chosenRemote.settings && typeof chosenRemote.settings === "object") {
         // Buluttan gelen settings içindeki değerler (boş bırakılan mersisNo / tradeRegisterNo dahil) önceliklidir
@@ -557,18 +588,19 @@ export async function pullLatestCompanyDataFromCloud(
         saveStoredData("SETTINGS", mergedSettings, cid);
       }
 
+      const localUpdatedAtStr = safeGetStorageItem(`muavin_company_updated_at_${cid}`);
+      const localTime = localUpdatedAtStr ? new Date(localUpdatedAtStr).getTime() : 0;
+      const remoteTime = chosenRemote.updatedAt ? new Date(chosenRemote.updatedAt).getTime() : 0;
+      const isRemoteNewerOrEqual = !localTime || (remoteTime > 0 && remoteTime >= localTime);
+
       COMPANY_SLICE_MAPPING.forEach(({ dataKey, storageKey }) => {
         const remoteArr = chosenRemote[dataKey];
         if (Array.isArray(remoteArr)) {
           if (preferRemoteState) {
             const localArr = Array.isArray((localData as any)[dataKey]) ? (localData as any)[dataKey] : [];
-            const hasLocalUserSavedTimestamp = Boolean(safeGetStorageItem(`muavin_company_updated_at_${cid}`));
-            const finalArr =
-              remoteArr.length > 0
-                ? hasLocalUserSavedTimestamp
-                  ? mergeRecordsById(remoteArr, localArr)
-                  : remoteArr
-                : localArr;
+            const finalArr = isRemoteNewerOrEqual
+              ? remoteArr
+              : mergeRecordsById(remoteArr, localArr);
             saveStoredData(storageKey, finalArr, cid);
           } else {
             const mergedArr = mergeRecordsById((localData as any)[dataKey], remoteArr);
@@ -576,6 +608,11 @@ export async function pullLatestCompanyDataFromCloud(
           }
         }
       });
+
+      // Hesap bakiyelerini hareketlere göre yeniden senkronize et
+      const postSyncData = getStoredData(cid);
+      const syncedAccs = syncAccountBalancesFromTransactions(postSyncData.accounts, postSyncData.transactions);
+      saveStoredData("ACCOUNTS", syncedAccs, cid);
 
       if (chosenRemote.updatedAt) {
         safeSetStorageItem(`muavin_company_updated_at_${cid}`, chosenRemote.updatedAt);

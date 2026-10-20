@@ -998,6 +998,88 @@ const safeSet = (key: string, val: any) => {
   safeSetStorageItem(key, JSON.stringify(val));
 };
 
+const DEMO_ACCOUNT_IDS = new Set(initialAccounts.map((a) => a.id));
+const DEMO_CONTACT_IDS = new Set(initialContacts.map((c) => c.id));
+const DEMO_PRODUCT_IDS = new Set(initialProducts.map((p) => p.id));
+const DEMO_INVOICE_IDS = new Set(initialInvoices.map((i) => i.id));
+const DEMO_TRANSACTION_IDS = new Set(initialTransactions.map((t) => t.id));
+
+export function syncAccountBalancesFromTransactions(
+  accounts: Account[],
+  transactions: Transaction[]
+): Account[] {
+  if (!Array.isArray(accounts)) return [];
+  const txList = Array.isArray(transactions) ? transactions : [];
+  return accounts.map((acc) => {
+    let calculatedBalance = 0;
+    for (const tx of txList) {
+      if (tx && tx.accountId === acc.id) {
+        const amt = Number(tx.amount) || 0;
+        const isInc = tx.type === "income" || tx.type === "collection";
+        calculatedBalance += isInc ? amt : -amt;
+      }
+    }
+    const rounded = Math.round(calculatedBalance * 100) / 100;
+    return acc.balance === rounded ? acc : { ...acc, balance: rounded };
+  });
+}
+
+export function sanitizeNonDefaultCompanySlices(
+  cid: string,
+  rawSlices: {
+    contacts?: Contact[];
+    products?: Product[];
+    invoices?: Invoice[];
+    accounts?: Account[];
+    transactions?: Transaction[];
+  }
+) {
+  const isDefault = cid === DEFAULT_COMPANY.id;
+  const rawAccounts = Array.isArray(rawSlices.accounts) ? rawSlices.accounts : [];
+  const rawTransactions = Array.isArray(rawSlices.transactions) ? rawSlices.transactions : [];
+  const rawContacts = Array.isArray(rawSlices.contacts) ? rawSlices.contacts : [];
+  const rawProducts = Array.isArray(rawSlices.products) ? rawSlices.products : [];
+  const rawInvoices = Array.isArray(rawSlices.invoices) ? rawSlices.invoices : [];
+
+  const cleanAccounts = isDefault
+    ? rawAccounts
+    : rawAccounts.filter((a) => a && !DEMO_ACCOUNT_IDS.has(a.id));
+
+  const validAccountIds = new Set(cleanAccounts.map((a) => a.id));
+
+  const cleanTransactions = isDefault
+    ? rawTransactions
+    : rawTransactions.filter(
+        (t) =>
+          t &&
+          !DEMO_TRANSACTION_IDS.has(t.id) &&
+          !String(t.id || "").startsWith("tx_all_") &&
+          (!t.accountId || validAccountIds.has(t.accountId))
+      );
+
+  const cleanContacts = isDefault
+    ? rawContacts
+    : rawContacts.filter((c) => c && !DEMO_CONTACT_IDS.has(c.id));
+
+  const cleanProducts = isDefault
+    ? rawProducts
+    : rawProducts.filter((p) => p && !DEMO_PRODUCT_IDS.has(p.id));
+
+  const cleanInvoices = isDefault
+    ? rawInvoices
+    : rawInvoices.filter((i) => i && !DEMO_INVOICE_IDS.has(i.id));
+
+  const syncedAccounts = syncAccountBalancesFromTransactions(cleanAccounts, cleanTransactions);
+
+  return {
+    accounts: syncedAccounts,
+    transactions: cleanTransactions,
+    contacts: cleanContacts,
+    products: cleanProducts,
+    invoices: cleanInvoices,
+  };
+}
+
 export function getStoredData(targetCompanyId?: string) {
   cleanupOversizedStorage();
   const activeCompId = targetCompanyId || getActiveCompanyId();
@@ -1021,12 +1103,39 @@ export function getStoredData(targetCompanyId?: string) {
     return get<T>(scopedKey, fallbackNew);
   };
 
-  const storedInvoices = getCompanyScoped<Invoice[]>(STORAGE_KEYS.INVOICES, initialInvoices, []);
-  const storedProducts = getCompanyScoped<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts, []);
+  const rawInvoices = getCompanyScoped<Invoice[]>(STORAGE_KEYS.INVOICES, initialInvoices, []);
+  const rawProducts = getCompanyScoped<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts, []);
   const storedCheques = getCompanyScoped<Cheque[]>(STORAGE_KEYS.CHEQUES, initialCheques, []);
   const storedNotes = getCompanyScoped<PromissoryNote[]>(STORAGE_KEYS.PROMISSORY_NOTES, initialPromissoryNotes, []);
-  const loadedContacts = getCompanyScoped<Contact[]>(STORAGE_KEYS.CONTACTS, initialContacts, []);
-  const loadedTransactions = getCompanyScoped<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions, []);
+  const rawContacts = getCompanyScoped<Contact[]>(STORAGE_KEYS.CONTACTS, initialContacts, []);
+  const rawTransactions = getCompanyScoped<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions, []);
+  const rawAccounts = getCompanyScoped<Account[]>(STORAGE_KEYS.ACCOUNTS, initialAccounts, []);
+
+  const sanitized = sanitizeNonDefaultCompanySlices(activeCompId, {
+    contacts: rawContacts,
+    products: rawProducts,
+    invoices: rawInvoices,
+    accounts: rawAccounts,
+    transactions: rawTransactions,
+  });
+
+  if (!isDefault) {
+    if (sanitized.accounts.length !== rawAccounts.length) {
+      safeSet(`${STORAGE_KEYS.ACCOUNTS}_${activeCompId}`, sanitized.accounts);
+    }
+    if (sanitized.transactions.length !== rawTransactions.length) {
+      safeSet(`${STORAGE_KEYS.TRANSACTIONS}_${activeCompId}`, sanitized.transactions);
+    }
+    if (sanitized.contacts.length !== rawContacts.length) {
+      safeSet(`${STORAGE_KEYS.CONTACTS}_${activeCompId}`, sanitized.contacts);
+    }
+  }
+
+  const storedInvoices = sanitized.invoices;
+  const storedProducts = sanitized.products;
+  const loadedContacts = sanitized.contacts;
+  const loadedTransactions = sanitized.transactions;
+  const loadedAccounts = sanitized.accounts;
 
   const normalizedContacts = syncContactBalances(
     loadedContacts,
@@ -1181,7 +1290,7 @@ export function getStoredData(targetCompanyId?: string) {
   return {
     settings: loadedSettings,
     contacts: normalizedContacts,
-    accounts: getCompanyScoped<Account[]>(STORAGE_KEYS.ACCOUNTS, initialAccounts, []),
+    accounts: loadedAccounts,
     invoices: storedInvoices,
     transactions: loadedTransactions,
     products: storedProducts,
@@ -1382,7 +1491,7 @@ export function syncContactBalances(
   }
 
   return contacts.map((c) => {
-    const calcBal = contactBalanceMap[c.id] ?? c.balance ?? 0;
+    const calcBal = Math.round((contactBalanceMap[c.id] ?? 0) * 100) / 100;
     return {
       ...c,
       accountCode: getContactAccountCode(c),

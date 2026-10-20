@@ -510,26 +510,61 @@ export async function syncUserBatchToPostgres(
     await getOrCreateUser(uid, email);
 
     if (Array.isArray(payload.accounts)) {
+      const existingAccs = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.userId, uid));
+      const incomingAccIds = new Set(payload.accounts.filter((a) => a && a.id).map((a) => String(a.id)));
+      for (const ex of existingAccs) {
+        if (!incomingAccIds.has(String(ex.id))) {
+          await db.delete(accounts).where(and(eq(accounts.id, String(ex.id)), eq(accounts.userId, uid)));
+        }
+      }
       for (const acc of payload.accounts) {
         if (acc && acc.id) await upsertAccountRecord(uid, acc);
       }
     }
     if (Array.isArray(payload.contacts)) {
+      const existingCnts = await db.select({ id: contacts.id }).from(contacts).where(eq(contacts.userId, uid));
+      const incomingCntIds = new Set(payload.contacts.filter((c) => c && c.id).map((c) => String(c.id)));
+      for (const ex of existingCnts) {
+        if (!incomingCntIds.has(String(ex.id))) {
+          await db.delete(contacts).where(and(eq(contacts.id, String(ex.id)), eq(contacts.userId, uid)));
+        }
+      }
       for (const cnt of payload.contacts) {
         if (cnt && cnt.id) await upsertContactRecord(uid, cnt);
       }
     }
     if (Array.isArray(payload.products)) {
+      const existingProds = await db.select({ id: products.id }).from(products).where(eq(products.userId, uid));
+      const incomingProdIds = new Set(payload.products.filter((p) => p && p.id).map((p) => String(p.id)));
+      for (const ex of existingProds) {
+        if (!incomingProdIds.has(String(ex.id))) {
+          await deleteProductRecord(uid, String(ex.id));
+        }
+      }
       for (const prod of payload.products) {
         if (prod && prod.id) await upsertProductRecord(uid, prod);
       }
     }
     if (Array.isArray(payload.invoices)) {
+      const existingInvs = await db.select({ id: invoices.id }).from(invoices).where(eq(invoices.userId, uid));
+      const incomingInvIds = new Set(payload.invoices.filter((i) => i && i.id).map((i) => String(i.id)));
+      for (const ex of existingInvs) {
+        if (!incomingInvIds.has(String(ex.id))) {
+          await deleteInvoiceRecord(uid, String(ex.id));
+        }
+      }
       for (const inv of payload.invoices) {
         if (inv && inv.id) await upsertInvoiceRecord(uid, inv);
       }
     }
     if (Array.isArray(payload.transactions)) {
+      const existingTxs = await db.select({ id: transactions.id }).from(transactions).where(eq(transactions.userId, uid));
+      const incomingTxIds = new Set(payload.transactions.filter((t) => t && t.id).map((t) => String(t.id)));
+      for (const ex of existingTxs) {
+        if (!incomingTxIds.has(String(ex.id))) {
+          await deleteTransactionRecord(uid, String(ex.id));
+        }
+      }
       for (const tx of payload.transactions) {
         if (tx && tx.id) await upsertTransactionRecord(uid, tx);
       }

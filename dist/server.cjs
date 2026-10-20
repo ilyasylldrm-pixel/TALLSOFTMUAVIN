@@ -6605,26 +6605,61 @@ async function syncUserBatchToPostgres(uid, email, payload) {
   try {
     await getOrCreateUser(uid, email);
     if (Array.isArray(payload.accounts)) {
+      const existingAccs = await db.select({ id: accounts.id }).from(accounts).where((0, import_drizzle_orm3.eq)(accounts.userId, uid));
+      const incomingAccIds = new Set(payload.accounts.filter((a) => a && a.id).map((a) => String(a.id)));
+      for (const ex of existingAccs) {
+        if (!incomingAccIds.has(String(ex.id))) {
+          await db.delete(accounts).where((0, import_drizzle_orm3.and)((0, import_drizzle_orm3.eq)(accounts.id, String(ex.id)), (0, import_drizzle_orm3.eq)(accounts.userId, uid)));
+        }
+      }
       for (const acc of payload.accounts) {
         if (acc && acc.id) await upsertAccountRecord(uid, acc);
       }
     }
     if (Array.isArray(payload.contacts)) {
+      const existingCnts = await db.select({ id: contacts.id }).from(contacts).where((0, import_drizzle_orm3.eq)(contacts.userId, uid));
+      const incomingCntIds = new Set(payload.contacts.filter((c) => c && c.id).map((c) => String(c.id)));
+      for (const ex of existingCnts) {
+        if (!incomingCntIds.has(String(ex.id))) {
+          await db.delete(contacts).where((0, import_drizzle_orm3.and)((0, import_drizzle_orm3.eq)(contacts.id, String(ex.id)), (0, import_drizzle_orm3.eq)(contacts.userId, uid)));
+        }
+      }
       for (const cnt of payload.contacts) {
         if (cnt && cnt.id) await upsertContactRecord(uid, cnt);
       }
     }
     if (Array.isArray(payload.products)) {
+      const existingProds = await db.select({ id: products.id }).from(products).where((0, import_drizzle_orm3.eq)(products.userId, uid));
+      const incomingProdIds = new Set(payload.products.filter((p) => p && p.id).map((p) => String(p.id)));
+      for (const ex of existingProds) {
+        if (!incomingProdIds.has(String(ex.id))) {
+          await deleteProductRecord(uid, String(ex.id));
+        }
+      }
       for (const prod of payload.products) {
         if (prod && prod.id) await upsertProductRecord(uid, prod);
       }
     }
     if (Array.isArray(payload.invoices)) {
+      const existingInvs = await db.select({ id: invoices.id }).from(invoices).where((0, import_drizzle_orm3.eq)(invoices.userId, uid));
+      const incomingInvIds = new Set(payload.invoices.filter((i) => i && i.id).map((i) => String(i.id)));
+      for (const ex of existingInvs) {
+        if (!incomingInvIds.has(String(ex.id))) {
+          await deleteInvoiceRecord(uid, String(ex.id));
+        }
+      }
       for (const inv of payload.invoices) {
         if (inv && inv.id) await upsertInvoiceRecord(uid, inv);
       }
     }
     if (Array.isArray(payload.transactions)) {
+      const existingTxs = await db.select({ id: transactions.id }).from(transactions).where((0, import_drizzle_orm3.eq)(transactions.userId, uid));
+      const incomingTxIds = new Set(payload.transactions.filter((t) => t && t.id).map((t) => String(t.id)));
+      for (const ex of existingTxs) {
+        if (!incomingTxIds.has(String(ex.id))) {
+          await deleteTransactionRecord(uid, String(ex.id));
+        }
+      }
       for (const tx of payload.transactions) {
         if (tx && tx.id) await upsertTransactionRecord(uid, tx);
       }
@@ -8577,15 +8612,15 @@ function mergeUniqueById(primaryList = [], fallbackList = []) {
 }
 app.get("/api/db/state", requireAuth, async (req, res) => {
   const uid = req.user?.uid || "comp_default";
-  const email = req.user?.email || `${uid}@muavin.com`;
-  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : typeof req.headers["x-company-id"] === "string" && req.headers["x-company-id"].trim() ? req.headers["x-company-id"].trim() : uid;
+  const email = req.user?.email || `${companyId}@muavin.com`;
   const fallbackCompanyData = memoryCloudSyncStore.companiesData[companyId]?.data || {};
   try {
-    await getOrCreateUser(uid, email);
-    const pgRecords = await getAllUserAccountingRecords(uid);
+    await getOrCreateUser(companyId, email);
+    const pgRecords = await getAllUserAccountingRecords(companyId);
     res.json({
       success: true,
-      userId: uid,
+      userId: companyId,
       companyId,
       products: mergeUniqueById(pgRecords.products, fallbackCompanyData.products),
       invoices: mergeUniqueById(pgRecords.invoices, fallbackCompanyData.invoices),
@@ -8602,7 +8637,7 @@ app.get("/api/db/state", requireAuth, async (req, res) => {
   } catch {
     res.json({
       success: true,
-      userId: uid,
+      userId: companyId,
       companyId,
       products: fallbackCompanyData.products || [],
       invoices: fallbackCompanyData.invoices || [],
@@ -8620,9 +8655,9 @@ app.get("/api/db/state", requireAuth, async (req, res) => {
 });
 app.post("/api/db/sync", requireAuth, async (req, res) => {
   const uid = req.user?.uid || "comp_default";
-  const email = req.user?.email || `${uid}@muavin.com`;
   const { companyId, products: products2, invoices: invoices2, transactions: transactions2, contacts: contacts2, accounts: accounts2, data } = req.body || {};
-  const targetCompanyId = String(companyId || uid).trim();
+  const targetCompanyId = String(companyId || req.headers["x-company-id"] || uid).trim();
+  const email = req.user?.email || `${targetCompanyId}@muavin.com`;
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const existingEntry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
   const mergedSlice = {
@@ -8642,16 +8677,16 @@ app.post("/api/db/sync", requireAuth, async (req, res) => {
   memoryCloudSyncStore.version = Date.now();
   persistServerCloudSyncStore();
   try {
-    await syncUserBatchToPostgres(uid, email, {
+    await syncUserBatchToPostgres(targetCompanyId, email, {
       products: mergedSlice.products,
       invoices: mergedSlice.invoices,
       transactions: mergedSlice.transactions,
       contacts: mergedSlice.contacts,
       accounts: mergedSlice.accounts
     });
-    res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
+    res.json({ success: true, userId: targetCompanyId, companyId: targetCompanyId, updatedAt: nowIso });
   } catch {
-    res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
+    res.json({ success: true, userId: targetCompanyId, companyId: targetCompanyId, updatedAt: nowIso });
   }
 });
 app.get("/api/db/products", requireAuth, async (req, res) => {
@@ -8659,7 +8694,7 @@ app.get("/api/db/products", requireAuth, async (req, res) => {
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.products || [];
   try {
-    const records = await getAllUserAccountingRecords(uid);
+    const records = await getAllUserAccountingRecords(companyId);
     res.json({ success: true, products: mergeUniqueById(records.products, fallback) });
   } catch (error) {
     res.json({ success: true, products: fallback });
@@ -8667,12 +8702,12 @@ app.get("/api/db/products", requireAuth, async (req, res) => {
 });
 app.post("/api/db/products", requireAuth, async (req, res) => {
   const uid = req.user?.uid || "comp_default";
-  const email = req.user?.email || `${uid}@muavin.com`;
   const { product, companyId } = req.body || {};
   if (!product || typeof product !== "object") {
     return res.status(400).json({ error: "Ge\xE7ersiz stok kayd\u0131" });
   }
-  const targetCompanyId = String(companyId || uid).trim();
+  const targetCompanyId = String(companyId || req.headers["x-company-id"] || uid).trim();
+  const email = req.user?.email || `${targetCompanyId}@muavin.com`;
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
   const list = Array.isArray(entry.products) ? [...entry.products] : [];
@@ -8685,8 +8720,8 @@ app.post("/api/db/products", requireAuth, async (req, res) => {
   };
   persistServerCloudSyncStore();
   try {
-    await getOrCreateUser(uid, email);
-    const saved = await upsertProductRecord(uid, product);
+    await getOrCreateUser(targetCompanyId, email);
+    const saved = await upsertProductRecord(targetCompanyId, product);
     res.json({ success: true, product: saved });
   } catch (error) {
     res.json({ success: true, product });
@@ -8702,7 +8737,7 @@ app.delete("/api/db/products/:id", requireAuth, async (req, res) => {
     persistServerCloudSyncStore();
   }
   try {
-    await deleteProductRecord(uid, id);
+    await deleteProductRecord(companyId, id);
     res.json({ success: true, deletedId: id });
   } catch (error) {
     res.json({ success: true, deletedId: id });
@@ -8713,7 +8748,7 @@ app.get("/api/db/invoices", requireAuth, async (req, res) => {
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.invoices || [];
   try {
-    const records = await getAllUserAccountingRecords(uid);
+    const records = await getAllUserAccountingRecords(companyId);
     res.json({ success: true, invoices: mergeUniqueById(records.invoices, fallback) });
   } catch (error) {
     res.json({ success: true, invoices: fallback });
@@ -8721,12 +8756,12 @@ app.get("/api/db/invoices", requireAuth, async (req, res) => {
 });
 app.post("/api/db/invoices", requireAuth, async (req, res) => {
   const uid = req.user?.uid || "comp_default";
-  const email = req.user?.email || `${uid}@muavin.com`;
   const { invoice, companyId } = req.body || {};
   if (!invoice || typeof invoice !== "object") {
     return res.status(400).json({ error: "Ge\xE7ersiz fatura kayd\u0131" });
   }
-  const targetCompanyId = String(companyId || uid).trim();
+  const targetCompanyId = String(companyId || req.headers["x-company-id"] || uid).trim();
+  const email = req.user?.email || `${targetCompanyId}@muavin.com`;
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
   const list = Array.isArray(entry.invoices) ? [...entry.invoices] : [];
@@ -8739,8 +8774,8 @@ app.post("/api/db/invoices", requireAuth, async (req, res) => {
   };
   persistServerCloudSyncStore();
   try {
-    await getOrCreateUser(uid, email);
-    const saved = await upsertInvoiceRecord(uid, invoice);
+    await getOrCreateUser(targetCompanyId, email);
+    const saved = await upsertInvoiceRecord(targetCompanyId, invoice);
     res.json({ success: true, invoice: saved });
   } catch (error) {
     res.json({ success: true, invoice });
@@ -8756,7 +8791,7 @@ app.delete("/api/db/invoices/:id", requireAuth, async (req, res) => {
     persistServerCloudSyncStore();
   }
   try {
-    await deleteInvoiceRecord(uid, id);
+    await deleteInvoiceRecord(companyId, id);
     res.json({ success: true, deletedId: id });
   } catch (error) {
     res.json({ success: true, deletedId: id });
@@ -8767,7 +8802,7 @@ app.get("/api/db/transactions", requireAuth, async (req, res) => {
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.transactions || [];
   try {
-    const records = await getAllUserAccountingRecords(uid);
+    const records = await getAllUserAccountingRecords(companyId);
     res.json({ success: true, transactions: mergeUniqueById(records.transactions, fallback) });
   } catch (error) {
     res.json({ success: true, transactions: fallback });
@@ -8775,12 +8810,12 @@ app.get("/api/db/transactions", requireAuth, async (req, res) => {
 });
 app.post("/api/db/transactions", requireAuth, async (req, res) => {
   const uid = req.user?.uid || "comp_default";
-  const email = req.user?.email || `${uid}@muavin.com`;
   const { transaction, companyId } = req.body || {};
   if (!transaction || typeof transaction !== "object") {
     return res.status(400).json({ error: "Ge\xE7ersiz i\u015Flem kayd\u0131" });
   }
-  const targetCompanyId = String(companyId || uid).trim();
+  const targetCompanyId = String(companyId || req.headers["x-company-id"] || uid).trim();
+  const email = req.user?.email || `${targetCompanyId}@muavin.com`;
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
   const list = Array.isArray(entry.transactions) ? [...entry.transactions] : [];
@@ -8793,8 +8828,8 @@ app.post("/api/db/transactions", requireAuth, async (req, res) => {
   };
   persistServerCloudSyncStore();
   try {
-    await getOrCreateUser(uid, email);
-    const saved = await upsertTransactionRecord(uid, transaction);
+    await getOrCreateUser(targetCompanyId, email);
+    const saved = await upsertTransactionRecord(targetCompanyId, transaction);
     res.json({ success: true, transaction: saved });
   } catch (error) {
     res.json({ success: true, transaction });
@@ -8810,7 +8845,7 @@ app.delete("/api/db/transactions/:id", requireAuth, async (req, res) => {
     persistServerCloudSyncStore();
   }
   try {
-    await deleteTransactionRecord(uid, id);
+    await deleteTransactionRecord(companyId, id);
     res.json({ success: true, deletedId: id });
   } catch (error) {
     res.json({ success: true, deletedId: id });

@@ -114,6 +114,7 @@ import {
   recordManualBackup,
   snoozeManualBackupReminder,
   ManualBackupStatus,
+  syncAccountBalancesFromTransactions,
 } from "./utils/storage";
 import {
   verifyAndSyncAllUsersLocalDb,
@@ -2646,14 +2647,6 @@ export default function App() {
     });
   };
 
-  // Auto collect all invoices on mount if any are uncollected
-  useEffect(() => {
-    const uncollectedCount = data.invoices.filter((i) => i.status !== "cancelled" && i.status !== "draft" && i.remainingAmount > 0).length;
-    if (uncollectedCount > 0) {
-      handleCollectAllInvoices();
-    }
-  }, []);
-
   const handleTransferBetweenAccounts = (
     fromId: string,
     toId: string,
@@ -4295,7 +4288,29 @@ export default function App() {
               globalSearchTerm={searchTerm}
               onSelectFinanceSubTab={setFinanceSubTab}
               onAddAccount={(acc) =>
-                setData((p) => ({ ...p, accounts: [...p.accounts, acc] }))
+                setData((p) => {
+                  const initBal = Number(acc.balance) || 0;
+                  if (initBal === 0) {
+                    return { ...p, accounts: [...p.accounts, acc] };
+                  }
+                  const openingTx: Transaction = {
+                    id: "tx_open_" + acc.id,
+                    date: new Date().toISOString().split("T")[0],
+                    type: initBal >= 0 ? "income" : "expense",
+                    amount: Math.abs(initBal),
+                    currency: acc.currency || "TRY",
+                    accountId: acc.id,
+                    accountName: acc.name,
+                    category: "Açılış Devir Bakiyesi",
+                    description: `${acc.name} açılış devir bakiyesi`,
+                  };
+                  void saveTransactionToDatabase(openingTx, activeCompanyId);
+                  return {
+                    ...p,
+                    accounts: [...p.accounts, acc],
+                    transactions: [openingTx, ...p.transactions],
+                  };
+                })
               }
               onUpdateAccount={handleUpdateAccount}
               onDeleteAccount={handleDeleteAccount}
