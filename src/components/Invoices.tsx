@@ -601,7 +601,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   // Automatically sync selected branch address into notes whenever Gelir Faturası (sales) is active
   useEffect(() => {
-    if (!isNewInvoiceModalOpen) return;
+    if (!detailNav.isDetailView) return;
     if (invType === "sales") {
       setNotes((prev) => {
         const next = syncBranchAddressIntoNotes(prev, selectedBranchNoteLine);
@@ -619,7 +619,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         return filtered === prev ? prev : filtered;
       });
     }
-  }, [isNewInvoiceModalOpen, invType, selectedBranchNoteLine, syncBranchAddressIntoNotes]);
+  }, [detailNav.isDetailView, invType, selectedBranchNoteLine, syncBranchAddressIntoNotes]);
 
   // Quick inline branch creation / editing inside the invoice form
   const [isQuickBranchFormOpen, setIsQuickBranchFormOpen] = useState(false);
