@@ -853,24 +853,133 @@ export default function App() {
     };
   }, [data, activeCompanyId]);
 
-  // Auto & IT & Appliance & Construction Service Handlers
+  // Auto & IT & Appliance & Construction Service Handlers (Bidirectionally synced with Invoices & CostProjects)
   const handleUpdateAutoServices = (services: AutoServiceRecord[]) => {
+    const prevList = data.autoServices || [];
+    const newIds = new Set(services.map((s) => s.id));
+    const removedServices = prevList.filter((s) => !newIds.has(s.id));
+    const linkedInvoiceIdsToDelete = removedServices
+      .filter((s) => s.isInvoiced)
+      .flatMap((s) =>
+        (data.invoices || [])
+          .filter(
+            (inv) =>
+              inv.id === s.invoiceId ||
+              inv.invoiceNumber === s.invoiceNumber ||
+              inv.serviceRecordId === s.id
+          )
+          .map((inv) => inv.id)
+      );
+
     setData((prev) => ({ ...prev, autoServices: services }));
+    if (linkedInvoiceIdsToDelete.length > 0) {
+      handleBulkDeleteInvoices(Array.from(new Set(linkedInvoiceIdsToDelete)));
+    }
   };
 
   const handleUpdateItServices = (services: ItServiceRecord[]) => {
+    const prevList = data.itServices || [];
+    const newIds = new Set(services.map((s) => s.id));
+    const removedServices = prevList.filter((s) => !newIds.has(s.id));
+    const linkedInvoiceIdsToDelete = removedServices
+      .filter((s) => s.isInvoiced)
+      .flatMap((s) =>
+        (data.invoices || [])
+          .filter(
+            (inv) =>
+              inv.id === s.invoiceId ||
+              inv.invoiceNumber === s.invoiceNumber ||
+              inv.serviceRecordId === s.id
+          )
+          .map((inv) => inv.id)
+      );
+
     setData((prev) => ({ ...prev, itServices: services }));
+    if (linkedInvoiceIdsToDelete.length > 0) {
+      handleBulkDeleteInvoices(Array.from(new Set(linkedInvoiceIdsToDelete)));
+    }
   };
 
   const handleUpdateApplianceServices = (services: ApplianceServiceRecord[]) => {
+    const prevList = data.applianceServices || [];
+    const newIds = new Set(services.map((s) => s.id));
+    const removedServices = prevList.filter((s) => !newIds.has(s.id));
+    const linkedInvoiceIdsToDelete = removedServices
+      .filter((s) => s.isInvoiced)
+      .flatMap((s) =>
+        (data.invoices || [])
+          .filter(
+            (inv) =>
+              inv.id === s.invoiceId ||
+              inv.invoiceNumber === s.invoiceNumber ||
+              inv.serviceRecordId === s.id
+          )
+          .map((inv) => inv.id)
+      );
+
     setData((prev) => ({ ...prev, applianceServices: services }));
+    if (linkedInvoiceIdsToDelete.length > 0) {
+      handleBulkDeleteInvoices(Array.from(new Set(linkedInvoiceIdsToDelete)));
+    }
   };
 
   const handleUpdateConstructionProjects = (projects: ConstructionProject[]) => {
-    setData((prev) => ({ ...prev, constructionProjects: projects }));
+    setData((prev) => {
+      const prevProjects = prev.constructionProjects || [];
+      const newIds = new Set(projects.map((p) => p.id));
+      const removedProjectIds = new Set(prevProjects.filter((p) => !newIds.has(p.id)).map((p) => p.id));
+
+      // Keep CostProjects bidirectionally synced with ConstructionProjects
+      let updatedCostProjects = (prev.costProjects || []).filter((cp) => !removedProjectIds.has(cp.id));
+      projects.forEach((proj) => {
+        const existingIdx = updatedCostProjects.findIndex((cp) => cp.id === proj.id);
+        const mappedCostProject: CostProject = {
+          id: proj.id,
+          code: proj.code,
+          name: proj.name,
+          type: "santiye",
+          location: `${proj.district || ""} / ${proj.city || "İstanbul"}`,
+          managerName: proj.contractorName || "Şantiye Şefi",
+          startDate: proj.startDate,
+          endDate: proj.estimatedEndDate,
+          status:
+            proj.status === "completed"
+              ? "completed"
+              : proj.status === "suspended"
+              ? "paused"
+              : "active",
+          budgetLimit: proj.totalCost * 1.15,
+          description: `${proj.projectType} - ${proj.totalConstructionAreaM2} m² İnşaat Projesi`,
+        };
+        if (existingIdx >= 0) {
+          updatedCostProjects[existingIdx] = {
+            ...updatedCostProjects[existingIdx],
+            ...mappedCostProject,
+          };
+        } else {
+          updatedCostProjects = [mappedCostProject, ...updatedCostProjects];
+        }
+      });
+
+      const updatedEmployees =
+        removedProjectIds.size > 0
+          ? (prev.employees || []).map((emp) =>
+              emp.costProjectId && removedProjectIds.has(emp.costProjectId)
+                ? { ...emp, costProjectId: undefined, costProjectName: undefined }
+                : emp
+            )
+          : prev.employees;
+
+      return {
+        ...prev,
+        constructionProjects: projects,
+        costProjects: updatedCostProjects,
+        employees: updatedEmployees,
+      };
+    });
   };
 
-  // Handlers for Cost Projects
+  // Handlers for Cost Projects (Bidirectionally synced with ConstructionProjects & HR Employees)
   const handleAddCostProject = (newProject: CostProject) => {
     setData((prev) => ({
       ...prev,
@@ -882,6 +991,12 @@ export default function App() {
     setData((prev) => ({
       ...prev,
       costProjects: (prev.costProjects || []).map((p) => (p.id === updatedProject.id ? updatedProject : p)),
+      constructionProjects: (prev.constructionProjects || []).map((cp) =>
+        cp.id === updatedProject.id ? { ...cp, name: updatedProject.name, code: updatedProject.code } : cp
+      ),
+      employees: (prev.employees || []).map((emp) =>
+        emp.costProjectId === updatedProject.id ? { ...emp, costProjectName: updatedProject.name } : emp
+      ),
     }));
   };
 
@@ -889,10 +1004,16 @@ export default function App() {
     setData((prev) => ({
       ...prev,
       costProjects: (prev.costProjects || []).filter((p) => p.id !== projectId),
+      constructionProjects: (prev.constructionProjects || []).filter((cp) => cp.id !== projectId),
+      employees: (prev.employees || []).map((emp) =>
+        emp.costProjectId === projectId
+          ? { ...emp, costProjectId: undefined, costProjectName: undefined }
+          : emp
+      ),
     }));
   };
 
-  // Handlers for Waybills (İrsaliyeler)
+  // Handlers for Waybills (İrsaliyeler) - Bidirectionally linked with Invoices
   const handleAddWaybill = (newWaybill: Waybill) => {
     setData((prev) => ({
       ...prev,
@@ -908,17 +1029,35 @@ export default function App() {
   };
 
   const handleDeleteWaybill = (waybillId: string) => {
-    setData((prev) => ({
-      ...prev,
-      waybills: (prev.waybills || []).filter((w) => w.id !== waybillId),
-    }));
+    handleBulkDeleteWaybills([waybillId]);
   };
 
   const handleBulkDeleteWaybills = (ids: string[]) => {
+    const targetWaybills = (data.waybills || []).filter((w) => ids.includes(w.id));
+    const linkedInvoiceIds = Array.from(
+      new Set(
+        targetWaybills
+          .flatMap((w) => {
+            const matchedInvs = (data.invoices || []).filter(
+              (inv) =>
+                inv.id === w.invoicedInvoiceId ||
+                (w.invoicedInvoiceNumber && inv.invoiceNumber === w.invoicedInvoiceNumber) ||
+                inv.waybillId === w.id
+            );
+            return [w.invoicedInvoiceId, ...matchedInvs.map((i) => i.id)];
+          })
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
     setData((prev) => ({
       ...prev,
       waybills: (prev.waybills || []).filter((w) => !ids.includes(w.id)),
     }));
+
+    if (linkedInvoiceIds.length > 0) {
+      handleBulkDeleteInvoices(linkedInvoiceIds);
+    }
   };
 
   const handleConvertWaybillToInvoice = (waybill: Waybill) => {
@@ -956,6 +1095,7 @@ export default function App() {
       status: "sent",
       notes: `İrsaliye No: ${waybill.waybillNumber} faturalandırıldı. (Plaka: ${waybill.vehiclePlate || "-"}, Sürücü: ${waybill.driverName || "-"})`,
       createdAt: new Date().toISOString().split("T")[0],
+      waybillId: waybill.id,
     };
 
     const updatedWaybill: Waybill = {
@@ -965,41 +1105,15 @@ export default function App() {
       invoicedInvoiceNumber: newInvoice.invoiceNumber,
     };
 
-    setData((prev) => {
-      const updatedWaybills = (prev.waybills || []).map((w) => (w.id === waybill.id ? updatedWaybill : w));
-      const updatedInvoices = [newInvoice, ...prev.invoices];
+    setData((prev) => ({
+      ...prev,
+      waybills: (prev.waybills || []).map((w) => (w.id === waybill.id ? updatedWaybill : w)),
+    }));
 
-      const updatedProducts = prev.products.map((p) => {
-        const item = waybill.items.find((i) => i.productId === p.id);
-        if (!item) return p;
-        const qty = item.quantity;
-        const newStock = waybill.type === "dispatch" ? p.stockQuantity - qty : p.stockQuantity + qty;
-        return { ...p, stockQuantity: newStock < 0 ? 0 : newStock };
-      });
-
-      const updatedContacts = prev.contacts.map((c) => {
-        if (c.id !== waybill.contactId) return c;
-        const currentBal = c.balance || 0;
-        const change = waybill.type === "dispatch" ? waybill.grandTotal : -waybill.grandTotal;
-        const newBal = currentBal + change;
-        return {
-          ...c,
-          balance: newBal,
-          balanceType: newBal > 0 ? ("receivable" as const) : newBal < 0 ? ("payable" as const) : ("balanced" as const),
-        };
-      });
-
-      return {
-        ...prev,
-        invoices: updatedInvoices,
-        waybills: updatedWaybills,
-        products: updatedProducts,
-        contacts: updatedContacts,
-      };
-    });
+    handleAddInvoice(newInvoice);
   };
 
-  // Handlers for Orders
+  // Handlers for Orders (Bidirectionally linked with Quotes & Invoices)
   const handleAddOrder = (newOrder: Order) => {
     setData((prev) => ({
       ...prev,
@@ -1015,21 +1129,56 @@ export default function App() {
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    setData((prev) => ({
-      ...prev,
-      orders: (prev.orders || []).filter((o) => o.id !== orderId),
-    }));
+    handleBulkDeleteOrders([orderId]);
   };
 
   const handleBulkDeleteOrders = (ids: string[]) => {
+    const targetOrders = (data.orders || []).filter((o) => ids.includes(o.id));
+    const linkedInvoiceIds = Array.from(
+      new Set(
+        targetOrders
+          .flatMap((o) => {
+            const matchedInvs = (data.invoices || []).filter(
+              (inv) =>
+                inv.id === o.convertedToInvoiceId ||
+                (o.convertedToInvoiceNumber && inv.invoiceNumber === o.convertedToInvoiceNumber) ||
+                inv.orderId === o.id ||
+                (inv.notes && inv.notes.includes(`Sipariş No: ${o.orderNumber}`))
+            );
+            return [o.convertedToInvoiceId, ...matchedInvs.map((i) => i.id)];
+          })
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
+    const linkedQuoteIds = Array.from(
+      new Set(
+        targetOrders
+          .flatMap((o) => {
+            const matchedQuotes = (data.quotes || []).filter(
+              (q) =>
+                q.id === o.quoteId ||
+                q.convertedOrderId === o.id ||
+                (o.notes && o.notes.includes(`Belge No: ${q.quoteNumber}`))
+            );
+            return [o.quoteId, ...matchedQuotes.map((q) => q.id)];
+          })
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
     setData((prev) => ({
       ...prev,
       orders: (prev.orders || []).filter((o) => !ids.includes(o.id)),
+      quotes: (prev.quotes || []).filter((q) => !linkedQuoteIds.includes(q.id)),
     }));
+
+    if (linkedInvoiceIds.length > 0) {
+      handleBulkDeleteInvoices(linkedInvoiceIds);
+    }
   };
 
   const handleConvertOrderToInvoice = (order: Order) => {
-    // 1. Create a new Invoice from Order
     const newInvoice: Invoice = {
       id: "inv_" + Date.now(),
       invoiceNumber:
@@ -1064,42 +1213,23 @@ export default function App() {
       status: "sent",
       notes: `Sipariş No: ${order.orderNumber} faturaya dönüştürüldü. ${order.notes || ""}`,
       createdAt: new Date().toISOString().split("T")[0],
+      orderId: order.id,
+      quoteId: order.quoteId,
     };
 
-    // 2. Update Order status to 'converted'
     const updatedOrder: Order = {
       ...order,
       status: "converted",
+      convertedToInvoiceId: newInvoice.id,
+      convertedToInvoiceNumber: newInvoice.invoiceNumber,
     };
 
-    // 3. Update products stock and contacts balance
-    setData((prev) => {
-      const updatedInvoices = [newInvoice, ...prev.invoices];
-      const updatedOrders = (prev.orders || []).map((o) => (o.id === order.id ? updatedOrder : o));
+    setData((prev) => ({
+      ...prev,
+      orders: (prev.orders || []).map((o) => (o.id === order.id ? updatedOrder : o)),
+    }));
 
-      const updatedProducts = prev.products.map((p) => {
-        const item = order.items.find((i) => i.productId === p.id);
-        if (!item) return p;
-        const qty = item.quantity;
-        const newStock = order.type === "sales" ? p.stockQuantity - qty : p.stockQuantity + qty;
-        return { ...p, stockQuantity: newStock < 0 ? 0 : newStock };
-      });
-
-      const updatedContacts = prev.contacts.map((c) => {
-        if (c.id !== order.contactId) return c;
-        const currentBal = c.balance || 0;
-        const change = order.type === "sales" ? order.grandTotal : -order.grandTotal;
-        return { ...c, balance: currentBal + change };
-      });
-
-      return {
-        ...prev,
-        invoices: updatedInvoices,
-        orders: updatedOrders,
-        products: updatedProducts,
-        contacts: updatedContacts,
-      };
-    });
+    handleAddInvoice(newInvoice);
   };
 
   // Handlers for Branches
@@ -1114,6 +1244,9 @@ export default function App() {
     setData((prev) => ({
       ...prev,
       branches: (prev.branches || []).map((b) => (b.id === branch.id ? branch : b)),
+      employees: (prev.employees || []).map((emp) =>
+        emp.branchId === branch.id ? { ...emp, branchName: branch.name } : emp
+      ),
     }));
   };
 
@@ -1121,6 +1254,9 @@ export default function App() {
     setData((prev) => ({
       ...prev,
       branches: (prev.branches || []).filter((b) => b.id !== id),
+      employees: (prev.employees || []).map((emp) =>
+        emp.branchId === id ? { ...emp, branchId: undefined, branchName: undefined } : emp
+      ),
     }));
   };
 
@@ -1136,6 +1272,9 @@ export default function App() {
     setData((prev) => ({
       ...prev,
       warehouses: (prev.warehouses || []).map((w) => (w.id === wh.id ? wh : w)),
+      employees: (prev.employees || []).map((emp) =>
+        emp.warehouseId === wh.id ? { ...emp, warehouseName: wh.name } : emp
+      ),
     }));
   };
 
@@ -1143,6 +1282,9 @@ export default function App() {
     setData((prev) => ({
       ...prev,
       warehouses: (prev.warehouses || []).filter((w) => w.id !== id),
+      employees: (prev.employees || []).map((emp) =>
+        emp.warehouseId === id ? { ...emp, warehouseId: undefined, warehouseName: undefined } : emp
+      ),
     }));
   };
 
@@ -1151,10 +1293,20 @@ export default function App() {
     setData((prev) => ({
       ...prev,
       accounts: prev.accounts.map((a) => (a.id === account.id ? account : a)),
+      transactions: prev.transactions.map((t) =>
+        t.accountId === account.id ? { ...t, accountName: account.name } : t
+      ),
+      invoices: prev.invoices.map((inv) =>
+        inv.paymentAccountId === account.id ? { ...inv, paymentAccountName: account.name } : inv
+      ),
     }));
   };
 
   const handleDeleteAccount = (id: string) => {
+    const accountTxs = data.transactions.filter((t) => t.accountId === id);
+    if (accountTxs.length > 0) {
+      handleBulkDeleteTransactions(accountTxs.map((t) => t.id));
+    }
     setData((prev) => ({
       ...prev,
       accounts: prev.accounts.filter((a) => a.id !== id),
@@ -1163,27 +1315,155 @@ export default function App() {
 
   const handleUpdateTransaction = (tx: Transaction) => {
     void saveTransactionToDatabase(tx, activeCompanyId);
-    setData((prev) => ({
-      ...prev,
-      transactions: prev.transactions.map((t) => (t.id === tx.id ? tx : t)),
-    }));
+    setData((prev) => {
+      const oldTx = prev.transactions.find((t) => t.id === tx.id);
+      if (!oldTx) {
+        return {
+          ...prev,
+          transactions: prev.transactions.map((t) => (t.id === tx.id ? tx : t)),
+        };
+      }
+
+      const oldIsInc = oldTx.type === "income" || oldTx.type === "collection";
+      const newIsInc = tx.type === "income" || tx.type === "collection";
+
+      // 1. Update Account balances (reverse oldTx, apply new tx)
+      const updatedAccounts = prev.accounts.map((acc) => {
+        let bal = acc.balance;
+        if (acc.id === oldTx.accountId) {
+          bal += oldIsInc ? -oldTx.amount : oldTx.amount;
+        }
+        if (acc.id === tx.accountId) {
+          bal += newIsInc ? tx.amount : -tx.amount;
+        }
+        return bal === acc.balance ? acc : { ...acc, balance: bal };
+      });
+
+      // 2. Update Contact balances (reverse oldTx, apply new tx)
+      const updatedContacts = prev.contacts.map((c) => {
+        let bal = c.balance;
+        if (oldTx.contactId && c.id === oldTx.contactId) {
+          bal += oldIsInc ? oldTx.amount : -oldTx.amount;
+        }
+        if (tx.contactId && c.id === tx.contactId) {
+          bal += newIsInc ? -tx.amount : tx.amount;
+        }
+        if (bal === c.balance) return c;
+        return {
+          ...c,
+          balance: bal,
+          balanceType: bal > 0 ? ("receivable" as const) : bal < 0 ? ("payable" as const) : ("balanced" as const),
+        };
+      });
+
+      // 3. Update Product stocks if items changed
+      let updatedProducts = prev.products;
+      if ((oldTx.items && oldTx.items.length > 0) || (tx.items && tx.items.length > 0)) {
+        updatedProducts = prev.products.map((p) => {
+          let stock = p.stockQuantity;
+          (oldTx.items || []).forEach((item) => {
+            if (item.productId === p.id) {
+              stock += oldIsInc ? item.quantity : -item.quantity;
+            }
+          });
+          (tx.items || []).forEach((item) => {
+            if (item.productId === p.id) {
+              stock += newIsInc ? -item.quantity : item.quantity;
+            }
+          });
+          return stock === p.stockQuantity ? p : { ...p, stockQuantity: Math.max(0, stock) };
+        });
+      }
+
+      // 4. Update linked Invoice paidAmount / remainingAmount if amount changed
+      let updatedInvoices = prev.invoices;
+      if (tx.invoiceId && oldTx.amount !== tx.amount) {
+        const diff = tx.amount - oldTx.amount;
+        updatedInvoices = prev.invoices.map((inv) => {
+          if (inv.id !== tx.invoiceId) return inv;
+          const targetPayable = inv.payableAmount ?? inv.grandTotal;
+          const newPaid = Math.max(0, (inv.paidAmount || 0) + diff);
+          const newRemaining = Math.max(0, targetPayable - newPaid);
+          const newStatus = newRemaining <= 0 ? "paid" : newPaid > 0 ? "partial" : "sent";
+          return {
+            ...inv,
+            paidAmount: newPaid,
+            remainingAmount: newRemaining,
+            status: newStatus as any,
+          };
+        });
+      }
+
+      return {
+        ...prev,
+        transactions: prev.transactions.map((t) => (t.id === tx.id ? tx : t)),
+        accounts: updatedAccounts,
+        contacts: updatedContacts,
+        products: updatedProducts,
+        invoices: updatedInvoices,
+      };
+    });
   };
 
   const handleUpdateCheque = (cheque: Cheque) => {
-    setData((prev) => ({
-      ...prev,
-      cheques: (prev.cheques || []).map((c) => (c.id === cheque.id ? cheque : c)),
-    }));
+    setData((prev) => {
+      const oldCheque = (prev.cheques || []).find((c) => c.id === cheque.id);
+      let updatedContacts = prev.contacts;
+      if (oldCheque && (oldCheque.amount !== cheque.amount || oldCheque.contactId !== cheque.contactId || oldCheque.type !== cheque.type)) {
+        updatedContacts = prev.contacts.map((c) => {
+          let bal = c.balance;
+          if (oldCheque.contactId && c.id === oldCheque.contactId) {
+            bal += oldCheque.type === "received" ? oldCheque.amount : -oldCheque.amount;
+          }
+          if (cheque.contactId && c.id === cheque.contactId) {
+            bal += cheque.type === "received" ? -cheque.amount : cheque.amount;
+          }
+          if (bal === c.balance) return c;
+          return {
+            ...c,
+            balance: bal,
+            balanceType: bal > 0 ? ("receivable" as const) : bal < 0 ? ("payable" as const) : ("balanced" as const),
+          };
+        });
+      }
+      return {
+        ...prev,
+        cheques: (prev.cheques || []).map((c) => (c.id === cheque.id ? cheque : c)),
+        contacts: updatedContacts,
+      };
+    });
   };
 
   const handleUpdatePromissoryNote = (note: PromissoryNote) => {
-    setData((prev) => ({
-      ...prev,
-      promissoryNotes: (prev.promissoryNotes || []).map((n) => (n.id === note.id ? note : n)),
-    }));
+    setData((prev) => {
+      const oldNote = (prev.promissoryNotes || []).find((n) => n.id === note.id);
+      let updatedContacts = prev.contacts;
+      if (oldNote && (oldNote.amount !== note.amount || oldNote.contactId !== note.contactId || oldNote.type !== note.type)) {
+        updatedContacts = prev.contacts.map((c) => {
+          let bal = c.balance;
+          if (oldNote.contactId && c.id === oldNote.contactId) {
+            bal += oldNote.type === "received" ? oldNote.amount : -oldNote.amount;
+          }
+          if (note.contactId && c.id === note.contactId) {
+            bal += note.type === "received" ? -note.amount : note.amount;
+          }
+          if (bal === c.balance) return c;
+          return {
+            ...c,
+            balance: bal,
+            balanceType: bal > 0 ? ("receivable" as const) : bal < 0 ? ("payable" as const) : ("balanced" as const),
+          };
+        });
+      }
+      return {
+        ...prev,
+        promissoryNotes: (prev.promissoryNotes || []).map((n) => (n.id === note.id ? note : n)),
+        contacts: updatedContacts,
+      };
+    });
   };
 
-  // Handlers
+  // Handlers for Contacts (Bidirectionally synced with Invoices, Transactions, Cheques, Notes, Orders, Quotes, Waybills, Services)
   const handleAddContact = (contact: Contact) => {
     setData((prev) => ({
       ...prev,
@@ -1195,20 +1475,60 @@ export default function App() {
     setData((prev) => ({
       ...prev,
       contacts: prev.contacts.map((c) => (c.id === contact.id ? contact : c)),
+      invoices: prev.invoices.map((inv) =>
+        inv.contactId === contact.id ? { ...inv, contactName: contact.name } : inv
+      ),
+      transactions: prev.transactions.map((tx) =>
+        tx.contactId === contact.id ? { ...tx, contactName: contact.name } : tx
+      ),
+      cheques: (prev.cheques || []).map((chq) =>
+        chq.contactId === contact.id ? { ...chq, contactName: contact.name } : chq
+      ),
+      promissoryNotes: (prev.promissoryNotes || []).map((n) =>
+        n.contactId === contact.id ? { ...n, contactName: contact.name } : n
+      ),
+      orders: (prev.orders || []).map((o) =>
+        o.contactId === contact.id ? { ...o, contactName: contact.name } : o
+      ),
+      quotes: (prev.quotes || []).map((q) =>
+        q.contactId === contact.id ? { ...q, contactName: contact.name } : q
+      ),
+      waybills: (prev.waybills || []).map((w) =>
+        w.contactId === contact.id ? { ...w, contactName: contact.name } : w
+      ),
     }));
   };
 
   const handleDeleteContact = (id: string) => {
-    setData((prev) => ({
-      ...prev,
-      contacts: prev.contacts.filter((c) => c.id !== id),
-    }));
+    handleBulkDeleteContacts([id]);
   };
 
   const handleBulkDeleteContacts = (ids: string[]) => {
+    const idSet = new Set(ids);
+    const contactInvoices = data.invoices.filter((i) => idSet.has(i.contactId));
+    const contactTxs = data.transactions.filter((t) => t.contactId && idSet.has(t.contactId));
+    const contactCheques = (data.cheques || []).filter((c) => c.contactId && idSet.has(c.contactId));
+    const contactNotes = (data.promissoryNotes || []).filter((n) => n.contactId && idSet.has(n.contactId));
+
+    if (contactInvoices.length > 0) {
+      handleBulkDeleteInvoices(contactInvoices.map((i) => i.id));
+    }
+    if (contactTxs.length > 0) {
+      handleBulkDeleteTransactions(contactTxs.map((t) => t.id));
+    }
+    if (contactCheques.length > 0) {
+      handleBulkDeleteCheques(contactCheques.map((c) => c.id));
+    }
+    if (contactNotes.length > 0) {
+      handleBulkDeletePromissoryNotes(contactNotes.map((n) => n.id));
+    }
+
     setData((prev) => ({
       ...prev,
-      contacts: prev.contacts.filter((c) => !ids.includes(c.id)),
+      contacts: prev.contacts.filter((c) => !idSet.has(c.id)),
+      orders: (prev.orders || []).filter((o) => !idSet.has(o.contactId)),
+      quotes: (prev.quotes || []).filter((q) => !idSet.has(q.contactId)),
+      waybills: (prev.waybills || []).filter((w) => !idSet.has(w.contactId)),
     }));
   };
 
@@ -1260,7 +1580,7 @@ export default function App() {
     setData((prev) => {
       const isDraftOrCancelled = invoice.status === "draft" || invoice.status === "cancelled";
 
-      // Update contact balance only when invoice is officially issued (not draft/cancelled)
+      // 1. Update contact balance only when invoice is officially issued (not draft/cancelled)
       const updatedContacts = isDraftOrCancelled
         ? prev.contacts
         : prev.contacts.map((c) => {
@@ -1276,7 +1596,28 @@ export default function App() {
             return c;
           });
 
-      // Advance Mysoft e-Fatura / e-Arşiv sequential invoice number when issuing a non-draft sales invoice
+      // 2. Update product stock quantities for all items in the invoice
+      const updatedProducts = isDraftOrCancelled
+        ? prev.products
+        : prev.products.map((p) => {
+            const matchingItems = (invoice.items || []).filter(
+              (item) =>
+                item.productId === p.id ||
+                (item.productCode && p.code && item.productCode === p.code)
+            );
+            if (matchingItems.length === 0) return p;
+            const totalQty = matchingItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+            const newStock =
+              invoice.type === "sales"
+                ? p.stockQuantity - totalQty
+                : p.stockQuantity + totalQty;
+            return {
+              ...p,
+              stockQuantity: Math.max(0, newStock),
+            };
+          });
+
+      // 3. Advance Mysoft e-Fatura / e-Arşiv sequential invoice number when issuing a non-draft sales invoice
       let updatedSettings = prev.settings;
       if (!isDraftOrCancelled && invoice.type === "sales" && invoice.docKind !== "receipt") {
         const cleanNo = String(invoice.invoiceNumber || "").trim().toUpperCase();
@@ -1329,10 +1670,78 @@ export default function App() {
         upsertOutgoingEDocumentFromSalesInvoice(invoice, updatedSettings, activeCompanyId);
       }
 
+      // 4. If invoice was created as already "paid" without a linked transaction (e.g. from ServiceInvoicingModal), create its paired Transaction and update account balance
+      let updatedTransactions = prev.transactions;
+      let updatedAccounts = prev.accounts;
+      if (
+        !isDraftOrCancelled &&
+        invoice.status === "paid" &&
+        (invoice.paidAmount || 0) > 0 &&
+        !prev.transactions.some((t) => t.invoiceId === invoice.id)
+      ) {
+        const payAcc =
+          prev.accounts.find((a) => a.id === invoice.paymentAccountId) || prev.accounts[0];
+        if (payAcc) {
+          const isSales = invoice.type === "sales";
+          const amountToPay = invoice.paidAmount || invoice.grandTotal;
+          const autoTx: Transaction = {
+            id: `tx_inv_${invoice.id}`,
+            date: invoice.issueDate || new Date().toISOString().split("T")[0],
+            type: isSales ? "collection" : "payment",
+            amount: amountToPay,
+            currency: invoice.currency || "TRY",
+            accountId: payAcc.id,
+            accountName: payAcc.name,
+            contactId: invoice.contactId,
+            contactName: invoice.contactName,
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            serviceRecordId: invoice.serviceRecordId,
+            category: isSales ? "Fatura Tahsilatı" : "Fatura Ödemesi",
+            description: `${invoice.invoiceNumber} nolu fatura ${isSales ? "peşin tahsilatı" : "peşin ödemesi"}`,
+          };
+          void saveTransactionToDatabase(autoTx, activeCompanyId);
+          updatedTransactions = [autoTx, ...prev.transactions];
+          updatedAccounts = prev.accounts.map((a) =>
+            a.id === payAcc.id
+              ? { ...a, balance: isSales ? a.balance + amountToPay : a.balance - amountToPay }
+              : a
+          );
+          // Adjust contact balance for the immediate collection/payment so net balance change is 0
+          const paidDelta = isSales ? -amountToPay : amountToPay;
+          return {
+            ...prev,
+            settings: updatedSettings,
+            invoices: [
+              {
+                ...invoice,
+                paymentAccountId: payAcc.id,
+                paymentAccountName: payAcc.name,
+              },
+              ...prev.invoices,
+            ],
+            products: updatedProducts,
+            transactions: updatedTransactions,
+            accounts: updatedAccounts,
+            contacts: (updatedContacts as Contact[]).map((c) => {
+              if (c.id !== invoice.contactId) return c;
+              const finalBal = c.balance + paidDelta;
+              return {
+                ...c,
+                balance: finalBal,
+                balanceType:
+                  finalBal > 0 ? "receivable" : finalBal < 0 ? "payable" : "balanced",
+              };
+            }),
+          };
+        }
+      }
+
       return {
         ...prev,
         settings: updatedSettings,
         invoices: [invoice, ...prev.invoices],
+        products: updatedProducts,
         contacts: updatedContacts as Contact[],
       };
     });
@@ -1453,6 +1862,7 @@ export default function App() {
     setData((prev) => {
       const oldInvoice = prev.invoices.find((i) => i.id === updatedInvoice.id);
       let updatedContacts = prev.contacts;
+      let updatedProducts = prev.products;
       let updatedSettings = prev.settings;
 
       if (oldInvoice) {
@@ -1506,6 +1916,26 @@ export default function App() {
             return c;
           });
         }
+
+        // Update product stocks when invoice items or status change
+        updatedProducts = prev.products.map((p) => {
+          let stock = p.stockQuantity;
+          if (!oldWasInactive) {
+            (oldInvoice.items || []).forEach((item) => {
+              if (item.productId === p.id || (item.productCode && p.code && item.productCode === p.code)) {
+                stock += oldInvoice.type === "sales" ? item.quantity : -item.quantity;
+              }
+            });
+          }
+          if (!newIsInactive) {
+            (updatedInvoice.items || []).forEach((item) => {
+              if (item.productId === p.id || (item.productCode && p.code && item.productCode === p.code)) {
+                stock += updatedInvoice.type === "sales" ? -item.quantity : item.quantity;
+              }
+            });
+          }
+          return stock === p.stockQuantity ? p : { ...p, stockQuantity: Math.max(0, stock) };
+        });
 
         // If transitioning from draft to an issued sales invoice, advance Mysoft serial counter
         if (
@@ -1569,38 +1999,193 @@ export default function App() {
         ...prev,
         settings: updatedSettings,
         invoices: prev.invoices.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv)),
+        products: updatedProducts,
         contacts: updatedContacts as Contact[],
       };
     });
   };
 
   const handleDeleteInvoice = (id: string) => {
-    void deleteInvoiceFromDatabase(id, activeCompanyId);
-    removeOutgoingEDocumentForInvoice(id);
-    setData((prev) => ({
-      ...prev,
-      invoices: prev.invoices.filter((i) => i.id !== id),
-    }));
+    handleBulkDeleteInvoices([id]);
   };
 
   const handleBulkDeleteInvoices = (ids: string[]) => {
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+
     ids.forEach((id) => {
       void deleteInvoiceFromDatabase(id, activeCompanyId);
       removeOutgoingEDocumentForInvoice(id);
     });
-    setData((prev) => ({
-      ...prev,
-      invoices: prev.invoices.filter((i) => !ids.includes(i.id)),
-    }));
+
+    setData((prev) => {
+      const targetInvoices = prev.invoices.filter((i) => idSet.has(i.id));
+      if (targetInvoices.length === 0) return prev;
+
+      const targetInvoiceNumbers = new Set(
+        targetInvoices.map((i) => i.invoiceNumber).filter(Boolean)
+      );
+
+      // Find all linked transactions (collections/payments for these invoices + any paired POS commissions)
+      const directLinkedTxs = prev.transactions.filter(
+        (t) =>
+          (t.invoiceId && idSet.has(t.invoiceId)) ||
+          (t.invoiceNumber && targetInvoiceNumbers.has(t.invoiceNumber))
+      );
+      const directTxIds = new Set(directLinkedTxs.map((t) => t.id));
+      const allLinkedTxs = prev.transactions.filter(
+        (t) =>
+          directTxIds.has(t.id) ||
+          (t.linkedTransactionId && directTxIds.has(t.linkedTransactionId))
+      );
+      const allLinkedTxIds = new Set(allLinkedTxs.map((t) => t.id));
+
+      allLinkedTxIds.forEach((txId) => void deleteTransactionFromDatabase(txId, activeCompanyId));
+
+      // 1. Reverse Account balances from linked transactions
+      const updatedAccounts = prev.accounts.map((acc) => {
+        let bal = acc.balance;
+        allLinkedTxs.forEach((tx) => {
+          if (tx.accountId === acc.id) {
+            const isInc = tx.type === "income" || tx.type === "collection";
+            bal += isInc ? -tx.amount : tx.amount;
+          }
+        });
+        return bal === acc.balance ? acc : { ...acc, balance: bal };
+      });
+
+      // 2. Reverse Contact balances from deleted invoices AND linked transactions
+      const updatedContacts = prev.contacts.map((c) => {
+        let bal = c.balance;
+        targetInvoices.forEach((inv) => {
+          const isInactive = inv.status === "draft" || inv.status === "cancelled";
+          if (!isInactive && inv.contactId === c.id) {
+            const invDelta = inv.type === "sales" ? inv.grandTotal : -inv.grandTotal;
+            bal -= invDelta;
+          }
+        });
+        allLinkedTxs.forEach((tx) => {
+          if (tx.contactId === c.id) {
+            const isInc = tx.type === "income" || tx.type === "collection";
+            const txDelta = isInc ? -tx.amount : tx.amount;
+            bal -= txDelta;
+          }
+        });
+        if (bal === c.balance) return c;
+        return {
+          ...c,
+          balance: bal,
+          balanceType: bal > 0 ? ("receivable" as const) : bal < 0 ? ("payable" as const) : ("balanced" as const),
+        };
+      });
+
+      // 3. Reverse Product stock quantities from deleted invoices
+      const updatedProducts = prev.products.map((p) => {
+        let stock = p.stockQuantity;
+        targetInvoices.forEach((inv) => {
+          const isInactive = inv.status === "draft" || inv.status === "cancelled";
+          if (!isInactive) {
+            (inv.items || []).forEach((item) => {
+              if (
+                item.productId === p.id ||
+                (item.productCode && p.code && item.productCode === p.code)
+              ) {
+                stock += inv.type === "sales" ? item.quantity : -item.quantity;
+              }
+            });
+          }
+        });
+        return stock === p.stockQuantity ? p : { ...p, stockQuantity: Math.max(0, stock) };
+      });
+
+      // 4. Bidirectional cascade: delete paired Waybills, Orders, Quotes, and Service Records
+      const waybillIdsToDelete = new Set<string>();
+      const orderIdsToDelete = new Set<string>();
+      const quoteIdsToDelete = new Set<string>();
+      const serviceIdsToDelete = new Set<string>();
+
+      targetInvoices.forEach((inv) => {
+        if (inv.waybillId) waybillIdsToDelete.add(inv.waybillId);
+        if (inv.orderId) orderIdsToDelete.add(inv.orderId);
+        if (inv.quoteId) quoteIdsToDelete.add(inv.quoteId);
+        if (inv.serviceRecordId) serviceIdsToDelete.add(inv.serviceRecordId);
+      });
+
+      const updatedWaybills = (prev.waybills || []).filter((w) => {
+        const isLinked =
+          waybillIdsToDelete.has(w.id) ||
+          (w.invoicedInvoiceId && idSet.has(w.invoicedInvoiceId)) ||
+          (w.invoicedInvoiceNumber && targetInvoiceNumbers.has(w.invoicedInvoiceNumber)) ||
+          targetInvoices.some((inv) => inv.notes && inv.notes.includes(`İrsaliye No: ${w.waybillNumber}`));
+        return !isLinked;
+      });
+
+      const updatedOrders = (prev.orders || []).filter((o) => {
+        const isLinked =
+          orderIdsToDelete.has(o.id) ||
+          (o.convertedToInvoiceId && idSet.has(o.convertedToInvoiceId)) ||
+          (o.convertedToInvoiceNumber && targetInvoiceNumbers.has(o.convertedToInvoiceNumber)) ||
+          targetInvoices.some((inv) => inv.notes && inv.notes.includes(`Sipariş No: ${o.orderNumber}`));
+        if (isLinked && o.quoteId) {
+          quoteIdsToDelete.add(o.quoteId);
+        }
+        return !isLinked;
+      });
+
+      const updatedQuotes = (prev.quotes || []).filter((q) => {
+        const isLinked =
+          quoteIdsToDelete.has(q.id) ||
+          (q.convertedInvoiceId && idSet.has(q.convertedInvoiceId)) ||
+          (q.convertedOrderId && orderIdsToDelete.has(q.convertedOrderId));
+        return !isLinked;
+      });
+
+      const updatedAutoServices = (prev.autoServices || []).filter(
+        (s) =>
+          !serviceIdsToDelete.has(s.id) &&
+          !(s.invoiceId && idSet.has(s.invoiceId)) &&
+          !(s.invoiceNumber && targetInvoiceNumbers.has(s.invoiceNumber))
+      );
+
+      const updatedItServices = (prev.itServices || []).filter(
+        (s) =>
+          !serviceIdsToDelete.has(s.id) &&
+          !(s.invoiceId && idSet.has(s.invoiceId)) &&
+          !(s.invoiceNumber && targetInvoiceNumbers.has(s.invoiceNumber))
+      );
+
+      const updatedApplianceServices = (prev.applianceServices || []).filter(
+        (s) =>
+          !serviceIdsToDelete.has(s.id) &&
+          !(s.invoiceId && idSet.has(s.invoiceId)) &&
+          !(s.invoiceNumber && targetInvoiceNumbers.has(s.invoiceNumber))
+      );
+
+      return {
+        ...prev,
+        invoices: prev.invoices.filter((i) => !idSet.has(i.id)),
+        transactions: prev.transactions.filter((t) => !allLinkedTxIds.has(t.id)),
+        accounts: updatedAccounts,
+        contacts: updatedContacts,
+        products: updatedProducts,
+        waybills: updatedWaybills,
+        orders: updatedOrders,
+        quotes: updatedQuotes,
+        autoServices: updatedAutoServices,
+        itServices: updatedItServices,
+        applianceServices: updatedApplianceServices,
+      };
+    });
   };
 
   const handleAddTransaction = (tx: Transaction) => {
     void saveTransactionToDatabase(tx, activeCompanyId);
     setData((prev) => {
-      // Update account balance
+      const isInc = tx.type === "income" || tx.type === "collection";
+
+      // 1. Update account balance
       const updatedAccounts = prev.accounts.map((a) => {
         if (a.id === tx.accountId) {
-          const isInc = tx.type === "income" || tx.type === "collection";
           return {
             ...a,
             balance: isInc ? a.balance + tx.amount : a.balance - tx.amount,
@@ -1609,12 +2194,11 @@ export default function App() {
         return a;
       });
 
-      // If contact linked, update contact balance
+      // 2. If contact linked, update contact balance
       let updatedContacts = prev.contacts;
       if (tx.contactId) {
         updatedContacts = prev.contacts.map((c) => {
           if (c.id === tx.contactId) {
-            const isInc = tx.type === "income" || tx.type === "collection";
             // Collection reduces receivable balance
             const delta = isInc ? -tx.amount : tx.amount;
             const newBal = c.balance + delta;
@@ -1628,29 +2212,292 @@ export default function App() {
         });
       }
 
+      // 3. If transaction has product line items (Gelir/Gider Fişi kalemleri), update product stock quantities
+      let updatedProducts = prev.products;
+      if (tx.items && tx.items.length > 0) {
+        updatedProducts = prev.products.map((p) => {
+          const matchingItems = (tx.items || []).filter(
+            (item) =>
+              item.productId === p.id ||
+              (item.productCode && p.code && item.productCode === p.code)
+          );
+          if (matchingItems.length === 0) return p;
+          const totalQty = matchingItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+          const newStock = isInc ? p.stockQuantity - totalQty : p.stockQuantity + totalQty;
+          return {
+            ...p,
+            stockQuantity: Math.max(0, newStock),
+          };
+        });
+      }
+
       return {
         ...prev,
         transactions: [tx, ...prev.transactions],
         accounts: updatedAccounts,
         contacts: updatedContacts,
+        products: updatedProducts,
       };
     });
   };
 
   const handleDeleteTransaction = (id: string) => {
-    void deleteTransactionFromDatabase(id, activeCompanyId);
-    setData((prev) => ({
-      ...prev,
-      transactions: prev.transactions.filter((t) => t.id !== id),
-    }));
+    handleBulkDeleteTransactions([id]);
   };
 
   const handleBulkDeleteTransactions = (ids: string[]) => {
-    ids.forEach((id) => void deleteTransactionFromDatabase(id, activeCompanyId));
-    setData((prev) => ({
-      ...prev,
-      transactions: prev.transactions.filter((t) => !ids.includes(t.id)),
-    }));
+    if (!ids.length) return;
+
+    setData((prev) => {
+      const initialSet = new Set(ids);
+      const initialTxs = prev.transactions.filter((t) => initialSet.has(t.id));
+      if (initialTxs.length === 0) return prev;
+
+      // Expand set to include paired Virman transactions, linked POS commission transactions, and credit card transfer pairs
+      const fullTxIdSet = new Set<string>(ids);
+      const virmanDocNos = new Set<string>();
+
+      initialTxs.forEach((tx) => {
+        if (tx.linkedTransactionId) {
+          fullTxIdSet.add(tx.linkedTransactionId);
+        }
+        if (
+          tx.documentNo &&
+          (tx.documentNo.startsWith("VRM-") ||
+            tx.documentNo.startsWith("KKB-") ||
+            tx.category === "Virman / Transfer")
+        ) {
+          virmanDocNos.add(tx.documentNo);
+        }
+        if (tx.id.startsWith("tx_cc_pay_")) {
+          const tsPart = tx.id.replace("tx_cc_pay_", "");
+          fullTxIdSet.add(`tx_cc_inc_${Number(tsPart) + 1}`);
+        } else if (tx.id.startsWith("tx_cc_inc_")) {
+          const tsPart = tx.id.replace("tx_cc_inc_", "");
+          fullTxIdSet.add(`tx_cc_pay_${Number(tsPart) - 1}`);
+        }
+      });
+
+      prev.transactions.forEach((t) => {
+        if (t.linkedTransactionId && fullTxIdSet.has(t.linkedTransactionId)) {
+          fullTxIdSet.add(t.id);
+        }
+        if (t.documentNo && virmanDocNos.has(t.documentNo)) {
+          fullTxIdSet.add(t.id);
+        }
+      });
+
+      const allTxsToDelete = prev.transactions.filter((t) => fullTxIdSet.has(t.id));
+      allTxsToDelete.forEach((t) => void deleteTransactionFromDatabase(t.id, activeCompanyId));
+
+      // Check if any deleted transactions are linked to Invoices, Cheques, PromissoryNotes, or AdvanceRequests
+      const linkedInvoiceIdsToDelete = new Set<string>();
+      const linkedChequeIdsToDelete = new Set<string>();
+      const linkedNoteIdsToDelete = new Set<string>();
+      const linkedAdvanceIdsToDelete = new Set<string>();
+
+      allTxsToDelete.forEach((tx) => {
+        if (tx.invoiceId) linkedInvoiceIdsToDelete.add(tx.invoiceId);
+        if (tx.chequeId) linkedChequeIdsToDelete.add(tx.chequeId);
+        if (tx.promissoryNoteId) linkedNoteIdsToDelete.add(tx.promissoryNoteId);
+        if (tx.advanceRequestId) linkedAdvanceIdsToDelete.add(tx.advanceRequestId);
+
+        // Also match by documentNo or id pattern for cheques/notes
+        if (tx.category === "Ciro Edilen Çek" || tx.category === "Çek Tahsilatı" || tx.category === "Çek Ödemesi") {
+          (prev.cheques || []).forEach((chq) => {
+            if (
+              chq.id === tx.chequeId ||
+              chq.linkedTransactionId === tx.id ||
+              chq.endorsementTransactionId === tx.id ||
+              (tx.documentNo && chq.chequeNumber === tx.documentNo)
+            ) {
+              linkedChequeIdsToDelete.add(chq.id);
+            }
+          });
+        }
+        if (tx.category === "Ciro Edilen Senet" || tx.category === "Senet Tahsilatı" || tx.category === "Senet Ödemesi") {
+          (prev.promissoryNotes || []).forEach((n) => {
+            if (
+              n.id === tx.promissoryNoteId ||
+              n.linkedTransactionId === tx.id ||
+              n.endorsementTransactionId === tx.id ||
+              (tx.documentNo && n.noteNumber === tx.documentNo)
+            ) {
+              linkedNoteIdsToDelete.add(n.id);
+            }
+          });
+        }
+      });
+
+      // Also include any other transactions linked to the invoices/cheques/notes being cascade-deleted
+      const targetInvoices = prev.invoices.filter((inv) => linkedInvoiceIdsToDelete.has(inv.id));
+      const targetCheques = (prev.cheques || []).filter((chq) => linkedChequeIdsToDelete.has(chq.id));
+      const targetNotes = (prev.promissoryNotes || []).filter((n) => linkedNoteIdsToDelete.has(n.id));
+
+      prev.transactions.forEach((t) => {
+        if (
+          (t.invoiceId && linkedInvoiceIdsToDelete.has(t.invoiceId)) ||
+          (t.chequeId && linkedChequeIdsToDelete.has(t.chequeId)) ||
+          (t.promissoryNoteId && linkedNoteIdsToDelete.has(t.promissoryNoteId))
+        ) {
+          fullTxIdSet.add(t.id);
+        }
+      });
+
+      const finalTxsToDelete = prev.transactions.filter((t) => fullTxIdSet.has(t.id));
+      finalTxsToDelete.forEach((t) => void deleteTransactionFromDatabase(t.id, activeCompanyId));
+      targetInvoices.forEach((inv) => {
+        void deleteInvoiceFromDatabase(inv.id, activeCompanyId);
+        removeOutgoingEDocumentForInvoice(inv.id);
+      });
+
+      // 1. Reverse Account balances for all deleted transactions
+      const updatedAccounts = prev.accounts.map((acc) => {
+        let bal = acc.balance;
+        finalTxsToDelete.forEach((tx) => {
+          if (tx.accountId === acc.id) {
+            const isInc = tx.type === "income" || tx.type === "collection";
+            bal += isInc ? -tx.amount : tx.amount;
+          }
+        });
+        return bal === acc.balance ? acc : { ...acc, balance: bal };
+      });
+
+      // 2. Reverse Contact balances for all deleted transactions, cascade-deleted invoices, cheques, and notes
+      const updatedContacts = prev.contacts.map((c) => {
+        let bal = c.balance;
+        finalTxsToDelete.forEach((tx) => {
+          if (tx.contactId === c.id) {
+            const isInc = tx.type === "income" || tx.type === "collection";
+            const txDelta = isInc ? -tx.amount : tx.amount;
+            bal -= txDelta;
+          }
+        });
+        targetInvoices.forEach((inv) => {
+          const isInactive = inv.status === "draft" || inv.status === "cancelled";
+          if (!isInactive && inv.contactId === c.id) {
+            const invDelta = inv.type === "sales" ? inv.grandTotal : -inv.grandTotal;
+            bal -= invDelta;
+          }
+        });
+        targetCheques.forEach((chq) => {
+          if (chq.contactId === c.id) {
+            const chqDelta = chq.type === "received" ? -chq.amount : chq.amount;
+            bal -= chqDelta;
+          }
+        });
+        targetNotes.forEach((n) => {
+          if (n.contactId === c.id) {
+            const noteDelta = n.type === "received" ? -n.amount : n.amount;
+            bal -= noteDelta;
+          }
+        });
+        if (bal === c.balance) return c;
+        return {
+          ...c,
+          balance: bal,
+          balanceType: bal > 0 ? ("receivable" as const) : bal < 0 ? ("payable" as const) : ("balanced" as const),
+        };
+      });
+
+      // 3. Reverse Product stock quantities for deleted transactions (with items) and cascade-deleted invoices
+      const updatedProducts = prev.products.map((p) => {
+        let stock = p.stockQuantity;
+        finalTxsToDelete.forEach((tx) => {
+          const isInc = tx.type === "income" || tx.type === "collection";
+          (tx.items || []).forEach((item) => {
+            if (
+              item.productId === p.id ||
+              (item.productCode && p.code && item.productCode === p.code)
+            ) {
+              stock += isInc ? item.quantity : -item.quantity;
+            }
+          });
+        });
+        targetInvoices.forEach((inv) => {
+          const isInactive = inv.status === "draft" || inv.status === "cancelled";
+          if (!isInactive) {
+            (inv.items || []).forEach((item) => {
+              if (
+                item.productId === p.id ||
+                (item.productCode && p.code && item.productCode === p.code)
+              ) {
+                stock += inv.type === "sales" ? item.quantity : -item.quantity;
+              }
+            });
+          }
+        });
+        return stock === p.stockQuantity ? p : { ...p, stockQuantity: Math.max(0, stock) };
+      });
+
+      // 4. Cascade delete Waybills, Orders, Quotes, Service Records linked to cascade-deleted Invoices
+      const targetInvoiceNumbers = new Set(targetInvoices.map((i) => i.invoiceNumber).filter(Boolean));
+      const serviceIdsToDelete = new Set<string>(
+        targetInvoices.map((i) => i.serviceRecordId).filter((id): id is string => Boolean(id))
+      );
+      finalTxsToDelete.forEach((tx) => {
+        if (tx.serviceRecordId) serviceIdsToDelete.add(tx.serviceRecordId);
+      });
+
+      const updatedWaybills = (prev.waybills || []).filter(
+        (w) =>
+          !(w.invoicedInvoiceId && linkedInvoiceIdsToDelete.has(w.invoicedInvoiceId)) &&
+          !(w.invoicedInvoiceNumber && targetInvoiceNumbers.has(w.invoicedInvoiceNumber))
+      );
+
+      const updatedOrders = (prev.orders || []).filter(
+        (o) =>
+          !(o.convertedToInvoiceId && linkedInvoiceIdsToDelete.has(o.convertedToInvoiceId)) &&
+          !(o.convertedToInvoiceNumber && targetInvoiceNumbers.has(o.convertedToInvoiceNumber))
+      );
+
+      const updatedQuotes = (prev.quotes || []).filter(
+        (q) => !(q.convertedInvoiceId && linkedInvoiceIdsToDelete.has(q.convertedInvoiceId))
+      );
+
+      const updatedAutoServices = (prev.autoServices || []).filter(
+        (s) =>
+          !serviceIdsToDelete.has(s.id) &&
+          !(s.invoiceId && linkedInvoiceIdsToDelete.has(s.invoiceId)) &&
+          !(s.invoiceNumber && targetInvoiceNumbers.has(s.invoiceNumber))
+      );
+
+      const updatedItServices = (prev.itServices || []).filter(
+        (s) =>
+          !serviceIdsToDelete.has(s.id) &&
+          !(s.invoiceId && linkedInvoiceIdsToDelete.has(s.invoiceId)) &&
+          !(s.invoiceNumber && targetInvoiceNumbers.has(s.invoiceNumber))
+      );
+
+      const updatedApplianceServices = (prev.applianceServices || []).filter(
+        (s) =>
+          !serviceIdsToDelete.has(s.id) &&
+          !(s.invoiceId && linkedInvoiceIdsToDelete.has(s.invoiceId)) &&
+          !(s.invoiceNumber && targetInvoiceNumbers.has(s.invoiceNumber))
+      );
+
+      const updatedAdvanceRequests = (prev.advanceRequests || []).filter(
+        (r) => !linkedAdvanceIdsToDelete.has(r.id)
+      );
+
+      return {
+        ...prev,
+        transactions: prev.transactions.filter((t) => !fullTxIdSet.has(t.id)),
+        invoices: prev.invoices.filter((inv) => !linkedInvoiceIdsToDelete.has(inv.id)),
+        cheques: (prev.cheques || []).filter((chq) => !linkedChequeIdsToDelete.has(chq.id)),
+        promissoryNotes: (prev.promissoryNotes || []).filter((n) => !linkedNoteIdsToDelete.has(n.id)),
+        advanceRequests: updatedAdvanceRequests,
+        accounts: updatedAccounts,
+        contacts: updatedContacts,
+        products: updatedProducts,
+        waybills: updatedWaybills,
+        orders: updatedOrders,
+        quotes: updatedQuotes,
+        autoServices: updatedAutoServices,
+        itServices: updatedItServices,
+        applianceServices: updatedApplianceServices,
+      };
+    });
   };
 
   const handleAddTransactionFromInvoice = (
@@ -1659,7 +2506,8 @@ export default function App() {
     paidAmount: number
   ) => {
     const isSales = invoice.type === "sales";
-    const acc = data.accounts.find((a) => a.id === accountId);
+    const acc = data.accounts.find((a) => a.id === accountId) || data.accounts[0];
+    const resolvedAccountId = acc?.id || accountId;
     const methodLabel =
       invoice.paymentMethod === "nakit"
         ? "Nakit"
@@ -1675,12 +2523,13 @@ export default function App() {
       type: isSales ? "collection" : "payment",
       amount: paidAmount,
       currency: invoice.currency || "TRY",
-      accountId,
+      accountId: resolvedAccountId,
       accountName: acc?.name || invoice.paymentAccountName || "Kasa/Banka",
       contactId: invoice.contactId,
       contactName: invoice.contactName,
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
+      serviceRecordId: invoice.serviceRecordId,
       category: isSales
         ? methodLabel
           ? `Fatura Tahsilatı (${methodLabel})`
@@ -1691,7 +2540,6 @@ export default function App() {
       description: `${invoice.invoiceNumber} nolu fatura ${methodLabel ? `${methodLabel} ` : ""}${isSales ? "tahsilatı" : "ödemesi"}`,
     };
 
-    // Update invoice status & remaining
     const targetPayable = invoice.payableAmount ?? invoice.grandTotal;
     const newPaid = invoice.paidAmount + paidAmount;
     const newRemaining = targetPayable - newPaid;
@@ -1702,7 +2550,7 @@ export default function App() {
       paidAmount: newPaid,
       remainingAmount: Math.max(0, newRemaining),
       status: newStatus as any,
-      paymentAccountId: accountId || invoice.paymentAccountId,
+      paymentAccountId: resolvedAccountId || invoice.paymentAccountId,
       paymentAccountName: acc?.name || invoice.paymentAccountName,
     };
 
@@ -1728,7 +2576,7 @@ export default function App() {
       let collectCount = 0;
 
       const updatedInvoices = prev.invoices.map((inv) => {
-        if (inv.status !== "cancelled" && inv.remainingAmount > 0) {
+        if (inv.status !== "cancelled" && inv.status !== "draft" && inv.remainingAmount > 0) {
           collectCount++;
           const remainingToPay = inv.remainingAmount;
           const isSales = inv.type === "sales";
@@ -1800,7 +2648,7 @@ export default function App() {
 
   // Auto collect all invoices on mount if any are uncollected
   useEffect(() => {
-    const uncollectedCount = data.invoices.filter((i) => i.status !== "cancelled" && i.remainingAmount > 0).length;
+    const uncollectedCount = data.invoices.filter((i) => i.status !== "cancelled" && i.status !== "draft" && i.remainingAmount > 0).length;
     if (uncollectedCount > 0) {
       handleCollectAllInvoices();
     }
@@ -1827,32 +2675,36 @@ export default function App() {
       const docNo = `VRM-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
       const now = Date.now();
       const todayStr = new Date().toISOString().split("T")[0];
+      const txOutId = "tx_out_" + now;
+      const txInId = "tx_in_" + (now + 1);
 
       const txOut: Transaction = {
-        id: "tx_out_" + now,
+        id: txOutId,
         date: todayStr,
         type: "expense",
         amount,
         currency: fromAcc?.currency || toAcc?.currency || "TRY",
-        accountId: fromAcc ? fromAcc.id : (prev.accounts[0]?.id || ""),
+        accountId: fromAcc ? fromAcc.id : "virman_cari_bridge",
         accountName: fromAcc ? fromAcc.name : (fromContact ? `Cari: ${fromContact.name}` : "Virman Hesabı"),
         contactId: fromContact ? fromContact.id : undefined,
         contactName: fromContact ? fromContact.name : undefined,
+        linkedTransactionId: txInId,
         category: "Virman / Transfer",
         description: `Virman (Çıkış): ${fromName} -> ${toName}${desc ? ` (${desc})` : ""}`,
         documentNo: docNo,
       };
 
       const txIn: Transaction = {
-        id: "tx_in_" + (now + 1),
+        id: txInId,
         date: todayStr,
         type: "income",
         amount,
         currency: toAcc?.currency || fromAcc?.currency || "TRY",
-        accountId: toAcc ? toAcc.id : (prev.accounts[0]?.id || ""),
+        accountId: toAcc ? toAcc.id : "virman_cari_bridge",
         accountName: toAcc ? toAcc.name : (toContact ? `Cari: ${toContact.name}` : "Virman Hesabı"),
         contactId: toContact ? toContact.id : undefined,
         contactName: toContact ? toContact.name : undefined,
+        linkedTransactionId: txOutId,
         category: "Virman / Transfer",
         description: `Virman (Giriş): ${toName} <- ${fromName}${desc ? ` (${desc})` : ""}`,
         documentNo: docNo,
@@ -1924,17 +2776,24 @@ export default function App() {
   const handleUpdateChequeStatus = (id: string, status: ChequeStatus) => {
     setData((prev) => {
       const cheque = (prev.cheques || []).find((c) => c.id === id);
-      const updatedCheques = (prev.cheques || []).map((c) => (c.id === id ? { ...c, status } : c));
+      if (!cheque) return prev;
 
       let updatedAccounts = prev.accounts;
       let updatedTransactions = prev.transactions;
+      let linkedTxId = cheque.linkedTransactionId;
 
-      if (cheque && (status === "collected" || status === "paid")) {
+      if (
+        (status === "collected" || status === "paid") &&
+        cheque.status !== "collected" &&
+        cheque.status !== "paid"
+      ) {
         const defaultAcc = prev.accounts[0];
         if (defaultAcc) {
           const isIncome = cheque.type === "received";
+          const txId = "tx_chq_" + Date.now();
+          linkedTxId = txId;
           const newTx: Transaction = {
-            id: "tx_chq_" + Date.now(),
+            id: txId,
             date: new Date().toISOString().split("T")[0],
             type: isIncome ? "collection" : "payment",
             amount: cheque.amount,
@@ -1943,6 +2802,8 @@ export default function App() {
             accountName: defaultAcc.name,
             contactId: cheque.contactId,
             contactName: cheque.contactName,
+            chequeId: cheque.id,
+            documentNo: cheque.chequeNumber,
             category: isIncome ? "Çek Tahsilatı" : "Çek Ödemesi",
             description: `${cheque.bankName || "Banka"} (${cheque.chequeNumber || "Çek"}) ${isIncome ? "Çek Tahsilatı" : "Çek Ödemesi"}`,
           };
@@ -1954,6 +2815,10 @@ export default function App() {
           updatedTransactions = [newTx, ...prev.transactions];
         }
       }
+
+      const updatedCheques = (prev.cheques || []).map((c) =>
+        c.id === id ? { ...c, status, linkedTransactionId: linkedTxId } : c
+      );
 
       return {
         ...prev,
@@ -1987,17 +2852,82 @@ export default function App() {
   };
 
   const handleDeleteCheque = (id: string) => {
-    setData((prev) => ({
-      ...prev,
-      cheques: (prev.cheques || []).filter((c) => c.id !== id),
-    }));
+    handleBulkDeleteCheques([id]);
   };
 
   const handleBulkDeleteCheques = (ids: string[]) => {
-    setData((prev) => ({
-      ...prev,
-      cheques: (prev.cheques || []).filter((c) => !ids.includes(c.id)),
-    }));
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+
+    setData((prev) => {
+      const targetCheques = (prev.cheques || []).filter((c) => idSet.has(c.id));
+      if (targetCheques.length === 0) return prev;
+
+      const chequeNumbers = new Set(targetCheques.map((c) => c.chequeNumber).filter(Boolean));
+      const linkedTxIds = new Set<string>();
+      targetCheques.forEach((c) => {
+        if (c.linkedTransactionId) linkedTxIds.add(c.linkedTransactionId);
+        if (c.endorsementTransactionId) linkedTxIds.add(c.endorsementTransactionId);
+      });
+
+      const linkedTxs = prev.transactions.filter(
+        (t) =>
+          linkedTxIds.has(t.id) ||
+          (t.chequeId && idSet.has(t.chequeId)) ||
+          ((t.category === "Çek Tahsilatı" ||
+            t.category === "Çek Ödemesi" ||
+            t.category === "Ciro Edilen Çek") &&
+            t.documentNo &&
+            chequeNumbers.has(t.documentNo))
+      );
+      const allTxIdSet = new Set(linkedTxs.map((t) => t.id));
+      allTxIdSet.forEach((txId) => void deleteTransactionFromDatabase(txId, activeCompanyId));
+
+      // 1. Reverse Account balances for any linked cheque collection/payment transactions
+      const updatedAccounts = prev.accounts.map((acc) => {
+        let bal = acc.balance;
+        linkedTxs.forEach((tx) => {
+          if (tx.accountId === acc.id) {
+            const isInc = tx.type === "income" || tx.type === "collection";
+            bal += isInc ? -tx.amount : tx.amount;
+          }
+        });
+        return bal === acc.balance ? acc : { ...acc, balance: bal };
+      });
+
+      // 2. Reverse Contact balances for the deleted cheques AND any endorsement transactions
+      const updatedContacts = prev.contacts.map((c) => {
+        let bal = c.balance;
+        targetCheques.forEach((chq) => {
+          if (chq.contactId === c.id) {
+            const delta = chq.type === "received" ? -chq.amount : chq.amount;
+            bal -= delta;
+          }
+        });
+        linkedTxs.forEach((tx) => {
+          // Endorsement transactions modified the endorsed target contact's balance via handleAddTransaction
+          if (tx.category === "Ciro Edilen Çek" && tx.contactId === c.id) {
+            const isInc = tx.type === "income" || tx.type === "collection";
+            const txDelta = isInc ? -tx.amount : tx.amount;
+            bal -= txDelta;
+          }
+        });
+        if (bal === c.balance) return c;
+        return {
+          ...c,
+          balance: bal,
+          balanceType: bal > 0 ? ("receivable" as const) : bal < 0 ? ("payable" as const) : ("balanced" as const),
+        };
+      });
+
+      return {
+        ...prev,
+        cheques: (prev.cheques || []).filter((c) => !idSet.has(c.id)),
+        transactions: prev.transactions.filter((t) => !allTxIdSet.has(t.id)),
+        accounts: updatedAccounts,
+        contacts: updatedContacts,
+      };
+    });
   };
 
   const handleAddPromissoryNote = (note: PromissoryNote) => {
@@ -2028,17 +2958,24 @@ export default function App() {
   const handleUpdateNoteStatus = (id: string, status: PromissoryNoteStatus) => {
     setData((prev) => {
       const note = (prev.promissoryNotes || []).find((n) => n.id === id);
-      const updatedNotes = (prev.promissoryNotes || []).map((n) => (n.id === id ? { ...n, status } : n));
+      if (!note) return prev;
 
       let updatedAccounts = prev.accounts;
       let updatedTransactions = prev.transactions;
+      let linkedTxId = note.linkedTransactionId;
 
-      if (note && (status === "collected" || status === "paid")) {
+      if (
+        (status === "collected" || status === "paid") &&
+        note.status !== "collected" &&
+        note.status !== "paid"
+      ) {
         const defaultAcc = prev.accounts[0];
         if (defaultAcc) {
           const isIncome = note.type === "received";
+          const txId = "tx_note_" + Date.now();
+          linkedTxId = txId;
           const newTx: Transaction = {
-            id: "tx_note_" + Date.now(),
+            id: txId,
             date: new Date().toISOString().split("T")[0],
             type: isIncome ? "collection" : "payment",
             amount: note.amount,
@@ -2047,6 +2984,8 @@ export default function App() {
             accountName: defaultAcc.name,
             contactId: note.contactId,
             contactName: note.contactName,
+            promissoryNoteId: note.id,
+            documentNo: note.noteNumber,
             category: isIncome ? "Senet Tahsilatı" : "Senet Ödemesi",
             description: `Senet No: ${note.noteNumber || "Senet"} ${isIncome ? "Senet Tahsilatı" : "Senet Ödemesi"}`,
           };
@@ -2058,6 +2997,10 @@ export default function App() {
           updatedTransactions = [newTx, ...prev.transactions];
         }
       }
+
+      const updatedNotes = (prev.promissoryNotes || []).map((n) =>
+        n.id === id ? { ...n, status, linkedTransactionId: linkedTxId } : n
+      );
 
       return {
         ...prev,
@@ -2091,17 +3034,81 @@ export default function App() {
   };
 
   const handleDeletePromissoryNote = (id: string) => {
-    setData((prev) => ({
-      ...prev,
-      promissoryNotes: (prev.promissoryNotes || []).filter((n) => n.id !== id),
-    }));
+    handleBulkDeletePromissoryNotes([id]);
   };
 
   const handleBulkDeletePromissoryNotes = (ids: string[]) => {
-    setData((prev) => ({
-      ...prev,
-      promissoryNotes: (prev.promissoryNotes || []).filter((n) => !ids.includes(n.id)),
-    }));
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+
+    setData((prev) => {
+      const targetNotes = (prev.promissoryNotes || []).filter((n) => idSet.has(n.id));
+      if (targetNotes.length === 0) return prev;
+
+      const noteNumbers = new Set(targetNotes.map((n) => n.noteNumber).filter(Boolean));
+      const linkedTxIds = new Set<string>();
+      targetNotes.forEach((n) => {
+        if (n.linkedTransactionId) linkedTxIds.add(n.linkedTransactionId);
+        if (n.endorsementTransactionId) linkedTxIds.add(n.endorsementTransactionId);
+      });
+
+      const linkedTxs = prev.transactions.filter(
+        (t) =>
+          linkedTxIds.has(t.id) ||
+          (t.promissoryNoteId && idSet.has(t.promissoryNoteId)) ||
+          ((t.category === "Senet Tahsilatı" ||
+            t.category === "Senet Ödemesi" ||
+            t.category === "Ciro Edilen Senet") &&
+            t.documentNo &&
+            noteNumbers.has(t.documentNo))
+      );
+      const allTxIdSet = new Set(linkedTxs.map((t) => t.id));
+      allTxIdSet.forEach((txId) => void deleteTransactionFromDatabase(txId, activeCompanyId));
+
+      // 1. Reverse Account balances
+      const updatedAccounts = prev.accounts.map((acc) => {
+        let bal = acc.balance;
+        linkedTxs.forEach((tx) => {
+          if (tx.accountId === acc.id) {
+            const isInc = tx.type === "income" || tx.type === "collection";
+            bal += isInc ? -tx.amount : tx.amount;
+          }
+        });
+        return bal === acc.balance ? acc : { ...acc, balance: bal };
+      });
+
+      // 2. Reverse Contact balances
+      const updatedContacts = prev.contacts.map((c) => {
+        let bal = c.balance;
+        targetNotes.forEach((n) => {
+          if (n.contactId === c.id) {
+            const delta = n.type === "received" ? -n.amount : n.amount;
+            bal -= delta;
+          }
+        });
+        linkedTxs.forEach((tx) => {
+          if (tx.category === "Ciro Edilen Senet" && tx.contactId === c.id) {
+            const isInc = tx.type === "income" || tx.type === "collection";
+            const txDelta = isInc ? -tx.amount : tx.amount;
+            bal -= txDelta;
+          }
+        });
+        if (bal === c.balance) return c;
+        return {
+          ...c,
+          balance: bal,
+          balanceType: bal > 0 ? ("receivable" as const) : bal < 0 ? ("payable" as const) : ("balanced" as const),
+        };
+      });
+
+      return {
+        ...prev,
+        promissoryNotes: (prev.promissoryNotes || []).filter((n) => !idSet.has(n.id)),
+        transactions: prev.transactions.filter((t) => !allTxIdSet.has(t.id)),
+        accounts: updatedAccounts,
+        contacts: updatedContacts,
+      };
+    });
   };
 
   const handleAddProduct = (product: Product) => {
@@ -2191,18 +3198,87 @@ export default function App() {
     }));
   };
 
+  // FixedAssets <-> HR AssetCustodies bidirectional synchronization
   const handleUpdateFixedAssets = (updatedAssets: FixedAsset[]) => {
     setData((prev) => {
-      const next = { ...prev, fixedAssets: updatedAssets };
-      saveStoredData("FIXED_ASSETS", updatedAssets);
-      return next;
+      const prevAssets = prev.fixedAssets || [];
+      const newIds = new Set(updatedAssets.map((a) => a.id));
+      const removedAssetIds = new Set(prevAssets.filter((a) => !newIds.has(a.id)).map((a) => a.id));
+      const removedSerials = new Set(
+        prevAssets
+          .filter((a) => !newIds.has(a.id) && a.serialOrPlate)
+          .map((a) => a.serialOrPlate!)
+      );
+
+      // Remove linked custodies, maintenances, and disposals when a FixedAsset is deleted
+      let updatedCustodies = (prev.assetCustodies || []).filter(
+        (c) =>
+          !removedAssetIds.has(c.id) &&
+          !removedAssetIds.has(c.id.replace(/^zim_/, "")) &&
+          !(c.serialNumber && removedSerials.has(c.serialNumber))
+      );
+
+      // Sync custody assignments for updated/created FixedAssets
+      updatedAssets.forEach((fa) => {
+        const custodyId = `zim_${fa.id}`;
+        const existingIdx = updatedCustodies.findIndex(
+          (c) => c.id === custodyId || c.id === fa.id || (fa.serialOrPlate && c.serialNumber === fa.serialOrPlate)
+        );
+        if (fa.custodianEmployeeId) {
+          const syncedCustody: AssetCustody = {
+            id: existingIdx >= 0 ? updatedCustodies[existingIdx].id : custodyId,
+            employeeId: fa.custodianEmployeeId,
+            assetName: fa.name,
+            category:
+              fa.category === "Tasitlar"
+                ? "Arac"
+                : fa.category === "Bilgisayar_Bilisim"
+                ? "Bilgisayar"
+                : fa.category === "Makine_Tesis" || fa.category === "El_Aletleri"
+                ? "Ekipman"
+                : "Diger",
+            serialNumber: fa.serialOrPlate || fa.code,
+            assignedDate: fa.custodyStartDate || fa.purchaseDate,
+            conditionOnAssign: "Iyi",
+            status: fa.status === "hurda" || fa.status === "satildi" ? "returned" : "active",
+            notes: fa.description,
+          };
+          if (existingIdx >= 0) {
+            updatedCustodies[existingIdx] = syncedCustody;
+          } else {
+            updatedCustodies = [syncedCustody, ...updatedCustodies];
+          }
+        } else if (existingIdx >= 0) {
+          updatedCustodies = updatedCustodies.filter((_, i) => i !== existingIdx);
+        }
+      });
+
+      const updatedMaintenances = (prev.assetMaintenances || []).filter(
+        (m) => !removedAssetIds.has(m.assetId)
+      );
+      const updatedDisposals = (prev.assetDisposals || []).filter(
+        (d) => !removedAssetIds.has(d.assetId)
+      );
+
+      saveStoredData("FIXED_ASSETS", updatedAssets, activeCompanyId);
+      saveStoredData("ASSET_CUSTODIES", updatedCustodies, activeCompanyId);
+      saveStoredData("ASSET_MAINTENANCES", updatedMaintenances, activeCompanyId);
+      saveStoredData("ASSET_DISPOSALS", updatedDisposals, activeCompanyId);
+
+      return {
+        ...prev,
+        fixedAssets: updatedAssets,
+        assetCustodies: updatedCustodies,
+        assetMaintenances: updatedMaintenances,
+        assetDisposals: updatedDisposals,
+      };
     });
   };
 
   const handleUpdateAssetMaintenances = (updatedMaintenances: AssetMaintenanceRecord[]) => {
     setData((prev) => {
       const next = { ...prev, assetMaintenances: updatedMaintenances };
-      saveStoredData("ASSET_MAINTENANCES", updatedMaintenances);
+      saveStoredData("ASSET_MAINTENANCES", updatedMaintenances, activeCompanyId);
       return next;
     });
   };
@@ -2210,7 +3286,7 @@ export default function App() {
   const handleUpdateAssetDisposals = (updatedDisposals: AssetDisposalRecord[]) => {
     setData((prev) => {
       const next = { ...prev, assetDisposals: updatedDisposals };
-      saveStoredData("ASSET_DISPOSALS", updatedDisposals);
+      saveStoredData("ASSET_DISPOSALS", updatedDisposals, activeCompanyId);
       return next;
     });
   };
@@ -2244,15 +3320,17 @@ export default function App() {
       currency: "TRY",
       notes: quote.notes,
       createdAt: new Date().toISOString().split("T")[0],
+      quoteId: quote.id,
     };
 
     handleAddInvoice(newInvoice);
 
-    // Update quote status
     setData((prev) => ({
       ...prev,
       quotes: prev.quotes.map((q) =>
-        q.id === quote.id ? { ...q, status: "converted" as const } : q
+        q.id === quote.id
+          ? { ...q, status: "converted" as const, convertedInvoiceId: newInvoice.id }
+          : q
       ),
     }));
   };
@@ -2296,25 +3374,54 @@ export default function App() {
       currency: quote.currency || "TRY",
       status: "approved",
       notes: `Proforma (Belge No: ${quote.quoteNumber}) siparişe dönüştürüldü. ${quote.notes || ""}`,
+      quoteId: quote.id,
       createdAt: new Date().toISOString().split("T")[0],
     };
 
     handleAddOrder(newOrder);
 
-    // Update quote status to converted
     setData((prev) => ({
       ...prev,
       quotes: prev.quotes.map((q) =>
-        q.id === quote.id ? { ...q, status: "converted" as const } : q
+        q.id === quote.id
+          ? { ...q, status: "converted" as const, convertedOrderId: newOrder.id }
+          : q
       ),
     }));
   };
 
   const handleDeleteQuote = (id: string) => {
+    const targetQuote = data.quotes.find((q) => q.id === id);
+    const linkedInvoiceIds: string[] = [];
+    const linkedOrderIds: string[] = [];
+
+    if (targetQuote) {
+      if (targetQuote.convertedInvoiceId) linkedInvoiceIds.push(targetQuote.convertedInvoiceId);
+      if (targetQuote.convertedOrderId) linkedOrderIds.push(targetQuote.convertedOrderId);
+      data.invoices.forEach((inv) => {
+        if (inv.quoteId === id) linkedInvoiceIds.push(inv.id);
+      });
+      (data.orders || []).forEach((ord) => {
+        if (
+          ord.quoteId === id ||
+          (ord.notes && ord.notes.includes(`Belge No: ${targetQuote.quoteNumber}`))
+        ) {
+          linkedOrderIds.push(ord.id);
+        }
+      });
+    }
+
     setData((prev) => ({
       ...prev,
       quotes: prev.quotes.filter((q) => q.id !== id),
     }));
+
+    if (linkedOrderIds.length > 0) {
+      handleBulkDeleteOrders(Array.from(new Set(linkedOrderIds)));
+    }
+    if (linkedInvoiceIds.length > 0) {
+      handleBulkDeleteInvoices(Array.from(new Set(linkedInvoiceIds)));
+    }
   };
 
   const handleSaveSettings = (newSettings: CompanySettings) => {
@@ -2500,11 +3607,11 @@ export default function App() {
     return ok;
   };
 
-  // HR Handlers
+  // HR Handlers (Bidirectionally synced with Transactions, FixedAssets, Leave/Advance/LegalDeductions)
   const handleAddEmployee = (emp: Employee) => {
     setData((p) => {
       const next = { ...p, employees: [emp, ...(p.employees || [])] };
-      saveStoredData("EMPLOYEES", next.employees);
+      saveStoredData("EMPLOYEES", next.employees, activeCompanyId);
       return next;
     });
   };
@@ -2514,27 +3621,63 @@ export default function App() {
       const next = {
         ...p,
         employees: (p.employees || []).map((e) => (e.id === emp.id ? emp : e)),
+        fixedAssets: (p.fixedAssets || []).map((fa) =>
+          fa.custodianEmployeeId === emp.id
+            ? { ...fa, custodianName: emp.fullName, department: emp.department }
+            : fa
+        ),
       };
-      saveStoredData("EMPLOYEES", next.employees);
+      saveStoredData("EMPLOYEES", next.employees, activeCompanyId);
       return next;
     });
   };
 
   const handleDeleteEmployee = (id: string) => {
+    const empTxs = data.transactions.filter(
+      (t) =>
+        t.contactId === id ||
+        t.employeeId === id ||
+        (t.documentNo && t.documentNo.includes(id.slice(-4)))
+    );
+    if (empTxs.length > 0) {
+      handleBulkDeleteTransactions(empTxs.map((t) => t.id));
+    }
+
     setData((p) => {
-      const next = {
+      const updatedEmployees = (p.employees || []).filter((e) => e.id !== id);
+      const updatedLeaves = (p.leaveRequests || []).filter((l) => l.employeeId !== id);
+      const updatedAdvances = (p.advanceRequests || []).filter((a) => a.employeeId !== id);
+      const updatedDeductions = (p.legalDeductions || []).filter((d) => d.employeeId !== id);
+      const updatedCustodies = (p.assetCustodies || []).filter((c) => c.employeeId !== id);
+      const updatedFixedAssets = (p.fixedAssets || []).map((fa) =>
+        fa.custodianEmployeeId === id
+          ? { ...fa, custodianEmployeeId: undefined, custodianName: undefined }
+          : fa
+      );
+
+      saveStoredData("EMPLOYEES", updatedEmployees, activeCompanyId);
+      saveStoredData("LEAVE_REQUESTS", updatedLeaves, activeCompanyId);
+      saveStoredData("ADVANCE_REQUESTS", updatedAdvances, activeCompanyId);
+      saveStoredData("LEGAL_DEDUCTIONS", updatedDeductions, activeCompanyId);
+      saveStoredData("ASSET_CUSTODIES", updatedCustodies, activeCompanyId);
+      saveStoredData("FIXED_ASSETS", updatedFixedAssets, activeCompanyId);
+
+      return {
         ...p,
-        employees: (p.employees || []).filter((e) => e.id !== id),
+        employees: updatedEmployees,
+        leaveRequests: updatedLeaves,
+        advanceRequests: updatedAdvances,
+        legalDeductions: updatedDeductions,
+        assetCustodies: updatedCustodies,
+        fixedAssets: updatedFixedAssets,
       };
-      saveStoredData("EMPLOYEES", next.employees);
-      return next;
     });
   };
 
   const handleAddLeaveRequest = (req: LeaveRequest) => {
     setData((p) => {
       const next = { ...p, leaveRequests: [req, ...(p.leaveRequests || [])] };
-      saveStoredData("LEAVE_REQUESTS", next.leaveRequests);
+      saveStoredData("LEAVE_REQUESTS", next.leaveRequests, activeCompanyId);
       return next;
     });
   };
@@ -2547,7 +3690,7 @@ export default function App() {
           r.id === id ? { ...r, status } : r
         ),
       };
-      saveStoredData("LEAVE_REQUESTS", next.leaveRequests);
+      saveStoredData("LEAVE_REQUESTS", next.leaveRequests, activeCompanyId);
       return next;
     });
   };
@@ -2555,7 +3698,7 @@ export default function App() {
   const handleAddAdvanceRequest = (req: AdvanceRequest) => {
     setData((p) => {
       const next = { ...p, advanceRequests: [req, ...(p.advanceRequests || [])] };
-      saveStoredData("ADVANCE_REQUESTS", next.advanceRequests);
+      saveStoredData("ADVANCE_REQUESTS", next.advanceRequests, activeCompanyId);
       return next;
     });
   };
@@ -2566,7 +3709,7 @@ export default function App() {
       const updatedAdvanceRequests = (p.advanceRequests || []).map((r) =>
         r.id === id ? { ...r, status } : r
       );
-      saveStoredData("ADVANCE_REQUESTS", updatedAdvanceRequests);
+      saveStoredData("ADVANCE_REQUESTS", updatedAdvanceRequests, activeCompanyId);
 
       let updatedAccounts = p.accounts;
       let updatedTransactions = p.transactions;
@@ -2575,18 +3718,24 @@ export default function App() {
         const defaultAcc = p.accounts[0];
         if (defaultAcc) {
           const emp = (p.employees || []).find((e) => e.id === targetReq.employeeId);
-          const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Personel";
+          const empName = emp?.fullName || "Personel";
           const newTx: Transaction = {
-            id: "tx_adv_" + Date.now(),
+            id: "tx_adv_" + targetReq.id,
             date: new Date().toISOString().split("T")[0],
             type: "expense",
             amount: targetReq.amount,
             currency: "TRY",
             accountId: defaultAcc.id,
             accountName: defaultAcc.name,
+            contactId: emp?.id,
+            contactName: emp ? `${emp.fullName} (Personel)` : undefined,
+            advanceRequestId: targetReq.id,
+            employeeId: targetReq.employeeId,
+            documentNo: `AVN-${targetReq.id.slice(-6).toUpperCase()}`,
             category: "Personel / Avans",
-            description: `Personel Avans Ödemesi: ${empName} (${targetReq.reason || "Avans Ödemesi"})`,
+            description: `Personel Avans Ödemesi: ${empName} (${targetReq.description || "Avans Ödemesi"})`,
           };
+          void saveTransactionToDatabase(newTx, activeCompanyId);
           updatedAccounts = p.accounts.map((acc) =>
             acc.id === defaultAcc.id ? { ...acc, balance: acc.balance - targetReq.amount } : acc
           );
@@ -2606,7 +3755,7 @@ export default function App() {
   const handleAddLegalDeduction = (deduction: LegalDeduction) => {
     setData((p) => {
       const next = { ...p, legalDeductions: [deduction, ...(p.legalDeductions || [])] };
-      saveStoredData("LEGAL_DEDUCTIONS", next.legalDeductions);
+      saveStoredData("LEGAL_DEDUCTIONS", next.legalDeductions, activeCompanyId);
       return next;
     });
   };
@@ -2617,7 +3766,7 @@ export default function App() {
         ...p,
         legalDeductions: (p.legalDeductions || []).map((d) => (d.id === deduction.id ? deduction : d)),
       };
-      saveStoredData("LEGAL_DEDUCTIONS", next.legalDeductions);
+      saveStoredData("LEGAL_DEDUCTIONS", next.legalDeductions, activeCompanyId);
       return next;
     });
   };
@@ -2628,39 +3777,121 @@ export default function App() {
         ...p,
         legalDeductions: (p.legalDeductions || []).filter((d) => d.id !== id),
       };
-      saveStoredData("LEGAL_DEDUCTIONS", next.legalDeductions);
+      saveStoredData("LEGAL_DEDUCTIONS", next.legalDeductions, activeCompanyId);
       return next;
     });
   };
 
-  // Handlers for Asset Custody (Zimmet & Demirbaş)
+  // Handlers for Asset Custody (Zimmet & Demirbaş) - Bidirectionally synced with FixedAssets
   const handleAddAsset = (asset: AssetCustody) => {
     setData((p) => {
-      const next = { ...p, assetCustodies: [asset, ...(p.assetCustodies || [])] };
-      saveStoredData("ASSET_CUSTODIES", next.assetCustodies);
-      return next;
+      const updatedCustodies = [asset, ...(p.assetCustodies || [])];
+      const emp = (p.employees || []).find((e) => e.id === asset.employeeId);
+
+      // Sync to FixedAssets if matching serialNumber or create a paired FixedAsset
+      let updatedFixedAssets = [...(p.fixedAssets || [])];
+      const matchIdx = updatedFixedAssets.findIndex(
+        (fa) =>
+          fa.id === asset.id.replace(/^zim_/, "") ||
+          (asset.serialNumber && fa.serialOrPlate === asset.serialNumber)
+      );
+      if (matchIdx >= 0) {
+        updatedFixedAssets[matchIdx] = {
+          ...updatedFixedAssets[matchIdx],
+          custodianEmployeeId: asset.employeeId,
+          custodianName: emp?.fullName,
+          department: emp?.department,
+          custodyStartDate: asset.assignedDate,
+        };
+      } else {
+        const newFa: FixedAsset = {
+          id: `fa_${asset.id}`,
+          code: `DMB-${Date.now().toString().slice(-4)}`,
+          name: asset.assetName,
+          category:
+            asset.category === "Arac"
+              ? "Tasitlar"
+              : asset.category === "Bilgisayar" || asset.category === "Telefon"
+              ? "Bilgisayar_Bilisim"
+              : "Demirbaslar",
+          serialOrPlate: asset.serialNumber,
+          purchaseDate: asset.assignedDate || new Date().toISOString().split("T")[0],
+          purchaseCost: 0,
+          vatRate: 20,
+          currency: "TRY",
+          usefulLifeYears: 5,
+          depreciationRate: 20,
+          depreciationMethod: "normal",
+          isProRata: false,
+          accumulatedDepreciation: 0,
+          netBookValue: 0,
+          custodianEmployeeId: asset.employeeId,
+          custodianName: emp?.fullName,
+          department: emp?.department,
+          custodyStartDate: asset.assignedDate,
+          status: asset.status === "active" ? "aktif" : "bakimda",
+          description: asset.notes,
+        };
+        updatedFixedAssets = [newFa, ...updatedFixedAssets];
+      }
+
+      saveStoredData("ASSET_CUSTODIES", updatedCustodies, activeCompanyId);
+      saveStoredData("FIXED_ASSETS", updatedFixedAssets, activeCompanyId);
+      return {
+        ...p,
+        assetCustodies: updatedCustodies,
+        fixedAssets: updatedFixedAssets,
+      };
     });
   };
 
   const handleUpdateAsset = (asset: AssetCustody) => {
     setData((p) => {
-      const next = {
+      const updatedCustodies = (p.assetCustodies || []).map((a) => (a.id === asset.id ? asset : a));
+      const emp = (p.employees || []).find((e) => e.id === asset.employeeId);
+      const updatedFixedAssets = (p.fixedAssets || []).map((fa) => {
+        if (
+          fa.id === asset.id.replace(/^zim_/, "") ||
+          fa.id === `fa_${asset.id}` ||
+          (asset.serialNumber && fa.serialOrPlate === asset.serialNumber)
+        ) {
+          return {
+            ...fa,
+            name: asset.assetName,
+            serialOrPlate: asset.serialNumber,
+            custodianEmployeeId: asset.status === "returned" ? undefined : asset.employeeId,
+            custodianName: asset.status === "returned" ? undefined : emp?.fullName,
+            department: emp?.department,
+          };
+        }
+        return fa;
+      });
+      saveStoredData("ASSET_CUSTODIES", updatedCustodies, activeCompanyId);
+      saveStoredData("FIXED_ASSETS", updatedFixedAssets, activeCompanyId);
+      return {
         ...p,
-        assetCustodies: (p.assetCustodies || []).map((a) => (a.id === asset.id ? asset : a)),
+        assetCustodies: updatedCustodies,
+        fixedAssets: updatedFixedAssets,
       };
-      saveStoredData("ASSET_CUSTODIES", next.assetCustodies);
-      return next;
     });
   };
 
   const handleDeleteAsset = (id: string) => {
     setData((p) => {
-      const next = {
+      const targetCustody = (p.assetCustodies || []).find((a) => a.id === id);
+      const updatedCustodies = (p.assetCustodies || []).filter((a) => a.id !== id);
+      const updatedFixedAssets = (p.fixedAssets || []).filter((fa) => {
+        if (fa.id === id.replace(/^zim_/, "") || fa.id === `fa_${id}`) return false;
+        if (targetCustody?.serialNumber && fa.serialOrPlate === targetCustody.serialNumber) return false;
+        return true;
+      });
+      saveStoredData("ASSET_CUSTODIES", updatedCustodies, activeCompanyId);
+      saveStoredData("FIXED_ASSETS", updatedFixedAssets, activeCompanyId);
+      return {
         ...p,
-        assetCustodies: (p.assetCustodies || []).filter((a) => a.id !== id),
+        assetCustodies: updatedCustodies,
+        fixedAssets: updatedFixedAssets,
       };
-      saveStoredData("ASSET_CUSTODIES", next.assetCustodies);
-      return next;
     });
   };
 
@@ -2969,6 +4200,10 @@ export default function App() {
               onAddTransaction={handleAddTransaction}
               onAddCheque={handleAddCheque}
               onAddPromissoryNote={handleAddPromissoryNote}
+              onDeleteInvoice={handleDeleteInvoice}
+              onDeleteTransaction={handleDeleteTransaction}
+              onDeleteCheque={handleDeleteCheque}
+              onDeletePromissoryNote={handleDeletePromissoryNote}
               onTransferBetweenAccounts={handleTransferBetweenAccounts}
               onOpenNewInvoiceForContact={(cid) => {
                 setInitialContactIdForInvoice(cid);
@@ -3127,6 +4362,8 @@ export default function App() {
               onAddWarehouse={handleAddWarehouse}
               onUpdateWarehouse={handleUpdateWarehouse}
               onDeleteWarehouse={handleDeleteWarehouse}
+              onDeleteInvoice={handleDeleteInvoice}
+              onDeleteTransaction={handleDeleteTransaction}
             />
           )}
 

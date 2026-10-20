@@ -1012,8 +1012,14 @@ export const Accounts: React.FC<AccountsProps> = ({
       finalDesc = txDescription || (txType === "income" ? "Gelen Transfer / Havale" : "Gönderilen Transfer / Havale");
     }
 
+    const nowTs = Date.now();
+    const mainTxId = "tx_" + nowTs;
+    const commRate = addTxContext === "pos" && autoRecordPosCommission && txType === "income" ? parseFloat(posCommissionRate) || 0 : 0;
+    const commAmount = commRate > 0 ? (numAmount * commRate) / 100 : 0;
+    const commTxId = commAmount > 0 ? "tx_comm_" + (nowTs + 2) : undefined;
+
     const newTx: Transaction = {
-      id: "tx_" + Date.now(),
+      id: mainTxId,
       date: txDate || new Date().toISOString().split("T")[0],
       type: txType,
       amount: numAmount,
@@ -1022,6 +1028,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       accountName: targetAcc.name,
       contactId: targetContact ? targetContact.id : undefined,
       contactName: targetContact ? targetContact.name : undefined,
+      linkedTransactionId: commTxId,
       category: finalCategory,
       description: finalDesc,
       documentNo: finalDocNo,
@@ -1032,24 +1039,21 @@ export const Accounts: React.FC<AccountsProps> = ({
     }
 
     // POS Komisyon Kesintisini Otomatik Gider Fişi Olarak İşle
-    if (addTxContext === "pos" && autoRecordPosCommission && txType === "income") {
-      const commRate = parseFloat(posCommissionRate) || 0;
-      const commAmount = (numAmount * commRate) / 100;
-      if (commAmount > 0 && onAddTransaction) {
-        const commTx: Transaction = {
-          id: "tx_comm_" + (Date.now() + 2),
-          date: txDate || new Date().toISOString().split("T")[0],
-          type: "expense",
-          amount: Number(commAmount.toFixed(2)),
-          currency: targetAcc.currency || "TRY",
-          accountId: targetAcc.id,
-          accountName: targetAcc.name,
-          category: "Banka & POS Komisyon Gideri",
-          description: `POS Komisyon Kesintisi (%${commRate}) • Slip No: ${finalDocNo || "SLP"}`,
-          documentNo: finalDocNo ? `KOM-${finalDocNo}` : undefined,
-        };
-        onAddTransaction(commTx);
-      }
+    if (commAmount > 0 && commTxId && onAddTransaction) {
+      const commTx: Transaction = {
+        id: commTxId,
+        date: txDate || new Date().toISOString().split("T")[0],
+        type: "expense",
+        amount: Number(commAmount.toFixed(2)),
+        currency: targetAcc.currency || "TRY",
+        accountId: targetAcc.id,
+        accountName: targetAcc.name,
+        linkedTransactionId: mainTxId,
+        category: "Banka & POS Komisyon Gideri",
+        description: `POS Komisyon Kesintisi (%${commRate}) • Slip No: ${finalDocNo || "SLP"}`,
+        documentNo: finalDocNo ? `KOM-${finalDocNo}` : undefined,
+      };
+      onAddTransaction(commTx);
     }
 
     setIsAddTxModalOpen(false);
@@ -1108,10 +1112,11 @@ export const Accounts: React.FC<AccountsProps> = ({
           type: "payment",
           amount: selectedCheque.amount,
           currency: selectedCheque.currency || "TRY",
-          accountId: accounts[0]?.id || "default",
+          accountId: "portfolio_endorsement",
           accountName: "Çek / Senet Portföyü",
           contactId: targetContact.id,
           contactName: targetContact.name,
+          chequeId: selectedCheque.id,
           category: "Ciro Edilen Çek",
           description: `Ciro Edilen Çek (Ciranta): Çek No ${selectedCheque.chequeNumber} (${selectedCheque.bankName}) -> ${targetContact.name}. ${endorseNote}`.trim(),
           documentNo: selectedCheque.chequeNumber,
@@ -1134,10 +1139,11 @@ export const Accounts: React.FC<AccountsProps> = ({
           type: "payment",
           amount: selectedNote.amount,
           currency: selectedNote.currency || "TRY",
-          accountId: accounts[0]?.id || "default",
+          accountId: "portfolio_endorsement",
           accountName: "Çek / Senet Portföyü",
           contactId: targetContact.id,
           contactName: targetContact.name,
+          promissoryNoteId: selectedNote.id,
           category: "Ciro Edilen Senet",
           description: `Ciro Edilen Senet (Ciranta): Senet No ${selectedNote.noteNumber} -> ${targetContact.name}. ${endorseNote}`.trim(),
           documentNo: selectedNote.noteNumber,

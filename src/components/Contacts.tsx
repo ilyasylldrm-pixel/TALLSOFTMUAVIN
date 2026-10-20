@@ -111,6 +111,10 @@ interface ContactsProps {
   onAddTransaction?: (tx: Transaction) => void;
   onAddCheque?: (cheque: Cheque) => void;
   onAddPromissoryNote?: (note: PromissoryNote) => void;
+  onDeleteInvoice?: (id: string) => void;
+  onDeleteTransaction?: (id: string) => void;
+  onDeleteCheque?: (id: string) => void;
+  onDeletePromissoryNote?: (id: string) => void;
   onTransferBetweenAccounts?: (fromId: string, toId: string, amount: number, desc: string) => void;
   initialFilterType?: string;
   initialStatusFilter?: string;
@@ -146,6 +150,10 @@ export const Contacts: React.FC<ContactsProps> = ({
   onAddTransaction,
   onAddCheque,
   onAddPromissoryNote,
+  onDeleteInvoice,
+  onDeleteTransaction,
+  onDeleteCheque,
+  onDeletePromissoryNote,
   onTransferBetweenAccounts,
   initialFilterType,
   initialStatusFilter,
@@ -1087,8 +1095,23 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   // Calculate Ledger / Muavin Entries for a selected contact
   const getLedgerEntries = (contactId: string): LedgerEntry[] => {
-    const contactInvoices = invoices.filter((i) => i.contactId === contactId);
-    const contactTxs = transactions.filter((t) => t.contactId === contactId);
+    const contactInvoices = invoices.filter(
+      (i) => i.contactId === contactId && i.status !== "draft" && i.status !== "cancelled"
+    );
+    const contactTxs = transactions.filter((t) => {
+      if (t.contactId !== contactId) return false;
+      if (
+        t.id.startsWith("tx_chq_") ||
+        t.id.startsWith("tx_note_") ||
+        t.category === "Çek Tahsilatı" ||
+        t.category === "Çek Ödemesi" ||
+        t.category === "Senet Tahsilatı" ||
+        t.category === "Senet Ödemesi"
+      ) {
+        return false;
+      }
+      return true;
+    });
 
     const items: Array<{
       date: string;
@@ -1097,6 +1120,8 @@ export const Contacts: React.FC<ContactsProps> = ({
       desc: string;
       debit: number;
       credit: number;
+      sourceType: "invoice" | "transaction" | "cheque" | "note";
+      sourceId: string;
     }> = [];
 
     // Invoices
@@ -1110,6 +1135,8 @@ export const Contacts: React.FC<ContactsProps> = ({
           desc: `Satış Faturası: ${inv.items.map((i) => i.description).join(", ")}`,
           debit: inv.grandTotal,
           credit: 0,
+          sourceType: "invoice",
+          sourceId: inv.id,
         });
       } else {
         // Alış Faturası -> Cari Alacaklanır (Credit)
@@ -1120,6 +1147,8 @@ export const Contacts: React.FC<ContactsProps> = ({
           desc: `Alış Faturası: ${inv.items.map((i) => i.description).join(", ")}`,
           debit: 0,
           credit: inv.grandTotal,
+          sourceType: "invoice",
+          sourceId: inv.id,
         });
       }
     });
@@ -1135,6 +1164,8 @@ export const Contacts: React.FC<ContactsProps> = ({
           desc: `Tahsilat (${tx.accountName}): ${tx.description}`,
           debit: 0,
           credit: tx.amount,
+          sourceType: "transaction",
+          sourceId: tx.id,
         });
       } else if (tx.type === "expense" || tx.type === "payment") {
         // Tedarikçiye Ödeme yaptık -> Carinin alacağı düşer (Debit)
@@ -1145,6 +1176,8 @@ export const Contacts: React.FC<ContactsProps> = ({
           desc: `Ödeme (${tx.accountName}): ${tx.description}`,
           debit: tx.amount,
           credit: 0,
+          sourceType: "transaction",
+          sourceId: tx.id,
         });
       }
     });
@@ -1162,6 +1195,8 @@ export const Contacts: React.FC<ContactsProps> = ({
               desc: `Müşteri Çeki Girişi (${chq.bankName}) - Vade: ${chq.dueDate}`,
               debit: 0,
               credit: chq.amount,
+              sourceType: "cheque",
+              sourceId: chq.id,
             });
           } else {
             items.push({
@@ -1171,6 +1206,8 @@ export const Contacts: React.FC<ContactsProps> = ({
               desc: `Firma Çeki Verildi (${chq.bankName}) - Vade: ${chq.dueDate}`,
               debit: chq.amount,
               credit: 0,
+              sourceType: "cheque",
+              sourceId: chq.id,
             });
           }
         });
@@ -1189,6 +1226,8 @@ export const Contacts: React.FC<ContactsProps> = ({
               desc: `Müşteri Senedi Girişi (Borçlu: ${note.debtorName}) - Vade: ${note.dueDate}`,
               debit: 0,
               credit: note.amount,
+              sourceType: "note",
+              sourceId: note.id,
             });
           } else {
             items.push({
@@ -1198,6 +1237,8 @@ export const Contacts: React.FC<ContactsProps> = ({
               desc: `Firma Senedi Verildi (Borçlu: ${note.debtorName}) - Vade: ${note.dueDate}`,
               debit: note.amount,
               credit: 0,
+              sourceType: "note",
+              sourceId: note.id,
             });
           }
         });
@@ -1210,7 +1251,7 @@ export const Contacts: React.FC<ContactsProps> = ({
     return items.map((item, idx) => {
       running += item.debit - item.credit;
       return {
-        id: "l_" + idx,
+        id: "l_" + idx + "_" + item.sourceId,
         date: item.date,
         documentType: item.docType,
         documentNo: item.docNo,
@@ -1218,6 +1259,8 @@ export const Contacts: React.FC<ContactsProps> = ({
         debit: item.debit,
         credit: item.credit,
         runningBalance: running,
+        sourceType: item.sourceType,
+        sourceId: item.sourceId,
       };
     });
   };
@@ -3174,12 +3217,13 @@ export const Contacts: React.FC<ContactsProps> = ({
                           <th className="py-2.5 px-3 text-right">Borç (₺)</th>
                           <th className="py-2.5 px-3 text-right">Alacak (₺)</th>
                           <th className="py-2.5 px-3 text-right" style={{ backgroundColor: "#2e2a72", color: "#ffffff" }}>Bakiye (₺)</th>
+                          <th className="py-2.5 px-3 text-center no-print">İşlem</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y" style={{ borderColor: "#f1f5f9" }}>
                         {filteredLedgerEntries.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="text-center py-8 bg-white" style={{ color: "#94a3b8" }}>
+                            <td colSpan={8} className="text-center py-8 bg-white" style={{ color: "#94a3b8" }}>
                               Seçili filtrelere uygun cari hareket kaydı bulunamadı.
                             </td>
                           </tr>
@@ -3226,6 +3270,28 @@ export const Contacts: React.FC<ContactsProps> = ({
                                   ₺{Math.abs(m.runningBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                                 </span>
                               </td>
+                              <td className="py-2 px-3 text-center whitespace-nowrap no-print">
+                                {m.sourceId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (m.sourceType === "invoice" && onDeleteInvoice) {
+                                        onDeleteInvoice(m.sourceId!);
+                                      } else if (m.sourceType === "transaction" && onDeleteTransaction) {
+                                        onDeleteTransaction(m.sourceId!);
+                                      } else if (m.sourceType === "cheque" && onDeleteCheque) {
+                                        onDeleteCheque(m.sourceId!);
+                                      } else if (m.sourceType === "note" && onDeletePromissoryNote) {
+                                        onDeletePromissoryNote(m.sourceId!);
+                                      }
+                                    }}
+                                    className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors cursor-pointer"
+                                    title="Bu kaydı ve bağlı olduğu karşı kaydı sil"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </td>
                             </tr>
                           ))
                         )}
@@ -3248,6 +3314,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                             <td className="py-2.5 px-3 text-right font-mono text-xs" style={{ backgroundColor: "#c7d2fe", color: "#1e1b4b" }}>
                               ₺{Math.abs(ledgerSummary?.netBalance || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                             </td>
+                            <td className="no-print"></td>
                           </tr>
                         </tfoot>
                       )}

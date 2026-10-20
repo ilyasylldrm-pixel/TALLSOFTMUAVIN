@@ -316,6 +316,7 @@ export const ServiceInvoicingModal: React.FC<ServiceInvoicingModalProps> = ({
       eDocumentEttn: `ETTN-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
       notes: invoiceNotes,
       createdAt: new Date().toISOString().split("T")[0],
+      serviceRecordId: serviceRecord.id,
     };
 
     // 1. Add to invoices

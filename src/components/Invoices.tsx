@@ -3046,9 +3046,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
         status: nextStatus,
       };
 
+      const targetPayAcc = selectedPaymentAccount || accounts[0];
       onUpdateInvoice(updatedInvoice);
-      if (isImmediatePayment && wasUnpaid && selectedPaymentAccount && payableAmount > 0) {
-        onAddTransactionFromInvoice(updatedInvoice, selectedPaymentAccount.id, payableAmount);
+      if (isImmediatePayment && wasUnpaid && targetPayAcc && payableAmount > 0) {
+        onAddTransactionFromInvoice(updatedInvoice, targetPayAcc.id, payableAmount);
       }
       setEditingInvoiceId(null);
       setEditingInvoiceNumber(null);
@@ -3058,16 +3059,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
       return;
     }
 
+    const targetPayAcc = selectedPaymentAccount || accounts[0];
     const newInvoice: Invoice = {
       ...baseInvoice,
-      paidAmount: isImmediatePayment && !selectedPaymentAccount ? payableAmount : 0,
-      remainingAmount: isImmediatePayment && !selectedPaymentAccount ? 0 : payableAmount,
-      status: isImmediatePayment && !selectedPaymentAccount ? "paid" : "sent",
+      paidAmount: 0,
+      remainingAmount: payableAmount,
+      status: "sent",
     };
 
     onAddInvoice(newInvoice);
-    if (isImmediatePayment && selectedPaymentAccount && payableAmount > 0) {
-      onAddTransactionFromInvoice(newInvoice, selectedPaymentAccount.id, payableAmount);
+    if (isImmediatePayment && targetPayAcc && payableAmount > 0) {
+      onAddTransactionFromInvoice(newInvoice, targetPayAcc.id, payableAmount);
     }
     if (forcedType) {
       setDocSubTab(formDocKind === "receipt" ? "receipts" : "invoices");

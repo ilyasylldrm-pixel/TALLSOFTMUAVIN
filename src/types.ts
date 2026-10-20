@@ -121,6 +121,7 @@ export interface ItemAdditionalTax {
 export interface InvoiceItem {
   id: string;
   productId?: string;
+  productCode?: string;
   expenseCategory?: string; // Masraf / Gider Kalemi (Yemek ve ulaşım, Kira ödemeleri, vb.)
   description: string;
   quantity: number;
@@ -473,6 +474,10 @@ export interface Invoice {
   createdAt: string;
   eDocumentType?: EDocumentType;
   eDocumentEttn?: string;
+  waybillId?: string;
+  orderId?: string;
+  quoteId?: string;
+  serviceRecordId?: string;
 }
 
 export type ChequeType = "received" | "issued"; // received = Müşteri Çeki, issued = Borç / Firma Çeki
@@ -497,6 +502,8 @@ export interface Cheque {
   endorsedToContactId?: string;
   endorsedToContactName?: string;
   endorsedDate?: string;
+  linkedTransactionId?: string;
+  endorsementTransactionId?: string;
 }
 
 export type PromissoryNoteType = "received" | "issued"; // received = Müşteri Seneti, issued = Borç Seneti
@@ -518,6 +525,8 @@ export interface PromissoryNote {
   endorsedToContactId?: string;
   endorsedToContactName?: string;
   endorsedDate?: string;
+  linkedTransactionId?: string;
+  endorsementTransactionId?: string;
 }
 
 export type AccountType = "cash" | "bank" | "credit_card" | "pos" | string;
@@ -550,6 +559,13 @@ export interface Transaction {
   contactName?: string;
   invoiceId?: string;
   invoiceNumber?: string;
+  linkedTransactionId?: string;
+  chequeId?: string;
+  promissoryNoteId?: string;
+  advanceRequestId?: string;
+  employeeId?: string;
+  fixedAssetId?: string;
+  serviceRecordId?: string;
   category: string; // ör: Danışmanlık Geliri, Ofis Kirası, Yazılım Lisansı, Maaş, Vergi/SGK
   description: string;
   documentNo?: string;
@@ -620,6 +636,8 @@ export interface Quote {
   currency?: string;
   status: QuoteStatus;
   notes?: string;
+  convertedInvoiceId?: string;
+  convertedOrderId?: string;
 }
 
 export type OrderType = "sales" | "purchase"; // Satış Siparişi (Müşteriden Alınan) / Alış Siparişi (Tedarikçiye Verilen)
@@ -661,6 +679,7 @@ export interface Order {
   warehouseId?: string;
   warehouseName?: string;
   notes?: string;
+  quoteId?: string;
   convertedToInvoiceId?: string;
   convertedToInvoiceNumber?: string;
   createdAt: string;
@@ -869,6 +888,8 @@ export interface LedgerEntry {
   debit: number; // Borç (Cari hesabın borcu - Bize borçlandı veya ödeme yaptı)
   credit: number; // Alacak (Cari hesabın alacağı - Fatura kesti veya tahsilat yaptık)
   runningBalance: number; // Bakiye
+  sourceType?: "invoice" | "transaction" | "cheque" | "note";
+  sourceId?: string;
 }
 
 export type DepartmentType =

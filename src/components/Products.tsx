@@ -84,6 +84,8 @@ interface ProductsProps {
   onAddWarehouse?: (warehouse: Warehouse) => void;
   onUpdateWarehouse?: (warehouse: Warehouse) => void;
   onDeleteWarehouse?: (id: string) => void;
+  onDeleteInvoice?: (id: string) => void;
+  onDeleteTransaction?: (id: string) => void;
 }
 
 export interface ProductMovement {
@@ -354,6 +356,8 @@ export const Products: React.FC<ProductsProps> = ({
   onAddWarehouse,
   onUpdateWarehouse,
   onDeleteWarehouse,
+  onDeleteInvoice,
+  onDeleteTransaction,
 }: ProductsProps) => {
   const selection = useTableSelection();
   const activeWarehouses = warehouses && warehouses.length > 0 ? warehouses : defaultWarehouses;
@@ -2114,6 +2118,20 @@ export const Products: React.FC<ProductsProps> = ({
                   >
                     Yürüyen Bakiye
                   </th>
+                  {(onDeleteInvoice || onDeleteTransaction) && (
+                    <th
+                      style={{
+                        backgroundColor: "#83b8ff",
+                        color: "#0f172a",
+                        borderColor: "#60a5fa",
+                        WebkitPrintColorAdjust: "exact",
+                        printColorAdjust: "exact",
+                      }}
+                      className="stock-th-colored py-2.5 px-2.5 border-l border-[#60a5fa] text-slate-950 font-black text-center w-14 no-print"
+                    >
+                      İşlem
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-purple-100 text-slate-800">
@@ -2165,13 +2183,34 @@ export const Products: React.FC<ProductsProps> = ({
                       <td className="py-2 px-3 text-right font-mono tabular-nums font-tabular-num-md font-black text-purple-950 bg-purple-100/50">
                         {m.runningBalance !== undefined ? m.runningBalance : "-"} {m.unit}
                       </td>
+                      {(onDeleteInvoice || onDeleteTransaction) && (
+                        <td className="py-2 px-2 text-center border-l border-purple-100 no-print">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const isTx =
+                                (transactions || []).some((t) => t.id === m.invoiceId) &&
+                                !(invoices || []).some((inv) => inv.id === m.invoiceId);
+                              if (isTx) {
+                                onDeleteTransaction?.(m.invoiceId);
+                              } else {
+                                onDeleteInvoice?.(m.invoiceId);
+                              }
+                            }}
+                            title="Bu stok hareketini ve bağlı fatura/fiş kaydını çift yönlü sil"
+                            className="p-1 rounded-md text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer inline-flex items-center justify-center"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
 
                 {pageMovements.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center py-8 text-slate-400 font-medium">
+                    <td colSpan={9} className="text-center py-8 text-slate-400 font-medium">
                       Bu kriterlere ve filtreye uygun stok hareketi bulunamadı.
                     </td>
                   </tr>
