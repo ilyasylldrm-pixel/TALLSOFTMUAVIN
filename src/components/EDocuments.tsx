@@ -32,6 +32,7 @@ import { useTheme } from "../context/ThemeContext";
 import type {
   CompanySettings,
   EDocumentDirection,
+  Invoice,
   ManagedCompany,
   MysoftDocumentFamily,
   MysoftEDocument,
@@ -48,6 +49,8 @@ import {
   sendMysoftDraftEDocument,
   normalizeMysoftTenantIdentifier,
   resolveMysoftDocumentStatus,
+  invoiceToMysoftOutgoingEDocument,
+  readPersistedEDocuments,
 } from "../services/mysoftEDocumentService";
 import { useMysoftTenants } from "../hooks/useMysoftTenants";
 import { DetailPageLayout } from "./common/DetailPageLayout";
@@ -69,12 +72,58 @@ export interface EDocumentsProps {
   activeCompany?: ManagedCompany;
   companyId?: string;
   tenantIdentifierNumber?: string;
-  /** Optional local import hook. The default view keeps Mysoft records separate from local invoices. */
+  /** Local invoices so Gelir Faturaları appear immediately in Giden e-Faturalar */
+  invoices?: Invoice[];
+  /** Optional local import hook. */
   onImportInvoice?: (document: MysoftEDocument) => void;
 }
 
-type SyncPeriod = "this_month" | "three_months" | "all";
+type SyncPeriod =
+  | "this_month"
+  | "three_months"
+  | "all"
+  | "month_1"
+  | "month_2"
+  | "month_3"
+  | "month_4"
+  | "month_5"
+  | "month_6"
+  | "month_7"
+  | "month_8"
+  | "month_9"
+  | "month_10"
+  | "month_11"
+  | "month_12";
 type DownloadFormat = "pdf" | "xml";
+
+const TURKISH_MONTHS = [
+  { id: 1, name: "Ocak", shortName: "Oca" },
+  { id: 2, name: "Şubat", shortName: "Şub" },
+  { id: 3, name: "Mart", shortName: "Mar" },
+  { id: 4, name: "Nisan", shortName: "Nis" },
+  { id: 5, name: "Mayıs", shortName: "May" },
+  { id: 6, name: "Haziran", shortName: "Haz" },
+  { id: 7, name: "Temmuz", shortName: "Tem" },
+  { id: 8, name: "Ağustos", shortName: "Ağu" },
+  { id: 9, name: "Eylül", shortName: "Eyl" },
+  { id: 10, name: "Ekim", shortName: "Eki" },
+  { id: 11, name: "Kasım", shortName: "Kas" },
+  { id: 12, name: "Aralık", shortName: "Ara" },
+] as const;
+
+const parseDocYearMonth = (rawDate: unknown): { year: number | null; month: number | null } => {
+  if (!rawDate) return { year: null, month: null };
+  const str = String(rawDate).trim();
+  const isoMatch = /^(\d{4})-(\d{1,2})/.exec(str);
+  if (isoMatch) {
+    return { year: parseInt(isoMatch[1], 10), month: parseInt(isoMatch[2], 10) };
+  }
+  const d = new Date(str);
+  if (!Number.isNaN(d.getTime())) {
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  }
+  return { year: null, month: null };
+};
 
 const formatMoney = (value: unknown, currency = "TRY") => {
   const amount = Number(value);
@@ -240,14 +289,43 @@ const formatLocalIsoDate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const getSyncRange = (period: SyncPeriod) => {
+const getSyncRange = (period: SyncPeriod, selectedYear: string = "all") => {
+  const now = new Date();
+  const targetYear =
+    selectedYear !== "all" && /^\d{4}$/.test(selectedYear)
+      ? parseInt(selectedYear, 10)
+      : now.getFullYear();
+
+  if (period.startsWith("month_")) {
+    const monthNum = parseInt(period.replace("month_", ""), 10);
+    if (monthNum >= 1 && monthNum <= 12) {
+      const from = new Date(targetYear, monthNum - 1, 1);
+      const to = new Date(targetYear, monthNum, 0);
+      return {
+        startDate: formatLocalIsoDate(from),
+        endDate: formatLocalIsoDate(to),
+      };
+    }
+  }
+
   const to = new Date();
   const from = new Date(to);
   if (period === "this_month") {
-    from.setDate(1);
+    const mFrom = new Date(targetYear, now.getMonth(), 1);
+    const mTo = new Date(targetYear, now.getMonth() + 1, 0);
+    return {
+      startDate: formatLocalIsoDate(mFrom),
+      endDate: formatLocalIsoDate(mTo),
+    };
   } else if (period === "three_months") {
     from.setMonth(from.getMonth() - 2, 1);
   } else {
+    if (selectedYear !== "all" && /^\d{4}$/.test(selectedYear)) {
+      return {
+        startDate: `${selectedYear}-01-01`,
+        endDate: `${selectedYear}-12-31`,
+      };
+    }
     // Mysoft period endpoints reject empty dates; "all" means last 12 months.
     from.setFullYear(from.getFullYear() - 1);
     from.setDate(1);
@@ -287,6 +365,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   activeCompany,
   companyId,
   tenantIdentifierNumber,
+  invoices = [],
   onImportInvoice,
 }) => {
   const { theme } = useTheme();
@@ -328,7 +407,10 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   const [searchTerm, setSearchTerm] = useState(globalSearchTerm);
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [period, setPeriod] = useState<SyncPeriod>("this_month");
+  const [selectedYear, setSelectedYear] = useState<string>(() =>
+    String(new Date().getFullYear()),
+  );
+  const [period, setPeriod] = useState<SyncPeriod>("all");
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] =
     useState<MysoftEDocument | null>(null);
@@ -397,7 +479,11 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       setIsLoading(true);
       setError(null);
       try {
-        const range = getSyncRange(period);
+        // When period is "all" for inbox paging, cap API query range to 89 days to satisfy Mysoft's 90-day paging limit
+        const range =
+          normalizeDirection(requestedDirection) === "inbox" && period === "all"
+            ? getSyncRange("three_months", selectedYear)
+            : getSyncRange(period, selectedYear);
         const result = await listMysoftEDocuments(requestedDirection, {
           signal: controller.signal,
           tenantIdentifierNumber: activeTenantIdentifierNumber,
@@ -436,6 +522,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       activeManagedCompanyId,
       activeTenantIdentifierNumber,
       period,
+      selectedYear,
       tenants.length,
       tenantsLoading,
       family,
@@ -466,7 +553,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     try {
       const result = await syncMysoftEDocuments({
         direction: activeDirection,
-        ...getSyncRange(period),
+        ...getSyncRange(period, selectedYear),
         tenantIdentifierNumber: activeTenantIdentifierNumber,
         companyId: activeManagedCompanyId,
         family,
@@ -507,6 +594,10 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     setActionError(null);
     setIsRejecting(false);
     setRejectReason("");
+    if (document.source === "local" || asRecord(document).raw?.isLocalSalesInvoice) {
+      setIsDetailLoading(false);
+      return;
+    }
     setIsDetailLoading(true);
     try {
       const detailed = await getMysoftEDocument(documentIdentity(document), {
@@ -683,23 +774,146 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     }
   };
 
+  // Merge remote Mysoft documents with local Gelir Faturaları (when viewing Giden e-Faturalar) and persisted e-documents
+  const allDocuments = useMemo(() => {
+    const mergedMap = new Map<string, MysoftEDocument>();
+    const makeDedupeKey = (doc: MysoftEDocument): string => {
+      const cleanNo = String(documentNumber(doc) || "")
+        .replace(/\s*\(TASLAK\)\s*$/i, "")
+        .trim()
+        .toUpperCase();
+      if (cleanNo && cleanNo !== "-") return `NO:${cleanNo}`;
+      const idOrEttn = String(asRecord(doc).ettn || doc.id || "").trim().toUpperCase();
+      return `ID:${idOrEttn}`;
+    };
+
+    // 1. Add persisted e-documents matching direction & family
+    try {
+      const persisted = readPersistedEDocuments();
+      for (const doc of persisted) {
+        if (documentDirection(doc) !== activeDirection) continue;
+        const docFam = doc.family || "invoice";
+        if (docFam !== family) continue;
+        if (activeManagedCompanyId && doc.companyId && doc.companyId !== activeManagedCompanyId) {
+          continue;
+        }
+        mergedMap.set(makeDedupeKey(doc), doc);
+      }
+    } catch {}
+
+    // 2. Immediately include all Gelir Faturaları (sales invoices) in Giden e-Faturalar
+    if (activeDirection === "outbox" && !isDespatch && Array.isArray(invoices)) {
+      for (const inv of invoices) {
+        if (inv.type === "sales" && inv.docKind !== "receipt") {
+          const converted = invoiceToMysoftOutgoingEDocument(
+            inv,
+            companySettings,
+            activeManagedCompanyId,
+          );
+          mergedMap.set(makeDedupeKey(converted), converted);
+        }
+      }
+    }
+
+    // 3. Overlay remote Mysoft documents (authoritative ETTN & envelope status)
+    for (const doc of documents) {
+      mergedMap.set(makeDedupeKey(doc), doc);
+    }
+
+    return Array.from(mergedMap.values()).sort((a, b) => {
+      const da = String(documentDate(a) || "");
+      const db = String(documentDate(b) || "");
+      if (da !== db) return db.localeCompare(da);
+      return String(documentNumber(b) || "").localeCompare(String(documentNumber(a) || ""));
+    });
+  }, [documents, invoices, activeDirection, isDespatch, family, companySettings, activeManagedCompanyId]);
+
+  const availableYears = useMemo(() => {
+    const years = new Set<number>([
+      new Date().getFullYear(),
+      new Date().getFullYear() - 1,
+      new Date().getFullYear() - 2,
+    ]);
+    for (const doc of allDocuments) {
+      const { year } = parseDocYearMonth(documentDate(doc));
+      if (year) years.add(year);
+    }
+    return Array.from(years).sort((a, b) => b - a);
+  }, [allDocuments]);
+
+  // Counts per month (1..12) for the selected year
+  const monthCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    const targetYear =
+      selectedYear !== "all" && /^\d{4}$/.test(selectedYear)
+        ? parseInt(selectedYear, 10)
+        : null;
+    for (const doc of allDocuments) {
+      const { year, month } = parseDocYearMonth(documentDate(doc));
+      if (!month) continue;
+      if (targetYear !== null && year !== targetYear) continue;
+      counts[month] = (counts[month] || 0) + 1;
+    }
+    return counts;
+  }, [allDocuments, selectedYear]);
+
+  // Filter by selected year & monthly period option
+  const periodFilteredDocuments = useMemo(() => {
+    const now = new Date();
+    const targetYear =
+      selectedYear !== "all" && /^\d{4}$/.test(selectedYear)
+        ? parseInt(selectedYear, 10)
+        : null;
+
+    return allDocuments.filter((doc) => {
+      const { year, month } = parseDocYearMonth(documentDate(doc));
+      if (!year || !month) return true;
+
+      if (period.startsWith("month_")) {
+        const wantedMonth = parseInt(period.replace("month_", ""), 10);
+        if (targetYear !== null && year !== targetYear) return false;
+        return month === wantedMonth;
+      }
+
+      if (period === "this_month") {
+        const wantedYear = targetYear ?? now.getFullYear();
+        return year === wantedYear && month === now.getMonth() + 1;
+      }
+
+      if (period === "three_months") {
+        const range = getSyncRange("three_months", selectedYear);
+        const docIso = String(documentDate(doc)).slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(docIso)) {
+          return docIso >= range.startDate && docIso <= range.endDate;
+        }
+        return true;
+      }
+
+      // period === "all"
+      if (targetYear !== null) {
+        return year === targetYear;
+      }
+      return true;
+    });
+  }, [allDocuments, period, selectedYear]);
+
   const availableTypes = useMemo(
     () =>
       Array.from(
-        new Set(documents.map((document) => String(documentType(document)))),
+        new Set(periodFilteredDocuments.map((document) => String(documentType(document)))),
       ).sort(),
-    [documents],
+    [periodFilteredDocuments],
   );
   const availableStatuses = useMemo(
     () =>
       Array.from(
-        new Set(documents.map((document) => documentStatus(document))),
+        new Set(periodFilteredDocuments.map((document) => documentStatus(document))),
       ).sort(),
-    [documents],
+    [periodFilteredDocuments],
   );
   const filteredDocuments = useMemo(() => {
     const query = String(searchTerm || "").trim().toLocaleLowerCase("tr-TR");
-    return documents.filter((document) => {
+    return periodFilteredDocuments.filter((document) => {
       const data = asRecord(document);
       const haystack = [
         documentNumber(document),
@@ -718,25 +932,25 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         (typeFilter === "all" || String(documentType(document)) === typeFilter)
       );
     });
-  }, [documents, searchTerm, statusFilter, typeFilter]);
+  }, [periodFilteredDocuments, searchTerm, statusFilter, typeFilter]);
 
   const stats = useMemo(() => {
-    const accepted = documents.filter((document) => {
+    const accepted = periodFilteredDocuments.filter((document) => {
       const tone = resolveMysoftDocumentStatus(documentStatus(document)).tone;
       return tone === "success" || tone === "info";
     }).length;
-    const waiting = documents.filter((document) => {
+    const waiting = periodFilteredDocuments.filter((document) => {
       return resolveMysoftDocumentStatus(documentStatus(document)).tone === "warning";
     }).length;
-    const failed = documents.filter((document) => {
+    const failed = periodFilteredDocuments.filter((document) => {
       return resolveMysoftDocumentStatus(documentStatus(document)).tone === "danger";
     }).length;
-    const total = documents.reduce(
+    const total = periodFilteredDocuments.reduce(
       (sum, document) => sum + Number(documentAmount(document) || 0),
       0,
     );
-    return { total: documents.length, accepted, waiting, failed, amount: total };
-  }, [documents]);
+    return { total: periodFilteredDocuments.length, accepted, waiting, failed, amount: total };
+  }, [periodFilteredDocuments]);
 
   const getEDocumentsExportData = useCallback((): ExportData => {
     const isDespatch = family === "despatch";
@@ -800,7 +1014,9 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         description={
           isDespatch
             ? "Mysoft gelen ve giden e-irsaliye listesi. Belgeler seçilen müşterinin VKN’si ile çekilir."
-            : "Mysoft Gelen / Giden Fatura ekranı. Firma seçip senkronize edin; kabul, red, PDF/XML buradan."
+            : activeDirection === "outbox"
+              ? "Kesilen tüm gelir faturaları (e-Fatura, e-Arşiv ve GYR) bu ekrana otomatik aktarılır; aylık olarak filtreleyebilir ve Mysoft ile senkronize edebilirsiniz."
+              : "Mysoft Gelen / Giden Fatura ekranı. Aylık dönem seçip senkronize edin; kabul, red, PDF/XML buradan."
         }
         actions={
           <>
@@ -823,14 +1039,36 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
               </div>
             )}
             <select
-              aria-label="Senkronizasyon dönemi"
+              aria-label="Yıl seçimi"
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(event.target.value)}
+              className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-semibold text-slate-700 outline-none focus:border-[#0f6bae] shrink-0 cursor-pointer"
+            >
+              <option value="all">Tüm Yıllar</option>
+              {availableYears.map((yr) => (
+                <option key={yr} value={String(yr)}>
+                  {yr} Yılı
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Aylık dönem seçimi"
               value={period}
               onChange={(event) => setPeriod(event.target.value as SyncPeriod)}
-              className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-600 outline-none focus:border-[#0f6bae] shrink-0"
+              className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-semibold text-slate-700 outline-none focus:border-[#0f6bae] shrink-0 cursor-pointer"
             >
-              <option value="this_month">Bu ayı getir</option>
-              <option value="three_months">Son 3 ayı getir</option>
-              <option value="all">Son 12 ayı getir</option>
+              <option value="all">Tüm Aylar (Yıllık)</option>
+              <option value="this_month">
+                Bu Ay ({TURKISH_MONTHS[new Date().getMonth()]?.name})
+              </option>
+              <option value="three_months">Son 3 Ay</option>
+              <optgroup label="Aylık Seçenekler">
+                {TURKISH_MONTHS.map((m) => (
+                  <option key={m.id} value={`month_${m.id}`}>
+                    {m.name} {selectedYear !== "all" ? selectedYear : ""}
+                  </option>
+                ))}
+              </optgroup>
             </select>
             <button
               type="button"
@@ -1006,6 +1244,99 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         })}
       </div>
 
+      {/* Aylık Dönem Seçenekleri Barı (Gelen & Giden Faturalar İçin Aylık Filtre) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-700">
+              Aylık Fatura Dönemi:
+            </span>
+            <select
+              aria-label="Aylık filtre yılı"
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(event.target.value)}
+              className="h-8 bg-slate-50 border border-slate-200 rounded-lg px-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#0f6bae] cursor-pointer"
+            >
+              <option value="all">Tüm Yıllar</option>
+              {availableYears.map((yr) => (
+                <option key={yr} value={String(yr)}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPeriod("all")}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                period === "all"
+                  ? "bg-[#0f6bae] text-white shadow-2xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              Tüm Aylar
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod("this_month")}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                period === "this_month"
+                  ? "bg-[#0f6bae] text-white shadow-2xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              Bu Ay ({TURKISH_MONTHS[new Date().getMonth()]?.name})
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod("three_months")}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                period === "three_months"
+                  ? "bg-[#0f6bae] text-white shadow-2xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              Son 3 Ay
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-12 gap-1.5">
+          {TURKISH_MONTHS.map((m) => {
+            const monthKey = `month_${m.id}` as SyncPeriod;
+            const isSelected = period === monthKey;
+            const count = monthCounts[m.id] || 0;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setPeriod(monthKey)}
+                className={`px-2 py-1.5 rounded-xl border text-xs font-semibold flex items-center justify-between gap-1 transition-all cursor-pointer ${
+                  isSelected
+                    ? "bg-[#eaedff] border-[#0f6bae] text-[#0f6bae] font-bold shadow-2xs"
+                    : count > 0
+                      ? "bg-white border-slate-200 text-slate-800 hover:border-[#0f6bae]/40 hover:bg-slate-50"
+                      : "bg-slate-50/70 border-slate-100 text-slate-500 hover:bg-slate-100"
+                }`}
+              >
+                <span className="truncate">{m.name}</span>
+                {count > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                      isSelected
+                        ? "bg-[#0f6bae] text-white"
+                        : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
           <div className="relative flex-1 max-w-xl">
@@ -1059,7 +1390,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
             })}
           </div>
         )}
-        {isLoading ? (
+        {isLoading && allDocuments.length === 0 ? (
           <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin text-[#0f6bae]" />
             <p className="text-sm">Mysoft belgeleri yükleniyor...</p>
@@ -1070,23 +1401,35 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
               <FileText className="w-6 h-6 text-slate-400" />
             </div>
             <h3 className="text-sm font-semibold text-slate-800">
-              {documents.length === 0
+              {allDocuments.length === 0
                 ? "Henüz belge bulunamadı"
-                : "Filtreyle eşleşen belge yok"}
+                : "Seçilen ay veya filtreyle eşleşen belge yok"}
             </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm">
-              {documents.length === 0
+              {allDocuments.length === 0
                 ? "Önce iş ortaklarını çekin, birini seçin, sonra senkronize edin."
-                : "Arama veya filtreleri değiştirerek tekrar deneyin."}
+                : "Yukarıdan farklı bir ay (" +
+                  (period !== "all" ? "veya Tüm Aylar" : "veya yıl") +
+                  ") seçerek tekrar deneyin."}
             </p>
-            {documents.length === 0 && (
+            {period !== "all" ? (
               <button
                 type="button"
-                onClick={handleSync}
+                onClick={() => setPeriod("all")}
                 className="mt-4 px-3.5 py-2 rounded-lg bg-[#eaedff] text-[#0f6bae] text-xs font-semibold hover:bg-[#dae2fd] cursor-pointer"
               >
-                İlk senkronizasyonu başlat
+                Tüm Ayları Göster
               </button>
+            ) : (
+              allDocuments.length === 0 && (
+                <button
+                  type="button"
+                  onClick={handleSync}
+                  className="mt-4 px-3.5 py-2 rounded-lg bg-[#eaedff] text-[#0f6bae] text-xs font-semibold hover:bg-[#dae2fd] cursor-pointer"
+                >
+                  İlk senkronizasyonu başlat
+                </button>
+              )
             )}
           </div>
         ) : (

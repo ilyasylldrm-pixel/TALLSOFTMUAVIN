@@ -46,7 +46,7 @@ import {
   getNextMysoftInvoiceNumber,
   checkRecipientTaxpayerStatus,
 } from "../services/mysoftEDocumentService";
-import { parseSeparateAddressFields, appendCityDistrictToAddress } from "../utils/storage";
+import { parseSeparateAddressFields, appendCityDistrictToAddress, compileStructuredAddress } from "../utils/storage";
 import { Logo } from "./Logo";
 import { readAndOptimizeLogoFile, clampLogoScale } from "../utils/logoUpload";
 
@@ -100,10 +100,13 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   const [email, setEmail] = useState(initialCompany?.email || "");
   const [website, setWebsite] = useState(initialCompany?.website || "");
   const [address, setAddress] = useState(initialCompany?.address || "");
-  const [city, setCity] = useState(initialCompany?.city || "İstanbul");
+  const [city, setCity] = useState(initialCompany?.city || "");
   const [district, setDistrict] = useState(initialCompany?.district || "");
   const [neighborhood, setNeighborhood] = useState(
     initialCompany?.neighborhood || initialCompany?.addressDetails?.neighborhood || ""
+  );
+  const [street, setStreet] = useState(
+    initialCompany?.street || initialCompany?.addressDetails?.street || ""
   );
   const [isFetchingTaxpayerInfo, setIsFetchingTaxpayerInfo] = useState(false);
   const [taxpayerFetchFeedback, setTaxpayerFetchFeedback] = useState<string | null>(null);
@@ -405,6 +408,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
         if (parsed.city) setCity(parsed.city);
         if (parsed.district) setDistrict(parsed.district);
         if (parsed.neighborhood) setNeighborhood(parsed.neighborhood);
+        if (parsed.street) setStreet(parsed.street);
         if (parsed.address) setAddress(parsed.address);
         if (status.phone && !phone) setPhone(status.phone);
         if (status.email && !email) setEmail(status.email);
@@ -556,16 +560,24 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
       website: website.trim() || undefined,
-      address: address.trim() || undefined,
+      address:
+        compileStructuredAddress(neighborhood, street, district, city) ||
+        address.trim() ||
+        undefined,
       city: city.trim() || "İstanbul",
       district: district.trim() || undefined,
       neighborhood: neighborhood.trim() || undefined,
+      street: street.trim() || undefined,
       addressDetails: {
         country: "Türkiye",
         city: city.trim() || "İstanbul",
         district: district.trim() || "",
         neighborhood: neighborhood.trim() || "",
-        fullAddress: address.trim() || "",
+        street: street.trim() || "",
+        fullAddress:
+          compileStructuredAddress(neighborhood, street, district, city) ||
+          address.trim() ||
+          "",
       },
       defaultBankAccountName: defaultBankAccountName.trim() || (companyTitle.trim() || cleanName),
       defaultBankName: defaultBankName.trim() || undefined,
@@ -1226,19 +1238,51 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                 />
               </div>
 
-              <div>
+              <div className="sm:col-span-3">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  İl
+                  Tam Adres (Mahalle, Cadde-Sokak, İlçe, İl)
                 </label>
                 <input
                   type="text"
-                  placeholder="Örn: İstanbul"
-                  value={city}
+                  placeholder="Mahalle, Cadde-Sokak, İlçe, İl"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Mahalle
+                </label>
+                <input
+                  type="text"
+                  placeholder="Örn: Mecidiyeköy Mah."
+                  value={neighborhood}
                   onChange={(e) => {
-                    const nextCity = e.target.value;
-                    setCity(nextCity);
+                    const nextNh = e.target.value;
+                    setNeighborhood(nextNh);
                     setAddress((prev) =>
-                      appendCityDistrictToAddress(prev, nextCity, district, city, district)
+                      compileStructuredAddress(nextNh, street, district, city) || prev
+                    );
+                  }}
+                  className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Cadde - Sokak
+                </label>
+                <input
+                  type="text"
+                  placeholder="Örn: Büyükdere Cad. No: 195"
+                  value={street}
+                  onChange={(e) => {
+                    const nextSt = e.target.value;
+                    setStreet(nextSt);
+                    setAddress((prev) =>
+                      compileStructuredAddress(neighborhood, nextSt, district, city) || prev
                     );
                   }}
                   className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
@@ -1257,6 +1301,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                     const nextDist = e.target.value;
                     setDistrict(nextDist);
                     setAddress((prev) =>
+                      compileStructuredAddress(neighborhood, street, nextDist, city) ||
                       appendCityDistrictToAddress(prev, city, nextDist, city, district)
                     );
                   }}
@@ -1266,26 +1311,20 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Mahalle
+                  İl
                 </label>
                 <input
                   type="text"
-                  placeholder="Örn: Merkez Mahallesi"
-                  value={neighborhood}
-                  onChange={(e) => setNeighborhood(e.target.value)}
-                  className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
-                />
-              </div>
-
-              <div className="sm:col-span-4">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Açık Adres
-                </label>
-                <input
-                  type="text"
-                  placeholder="İl / İlçe, Mahalle, Cadde, Sokak, No"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Örn: İstanbul"
+                  value={city}
+                  onChange={(e) => {
+                    const nextCity = e.target.value;
+                    setCity(nextCity);
+                    setAddress((prev) =>
+                      compileStructuredAddress(neighborhood, street, district, nextCity) ||
+                      appendCityDistrictToAddress(prev, nextCity, district, city, district)
+                    );
+                  }}
                   className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
                 />
               </div>

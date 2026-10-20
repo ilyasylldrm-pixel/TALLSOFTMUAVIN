@@ -48,6 +48,7 @@ import {
 import { useTheme } from "../../context/ThemeContext";
 import { ModuleEntranceHeader } from "../common/ModuleEntranceHeader";
 import { FeasibilityCostDashboard } from "./FeasibilityCostDashboard";
+import { compileStructuredAddress, parseCommaAddressParts } from "../../utils/storage";
 
 interface ConstructionCostingModuleProps {
   projects: ConstructionProject[];
@@ -148,6 +149,12 @@ export const ConstructionCostingModule: React.FC<ConstructionCostingModuleProps>
   // Form State: New Project
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectLocation, setNewProjectLocation] = useState("");
+  const [projAddressParts, setProjAddressParts] = useState({
+    neighborhood: "",
+    street: "",
+    district: "",
+    city: "",
+  });
   const [newProjectType, setNewProjectType] = useState<
     "residential" | "commercial" | "villa" | "industrial" | "mixed"
   >("residential");
@@ -169,12 +176,21 @@ export const ConstructionCostingModule: React.FC<ConstructionCostingModuleProps>
     const newGross = Number(newConstructionArea) || 0;
     const newUnits = Number(newUnitCount) || 24;
     const newSellable = Number(newSellableArea) || Math.round(newGross * 0.75);
+    const compiledLoc =
+      compileStructuredAddress(
+        projAddressParts.neighborhood,
+        projAddressParts.street,
+        projAddressParts.district,
+        projAddressParts.city,
+      ) ||
+      newProjectLocation.trim() ||
+      "İstanbul";
 
     const newProj: ConstructionProject = {
       id: `proj_ins_${Date.now()}`,
       projectCode: `İNS-2026-${projectSeq}`,
       projectName: newProjectName.trim(),
-      location: newProjectLocation.trim() || "İstanbul",
+      location: compiledLoc,
       projectType: newProjectType,
       status: "planning",
       landAreaM2: Number(newLandArea) || 0,
@@ -207,6 +223,7 @@ export const ConstructionCostingModule: React.FC<ConstructionCostingModuleProps>
     // Reset Form
     setNewProjectName("");
     setNewProjectLocation("");
+    setProjAddressParts({ neighborhood: "", street: "", district: "", city: "" });
   };
 
   const handleUpdateProjectAreaPlanning = (
@@ -602,35 +619,107 @@ export const ConstructionCostingModule: React.FC<ConstructionCostingModuleProps>
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <label className="block font-semibold text-slate-700">
+                  Şantiye Adresi (Mahalle, Cadde-Sokak, İlçe, İl)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">1. Mahalle</label>
+                    <input
+                      type="text"
+                      placeholder="Örn: Moda Mah."
+                      value={projAddressParts.neighborhood}
+                      onChange={(e) => {
+                        const next = { ...projAddressParts, neighborhood: e.target.value };
+                        setProjAddressParts(next);
+                        setNewProjectLocation(compileStructuredAddress(next.neighborhood, next.street, next.district, next.city));
+                      }}
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 font-semibold text-slate-900 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">2. Cadde-Sokak / No</label>
+                    <input
+                      type="text"
+                      placeholder="Örn: Bahariye Cad. No:10"
+                      value={projAddressParts.street}
+                      onChange={(e) => {
+                        const next = { ...projAddressParts, street: e.target.value };
+                        setProjAddressParts(next);
+                        setNewProjectLocation(compileStructuredAddress(next.neighborhood, next.street, next.district, next.city));
+                      }}
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 font-semibold text-slate-900 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">3. İlçe</label>
+                    <input
+                      type="text"
+                      placeholder="Örn: Kadıköy"
+                      value={projAddressParts.district}
+                      onChange={(e) => {
+                        const next = { ...projAddressParts, district: e.target.value };
+                        setProjAddressParts(next);
+                        setNewProjectLocation(compileStructuredAddress(next.neighborhood, next.street, next.district, next.city));
+                      }}
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 font-semibold text-slate-900 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">4. İl</label>
+                    <input
+                      type="text"
+                      placeholder="Örn: İstanbul"
+                      value={projAddressParts.city}
+                      onChange={(e) => {
+                        const next = { ...projAddressParts, city: e.target.value };
+                        setProjAddressParts(next);
+                        setNewProjectLocation(compileStructuredAddress(next.neighborhood, next.street, next.district, next.city));
+                      }}
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 font-semibold text-slate-900 bg-white"
+                    />
+                  </div>
+                </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Lokasyon / Şehir - İlçe
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                    Tam Adres (Mahalle, Cadde-Sokak, İlçe, İl)
                   </label>
                   <input
                     type="text"
-                    placeholder="İstanbul / Kadıköy"
+                    placeholder="Mahalle, Cadde-Sokak, İlçe, İl"
                     value={newProjectLocation}
-                    onChange={(e) => setNewProjectLocation(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-900 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const parsed = parseCommaAddressParts(val);
+                      setProjAddressParts({
+                        neighborhood: parsed.neighborhood,
+                        street: parsed.street,
+                        district: parsed.district,
+                        city: parsed.city,
+                      });
+                      setNewProjectLocation(val);
+                    }}
+                    className="w-full px-2.5 py-2 rounded-lg border border-slate-200 font-semibold text-slate-900 bg-white"
                   />
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Proje Tipi
-                  </label>
-                  <select
-                    value={newProjectType}
-                    onChange={(e) => setNewProjectType(e.target.value as any)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-900 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all cursor-pointer"
-                  >
-                    <option value="residential">Konut / Rezidans</option>
-                    <option value="commercial">Ticari / İş Merkezi</option>
-                    <option value="villa">Müstakil Villa</option>
-                    <option value="industrial">Sanayi / Fabrika</option>
-                    <option value="mixed">Karma Proje</option>
-                  </select>
-                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Proje Tipi
+                </label>
+                <select
+                  value={newProjectType}
+                  onChange={(e) => setNewProjectType(e.target.value as any)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-900 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all cursor-pointer"
+                >
+                  <option value="residential">Konut / Rezidans</option>
+                  <option value="commercial">Ticari / İş Merkezi</option>
+                  <option value="villa">Müstakil Villa</option>
+                  <option value="industrial">Sanayi / Fabrika</option>
+                  <option value="mixed">Karma Proje</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

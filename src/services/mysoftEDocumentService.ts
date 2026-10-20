@@ -1,8 +1,10 @@
 import {
   CanonicalEDocumentDirection,
+  CompanySettings,
   EDocumentDirection,
   EDocumentStatus,
   EDocumentType,
+  Invoice,
   MysoftDocumentFamily,
   MysoftEDocument,
 } from "../types";
@@ -1309,7 +1311,7 @@ function documentStorageKey(document: Pick<MysoftEDocument, "direction" | "ettn"
 /** Read only the explicitly persisted e-document snapshot.  getStoredData()
  * supplies demo defaults for the rest of the application, which is useful to
  * render a first-run UI but is unsafe as a sync baseline. */
-function readPersistedEDocuments(): MysoftEDocument[] {
+export function readPersistedEDocuments(): MysoftEDocument[] {
   try {
     if (typeof localStorage === "undefined") return [];
     const stored = localStorage.getItem("muavin_e_documents");
@@ -1319,6 +1321,156 @@ function readPersistedEDocuments(): MysoftEDocument[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Convert a local sales (income) invoice into a MysoftEDocument record for
+ * immediate display in the "Giden e-Faturalar" (outgoing e-invoices) module.
+ */
+export function invoiceToMysoftOutgoingEDocument(
+  invoice: Invoice,
+  companySettings?: CompanySettings,
+  companyId?: string,
+): MysoftEDocument {
+  const cleanDocNo = String(invoice.invoiceNumber || "")
+    .replace(/\s*\(TASLAK\)\s*$/i, "")
+    .trim();
+  const isGyr = cleanDocNo.toUpperCase().startsWith("GYR") || invoice.eDocumentType === "paper";
+  const isEArsiv =
+    !isGyr &&
+    (invoice.eDocumentType === "e_arsiv" ||
+      invoice.invoiceScenario === "EARSIVFATURA" ||
+      cleanDocNo.toUpperCase().startsWith("EAR"));
+
+  const docTypeLabel = isGyr
+    ? "GYR (Gayriresmi)"
+    : isEArsiv
+      ? "e_arsiv"
+      : "e_fatura";
+
+  const statusInfo =
+    invoice.status === "draft"
+      ? { status: "draft" as const, label: "Taslak" }
+      : invoice.status === "cancelled"
+        ? { status: "cancelled" as const, label: "İptal edildi" }
+        : invoice.eDocumentEttn
+          ? { status: "sent" as const, label: "GİB'e gönderildi" }
+          : { status: "accepted" as const, label: "Onaylandı" };
+
+  const senderName =
+    companySettings?.companyTitle ||
+    companySettings?.companyName ||
+    invoice.branchName ||
+    "Firmamız";
+  const senderTaxNumber =
+    companySettings?.taxNumber ||
+    companySettings?.vknTckn ||
+    companySettings?.tenantIdentifierNumber ||
+    "";
+  const ettnVal = invoice.eDocumentEttn || invoice.id;
+  const issueDateStr = invoice.issueDate || invoice.createdAt || new Date().toISOString().slice(0, 10);
+
+  return {
+    id: invoice.id,
+    ...(companyId ? { companyId } : {}),
+    family: "invoice",
+    direction: "outbox",
+    canonicalDirection: "outgoing",
+    documentType: docTypeLabel,
+    ettn: ettnVal,
+    documentNo: invoice.invoiceNumber,
+    number: invoice.invoiceNumber,
+    documentNumber: invoice.invoiceNumber,
+    issueDate: issueDateStr,
+    date: issueDateStr,
+    dueDate: invoice.dueDate || issueDateStr,
+    status: statusInfo.status,
+    statusText: statusInfo.label,
+    statusLabel: statusInfo.label,
+    senderName,
+    senderTaxNumber,
+    receiverName: invoice.contactName,
+    receiverTaxNumber: invoice.taxNumber || "",
+    accountName: invoice.contactName,
+    taxNumber: invoice.taxNumber || "",
+    partyName: invoice.contactName,
+    partyTaxNumber: invoice.taxNumber || "",
+    subtotal: invoice.subtotal,
+    vatTotal: invoice.payableVat ?? invoice.totalVat,
+    grandTotal: invoice.payableAmount ?? invoice.grandTotal,
+    amount: invoice.payableAmount ?? invoice.grandTotal,
+    currency: invoice.currency || "TRY",
+    profile:
+      invoice.invoiceScenario ||
+      (isEArsiv ? "EARSIVFATURA" : "TICARIFATURA"),
+    source: invoice.eDocumentEttn ? "mysoft" : "local",
+    syncedAt: new Date().toISOString(),
+    createdAt: invoice.createdAt || issueDateStr,
+    updatedAt: new Date().toISOString(),
+    items: invoice.items as unknown[],
+    lines: invoice.items as unknown[],
+    raw: {
+      ...invoice,
+      isLocalSalesInvoice: true,
+    },
+  };
+}
+
+/**
+ * Immediately transfer/upsert a sales invoice into persisted outgoing e-documents
+ * so it appears right away in the "Giden e-Faturalar" section.
+ */
+export function upsertOutgoingEDocumentFromSalesInvoice(
+  invoice: Invoice,
+  companySettings?: CompanySettings,
+  companyId?: string,
+): MysoftEDocument | null {
+  if (invoice.type !== "sales" || invoice.docKind === "receipt") {
+    return null;
+  }
+  const outgoingDoc = invoiceToMysoftOutgoingEDocument(invoice, companySettings, companyId);
+  try {
+    const existing = readPersistedEDocuments();
+    const cleanTargetNo = String(invoice.invoiceNumber || "")
+      .replace(/\s*\(TASLAK\)\s*$/i, "")
+      .trim()
+      .toUpperCase();
+    const filtered = existing.filter((doc) => {
+      if (canonicalDirection(doc.direction) !== "outgoing") return true;
+      if (doc.id === invoice.id) return false;
+      if (invoice.eDocumentEttn && doc.ettn === invoice.eDocumentEttn) return false;
+      const docNo = String(doc.documentNo || doc.documentNumber || "")
+        .replace(/\s*\(TASLAK\)\s*$/i, "")
+        .trim()
+        .toUpperCase();
+      if (cleanTargetNo && docNo === cleanTargetNo && (!companyId || !doc.companyId || doc.companyId === companyId)) {
+        return false;
+      }
+      return true;
+    });
+    const updated = [outgoingDoc, ...filtered];
+    saveStoredData("EDOCUMENTS", updated);
+  } catch (err) {
+    console.warn("Failed to persist outgoing e-document from sales invoice:", err);
+  }
+  return outgoingDoc;
+}
+
+export function removeOutgoingEDocumentForInvoice(
+  invoiceId: string,
+  ettn?: string,
+): void {
+  try {
+    const existing = readPersistedEDocuments();
+    const next = existing.filter((doc) => {
+      if (doc.id === invoiceId) return false;
+      if (ettn && doc.ettn === ettn) return false;
+      return true;
+    });
+    if (next.length !== existing.length) {
+      saveStoredData("EDOCUMENTS", next);
+    }
+  } catch {}
 }
 
 function makeQuery(params: Record<string, unknown>): string {

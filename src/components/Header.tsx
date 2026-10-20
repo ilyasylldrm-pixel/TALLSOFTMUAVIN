@@ -14,8 +14,14 @@ import {
   UploadCloud,
   ArrowLeft,
   ArrowRight,
+  Bell,
+  Download,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import { Account, CompanyItem, isAdminOrSysAdmin } from "../types";
+import { ManualBackupStatus } from "../utils/storage";
 import { UserProfile } from "./AuthModal";
 import { useTheme } from "../context/ThemeContext";
 import { Logo } from "./Logo";
@@ -45,6 +51,10 @@ interface HeaderProps {
   activeCompanyId?: string;
   onSelectCompany?: (id: string) => void;
   onOpenNewCompanyModal?: () => void;
+  backupStatus?: ManualBackupStatus;
+  onTriggerManualBackup?: () => void;
+  onSnoozeBackupReminder?: () => void;
+  onOpenBackupSettings?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -67,11 +77,17 @@ export const Header: React.FC<HeaderProps> = ({
   activeCompanyId,
   onSelectCompany,
   onOpenNewCompanyModal,
+  backupStatus,
+  onTriggerManualBackup,
+  onSnoozeBackupReminder,
+  onOpenBackupSettings,
 }) => {
   const { theme } = useTheme();
   const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
+  const [isBackupPopoverOpen, setIsBackupPopoverOpen] = useState(false);
   const [navState, setNavState] = useState({ canGoBack: false, canGoForward: false });
   const companyDropdownRef = useRef<HTMLDivElement>(null);
+  const backupPopoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return subscribeBrowserNav((snap) => {
@@ -83,6 +99,9 @@ export const Header: React.FC<HeaderProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       if (companyDropdownRef.current && !companyDropdownRef.current.contains(e.target as Node)) {
         setIsCompanyDropdownOpen(false);
+      }
+      if (backupPopoverRef.current && !backupPopoverRef.current.contains(e.target as Node)) {
+        setIsBackupPopoverOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -368,6 +387,146 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden lg:inline">Al, Gönder & Yayınla</span>
             <span className="lg:hidden">Yayınla</span>
           </button>
+        )}
+
+        {/* Automated 7-Day Manual Backup Notification Center */}
+        {backupStatus && (
+          <div className="relative" ref={backupPopoverRef}>
+            <button
+              type="button"
+              onClick={() => setIsBackupPopoverOpen((prev) => !prev)}
+              className={`relative p-2 rounded border shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                backupStatus.isOverdue
+                  ? "bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700 dark:bg-rose-950/50 dark:border-rose-800 dark:text-rose-300"
+                  : backupStatus.isApproaching
+                  ? "bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-700 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-300"
+                  : "hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+              style={
+                !backupStatus.isOverdue && !backupStatus.isApproaching
+                  ? {
+                      backgroundColor: theme.cardBg,
+                      borderColor: theme.cardBorder,
+                      color: theme.headerText,
+                    }
+                  : undefined
+              }
+              title={
+                backupStatus.isOverdue
+                  ? "Manuel Veri Yedekleme Uyarısı: Son 7 gündür yedek alınmadı"
+                  : "Veri Yedekleme ve Bildirim Merkezi"
+              }
+            >
+              <Bell className="w-4 h-4 shrink-0" />
+              {backupStatus.isOverdue && (
+                <span className="text-[11px] font-bold font-mono tabular-nums px-1.5 py-0.2 rounded bg-rose-600 text-white">
+                  1
+                </span>
+              )}
+            </button>
+
+            {isBackupPopoverOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl p-4 z-50 space-y-3 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                  <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100">
+                    {backupStatus.isOverdue ? (
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    ) : backupStatus.isApproaching ? (
+                      <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    )}
+                    <span>Otomatik Yedekleme Bildirim Merkezi</span>
+                  </div>
+                  <span className="font-mono tabular-nums text-[11px] text-slate-500">
+                    Periyot: {backupStatus.thresholdDays} Gün
+                  </span>
+                </div>
+
+                <div
+                  className={`p-3 rounded-lg border space-y-1.5 ${
+                    backupStatus.isOverdue
+                      ? "bg-rose-50/70 border-rose-200 text-rose-950 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-200"
+                      : backupStatus.isApproaching
+                      ? "bg-amber-50/70 border-amber-200 text-amber-950 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-200"
+                      : "bg-emerald-50/70 border-emerald-200 text-emerald-950 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-200"
+                  }`}
+                >
+                  <div className="font-bold flex items-center justify-between">
+                    <span>
+                      {backupStatus.isOverdue
+                        ? "Manuel Veri Yedeği Gerekli"
+                        : backupStatus.isApproaching
+                        ? "Yedekleme Süresi Yaklaşıyor"
+                        : "Manuel Yedekleme Güncel"}
+                    </span>
+                    <span className="font-mono tabular-nums text-[11px]">
+                      {backupStatus.daysSinceLastBackup !== null
+                        ? `${backupStatus.daysSinceLastBackup} gün önce`
+                        : "Hiç alınmadı"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed opacity-90">
+                    {backupStatus.isOverdue
+                      ? backupStatus.lastBackupAt
+                        ? `Son manuel veri yedeğinizin üzerinden ${backupStatus.daysSinceLastBackup} gün geçti (${new Date(
+                            backupStatus.lastBackupAt
+                          ).toLocaleString("tr-TR")}). Veri güvenliğiniz için lütfen manuel JSON yedeğinizi indirin.`
+                        : `Son ${backupStatus.thresholdDays} gün içinde hiç manuel veri yedeği alınmadı. Veri kaybı riskine karşı lütfen şimdi manuel yedek oluşturun.`
+                      : `Son manuel yedeğiniz ${
+                          backupStatus.lastBackupAt
+                            ? new Date(backupStatus.lastBackupAt).toLocaleString("tr-TR")
+                            : "yakın zamanda"
+                        } tarihinde alındı.`}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  {onTriggerManualBackup && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onTriggerManualBackup();
+                        setIsBackupPopoverOpen(false);
+                      }}
+                      className="flex-1 py-2 px-3 bg-[#0f6bae] hover:bg-[#005289] text-white font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Şimdi Manuel Yedek Al</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsBackupPopoverOpen(false);
+                      if (onOpenBackupSettings) {
+                        onOpenBackupSettings();
+                      } else {
+                        onSelectTab("company_settings");
+                      }
+                    }}
+                    className="py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    Yedek Ayarları
+                  </button>
+                </div>
+
+                {backupStatus.isOverdue && !backupStatus.isSnoozed && onSnoozeBackupReminder && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSnoozeBackupReminder();
+                      setIsBackupPopoverOpen(false);
+                    }}
+                    className="w-full py-1.5 text-[11px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 text-center transition-colors cursor-pointer"
+                  >
+                    Bildirim çubuğunu 24 saatliğine ertele
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* USER AUTHENTICATION BUTTONS / PROFILE STATE */}

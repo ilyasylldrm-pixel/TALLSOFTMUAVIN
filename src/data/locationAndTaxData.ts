@@ -1,149 +1,110 @@
-// Turkey Location Data (İl, İlçe, Mahalle) and Tax Offices (Vergi Daireleri)
-import {
-  ALL_81_PROVINCES_AND_DISTRICTS,
-  COMPREHENSIVE_STREET_DATABASE,
-  ProvinceDistricts
-} from "./allTurkeyDistricts";
+// Lightweight helper for deriving 2-digit plate code in accounting codes (e.g. 120.34.VKN)
+// Selectable province, district, and neighborhood lists have been removed.
 
-export interface District {
-  name: string;
-  neighborhoods: string[];
+const PLATE_CODE_MAP: Record<string, string> = {
+  adana: "01",
+  adiyaman: "02",
+  afyonkarahisar: "03",
+  afyon: "03",
+  agri: "04",
+  amasya: "05",
+  ankara: "06",
+  antalya: "07",
+  artvin: "08",
+  aydin: "09",
+  balikesir: "10",
+  bilecik: "11",
+  bingol: "12",
+  bitlis: "13",
+  bolu: "14",
+  burdur: "15",
+  bursa: "16",
+  canakkale: "17",
+  cankiri: "18",
+  corum: "19",
+  denizli: "20",
+  diyarbakir: "21",
+  edirne: "22",
+  elazig: "23",
+  erzincan: "24",
+  erzurum: "25",
+  eskisehir: "26",
+  gaziantep: "27",
+  giresun: "28",
+  gumushane: "29",
+  hakkari: "30",
+  hatay: "31",
+  isparta: "32",
+  mersin: "33",
+  icel: "33",
+  istanbul: "34",
+  izmir: "35",
+  kars: "36",
+  kastamonu: "37",
+  kayseri: "38",
+  kirklareli: "39",
+  kirsehir: "40",
+  kocaeli: "41",
+  konya: "42",
+  kutahya: "43",
+  malatya: "44",
+  manisa: "45",
+  kahramanmaras: "46",
+  mardin: "47",
+  mugla: "48",
+  mus: "49",
+  nevsehir: "50",
+  nigde: "51",
+  ordu: "52",
+  rize: "53",
+  sakarya: "54",
+  samsun: "55",
+  siirt: "56",
+  sinop: "57",
+  sivas: "58",
+  tekirdag: "59",
+  tokat: "60",
+  trabzon: "61",
+  tunceli: "62",
+  sanliurfa: "63",
+  urfa: "63",
+  usak: "64",
+  van: "65",
+  yozgat: "66",
+  zonguldak: "67",
+  aksaray: "68",
+  bayburt: "69",
+  karaman: "70",
+  kirikkale: "71",
+  batman: "72",
+  sirnak: "73",
+  bartin: "74",
+  ardahan: "75",
+  igdir: "76",
+  yalova: "77",
+  karabuk: "78",
+  kilis: "79",
+  osmaniye: "80",
+  duzce: "81",
+};
+
+function normalizeAscii(val?: string): string {
+  return String(val || "")
+    .trim()
+    .toLocaleLowerCase("tr-TR")
+    .replace(/ı/g, "i")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c");
 }
 
-export interface Province {
-  code: string; // Plaka kodu ör: "34"
-  name: string;
-  districts: District[];
-  taxOffices: string[];
-}
-
-export { ALL_81_PROVINCES_AND_DISTRICTS, COMPREHENSIVE_STREET_DATABASE };
-
-// Build TURKEY_PROVINCES_DATA with all 81 provinces and 973 districts
-export const TURKEY_PROVINCES_DATA: Province[] = ALL_81_PROVINCES_AND_DISTRICTS.map((item) => ({
-  code: item.code,
-  name: item.name,
-  taxOffices: item.taxOffices,
-  districts: item.districts.map((dName) => ({
-    name: dName,
-    neighborhoods: item.sampleNeighborhoods || [
-      "Merkez Mahallesi",
-      "Cumhuriyet Mahallesi",
-      "Atatürk Mahallesi",
-      "Fatih Mahallesi",
-      "Yeni Mahalle",
-      "Zafer Mahallesi",
-      "İstiklal Mahallesi",
-      "Hürriyet Mahallesi",
-      "Sanayi Mahallesi",
-      "Bahçelievler Mahallesi"
-    ]
-  }))
-}));
-
-// Complete list of 81 Provinces with plate codes
-export const ALL_81_PROVINCES: { code: string; name: string }[] = ALL_81_PROVINCES_AND_DISTRICTS.map((p) => ({
-  code: p.code,
-  name: p.name
-}));
-
-/**
- * Get 2-digit plate code for a province / city name
- * Örnek: "İstanbul" -> "34", "Ankara" -> "06", "İzmir" -> "35"
- */
 export function getProvincePlateCode(cityName?: string): string {
-  const clean = String(cityName || "").trim();
+  const clean = normalizeAscii(cityName);
   if (!clean) return "34";
-  const found = ALL_81_PROVINCES_AND_DISTRICTS.find(
-    (p) =>
-      p.name.toLocaleLowerCase("tr-TR") === clean.toLocaleLowerCase("tr-TR") ||
-      p.name.toLowerCase() === clean.toLowerCase() ||
-      p.code === clean
-  );
-  if (found) return found.code;
+  if (PLATE_CODE_MAP[clean]) return PLATE_CODE_MAP[clean];
   const match = clean.match(/^\d{2}/);
   if (match) return match[0];
   return "34";
-}
-
-// Common Street & Avenue Name Types in Turkey
-export const COMMON_STREET_TYPES = COMPREHENSIVE_STREET_DATABASE;
-
-/**
- * Get Districts for a given city/province
- */
-export function getDistrictsForProvince(cityName?: string): string[] {
-  const clean = String(cityName || "").trim().toLocaleLowerCase("tr-TR");
-  if (!clean) return [];
-  const prov = ALL_81_PROVINCES_AND_DISTRICTS.find(
-    (p) =>
-      p.name.toLocaleLowerCase("tr-TR") === clean ||
-      p.name.toLowerCase() === clean.toLowerCase() ||
-      p.code === clean
-  );
-  if (prov && prov.districts.length > 0) {
-    return prov.districts;
-  }
-  return ["Merkez", "Sanayi", "Organize Sanayi", "Doğu", "Batı", "Kuzey", "Güney", "Yenişehir"];
-}
-
-/**
- * Get Neighborhoods for a given city & district
- */
-export function getNeighborhoodsForDistrict(cityName?: string, districtName?: string): string[] {
-  const cleanCity = String(cityName || "").trim().toLocaleLowerCase("tr-TR");
-  if (!cleanCity) return [];
-  const prov = ALL_81_PROVINCES_AND_DISTRICTS.find(
-    (p) =>
-      p.name.toLocaleLowerCase("tr-TR") === cleanCity ||
-      p.name.toLowerCase() === cleanCity.toLowerCase() ||
-      p.code === cleanCity
-  );
-  if (prov) {
-    const list = prov.sampleNeighborhoods || [];
-    if (list.length > 0) {
-      return list;
-    }
-  }
-  return [
-    "Merkez Mahallesi",
-    "Atatürk Mahallesi",
-    "Cumhuriyet Mahallesi",
-    "Fatih Mahallesi",
-    "Yeni Mahalle",
-    "Zafer Mahallesi",
-    "İstiklal Mahallesi",
-    "Hürriyet Mahallesi",
-    "Sanayi Mahallesi",
-    "Bahçelievler Mahallesi",
-    "Çarşı Mahallesi",
-    "Gazi Mahallesi",
-    "Mimar Sinan Mahallesi",
-    "İnönü Mahallesi"
-  ];
-}
-
-/**
- * Get Tax Offices (Vergi Daireleri) for a given city
- */
-export function getTaxOfficesForProvince(cityName?: string): string[] {
-  const cleanCity = String(cityName || "").trim().toLocaleLowerCase("tr-TR");
-  if (!cleanCity) return [];
-  const prov = ALL_81_PROVINCES_AND_DISTRICTS.find(
-    (p) =>
-      p.name.toLocaleLowerCase("tr-TR") === cleanCity ||
-      p.name.toLowerCase() === cleanCity.toLowerCase() ||
-      p.code === cleanCity
-  );
-  if (prov && prov.taxOffices.length > 0) {
-    return Array.from(new Set(prov.taxOffices));
-  }
-  return [
-    `${cityName} Vergi Dairesi Mdr.`,
-    `${cityName} İhtisas Vergi Dairesi`,
-    `${cityName} Kurumlar Vergi Dairesi`,
-    `${cityName} Birlik Vergi Dairesi`,
-    `${cityName} Çarşı Vergi Dairesi`,
-    `${cityName} Sanayi Vergi Dairesi`
-  ];
 }

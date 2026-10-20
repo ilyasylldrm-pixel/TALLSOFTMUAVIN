@@ -2013,9 +2013,7 @@ app.post("/api/cloud-sync/company", (req, res) => {
       transactions: data.transactions,
       contacts: data.contacts,
       accounts: data.accounts,
-    }).catch((dbErr) => {
-      console.warn("PostgreSQL background sync warning:", dbErr?.message);
-    });
+    }).catch(() => {});
 
     res.json({
       success: true,
@@ -2125,8 +2123,7 @@ app.get("/api/db/state", requireAuth, async (req: AuthRequest, res) => {
       settings: fallbackCompanyData.settings || null,
       updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || new Date().toISOString(),
     });
-  } catch (error: any) {
-    console.warn("PostgreSQL state fetch fallback active:", error?.message);
+  } catch {
     res.json({
       success: true,
       userId: uid,
@@ -2182,8 +2179,7 @@ app.post("/api/db/sync", requireAuth, async (req: AuthRequest, res) => {
       accounts: mergedSlice.accounts,
     });
     res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
-  } catch (error: any) {
-    console.warn("PostgreSQL batch sync fallback active:", error?.message);
+  } catch {
     res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
   }
 });

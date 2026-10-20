@@ -58,6 +58,7 @@ import {
 } from "../../types";
 import { ApplianceCalendarView } from "./ApplianceCalendarView";
 import { ServiceInvoicingModal } from "../ServiceInvoicingModal";
+import { compileStructuredAddress, parseCommaAddressParts } from "../../utils/storage";
 import { ServiceWhatsAppModal } from "../ServiceWhatsAppModal";
 import { ServiceDeliveryModal } from "../ServiceDeliveryModal";
 import { DetailPageLayout } from "../common/DetailPageLayout";
@@ -480,9 +481,22 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
     return { total, onTheWay, partsPending, completed, activeRepair, totalRevenue };
   }, [applianceServices]);
 
+  const [srvAddressParts, setSrvAddressParts] = useState({
+    neighborhood: "",
+    street: "",
+    district: "",
+    city: "İstanbul",
+  });
+
   // Open Create Modal
   const handleOpenCreateModal = () => {
     const newNo = `SRV-${new Date().getFullYear()}-${String(applianceServices.length + 101).padStart(4, "0")}`;
+    setSrvAddressParts({
+      neighborhood: "",
+      street: "",
+      district: "",
+      city: "İstanbul",
+    });
     setFormData({
       serviceNo: newNo,
       category: "hvac_climate",
@@ -527,6 +541,12 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   // Open Create Modal with specific Date pre-filled (e.g. from calendar cell click)
   const handleOpenCreateModalWithDate = (dateStr: string) => {
     const newNo = `SRV-${new Date().getFullYear()}-${String(applianceServices.length + 101).padStart(4, "0")}`;
+    setSrvAddressParts({
+      neighborhood: "",
+      street: "",
+      district: "",
+      city: "İstanbul",
+    });
     setFormData({
       serviceNo: newNo,
       category: "hvac_climate",
@@ -571,7 +591,23 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   // Open Edit Modal
   const handleOpenEditModal = (record: ApplianceServiceRecord) => {
     setEditingRecord(record);
-    setFormData({ ...record });
+    const parsed = parseCommaAddressParts(record.serviceAddress || "");
+    const nVal = parsed.neighborhood || "";
+    const sVal = parsed.street || "";
+    const dVal = record.district || parsed.district || "";
+    const cVal = record.city || parsed.city || "İstanbul";
+    setSrvAddressParts({
+      neighborhood: nVal,
+      street: sVal,
+      district: dVal,
+      city: cVal,
+    });
+    setFormData({
+      ...record,
+      district: dVal,
+      city: cVal,
+      serviceAddress: compileStructuredAddress(nVal, sVal, dVal, cVal) || record.serviceAddress || "",
+    });
     setIsModalOpen(true);
   };
 
@@ -670,6 +706,15 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
     }
 
     const calc = recalculateTotals(formData.parts || [], formData.labors || [], formData.discountAmount || 0);
+    const compiledAddress =
+      compileStructuredAddress(
+        srvAddressParts.neighborhood,
+        srvAddressParts.street,
+        srvAddressParts.district,
+        srvAddressParts.city,
+      ) ||
+      formData.serviceAddress ||
+      "";
 
     if (editingRecord) {
       // Update
@@ -678,6 +723,9 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
           ? ({
               ...item,
               ...formData,
+              serviceAddress: compiledAddress,
+              district: srvAddressParts.district || formData.district || "",
+              city: srvAddressParts.city || formData.city || "İstanbul",
               ...calc,
               updatedAt: new Date().toISOString(),
             } as ApplianceServiceRecord)
@@ -698,9 +746,9 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
         contactName: formData.contactName || "",
         contactPhone: formData.contactPhone || "",
         contactEmail: formData.contactEmail || "",
-        serviceAddress: formData.serviceAddress || "",
-        city: formData.city || "İstanbul",
-        district: formData.district || "",
+        serviceAddress: compiledAddress,
+        city: srvAddressParts.city || formData.city || "İstanbul",
+        district: srvAddressParts.district || formData.district || "",
         appointmentDate: formData.appointmentDate,
         appointmentTimeSlot: formData.appointmentTimeSlot,
         entryDate: formData.entryDate || new Date().toISOString().split("T")[0],
@@ -1707,26 +1755,126 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-700 mb-1">Montaj / Hizmet Adresi</label>
-                    <input
-                      type="text"
-                      value={formData.serviceAddress}
-                      onChange={(e) => setFormData({ ...formData, serviceAddress: e.target.value })}
-                      placeholder="Açık adres, bina, daire vb."
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                    />
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5">
+                  <label className="block font-bold text-slate-700 text-xs">
+                    Montaj / Hizmet Adresi (Mahalle, Cadde-Sokak, İlçe, İl)
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">1. Mahalle</label>
+                      <input
+                        type="text"
+                        value={srvAddressParts.neighborhood}
+                        onChange={(e) => {
+                          const next = { ...srvAddressParts, neighborhood: e.target.value };
+                          setSrvAddressParts(next);
+                          setFormData({
+                            ...formData,
+                            district: next.district,
+                            city: next.city,
+                            serviceAddress: compileStructuredAddress(next.neighborhood, next.street, next.district, next.city),
+                          });
+                        }}
+                        placeholder="Örn: Barbaros Mah."
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">2. Cadde-Sokak / No</label>
+                      <input
+                        type="text"
+                        value={srvAddressParts.street}
+                        onChange={(e) => {
+                          const next = { ...srvAddressParts, street: e.target.value };
+                          setSrvAddressParts(next);
+                          setFormData({
+                            ...formData,
+                            district: next.district,
+                            city: next.city,
+                            serviceAddress: compileStructuredAddress(next.neighborhood, next.street, next.district, next.city),
+                          });
+                        }}
+                        placeholder="Örn: Atatürk Cad. No:14 D:5"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">3. İlçe</label>
+                      <input
+                        type="text"
+                        value={srvAddressParts.district}
+                        onChange={(e) => {
+                          const next = { ...srvAddressParts, district: e.target.value };
+                          setSrvAddressParts(next);
+                          setFormData({
+                            ...formData,
+                            district: next.district,
+                            city: next.city,
+                            serviceAddress: compileStructuredAddress(next.neighborhood, next.street, next.district, next.city),
+                          });
+                        }}
+                        placeholder="Örn: Kadıköy"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">4. İl</label>
+                      <input
+                        type="text"
+                        value={srvAddressParts.city}
+                        onChange={(e) => {
+                          const next = { ...srvAddressParts, city: e.target.value };
+                          setSrvAddressParts(next);
+                          setFormData({
+                            ...formData,
+                            district: next.district,
+                            city: next.city,
+                            serviceAddress: compileStructuredAddress(next.neighborhood, next.street, next.district, next.city),
+                          });
+                        }}
+                        placeholder="Örn: İstanbul"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Atanan Teknisyen</label>
-                    <input
-                      type="text"
-                      value={formData.assignedTechnician}
-                      onChange={(e) => setFormData({ ...formData, assignedTechnician: e.target.value })}
-                      placeholder="Teknisyen adı"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-[#8252F6]"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        Kaydedilecek Tam Adres (Mahalle, Cadde-Sokak, İlçe, İl)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.serviceAddress}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const parsed = parseCommaAddressParts(val);
+                          setSrvAddressParts({
+                            neighborhood: parsed.neighborhood,
+                            street: parsed.street,
+                            district: parsed.district,
+                            city: parsed.city,
+                          });
+                          setFormData({
+                            ...formData,
+                            district: parsed.district || formData.district,
+                            city: parsed.city || formData.city,
+                            serviceAddress: val,
+                          });
+                        }}
+                        placeholder="Mahalle, Cadde-Sokak, İlçe, İl..."
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Atanan Teknisyen</label>
+                      <input
+                        type="text"
+                        value={formData.assignedTechnician}
+                        onChange={(e) => setFormData({ ...formData, assignedTechnician: e.target.value })}
+                        placeholder="Teknisyen adı"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

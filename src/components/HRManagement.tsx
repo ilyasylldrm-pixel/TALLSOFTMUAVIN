@@ -94,6 +94,8 @@ import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import {
   loadPayrollCustomizationsStorage,
   savePayrollCustomizationsStorage,
+  compileStructuredAddress,
+  parseCommaAddressParts,
 } from "../utils/storage";
 import { getHrCompanyTitle } from "../utils/puantajUtils";
 
@@ -898,6 +900,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
     usedAnnualLeave: 0,
     notes: "",
   });
+  const [empAddressParts, setEmpAddressParts] = useState({
+    neighborhood: "",
+    street: "",
+    district: "",
+    city: "",
+  });
 
   const [newLeaveForm, setNewLeaveForm] = useState<Partial<LeaveRequest>>({
     employeeId: employees[0]?.id || "",
@@ -1284,6 +1292,12 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       usedAnnualLeave: 0,
       notes: "",
     });
+    setEmpAddressParts({
+      neighborhood: "",
+      street: "",
+      district: "",
+      city: "",
+    });
     setIsAddEmployeeOpen(true);
   };
 
@@ -1327,6 +1341,13 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       projectId: emp.projectId || "",
       projectName: emp.projectName || "",
     });
+    const parsedAddr = parseCommaAddressParts(emp.homeAddress || "");
+    setEmpAddressParts({
+      neighborhood: parsedAddr.neighborhood || "",
+      street: parsedAddr.street || "",
+      district: parsedAddr.district || "",
+      city: parsedAddr.city || "",
+    });
     setIsAddEmployeeOpen(true);
   };
 
@@ -1351,7 +1372,15 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         terminationCode: newEmpForm.terminationCode || undefined,
         terminationReason: newEmpForm.terminationReason || undefined,
         birthDate: newEmpForm.birthDate || undefined,
-        homeAddress: newEmpForm.homeAddress || undefined,
+        homeAddress:
+          compileStructuredAddress(
+            empAddressParts.neighborhood,
+            empAddressParts.street,
+            empAddressParts.district,
+            empAddressParts.city,
+          ) ||
+          newEmpForm.homeAddress ||
+          undefined,
         photoUrl: newEmpForm.photoUrl !== undefined ? newEmpForm.photoUrl : editingEmployee.photoUrl,
         phone: newEmpForm.phone || "",
         email: newEmpForm.email || "",
@@ -1396,7 +1425,15 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         terminationCode: newEmpForm.terminationCode || undefined,
         terminationReason: newEmpForm.terminationReason || undefined,
         birthDate: newEmpForm.birthDate || undefined,
-        homeAddress: newEmpForm.homeAddress || undefined,
+        homeAddress:
+          compileStructuredAddress(
+            empAddressParts.neighborhood,
+            empAddressParts.street,
+            empAddressParts.district,
+            empAddressParts.city,
+          ) ||
+          newEmpForm.homeAddress ||
+          undefined,
         photoUrl: newEmpForm.photoUrl || undefined,
         phone: newEmpForm.phone || "",
         email: newEmpForm.email || "",
@@ -2162,16 +2199,103 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                   )}
                 </div>
 
-                {/* Home Address */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Ev / İkametgah Adresi</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Mahalle, cadde, sokak, dış kapı/daire no, ilçe ve il bilgisi..."
-                    value={newEmpForm.homeAddress}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, homeAddress: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-medium text-slate-900"
-                  />
+                {/* Home Address (Mahalle, Cadde-Sokak, İlçe, İl) */}
+                <div className="sm:col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Ev / İkametgah Adresi (Mahalle, Cadde-Sokak, İlçe, İl)
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">1. Mahalle</label>
+                      <input
+                        type="text"
+                        placeholder="Örn: Barbaros Mah."
+                        value={empAddressParts.neighborhood}
+                        onChange={(e) => {
+                          const next = { ...empAddressParts, neighborhood: e.target.value };
+                          setEmpAddressParts(next);
+                          setNewEmpForm({
+                            ...newEmpForm,
+                            homeAddress: compileStructuredAddress(next.neighborhood, next.street, next.district, next.city),
+                          });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">2. Cadde-Sokak / No</label>
+                      <input
+                        type="text"
+                        placeholder="Örn: Atatürk Cad. No:14 D:5"
+                        value={empAddressParts.street}
+                        onChange={(e) => {
+                          const next = { ...empAddressParts, street: e.target.value };
+                          setEmpAddressParts(next);
+                          setNewEmpForm({
+                            ...newEmpForm,
+                            homeAddress: compileStructuredAddress(next.neighborhood, next.street, next.district, next.city),
+                          });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">3. İlçe</label>
+                      <input
+                        type="text"
+                        placeholder="Örn: Kadıköy"
+                        value={empAddressParts.district}
+                        onChange={(e) => {
+                          const next = { ...empAddressParts, district: e.target.value };
+                          setEmpAddressParts(next);
+                          setNewEmpForm({
+                            ...newEmpForm,
+                            homeAddress: compileStructuredAddress(next.neighborhood, next.street, next.district, next.city),
+                          });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">4. İl</label>
+                      <input
+                        type="text"
+                        placeholder="Örn: İstanbul"
+                        value={empAddressParts.city}
+                        onChange={(e) => {
+                          const next = { ...empAddressParts, city: e.target.value };
+                          setEmpAddressParts(next);
+                          setNewEmpForm({
+                            ...newEmpForm,
+                            homeAddress: compileStructuredAddress(next.neighborhood, next.street, next.district, next.city),
+                          });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-900"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Kaydedilecek Tam Adres (Mahalle, Cadde-Sokak, İlçe, İl)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Mahalle, Cadde-Sokak, İlçe, İl..."
+                      value={newEmpForm.homeAddress || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const parsed = parseCommaAddressParts(val);
+                        setEmpAddressParts({
+                          neighborhood: parsed.neighborhood,
+                          street: parsed.street,
+                          district: parsed.district,
+                          city: parsed.city,
+                        });
+                        setNewEmpForm({ ...newEmpForm, homeAddress: val });
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-900"
+                    />
+                  </div>
                 </div>
 
                 <div>

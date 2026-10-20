@@ -1,4 +1,4 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, CompanyItem, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, ApplianceServiceRecord, IndustrySector, FoodRecipe, FoodMenuPlan, FoodProductionOrder, FoodDispatchDelivery, FoodWitnessSample, ConstructionProject, getContactAccountCode, FixedAsset, AssetMaintenanceRecord, AssetDisposalRecord } from "../types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, CompanyItem, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, ApplianceServiceRecord, IndustrySector, FoodRecipe, FoodMenuPlan, FoodProductionOrder, FoodDispatchDelivery, FoodWitnessSample, ConstructionProject, getContactAccountCode, FixedAsset, AssetMaintenanceRecord, AssetDisposalRecord, ManualBackupLogEntry } from "../types";
 import {
   initialCompanySettings,
   initialContacts,
@@ -1452,6 +1452,206 @@ export function resetToDemoData() {
 }
 
 
+export const BACKUP_REMINDER_THRESHOLD_DAYS = 7;
+
+export interface ManualBackupStatus {
+  companyId: string;
+  lastBackupAt: string | null;
+  daysSinceLastBackup: number | null;
+  hoursSinceLastBackup: number | null;
+  thresholdDays: number;
+  isOverdue: boolean;
+  isApproaching: boolean;
+  isSnoozed: boolean;
+  snoozedUntil: string | null;
+  history: ManualBackupLogEntry[];
+}
+
+function getBackupTimestampKey(companyId: string): string {
+  return `muavin_last_manual_backup_${companyId}`;
+}
+
+function getBackupHistoryKey(companyId: string): string {
+  return `muavin_backup_history_${companyId}`;
+}
+
+function getBackupSnoozeKey(companyId: string): string {
+  return `muavin_backup_snooze_until_${companyId}`;
+}
+
+function dispatchBackupStatusChange(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("muavin:backup-status-changed"));
+  }
+}
+
+export function getManualBackupStatus(
+  companyId?: string,
+  settings?: CompanySettings
+): ManualBackupStatus {
+  const activeCompId = companyId || getActiveCompanyId();
+  const thresholdDays =
+    settings?.manualBackupReminderDays && settings.manualBackupReminderDays > 0
+      ? settings.manualBackupReminderDays
+      : BACKUP_REMINDER_THRESHOLD_DAYS;
+
+  let history: ManualBackupLogEntry[] = [];
+  try {
+    const rawHistory = safeGetStorageItem(getBackupHistoryKey(activeCompId));
+    if (rawHistory) {
+      const parsed = JSON.parse(rawHistory);
+      if (Array.isArray(parsed)) {
+        history = parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  if (history.length === 0 && Array.isArray(settings?.manualBackupHistory)) {
+    history = settings!.manualBackupHistory!;
+  }
+
+  const storedTimestamp =
+    safeGetStorageItem(getBackupTimestampKey(activeCompId)) ||
+    settings?.lastManualBackupAt ||
+    (history.length > 0 ? history[0]?.timestamp : null) ||
+    null;
+
+  let lastBackupAt: string | null = null;
+  let daysSinceLastBackup: number | null = null;
+  let hoursSinceLastBackup: number | null = null;
+
+  if (storedTimestamp) {
+    const parsedTime = new Date(storedTimestamp).getTime();
+    if (Number.isFinite(parsedTime) && parsedTime > 0) {
+      lastBackupAt = new Date(parsedTime).toISOString();
+      const diffMs = Math.max(0, Date.now() - parsedTime);
+      hoursSinceLastBackup = Math.floor(diffMs / (1000 * 60 * 60));
+      daysSinceLastBackup = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    }
+  }
+
+  let snoozedUntil: string | null = null;
+  let isSnoozed = false;
+  try {
+    const rawSnooze = safeGetStorageItem(getBackupSnoozeKey(activeCompId));
+    if (rawSnooze) {
+      const snoozeTime = new Date(rawSnooze).getTime();
+      if (Number.isFinite(snoozeTime) && snoozeTime > Date.now()) {
+        isSnoozed = true;
+        snoozedUntil = new Date(snoozeTime).toISOString();
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
+  const elapsedMs = lastBackupAt ? Math.max(0, Date.now() - new Date(lastBackupAt).getTime()) : Infinity;
+  const isOverdue = !lastBackupAt || elapsedMs >= thresholdMs;
+  const isApproaching =
+    !isOverdue &&
+    daysSinceLastBackup !== null &&
+    daysSinceLastBackup >= Math.max(1, thresholdDays - 2);
+
+  return {
+    companyId: activeCompId,
+    lastBackupAt,
+    daysSinceLastBackup,
+    hoursSinceLastBackup,
+    thresholdDays,
+    isOverdue,
+    isApproaching,
+    isSnoozed,
+    snoozedUntil,
+    history,
+  };
+}
+
+export function recordManualBackup(
+  companyId?: string,
+  performedBy?: string,
+  fileName?: string,
+  sizeBytes?: number
+): ManualBackupStatus {
+  const activeCompId = companyId || getActiveCompanyId();
+  const nowIso = new Date().toISOString();
+  const effectiveFileName =
+    fileName || `Muavin_Yedek_${nowIso.split("T")[0]}.json`;
+
+  safeSetStorageItem(getBackupTimestampKey(activeCompId), nowIso);
+  safeSetStorageItem("muavin_last_manual_backup", nowIso);
+  safeRemoveStorageItem(getBackupSnoozeKey(activeCompId));
+
+  let existingHistory: ManualBackupLogEntry[] = [];
+  try {
+    const raw = safeGetStorageItem(getBackupHistoryKey(activeCompId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        existingHistory = parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  const newEntry: ManualBackupLogEntry = {
+    id: `bkp_${Date.now()}`,
+    timestamp: nowIso,
+    fileName: effectiveFileName,
+    sizeBytes: sizeBytes ?? 0,
+    performedBy: performedBy || "Kullanıcı",
+    companyId: activeCompId,
+  };
+
+  const updatedHistory = [newEntry, ...existingHistory].slice(0, 25);
+  safeSetStorageItem(getBackupHistoryKey(activeCompId), JSON.stringify(updatedHistory));
+
+  try {
+    const currentData = getStoredData(activeCompId);
+    const updatedSettings: CompanySettings = {
+      ...currentData.settings,
+      lastManualBackupAt: nowIso,
+      manualBackupHistory: updatedHistory,
+    };
+    saveStoredData("SETTINGS", updatedSettings, activeCompId);
+  } catch {
+    // ignore
+  }
+
+  dispatchBackupStatusChange();
+  return getManualBackupStatus(activeCompId);
+}
+
+export function snoozeManualBackupReminder(companyId?: string, hours = 24): void {
+  const activeCompId = companyId || getActiveCompanyId();
+  const untilIso = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+  safeSetStorageItem(getBackupSnoozeKey(activeCompId), untilIso);
+  dispatchBackupStatusChange();
+}
+
+export function simulateOverdueManualBackup(companyId?: string, daysAgo = 8): ManualBackupStatus {
+  const activeCompId = companyId || getActiveCompanyId();
+  const simulatedIso = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+  safeSetStorageItem(getBackupTimestampKey(activeCompId), simulatedIso);
+  safeRemoveStorageItem(getBackupSnoozeKey(activeCompId));
+
+  try {
+    const currentData = getStoredData(activeCompId);
+    const updatedSettings: CompanySettings = {
+      ...currentData.settings,
+      lastManualBackupAt: simulatedIso,
+    };
+    saveStoredData("SETTINGS", updatedSettings, activeCompId);
+  } catch {
+    // ignore
+  }
+
+  dispatchBackupStatusChange();
+  return getManualBackupStatus(activeCompId);
+}
+
 export function exportBackupJSON(): string {
   const data = getStoredData();
   return JSON.stringify(data, null, 2);
@@ -1501,9 +1701,115 @@ export function importBackupJSON(jsonString: string): boolean {
 }
 
 /**
- * Ensures that a manual or open address string starts with the selected city and district
- * followed by the open address details (e.g., "İstanbul / Kadıköy, Barbaros Mah. Çiğdem Sk. No: 14")
- * without duplicating them, and updates the city/district prefix when province or district changes.
+ * Compiles structured address fields in the standard order:
+ * "Mahalle, Cadde-Sokak, İlçe, İl"
+ */
+export function compileStructuredAddress(
+  neighborhood?: string,
+  street?: string,
+  district?: string,
+  city?: string,
+  buildingNo?: string,
+  doorNo?: string,
+  postalCode?: string,
+  branchName?: string,
+  branchCode?: string
+): string {
+  const cleanNh = String(neighborhood || "").trim();
+  const cleanStreet = String(street || "").trim();
+  const cleanBld = String(buildingNo || "").trim();
+  const cleanDoor = String(doorNo || "").trim();
+  const cleanDist = String(district || "").trim();
+  const cleanCity = String(city || "").trim();
+  const cleanPostal = String(postalCode || "").trim();
+
+  const bldPart = cleanBld
+    ? cleanBld.toLowerCase().includes("no")
+      ? cleanBld
+      : `No: ${cleanBld}`
+    : "";
+  const doorPart = cleanDoor
+    ? cleanDoor.toLowerCase().includes("daire") || cleanDoor.toLowerCase().includes("d:")
+      ? cleanDoor
+      : `D: ${cleanDoor}`
+    : "";
+
+  const streetFull = [cleanStreet, bldPart, doorPart].filter(Boolean).join(" ").trim();
+  const mainParts = [cleanNh, streetFull, cleanDist, cleanCity].filter(Boolean);
+  let baseAddr = mainParts.join(", ");
+
+  if (cleanPostal && !baseAddr.includes(cleanPostal)) {
+    baseAddr = baseAddr ? `${baseAddr} (PK: ${cleanPostal})` : `PK: ${cleanPostal}`;
+  }
+
+  const bName = String(branchName || "").trim();
+  const bCode = String(branchCode || "").trim();
+  if (bName || bCode) {
+    const branchLabel =
+      bName && bCode
+        ? `Şube: ${bName} (${bCode})`
+        : bName
+        ? `Şube: ${bName}`
+        : `Şube Kodu: ${bCode}`;
+    if (!baseAddr.toLocaleLowerCase("tr-TR").includes("şube")) {
+      baseAddr = baseAddr ? `${baseAddr} — ${branchLabel}` : branchLabel;
+    }
+  }
+
+  return baseAddr;
+}
+
+/**
+ * Parses a comma-separated full address ("Mahalle, Cadde-Sokak, İlçe, İl") into its 4 parts
+ */
+export function parseCommaAddressParts(fullAddress?: string): {
+  neighborhood: string;
+  street: string;
+  district: string;
+  city: string;
+} {
+  const raw = String(fullAddress || "")
+    .replace(/\s*—\s*Şube.*$/i, "")
+    .replace(/\s*\(Şube[^)]*\)\s*$/i, "")
+    .replace(/\s*\(PK:\s*[^)]+\)\s*$/i, "")
+    .trim();
+  if (!raw) {
+    return { neighborhood: "", street: "", district: "", city: "" };
+  }
+  const parts = raw
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 4) {
+    const neighborhood = parts[0];
+    const city = parts[parts.length - 1];
+    const district = parts[parts.length - 2];
+    const street = parts.slice(1, parts.length - 2).join(", ");
+    return { neighborhood, street, district, city };
+  }
+  if (parts.length === 3) {
+    return {
+      neighborhood: parts[0],
+      street: parts[1],
+      district: "",
+      city: parts[2],
+    };
+  }
+  if (parts.length === 2) {
+    return {
+      neighborhood: parts[0],
+      street: parts[1],
+      district: "",
+      city: "",
+    };
+  }
+  return { neighborhood: "", street: raw, district: "", city: "" };
+}
+
+/**
+ * Ensures that an open address string ends with ", İlçe, İl" in the standard order:
+ * "Mahalle, Cadde-Sokak, İlçe, İl"
+ * without duplicating them, and updates the district/city suffix when district or city changes.
  */
 export function appendCityDistrictToAddress(
   rawAddress?: string,
@@ -1516,7 +1822,7 @@ export function appendCityDistrictToAddress(
   const cleanDistrict = String(district || "").trim();
   const cleanPrevCity = String(prevCity || "").trim();
   const cleanPrevDistrict = String(prevDistrict || "").trim();
-  const locationPrefix = [cleanCity, cleanDistrict].filter(Boolean).join(" / ");
+  const locationSuffix = [cleanDistrict, cleanCity].filter(Boolean).join(", ");
 
   let base = String(rawAddress || "").trim();
 
@@ -1534,16 +1840,22 @@ export function appendCityDistrictToAddress(
       [
         [cleanPrevCity, cleanPrevDistrict].filter(Boolean).join(" / "),
         [cleanPrevCity, cleanPrevDistrict].filter(Boolean).join("/"),
+        [cleanPrevCity, cleanPrevDistrict].filter(Boolean).join(", "),
         [cleanPrevDistrict, cleanPrevCity].filter(Boolean).join(" / "),
         [cleanPrevDistrict, cleanPrevCity].filter(Boolean).join("/"),
+        [cleanPrevDistrict, cleanPrevCity].filter(Boolean).join(", "),
         [cleanCity, cleanPrevDistrict].filter(Boolean).join(" / "),
         [cleanPrevDistrict, cleanCity].filter(Boolean).join(" / "),
+        [cleanPrevDistrict, cleanCity].filter(Boolean).join(", "),
         [cleanPrevCity, cleanDistrict].filter(Boolean).join(" / "),
         [cleanDistrict, cleanPrevCity].filter(Boolean).join(" / "),
+        [cleanDistrict, cleanPrevCity].filter(Boolean).join(", "),
         [cleanCity, cleanDistrict].filter(Boolean).join(" / "),
         [cleanCity, cleanDistrict].filter(Boolean).join("/"),
+        [cleanCity, cleanDistrict].filter(Boolean).join(", "),
         [cleanDistrict, cleanCity].filter(Boolean).join(" / "),
         [cleanDistrict, cleanCity].filter(Boolean).join("/"),
+        [cleanDistrict, cleanCity].filter(Boolean).join(", "),
         cleanPrevCity,
         cleanPrevDistrict,
         cleanCity,
@@ -1605,33 +1917,32 @@ export function appendCityDistrictToAddress(
     }
   }
 
-  if (pkSuffix && base && !base.includes(pkSuffix)) {
-    base = `${base} ${pkSuffix}`.trim();
+  let result = base;
+  if (locationSuffix) {
+    result = result ? `${result}, ${locationSuffix}` : locationSuffix;
   }
 
-  if (!locationPrefix) {
-    return base;
+  if (pkSuffix && result && !result.includes(pkSuffix)) {
+    result = `${result} ${pkSuffix}`.trim();
   }
 
-  if (!base) {
-    return locationPrefix;
-  }
-
-  return `${locationPrefix}, ${base}`;
+  return result;
 }
 
 /**
  * Formats an open address with city, district, and branch information (Şube Adı / Şube Kodu)
- * so that branch details visibly appear inside the address text without duplication.
+ * in the standard order "Mahalle, Cadde-Sokak, İlçe, İl".
  */
 export function formatAddressWithBranch(
   rawAddress?: string,
   city?: string,
   district?: string,
   branchName?: string,
-  branchCode?: string
+  branchCode?: string,
+  prevCity?: string,
+  prevDistrict?: string
 ): string {
-  const baseAddr = appendCityDistrictToAddress(rawAddress, city, district);
+  const baseAddr = appendCityDistrictToAddress(rawAddress, city, district, prevCity, prevDistrict);
   const cleanBranchName = String(branchName || "").trim();
   const cleanBranchCode = String(branchCode || "").trim();
   if (!cleanBranchName && !cleanBranchCode) {
@@ -1738,7 +2049,7 @@ export function toTurkishTitleCase(text?: string): string {
 }
 
 /**
- * Separates and normalizes Vergi Dairesi, İl, İlçe, Mahalle, and Açık Adres from a taxpayer lookup result.
+ * Separates and normalizes Vergi Dairesi, Mahalle, Cadde-Sokak, İlçe, İl, and Tam Adres ("Mahalle, Cadde-Sokak, İlçe, İl").
  */
 export function parseSeparateAddressFields(input: {
   taxOffice?: string;
@@ -1762,7 +2073,7 @@ export function parseSeparateAddressFields(input: {
   address: string;
 } {
   const taxOffice = String(input.taxOffice || "").trim();
-  const city = toTurkishTitleCase(input.city) || "İstanbul";
+  const city = toTurkishTitleCase(input.city) || "";
   const district = toTurkishTitleCase(input.district) || "";
   let neighborhood = String(input.neighborhood || "").trim();
   let street = String(input.street || "").trim();
@@ -1771,12 +2082,10 @@ export function parseSeparateAddressFields(input: {
   const postalCode = String(input.postalCode || "").trim();
   const rawAddress = String(input.address || "").trim();
 
-  // If neighborhood is missing, try to extract "... Mahallesi" or "... Mah." from rawAddress or street
   if (!neighborhood) {
     const sourceText = rawAddress || street;
     const mahMatch = sourceText.match(/([A-ZÇĞİÖŞÜa-zçğıöşü0-9.\-]+(?:\s+[A-ZÇĞİÖŞÜa-zçğıöşü0-9.\-]+){0,2}\s+(?:Mahallesi|Mah\.|Mah))\b/i);
     if (mahMatch && mahMatch[1]) {
-      // Remove any leading "İl / İlçe," if captured
       const candidate = mahMatch[1].replace(/^.*[,/]\s*/, "").trim();
       if (candidate) {
         neighborhood = candidate;
@@ -1790,13 +2099,23 @@ export function parseSeparateAddressFields(input: {
     neighborhood = toTurkishTitleCase(neighborhood);
   }
 
-  // Build open address details if rawAddress is empty
-  const detailParts = [neighborhood, street, buildingNo, doorNo].filter(Boolean);
-  let baseOpenAddr = rawAddress || detailParts.join(" ");
-  if (postalCode && baseOpenAddr && !baseOpenAddr.includes(postalCode)) {
-    baseOpenAddr = `${baseOpenAddr} (PK: ${postalCode})`;
+  let fullOpenAddress = "";
+  if (neighborhood || street || buildingNo || doorNo) {
+    fullOpenAddress = compileStructuredAddress(
+      neighborhood,
+      street || (!neighborhood ? rawAddress : ""),
+      district,
+      city,
+      buildingNo,
+      doorNo,
+      postalCode
+    );
+  } else {
+    fullOpenAddress = appendCityDistrictToAddress(rawAddress, city, district);
+    if (postalCode && fullOpenAddress && !fullOpenAddress.includes(postalCode)) {
+      fullOpenAddress = `${fullOpenAddress} (PK: ${postalCode})`;
+    }
   }
-  const fullOpenAddress = appendCityDistrictToAddress(baseOpenAddr, city, district);
 
   return {
     taxOffice,

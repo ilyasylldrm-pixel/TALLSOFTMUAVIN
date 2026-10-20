@@ -18,6 +18,7 @@ import { DataImportModal } from "./common/DataImportModal";
 import { useTheme } from "../context/ThemeContext";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
+import { compileStructuredAddress, parseCommaAddressParts } from "../utils/storage";
 import {
   Package,
   Plus,
@@ -367,6 +368,8 @@ export const Products: React.FC<ProductsProps> = ({
   const [whManagerName, setWhManagerName] = useState("");
   const [whPhone, setWhPhone] = useState("");
   const [whBranchName, setWhBranchName] = useState("");
+  const [whNeighborhood, setWhNeighborhood] = useState("");
+  const [whStreet, setWhStreet] = useState("");
   const [whCity, setWhCity] = useState("İstanbul");
   const [whDistrict, setWhDistrict] = useState("Merkez");
   const [whFullAddress, setWhFullAddress] = useState("");
@@ -382,9 +385,16 @@ export const Products: React.FC<ProductsProps> = ({
       setWhManagerName(wh.managerName || "");
       setWhPhone(wh.phone || "");
       setWhBranchName(wh.branchName || branches[0]?.name || "Merkez Şube");
-      setWhCity(wh.address?.city || companySettings?.city || "İstanbul");
-      setWhDistrict(wh.address?.district || companySettings?.district || "Merkez");
-      setWhFullAddress(wh.address?.fullAddress || "");
+      const parsed = parseCommaAddressParts(wh.address?.fullAddress || "");
+      const nVal = wh.address?.neighborhood || parsed.neighborhood || "";
+      const sVal = wh.address?.street || parsed.street || "";
+      const dVal = wh.address?.district || parsed.district || companySettings?.district || "Merkez";
+      const cVal = wh.address?.city || parsed.city || companySettings?.city || "İstanbul";
+      setWhNeighborhood(nVal);
+      setWhStreet(sVal);
+      setWhDistrict(dVal);
+      setWhCity(cVal);
+      setWhFullAddress(compileStructuredAddress(nVal, sVal, dVal, cVal) || wh.address?.fullAddress || "");
       setWhStatus(wh.status || "active");
     } else {
       setEditingWh(null);
@@ -396,9 +406,16 @@ export const Products: React.FC<ProductsProps> = ({
       setWhManagerName("");
       setWhPhone(companySettings?.phone || "");
       setWhBranchName(branches[0]?.name || `${companySettings?.companyName || "İşletme"} - Merkez Şube`);
-      setWhCity(companySettings?.city || "İstanbul");
-      setWhDistrict(companySettings?.district || "Merkez");
-      setWhFullAddress(companySettings?.address || "");
+      const parsed = parseCommaAddressParts(companySettings?.address || "");
+      const nVal = companySettings?.neighborhood || parsed.neighborhood || "";
+      const sVal = parsed.street || "";
+      const dVal = companySettings?.district || parsed.district || "Merkez";
+      const cVal = companySettings?.city || parsed.city || "İstanbul";
+      setWhNeighborhood(nVal);
+      setWhStreet(sVal);
+      setWhDistrict(dVal);
+      setWhCity(cVal);
+      setWhFullAddress(compileStructuredAddress(nVal, sVal, dVal, cVal) || companySettings?.address || "");
       setWhStatus("active");
     }
     setIsWhModalOpen(true);
@@ -412,6 +429,14 @@ export const Products: React.FC<ProductsProps> = ({
       triggerFormErrorNotification("Lütfen depo adını giriniz.", "Depo Kayıt Hatası", "Depo Adı");
       return;
     }
+
+    const compiledFullAddress =
+      compileStructuredAddress(
+        whNeighborhood.trim(),
+        whStreet.trim(),
+        whDistrict.trim(),
+        whCity.trim(),
+      ) || whFullAddress.trim();
 
     if (editingWh) {
       const updatedWh: Warehouse = {
@@ -427,9 +452,11 @@ export const Products: React.FC<ProductsProps> = ({
         address: {
           ...editingWh.address,
           country: "Türkiye",
-          city: whCity.trim() || "İstanbul",
+          neighborhood: whNeighborhood.trim(),
+          street: whStreet.trim(),
           district: whDistrict.trim() || "Merkez",
-          fullAddress: whFullAddress.trim() || `${whDistrict.trim() || "Merkez"} / ${whCity.trim() || "İstanbul"}`,
+          city: whCity.trim() || "İstanbul",
+          fullAddress: compiledFullAddress,
         },
       };
       onUpdateWarehouse?.(updatedWh);
@@ -448,9 +475,11 @@ export const Products: React.FC<ProductsProps> = ({
         status: whStatus,
         address: {
           country: "Türkiye",
-          city: whCity.trim() || "İstanbul",
+          neighborhood: whNeighborhood.trim(),
+          street: whStreet.trim(),
           district: whDistrict.trim() || "Merkez",
-          fullAddress: whFullAddress.trim() || `${whDistrict.trim() || "Merkez"} / ${whCity.trim() || "İstanbul"}`,
+          city: whCity.trim() || "İstanbul",
+          fullAddress: compiledFullAddress,
         },
         createdAt: new Date().toISOString().split("T")[0],
       };
@@ -2613,34 +2642,81 @@ export const Products: React.FC<ProductsProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">İl</label>
+                      <label className="block font-bold text-slate-700 mb-1">1. Mahalle</label>
                       <input
                         type="text"
-                        value={whCity}
-                        onChange={(e) => setWhCity(e.target.value)}
-                        placeholder="İstanbul"
+                        value={whNeighborhood}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setWhNeighborhood(v);
+                          setWhFullAddress(compileStructuredAddress(v, whStreet, whDistrict, whCity));
+                        }}
+                        placeholder="Örn: Barbaros Mah."
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
                       />
                     </div>
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">İlçe</label>
+                      <label className="block font-bold text-slate-700 mb-1">2. Cadde-Sokak / No</label>
+                      <input
+                        type="text"
+                        value={whStreet}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setWhStreet(v);
+                          setWhFullAddress(compileStructuredAddress(whNeighborhood, v, whDistrict, whCity));
+                        }}
+                        placeholder="Örn: Atatürk Cad. No:14"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">3. İlçe</label>
                       <input
                         type="text"
                         value={whDistrict}
-                        onChange={(e) => setWhDistrict(e.target.value)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setWhDistrict(v);
+                          setWhFullAddress(compileStructuredAddress(whNeighborhood, whStreet, v, whCity));
+                        }}
                         placeholder="Şişli"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">4. İl</label>
+                      <input
+                        type="text"
+                        value={whCity}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setWhCity(v);
+                          setWhFullAddress(compileStructuredAddress(whNeighborhood, whStreet, whDistrict, v));
+                        }}
+                        placeholder="İstanbul"
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Açık Adres</label>
+                    <label className="block font-bold text-slate-700 mb-1">Tam Adres (Mahalle, Cadde-Sokak, İlçe, İl)</label>
                     <input
                       type="text"
                       value={whFullAddress}
-                      onChange={(e) => setWhFullAddress(e.target.value)}
-                      placeholder="Mahalle, Cadde, Sokak, No..."
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const parsed = parseCommaAddressParts(val);
+                        setWhNeighborhood(parsed.neighborhood);
+                        setWhStreet(parsed.street);
+                        setWhDistrict(parsed.district);
+                        setWhCity(parsed.city);
+                        setWhFullAddress(val);
+                      }}
+                      placeholder="Mahalle, Cadde-Sokak, İlçe, İl"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
                     />
                   </div>
@@ -3708,34 +3784,81 @@ export const Products: React.FC<ProductsProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">İl</label>
+                  <label className="block font-bold text-slate-700 mb-1">1. Mahalle</label>
                   <input
                     type="text"
-                    value={whCity}
-                    onChange={(e) => setWhCity(e.target.value)}
-                    placeholder="İstanbul"
+                    value={whNeighborhood}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setWhNeighborhood(v);
+                      setWhFullAddress(compileStructuredAddress(v, whStreet, whDistrict, whCity));
+                    }}
+                    placeholder="Örn: Barbaros Mah."
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">İlçe</label>
+                  <label className="block font-bold text-slate-700 mb-1">2. Cadde-Sokak / No</label>
+                  <input
+                    type="text"
+                    value={whStreet}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setWhStreet(v);
+                      setWhFullAddress(compileStructuredAddress(whNeighborhood, v, whDistrict, whCity));
+                    }}
+                    placeholder="Örn: Atatürk Cad. No:14"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">3. İlçe</label>
                   <input
                     type="text"
                     value={whDistrict}
-                    onChange={(e) => setWhDistrict(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setWhDistrict(v);
+                      setWhFullAddress(compileStructuredAddress(whNeighborhood, whStreet, v, whCity));
+                    }}
                     placeholder="Şişli"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">4. İl</label>
+                  <input
+                    type="text"
+                    value={whCity}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setWhCity(v);
+                      setWhFullAddress(compileStructuredAddress(whNeighborhood, whStreet, whDistrict, v));
+                    }}
+                    placeholder="İstanbul"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Açık Adres</label>
+                <label className="block font-bold text-slate-700 mb-1">Tam Adres (Mahalle, Cadde-Sokak, İlçe, İl)</label>
                 <input
                   type="text"
                   value={whFullAddress}
-                  onChange={(e) => setWhFullAddress(e.target.value)}
-                  placeholder="Mahalle, Cadde, Sokak, No..."
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const parsed = parseCommaAddressParts(val);
+                    setWhNeighborhood(parsed.neighborhood);
+                    setWhStreet(parsed.street);
+                    setWhDistrict(parsed.district);
+                    setWhCity(parsed.city);
+                    setWhFullAddress(val);
+                  }}
+                  placeholder="Mahalle, Cadde-Sokak, İlçe, İl"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-900"
                 />
               </div>

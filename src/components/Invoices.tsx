@@ -73,6 +73,7 @@ import {
   updateCompanyItem,
   appendCityDistrictToAddress,
   formatAddressWithBranch,
+  compileStructuredAddress,
 } from "../utils/storage";
 import { Logo } from "./Logo";
 import { readAndOptimizeLogoFile } from "../utils/logoUpload";
@@ -132,7 +133,6 @@ import {
   Landmark,
   Send,
 } from "lucide-react";
-import { TURKEY_PROVINCES_DATA } from "../data/locationAndTaxData";
 
 const TURKISH_MONTHS = [
   { id: 1, name: "Ocak" },
@@ -197,6 +197,8 @@ interface InvoicesProps {
   onSelectTab?: (tab: NavItem) => void;
   onAddContact?: (contact: Contact) => void;
   onSaveCompanySettings?: (settings: CompanySettings) => void;
+  onAddBranch?: (branch: Branch) => void;
+  onUpdateBranch?: (branch: Branch) => void;
 }
 
 const INVOICE_TABLE_COLUMNS: ColumnDef[] = [
@@ -228,6 +230,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
   onSelectTab,
   onAddContact,
   onSaveCompanySettings,
+  onAddBranch,
+  onUpdateBranch,
 }) => {
   const { theme } = useTheme();
   const selection = useTableSelection();
@@ -290,6 +294,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [newContactName, setNewContactName] = useState<string>("");
   const [newContactTaxNo, setNewContactTaxNo] = useState<string>("");
   const [newContactPhone, setNewContactPhone] = useState<string>("");
+  const [newContactNeighborhood, setNewContactNeighborhood] = useState<string>("");
+  const [newContactStreet, setNewContactStreet] = useState<string>("");
+  const [newContactDistrict, setNewContactDistrict] = useState<string>("");
+  const [newContactCity, setNewContactCity] = useState<string>("");
+  const [newContactAddress, setNewContactAddress] = useState<string>("");
   const [newContactBranchName, setNewContactBranchName] = useState<string>("");
   const [newContactBranchCode, setNewContactBranchCode] = useState<string>("");
   const [newContactType, setNewContactType] = useState<"customer" | "vendor" | "both">("both");
@@ -375,6 +384,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [manualCustomerName, setManualCustomerName] = useState<string>("");
   const [manualTaxNumber, setManualTaxNumber] = useState<string>("");
   const [manualTaxOffice, setManualTaxOffice] = useState<string>("");
+  const [manualNeighborhood, setManualNeighborhood] = useState<string>("");
+  const [manualStreet, setManualStreet] = useState<string>("");
   const [manualAddress, setManualAddress] = useState<string>("");
   const [manualCity, setManualCity] = useState<string>("");
   const [manualDistrict, setManualDistrict] = useState<string>("");
@@ -545,32 +556,208 @@ export const Invoices: React.FC<InvoicesProps> = ({
     [customBranchAddressOverride, computedCompanyBranchAddress]
   );
 
-  const applyQueriedTaxpayerToManualForm = useCallback(
-    (status: RecipientTaxpayerStatus, queriedTaxNo?: string) => {
-      const normalizeTr = (val?: string) =>
-        String(val || "")
-          .trim()
-          .toLocaleLowerCase("tr-TR");
+  // Clean address helper & automatic branch note line builder for Gelir (Sales) Invoices
+  const selectedBranchCleanAddress = React.useMemo(() => {
+    return String(resolvedCompanyBranchAddress || "")
+      .replace(/\s*-\s*Şube:\s*.*$/i, "")
+      .replace(/\s*\((?:Şube|Merkez):[^)]+\)\s*$/i, "")
+      .trim();
+  }, [resolvedCompanyBranchAddress]);
 
-      let resolvedCity = String(status.city || "").trim();
-      let resolvedDistrict = String(status.district || "").trim();
+  const selectedBranchNoteLine = React.useMemo(() => {
+    const brName = selectedCompanyBranch?.name || companySettings.branchName || "Merkez";
+    const brCode = selectedCompanyBranch?.code || "";
+    const brLabel = `${brName}${brCode ? ` - ${brCode}` : ""}`;
+    if (!selectedBranchCleanAddress) {
+      return `Şube Adresi (${brLabel})`;
+    }
+    return `Şube Adresi (${brLabel}): ${selectedBranchCleanAddress}`;
+  }, [selectedBranchCleanAddress, selectedCompanyBranch, companySettings.branchName]);
 
-      if (resolvedCity) {
-        const matchedProv = TURKEY_PROVINCES_DATA.find(
-          (p) => normalizeTr(p.name) === normalizeTr(resolvedCity)
-        );
-        if (matchedProv) {
-          resolvedCity = matchedProv.name;
-          if (resolvedDistrict) {
-            const matchedDist = matchedProv.districts?.find(
-              (d) => normalizeTr(d.name) === normalizeTr(resolvedDistrict)
-            );
-            if (matchedDist) {
-              resolvedDistrict = matchedDist.name;
-            }
+  const syncBranchAddressIntoNotes = useCallback((prevNotes: string, branchLine: string) => {
+    if (!branchLine) return prevNotes;
+    const lines = (prevNotes || "").split("\n").map((l) => l.trimEnd());
+    const branchLineRegex =
+      /^(?:Şube Adresi|Faturanın Kesildiği Şube|Kesilen Şube Adresi|Düzenleyen Merkez\s*\/\s*Şube|Merkez\s*\/\s*Şube Adresi)/i;
+    const hasExisting = lines.some((l) => branchLineRegex.test(l.trim()));
+    if (hasExisting) {
+      let replaced = false;
+      const nextLines: string[] = [];
+      for (const l of lines) {
+        if (branchLineRegex.test(l.trim())) {
+          if (!replaced) {
+            nextLines.push(branchLine);
+            replaced = true;
           }
+        } else {
+          nextLines.push(l);
         }
       }
+      return nextLines.join("\n").trim();
+    }
+    const trimmedPrev = (prevNotes || "").trim();
+    return trimmedPrev ? `${branchLine}\n${trimmedPrev}` : branchLine;
+  }, []);
+
+  // Automatically sync selected branch address into notes whenever Gelir Faturası (sales) is active
+  useEffect(() => {
+    if (!isNewInvoiceModalOpen) return;
+    if (invType === "sales") {
+      setNotes((prev) => {
+        const next = syncBranchAddressIntoNotes(prev, selectedBranchNoteLine);
+        return next === prev ? prev : next;
+      });
+    } else if (invType === "purchase") {
+      setNotes((prev) => {
+        const branchLineRegex =
+          /^(?:Şube Adresi|Faturanın Kesildiği Şube|Kesilen Şube Adresi|Düzenleyen Merkez\s*\/\s*Şube|Merkez\s*\/\s*Şube Adresi)/i;
+        const filtered = (prev || "")
+          .split("\n")
+          .filter((l) => !branchLineRegex.test(l.trim()))
+          .join("\n")
+          .trim();
+        return filtered === prev ? prev : filtered;
+      });
+    }
+  }, [isNewInvoiceModalOpen, invType, selectedBranchNoteLine, syncBranchAddressIntoNotes]);
+
+  // Quick inline branch creation / editing inside the invoice form
+  const [isQuickBranchFormOpen, setIsQuickBranchFormOpen] = useState(false);
+  const [quickBranchMode, setQuickBranchMode] = useState<"create" | "edit">("create");
+  const [quickBranchName, setQuickBranchName] = useState("");
+  const [quickBranchCode, setQuickBranchCode] = useState("");
+  const [quickBranchNeighborhood, setQuickBranchNeighborhood] = useState("");
+  const [quickBranchStreet, setQuickBranchStreet] = useState("");
+  const [quickBranchCity, setQuickBranchCity] = useState("");
+  const [quickBranchDistrict, setQuickBranchDistrict] = useState("");
+  const [quickBranchAddress, setQuickBranchAddress] = useState("");
+
+  const handleOpenQuickBranchCreate = () => {
+    setQuickBranchMode("create");
+    const nextIdx = effectiveBranchesList.length + 1;
+    setQuickBranchCode(`SUB-00${nextIdx}`);
+    setQuickBranchName("");
+    setQuickBranchNeighborhood("");
+    setQuickBranchStreet("");
+    setQuickBranchCity(companySettings.city || "");
+    setQuickBranchDistrict(companySettings.district || "");
+    setQuickBranchAddress("");
+    setIsQuickBranchFormOpen(true);
+  };
+
+  const handleOpenQuickBranchEdit = () => {
+    if (!selectedCompanyBranch) return;
+    setQuickBranchMode("edit");
+    setQuickBranchCode(selectedCompanyBranch.code || "SUB-001");
+    setQuickBranchName(selectedCompanyBranch.name || "Merkez");
+    setQuickBranchNeighborhood(
+      selectedCompanyBranch.isMain
+        ? companySettings.neighborhood || selectedCompanyBranch.address?.neighborhood || ""
+        : selectedCompanyBranch.address?.neighborhood || ""
+    );
+    setQuickBranchStreet(
+      selectedCompanyBranch.isMain
+        ? companySettings.street || selectedCompanyBranch.address?.street || ""
+        : selectedCompanyBranch.address?.street || ""
+    );
+    setQuickBranchCity(
+      selectedCompanyBranch.isMain
+        ? companySettings.city || selectedCompanyBranch.address?.city || ""
+        : selectedCompanyBranch.address?.city || companySettings.city || ""
+    );
+    setQuickBranchDistrict(
+      selectedCompanyBranch.isMain
+        ? companySettings.district || selectedCompanyBranch.address?.district || ""
+        : selectedCompanyBranch.address?.district || companySettings.district || ""
+    );
+    setQuickBranchAddress(
+      selectedCompanyBranch.address?.fullAddress ||
+        selectedBranchCleanAddress ||
+        companySettings.address ||
+        ""
+    );
+    setIsQuickBranchFormOpen(true);
+  };
+
+  const handleSaveQuickBranch = () => {
+    const cleanName = quickBranchName.trim();
+    const cleanCode = quickBranchCode.trim() || `SUB-00${effectiveBranchesList.length + 1}`;
+    const cleanNh = quickBranchNeighborhood.trim();
+    const cleanSt = quickBranchStreet.trim();
+    const cleanCity = quickBranchCity.trim() || companySettings.city || "İstanbul";
+    const cleanDist = quickBranchDistrict.trim() || companySettings.district || "";
+    if (!cleanName) return;
+
+    const formattedFullAddr =
+      compileStructuredAddress(cleanNh, cleanSt, cleanDist, cleanCity) ||
+      appendCityDistrictToAddress(quickBranchAddress.trim(), cleanCity, cleanDist);
+
+    if (quickBranchMode === "edit" && selectedCompanyBranch) {
+      const updatedBr: Branch = {
+        ...selectedCompanyBranch,
+        name: cleanName,
+        code: cleanCode,
+        address: {
+          ...(selectedCompanyBranch.address || { country: "Türkiye", city: cleanCity, district: cleanDist }),
+          neighborhood: cleanNh,
+          street: cleanSt,
+          city: cleanCity,
+          district: cleanDist,
+          fullAddress: formattedFullAddr,
+        },
+      };
+      if (onUpdateBranch && selectedCompanyBranch.id !== "__MERKEZ__") {
+        onUpdateBranch(updatedBr);
+      }
+      if (selectedCompanyBranch.isMain && onSaveCompanySettings) {
+        onSaveCompanySettings({
+          ...companySettings,
+          branchName: cleanName,
+          branchCode: cleanCode,
+          neighborhood: cleanNh || companySettings.neighborhood,
+          street: cleanSt || companySettings.street,
+          city: cleanCity,
+          district: cleanDist,
+          address: formattedFullAddr,
+        });
+      }
+      setCustomBranchAddressOverride("");
+      setIsQuickBranchFormOpen(false);
+    } else {
+      const newBr: Branch = {
+        id: `br_${Date.now()}`,
+        code: cleanCode,
+        name: cleanName,
+        managerName: "",
+        phone: companySettings.phone || "",
+        email: companySettings.email || "",
+        isMain: false,
+        status: "active",
+        address: {
+          country: "Türkiye",
+          neighborhood: cleanNh,
+          street: cleanSt,
+          city: cleanCity,
+          district: cleanDist,
+          fullAddress: formattedFullAddr,
+        },
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      if (onAddBranch) {
+        onAddBranch(newBr);
+      }
+      setSelectedBranchId(newBr.id);
+      setCustomBranchAddressOverride("");
+      setIsQuickBranchFormOpen(false);
+    }
+  };
+
+  const applyQueriedTaxpayerToManualForm = useCallback(
+    (status: RecipientTaxpayerStatus, queriedTaxNo?: string) => {
+      const resolvedCity = String(status.city || "").trim();
+      const resolvedDistrict = String(status.district || "").trim();
+      const resolvedNh = String(status.neighborhood || "").trim();
+      const resolvedSt = [status.street, status.buildingNo, status.doorNo].filter(Boolean).join(" ").trim();
 
       if (queriedTaxNo) {
         setManualTaxNumber(queriedTaxNo);
@@ -580,6 +767,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
       }
       if (status.taxOffice) {
         setManualTaxOffice(status.taxOffice);
+      }
+      if (resolvedNh) {
+        setManualNeighborhood(resolvedNh);
+      }
+      if (resolvedSt) {
+        setManualStreet(resolvedSt);
       }
       if (resolvedCity) {
         setManualCity(resolvedCity);
@@ -600,81 +793,115 @@ export const Invoices: React.FC<InvoicesProps> = ({
         setManualEmail((prev) => prev.trim() || status.email || "");
       }
 
-      const rawOpenAddress =
-        status.address ||
-        [status.neighborhood, status.street, status.buildingNo, status.doorNo]
-          .filter(Boolean)
-          .join(" ");
-
-      const formattedAddress = formatAddressWithBranch(
-        rawOpenAddress,
-        resolvedCity || manualCity,
+      const structuredAddr = compileStructuredAddress(
+        resolvedNh || manualNeighborhood,
+        resolvedSt || manualStreet || status.address,
         resolvedDistrict || manualDistrict,
+        resolvedCity || manualCity,
+        undefined,
+        undefined,
+        status.postalCode,
         status.branchName || customerBranchName,
         status.branchCode || customerBranchCode
       );
-      if (formattedAddress) {
-        setManualAddress(formattedAddress);
+      if (structuredAddr) {
+        setManualAddress(structuredAddr);
       }
     },
-    [manualCity, manualDistrict, customerBranchName, customerBranchCode]
+    [manualNeighborhood, manualStreet, manualCity, manualDistrict, customerBranchName, customerBranchCode]
   );
+
+  const handleManualNeighborhoodChange = (newNh: string) => {
+    setManualNeighborhood(newNh);
+    const compiled = compileStructuredAddress(
+      newNh,
+      manualStreet,
+      manualDistrict,
+      manualCity,
+      undefined,
+      undefined,
+      undefined,
+      customerBranchName,
+      customerBranchCode
+    );
+    if (compiled) setManualAddress(compiled);
+  };
+
+  const handleManualStreetChange = (newSt: string) => {
+    setManualStreet(newSt);
+    const compiled = compileStructuredAddress(
+      manualNeighborhood,
+      newSt,
+      manualDistrict,
+      manualCity,
+      undefined,
+      undefined,
+      undefined,
+      customerBranchName,
+      customerBranchCode
+    );
+    if (compiled) setManualAddress(compiled);
+  };
 
   const handleManualCitySelect = (newCity: string) => {
     const prevCity = manualCity;
-    const prevDistrict = manualDistrict;
-    const prov = TURKEY_PROVINCES_DATA.find((p) => p.name === newCity);
-    const isDistrictValidForNewCity = Boolean(
-      prov?.districts?.some((d) => d.name === prevDistrict)
-    );
-    const nextDistrict = newCity ? (isDistrictValidForNewCity ? prevDistrict : "") : "";
-
     setManualCity(newCity);
-    if (nextDistrict !== prevDistrict) {
-      setManualDistrict(nextDistrict);
-    }
-    if (prov && prov.taxOffices?.length > 0 && !manualTaxOffice) {
-      setManualTaxOffice(prov.taxOffices[0]);
-    }
-    setManualAddress((prevAddr) =>
-      formatAddressWithBranch(
-        appendCityDistrictToAddress(prevAddr, newCity, nextDistrict, prevCity, prevDistrict),
-        newCity,
-        nextDistrict,
-        customerBranchName,
-        customerBranchCode
-      )
+    const compiled = compileStructuredAddress(
+      manualNeighborhood,
+      manualStreet,
+      manualDistrict,
+      newCity,
+      undefined,
+      undefined,
+      undefined,
+      customerBranchName,
+      customerBranchCode
     );
+    if (compiled && (manualNeighborhood || manualStreet)) {
+      setManualAddress(compiled);
+    } else {
+      setManualAddress((prevAddr) =>
+        formatAddressWithBranch(
+          appendCityDistrictToAddress(prevAddr, newCity, manualDistrict, prevCity, manualDistrict),
+          newCity,
+          manualDistrict,
+          customerBranchName,
+          customerBranchCode
+        )
+      );
+    }
   };
 
   const handleManualDistrictSelect = (newDistrict: string) => {
     const prevDistrict = manualDistrict;
     setManualDistrict(newDistrict);
-    setManualAddress((prevAddr) =>
-      formatAddressWithBranch(
-        appendCityDistrictToAddress(prevAddr, manualCity, newDistrict, manualCity, prevDistrict),
-        manualCity,
-        newDistrict,
-        customerBranchName,
-        customerBranchCode
-      )
+    const compiled = compileStructuredAddress(
+      manualNeighborhood,
+      manualStreet,
+      newDistrict,
+      manualCity,
+      undefined,
+      undefined,
+      undefined,
+      customerBranchName,
+      customerBranchCode
     );
-  };
-
-  const clampManualAddressCaret = () => {
-    const input = manualAddressInputRef.current;
-    if (!input) return;
-    const locPrefix = [manualCity.trim(), manualDistrict.trim()].filter(Boolean).join(" / ");
-    if (!locPrefix) return;
-    const currentVal = input.value;
-    if (currentVal === locPrefix) {
-      const nextWithComma = `${locPrefix}, `;
-      setManualAddress(nextWithComma);
-      requestAnimationFrame(() => {
-        input.setSelectionRange(nextWithComma.length, nextWithComma.length);
-      });
+    if (compiled && (manualNeighborhood || manualStreet)) {
+      setManualAddress(compiled);
+    } else {
+      setManualAddress((prevAddr) =>
+        formatAddressWithBranch(
+          appendCityDistrictToAddress(prevAddr, manualCity, newDistrict, manualCity, prevDistrict),
+          manualCity,
+          newDistrict,
+          customerBranchName,
+          customerBranchCode
+        )
+      );
     }
   };
+
+  const clampManualAddressCaret = () => {};
 
   const handleManualAddressInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setManualAddress(e.target.value);
@@ -1031,7 +1258,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
           nextInvoiceNumber: finalNextDocNo,
         });
 
-        setInvoiceNumberInput(finalNextDocNo);
+        if (sendToMysoft) {
+          setInvoiceNumberInput(finalNextDocNo);
+        }
 
         setMysoftMappingDefaults((prev) => ({
           ...(prev || { vknTckn: targetTenant || "", prefixes: [] }),
@@ -1057,7 +1286,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         setIsFetchingNextDocNo(false);
       }
     },
-    [mysoftTenantVkn, companySettings, mysoftEDocType, invoices],
+    [mysoftTenantVkn, companySettings, mysoftEDocType, invoices, sendToMysoft],
   );
 
   const handleTenantSelect = useCallback((vkn: string | undefined) => {
@@ -1149,6 +1378,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
       if (status.phone) {
         setNewContactPhone(status.phone);
       }
+      if (status.neighborhood) setNewContactNeighborhood(status.neighborhood);
+      if (status.street) setNewContactStreet(status.street);
+      if (status.district) setNewContactDistrict(status.district);
+      if (status.city) setNewContactCity(status.city);
+      const compiled = compileStructuredAddress(
+        status.neighborhood,
+        status.street || status.address,
+        status.district,
+        status.city,
+        status.buildingNo,
+        status.doorNo,
+        status.postalCode
+      );
+      if (compiled) setNewContactAddress(compiled);
     } catch (e) {
       console.error("Hızlı cari sorgulama hatası:", e);
     } finally {
@@ -1162,6 +1405,31 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     const effBranchName = newContactBranchName.trim() || quickContactStatus?.branchName || undefined;
     const effBranchCode = newContactBranchCode.trim() || quickContactStatus?.branchCode || undefined;
+    const effNh = newContactNeighborhood.trim() || quickContactStatus?.neighborhood || undefined;
+    const effSt = newContactStreet.trim() || quickContactStatus?.street || undefined;
+    const effDist = newContactDistrict.trim() || quickContactStatus?.district || undefined;
+    const effCity = newContactCity.trim() || quickContactStatus?.city || undefined;
+
+    const compiledFullAddr =
+      compileStructuredAddress(
+        effNh,
+        effSt,
+        effDist,
+        effCity,
+        quickContactStatus?.buildingNo,
+        quickContactStatus?.doorNo,
+        quickContactStatus?.postalCode,
+        effBranchName,
+        effBranchCode
+      ) ||
+      newContactAddress.trim() ||
+      formatAddressWithBranch(
+        quickContactStatus?.address,
+        effCity,
+        effDist,
+        effBranchName,
+        effBranchCode
+      );
 
     const createdContact: Contact = {
       id: "cnt_" + Date.now(),
@@ -1170,31 +1438,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
       companyName: quickContactStatus?.companyTitle || quickContactStatus?.title || newContactName.trim(),
       taxNumber: newContactTaxNo.trim() || undefined,
       taxOffice: quickContactStatus?.taxOffice || undefined,
-      city: quickContactStatus?.city || undefined,
-      district: quickContactStatus?.district || undefined,
-      neighborhood: quickContactStatus?.neighborhood || undefined,
-      street: quickContactStatus?.street || undefined,
+      city: effCity,
+      district: effDist,
+      neighborhood: effNh,
+      street: effSt,
       buildingNo: quickContactStatus?.buildingNo || undefined,
       doorNo: quickContactStatus?.doorNo || undefined,
       postalCode: quickContactStatus?.postalCode || undefined,
       branchName: effBranchName,
       branchCode: effBranchCode,
-      address:
-        formatAddressWithBranch(
-          quickContactStatus?.address,
-          quickContactStatus?.city,
-          quickContactStatus?.district,
-          effBranchName,
-          effBranchCode
-        ) || undefined,
-      shippingAddress:
-        formatAddressWithBranch(
-          quickContactStatus?.shippingAddress || quickContactStatus?.address,
-          quickContactStatus?.city,
-          quickContactStatus?.district,
-          effBranchName,
-          effBranchCode
-        ) || undefined,
+      address: compiledFullAddr || undefined,
+      shippingAddress: compiledFullAddr || undefined,
       phone: newContactPhone.trim() || quickContactStatus?.phone || undefined,
       email: quickContactStatus?.email || undefined,
       contactPerson: quickContactStatus?.contactPerson || undefined,
@@ -1221,6 +1475,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setIsContactPickerOpen(false);
     setNewContactName("");
     setNewContactTaxNo("");
+    setNewContactNeighborhood("");
+    setNewContactStreet("");
+    setNewContactDistrict("");
+    setNewContactCity("");
+    setNewContactAddress("");
     setNewContactPhone("");
     setNewContactBranchName("");
     setNewContactBranchCode("");
@@ -1400,30 +1659,59 @@ export const Invoices: React.FC<InvoicesProps> = ({
     ],
   );
 
+  const computeGyrSequentialNumber = useCallback((): string => {
+    const currentYear = Number(
+      String(issueDate || "").slice(0, 4) || new Date().getFullYear(),
+    );
+    const prefix = "GYR";
+    let maxInvoiceSeq = 0;
+    for (const inv of invoices) {
+      if (editingInvoiceId && inv.id === editingInvoiceId) continue;
+      const cleaned = String(inv.invoiceNumber || "")
+        .replace(/\s*\(TASLAK\)\s*$/i, "")
+        .trim()
+        .toUpperCase();
+      if (cleaned.startsWith(`${prefix}${currentYear}`)) {
+        const tail = cleaned.slice(prefix.length + 4);
+        const parsed = parseInt(tail, 10);
+        if (!isNaN(parsed) && parsed > maxInvoiceSeq) {
+          maxInvoiceSeq = parsed;
+        }
+      }
+    }
+    return `${prefix}${currentYear}${String(maxInvoiceSeq + 1).padStart(9, "0")}`;
+  }, [issueDate, invoices, editingInvoiceId]);
+
   const isCurrentSalesEArsiv =
     mysoftEDocType === "e_arsiv" || invoiceScenario === "EARSIVFATURA";
   const activeEFaturaNextNo = computeMysoftSequentialNumber("e_fatura");
   const activeEArsivNextNo = computeMysoftSequentialNumber("e_arsiv");
+  const activeGyrNextNo = computeGyrSequentialNumber();
   const activeMysoftSerialNumber = isCurrentSalesEArsiv
     ? activeEArsivNextNo
     : activeEFaturaNextNo;
+  const activeSalesSerialNumber = sendToMysoft
+    ? activeMysoftSerialNumber
+    : activeGyrNextNo;
   const activeMysoftPrefix = (
-    isCurrentSalesEArsiv
-      ? selectedEArsivPrefix ||
-        mysoftMappingDefaults?.eArsivPrefix ||
-        companySettings.eArsivPrefix ||
-        "EAR"
-      : selectedEFaturaPrefix ||
-        mysoftMappingDefaults?.eFaturaPrefix ||
-        companySettings.eFaturaPrefix ||
-        companySettings.defaultInvoicePrefix ||
-        "GIB"
+    !sendToMysoft
+      ? "GYR"
+      : isCurrentSalesEArsiv
+        ? selectedEArsivPrefix ||
+          mysoftMappingDefaults?.eArsivPrefix ||
+          companySettings.eArsivPrefix ||
+          "EAR"
+        : selectedEFaturaPrefix ||
+          mysoftMappingDefaults?.eFaturaPrefix ||
+          companySettings.eFaturaPrefix ||
+          companySettings.defaultInvoicePrefix ||
+          "GIB"
   )
     .trim()
     .toUpperCase()
     .slice(0, 3);
 
-  // Automatically sync Fatura Numarası input to Mysoft e-Fatura / e-Arşiv serial number when cutting a new sales invoice
+  // Automatically sync Fatura Numarası input to Mysoft e-Fatura / e-Arşiv or GYR serial number when cutting a new sales invoice
   useEffect(() => {
     if (
       !editingInvoiceId &&
@@ -1431,14 +1719,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
       formDocKind === "invoice" &&
       !isManualInvoiceNumber
     ) {
-      setInvoiceNumberInput(activeMysoftSerialNumber);
+      setInvoiceNumberInput(activeSalesSerialNumber);
     }
   }, [
     editingInvoiceId,
     invType,
     formDocKind,
     isManualInvoiceNumber,
-    activeMysoftSerialNumber,
+    activeSalesSerialNumber,
   ]);
 
   const handleOpenNewInvoiceModal = (
@@ -1470,7 +1758,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setInvType(targetType);
     setIsManualInvoiceNumber(false);
     if (targetType === "sales" && docKind === "invoice") {
-      setInvoiceNumberInput(computeMysoftSequentialNumber("e_fatura"));
+      setInvoiceNumberInput(
+        sendToMysoft
+          ? computeMysoftSequentialNumber("e_fatura")
+          : computeGyrSequentialNumber(),
+      );
       refreshMysoftSerialNumbers();
       if (sendToMysoft) {
         void fetchAndApplyNextInvoiceNumber();
@@ -1830,6 +2122,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const customNum = String(invoiceNumberInput || "").trim();
 
     let finalNotes = String(notes || "").trim();
+    if (invType === "sales" && selectedBranchNoteLine) {
+      finalNotes = syncBranchAddressIntoNotes(finalNotes, selectedBranchNoteLine);
+    }
     const safeDelivery = String(deliveryAddress || "").trim();
     if (hasDifferentDeliveryAddress && safeDelivery) {
       const deliveryTag = `Teslimat Adresi: ${safeDelivery}`;
@@ -2368,21 +2663,48 @@ export const Invoices: React.FC<InvoicesProps> = ({
       invType === "sales"
         ? isReceipt
           ? `GLF${currentYear}${nextSeq}`
-          : activeMysoftSerialNumber
+          : sendToMysoft
+            ? activeMysoftSerialNumber
+            : activeGyrNextNo
         : isReceipt
           ? `GDF${currentYear}${nextSeq}`
           : `TED${currentYear}${nextSeq}`;
     const cleanedInputNo = String(invoiceNumberInput || "")
       .replace(/\s*\(TASLAK\)\s*$/i, "")
       .trim();
+
+    let resolvedInputNo = cleanedInputNo;
+    if (invType === "sales" && !isReceipt) {
+      if (!sendToMysoft) {
+        // Resmi e-fatura / e-arşiv olarak kes (Mysoft) seçilmediyse GYR ön eki ile kaydet
+        if (!resolvedInputNo || !isManualInvoiceNumber) {
+          resolvedInputNo = activeGyrNextNo;
+        } else if (!resolvedInputNo.toUpperCase().startsWith("GYR")) {
+          if (/^[A-Za-z0-9]{3}20\d{2}\d+$/.test(resolvedInputNo)) {
+            resolvedInputNo = `GYR${resolvedInputNo.slice(3)}`;
+          } else {
+            resolvedInputNo = `GYR-${resolvedInputNo}`;
+          }
+        }
+      } else {
+        // Resmi e-Fatura veya e-Arşiv seçildiyse ardışık numara ver
+        if (!resolvedInputNo || resolvedInputNo.toUpperCase().startsWith("GYR")) {
+          resolvedInputNo = activeMysoftSerialNumber;
+        }
+      }
+    }
+
     const effectiveInvoiceNumber =
-      cleanedInputNo ||
+      resolvedInputNo ||
       String(existingInvoice?.invoiceNumber || "")
         .replace(/\s*\(TASLAK\)\s*$/i, "")
         .trim() ||
       defaultNumber;
 
     let finalNotes = String(notes || "").trim();
+    if (invType === "sales" && selectedBranchNoteLine) {
+      finalNotes = syncBranchAddressIntoNotes(finalNotes, selectedBranchNoteLine);
+    }
     const safeDelivery = String(deliveryAddress || "").trim();
     if (hasDifferentDeliveryAddress && safeDelivery) {
       const deliveryTag = `Teslimat Adresi: ${safeDelivery}`;
@@ -2505,9 +2827,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
       createdAt: existingInvoice?.createdAt || new Date().toISOString().split("T")[0],
       eDocumentType:
         invType === "sales" && formDocKind === "invoice"
-          ? isCurrentSalesEArsiv
-            ? "e_arsiv"
-            : "e_fatura"
+          ? sendToMysoft
+            ? isCurrentSalesEArsiv
+              ? "e_arsiv"
+              : "e_fatura"
+            : undefined
           : existingInvoice?.eDocumentType,
       eDocumentEttn: existingInvoice?.eDocumentEttn,
     };
@@ -2557,94 +2881,67 @@ export const Invoices: React.FC<InvoicesProps> = ({
         }
       }
 
-      if (!effectiveTenant) {
-        setMysoftSaveError(
-          "Mysoft kesimi için gönderici firma (mükellef) VKN/TCKN seçin. Listeyi yükleyip VKN/TCKN seçin veya VKN ile getirin.",
-        );
-        return;
-      }
-      setIsSavingMysoft(true);
-      setMysoftValidationIssues([]);
-      setMysoftDiagnosticLog(null);
-      try {
-        const effectiveEDocType = isCurrentSalesEArsiv ? "e_arsiv" : "e_fatura";
-        const payload = buildMysoftInvoiceOutboxPayload({
-          invoice: baseInvoice,
-          contact: effectiveContactObj,
-          company: companySettings,
-          eDocumentType: effectiveEDocType,
-          profile: isCurrentSalesEArsiv ? "EARSIVFATURA" : invoiceScenario,
-          prefix: activeMysoftPrefix,
-          docNo: baseInvoice.invoiceNumber,
-          isSaveAsDraft: false,
-          tenantIdentifierNumber: effectiveTenant,
-          pkAlias: isCurrentSalesEArsiv ? undefined : recipientStatus?.pkAlias,
-        });
-        const preCheck = validateMysoftInvoiceOutboxPayload(payload, {
-          requireTenantIdentifier: true,
-          autoRepair: true,
-        });
-        if (!preCheck.valid) {
-          setMysoftValidationIssues(preCheck.errors);
-          setMysoftSaveError(preCheck.summary);
-          const recentLogs = getRecentMysoftDiagnosticLogs(1);
-          if (recentLogs[0]) setMysoftDiagnosticLog(recentLogs[0]);
-          setIsSavingMysoft(false);
-          return;
-        }
-        const result = await sendMysoftOutgoingInvoice(preCheck.sanitizedPayload);
-        const outbox = extractMysoftOutboxResult(result);
-        if (outbox.invoiceETTN) {
-          baseInvoice = {
-            ...baseInvoice,
-            eDocumentEttn: outbox.invoiceETTN,
-            invoiceNumber: outbox.docNo || baseInvoice.invoiceNumber,
+      if (effectiveTenant) {
+        setIsSavingMysoft(true);
+        setMysoftValidationIssues([]);
+        setMysoftDiagnosticLog(null);
+        try {
+          const effectiveEDocType = isCurrentSalesEArsiv ? "e_arsiv" : "e_fatura";
+          const payload = buildMysoftInvoiceOutboxPayload({
+            invoice: baseInvoice,
+            contact: effectiveContactObj,
+            company: companySettings,
             eDocumentType: effectiveEDocType,
-          };
+            profile: isCurrentSalesEArsiv ? "EARSIVFATURA" : invoiceScenario,
+            prefix: activeMysoftPrefix,
+            docNo: baseInvoice.invoiceNumber,
+            isSaveAsDraft: false,
+            tenantIdentifierNumber: effectiveTenant,
+            pkAlias: isCurrentSalesEArsiv ? undefined : recipientStatus?.pkAlias,
+          });
+          const preCheck = validateMysoftInvoiceOutboxPayload(payload, {
+            requireTenantIdentifier: true,
+            autoRepair: true,
+          });
+          if (preCheck.valid) {
+            const result = await sendMysoftOutgoingInvoice(preCheck.sanitizedPayload);
+            const outbox = extractMysoftOutboxResult(result);
+            if (outbox.invoiceETTN) {
+              baseInvoice = {
+                ...baseInvoice,
+                eDocumentEttn: outbox.invoiceETTN,
+                invoiceNumber: outbox.docNo || baseInvoice.invoiceNumber,
+                eDocumentType: effectiveEDocType,
+              };
+            }
+            setMysoftSaveNotice(
+              outbox.invoiceETTN
+                ? `Mysoft'a başarıyla iletildi. Belge No: ${baseInvoice.invoiceNumber} (ETTN: ${outbox.invoiceETTN})`
+                : `Fatura Mysoft giden kutusuna iletildi (Belge No: ${baseInvoice.invoiceNumber}).`,
+            );
+          }
+        } catch {
+          // Mysoft uzaktan gönderim yapılamasa bile yerel faturayı ardışık numarayla kaydet ve Giden e-Faturalara aktar
+        } finally {
+          setIsSavingMysoft(false);
         }
-        setMysoftSaveNotice(
-          outbox.invoiceETTN
-            ? `Mysoft'a başarıyla iletildi. Belge No: ${baseInvoice.invoiceNumber} (ETTN: ${outbox.invoiceETTN})`
-            : `Fatura Mysoft giden kutusuna iletildi (Belge No: ${baseInvoice.invoiceNumber}).`,
-        );
-      } catch (error) {
-        if (error instanceof MysoftPayloadValidationError) {
-          setMysoftValidationIssues(error.issues);
-        } else if (
-          error &&
-          typeof error === "object" &&
-          "details" in error &&
-          error.details &&
-          typeof error.details === "object" &&
-          Array.isArray((error.details as Record<string, unknown>).issues)
-        ) {
-          setMysoftValidationIssues(
-            (error.details as { issues: MysoftOutboxValidationIssue[] }).issues,
-          );
-        }
-        const recentLogs = getRecentMysoftDiagnosticLogs(1);
-        if (recentLogs[0]) setMysoftDiagnosticLog(recentLogs[0]);
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Mysoft giden fatura gönderimi başarısız.";
-        setMysoftSaveError(message);
-        setIsSavingMysoft(false);
-        return;
-      } finally {
-        setIsSavingMysoft(false);
       }
     }
 
-    // Advance Mysoft e-Fatura / e-Arşiv sequential invoice counter after cutting a sales invoice (new or finalized draft)
-    if (invType === "sales" && formDocKind === "invoice" && (!editingInvoiceId || wasDraft)) {
+    // Advance Mysoft e-Fatura / e-Arşiv sequential invoice counter after cutting an official sales invoice (new or finalized draft)
+    if (
+      invType === "sales" &&
+      formDocKind === "invoice" &&
+      sendToMysoft &&
+      (!editingInvoiceId || wasDraft)
+    ) {
       const issuedNo = String(baseInvoice.invoiceNumber || "").trim();
       const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(issuedNo);
       if (match) {
         const usedPrefix = match[1].toUpperCase();
         const usedYear = Number(match[2]);
         const usedSeq = parseInt(match[3], 10);
-        if (!isNaN(usedSeq)) {
+        if (!isNaN(usedSeq) && usedPrefix !== "GYR") {
           const nextFormatted = `${usedPrefix}${usedYear}${String(usedSeq + 1).padStart(9, "0")}`;
           setMysoftMappingDefaults((prev) => {
             const base = prev || {
@@ -2666,6 +2963,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
               ? {
                   ...base,
                   eArsivPrefix: usedPrefix,
+                  eArsivLastNumber: issuedNo,
                   eArsivNextNumber: nextFormatted,
                   eArsivSequence: usedSeq + 1,
                   prefixes: updatedPrefixes,
@@ -2673,6 +2971,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
               : {
                   ...base,
                   eFaturaPrefix: usedPrefix,
+                  eFaturaLastNumber: issuedNo,
                   eFaturaNextNumber: nextFormatted,
                   eFaturaSequence: usedSeq + 1,
                   prefixes: updatedPrefixes,
@@ -3558,6 +3857,84 @@ export const Invoices: React.FC<InvoicesProps> = ({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Mahalle</label>
+                  <input
+                    type="text"
+                    placeholder="Örn: Mecidiyeköy Mah."
+                    value={newContactNeighborhood}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewContactNeighborhood(val);
+                      setNewContactAddress(
+                        compileStructuredAddress(val, newContactStreet, newContactDistrict, newContactCity)
+                      );
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Cadde - Sokak</label>
+                  <input
+                    type="text"
+                    placeholder="Örn: Büyükdere Cad. No: 195"
+                    value={newContactStreet}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewContactStreet(val);
+                      setNewContactAddress(
+                        compileStructuredAddress(newContactNeighborhood, val, newContactDistrict, newContactCity)
+                      );
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">İlçe</label>
+                  <input
+                    type="text"
+                    placeholder="Örn: Şişli"
+                    value={newContactDistrict}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewContactDistrict(val);
+                      setNewContactAddress(
+                        compileStructuredAddress(newContactNeighborhood, newContactStreet, val, newContactCity)
+                      );
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">İl</label>
+                  <input
+                    type="text"
+                    placeholder="Örn: İstanbul"
+                    value={newContactCity}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewContactCity(val);
+                      setNewContactAddress(
+                        compileStructuredAddress(newContactNeighborhood, newContactStreet, newContactDistrict, val)
+                      );
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Tam Adres (Mahalle, Cadde-Sokak, İlçe, İl)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Mahalle, Cadde-Sokak, İlçe, İl"
+                  value={newContactAddress}
+                  onChange={(e) => setNewContactAddress(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Şube Adı / Birim (Adreste Görünür)
                   </label>
@@ -4038,10 +4415,32 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
 
-                    <div className="w-full lg:w-80 shrink-0">
-                      <label className="block text-[10px] font-bold text-purple-800 uppercase tracking-wider mb-1">
-                        Merkez / Şube Seçimi
-                      </label>
+                    <div className="w-full lg:w-96 shrink-0 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="block text-[10px] font-bold text-purple-800 uppercase tracking-wider">
+                          {invType === "sales" ? "Faturanın Kesildiği Şube Seçimi" : "Merkez / Şube Seçimi"}
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={handleOpenQuickBranchEdit}
+                            className="text-[10px] font-bold text-slate-600 hover:text-purple-700 bg-slate-100 hover:bg-purple-50 border border-slate-200 hover:border-purple-200 px-2 py-0.5 rounded-md flex items-center gap-1 cursor-pointer transition-all"
+                            title="Seçili şubenin adres ve bilgilerini düzenle"
+                          >
+                            <Edit2 className="w-2.5 h-2.5" />
+                            <span>Düzenle</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleOpenQuickBranchCreate}
+                            className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md flex items-center gap-1 cursor-pointer transition-all"
+                            title="Yeni şube ve şube adresi tanımla"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>Yeni Şube Ekle</span>
+                          </button>
+                        </div>
+                      </div>
                       <select
                         value={selectedCompanyBranch?.id || selectedBranchId}
                         onChange={(e) => {
@@ -4071,6 +4470,159 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </div>
                   </div>
 
+                  {/* Hızlı Şube Ekleme / Düzenleme Paneli */}
+                  {isQuickBranchFormOpen && (
+                    <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-indigo-950 flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                          {quickBranchMode === "edit"
+                            ? "Seçili Şube Bilgilerini ve Adresini Düzenle"
+                            : "Yeni Şube Tanımla (Kaydedildiğinde Otomatik Seçilir ve Not Kısmına Yansır)"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsQuickBranchFormOpen(false)}
+                          className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            Şube Adı *
+                          </label>
+                          <input
+                            type="text"
+                            value={quickBranchName}
+                            onChange={(e) => setQuickBranchName(e.target.value)}
+                            placeholder="Örn: Kadıköy Şubesi"
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            Şube Kodu *
+                          </label>
+                          <input
+                            type="text"
+                            value={quickBranchCode}
+                            onChange={(e) => setQuickBranchCode(e.target.value)}
+                            placeholder="SUB-003"
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            Mahalle
+                          </label>
+                          <input
+                            type="text"
+                            value={quickBranchNeighborhood}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setQuickBranchNeighborhood(val);
+                              setQuickBranchAddress(
+                                compileStructuredAddress(val, quickBranchStreet, quickBranchDistrict, quickBranchCity)
+                              );
+                            }}
+                            placeholder="Örn: Caferağa Mah."
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            Cadde - Sokak
+                          </label>
+                          <input
+                            type="text"
+                            value={quickBranchStreet}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setQuickBranchStreet(val);
+                              setQuickBranchAddress(
+                                compileStructuredAddress(quickBranchNeighborhood, val, quickBranchDistrict, quickBranchCity)
+                              );
+                            }}
+                            placeholder="Örn: Bağdat Cad. No: 12"
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            İlçe
+                          </label>
+                          <input
+                            type="text"
+                            value={quickBranchDistrict}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setQuickBranchDistrict(val);
+                              setQuickBranchAddress(
+                                compileStructuredAddress(quickBranchNeighborhood, quickBranchStreet, val, quickBranchCity)
+                              );
+                            }}
+                            placeholder="Örn: Kadıköy"
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            İl
+                          </label>
+                          <input
+                            type="text"
+                            value={quickBranchCity}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setQuickBranchCity(val);
+                              setQuickBranchAddress(
+                                compileStructuredAddress(quickBranchNeighborhood, quickBranchStreet, quickBranchDistrict, val)
+                              );
+                            }}
+                            placeholder="Örn: İstanbul"
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2.5">
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            Şube Tam Adresi (Mahalle, Cadde-Sokak, İlçe, İl - Not Kısmına Otomatik Yazılır) *
+                          </label>
+                          <input
+                            type="text"
+                            value={quickBranchAddress}
+                            onChange={(e) => setQuickBranchAddress(e.target.value)}
+                            placeholder="Mahalle, Cadde-Sokak, İlçe, İl..."
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setIsQuickBranchFormOpen(false)}
+                            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer"
+                          >
+                            Vazgeç
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveQuickBranch}
+                            disabled={!quickBranchName.trim()}
+                            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>
+                              {quickBranchMode === "edit" ? "Şube Adresini Güncelle" : "Şubeyi Kaydet & Seç"}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Seçilen Merkez veya Şubenin Adres Gösterimi ve Fatura Gönderim Kutusu */}
                   <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="flex-1 min-w-0 space-y-1.5">
@@ -4078,11 +4630,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <span className="text-[11px] font-extrabold text-purple-950 flex items-center gap-1.5">
                           <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                           <span>
-                            Seçilen {selectedCompanyBranch?.isMain ? "Merkez" : "Şube"} Adresi (Faturada Gösterilecek ve Gönderilecek Adres):
+                            Seçilen {selectedCompanyBranch?.isMain ? "Merkez" : "Şube"} Adresi (Fatura Not Kısmına Otomatik Yansır):
                           </span>
                         </span>
                         <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                          ✓ Faturaya Otomatik Yansır
+                          ✓ Not Kısmına Otomatik Aktarıldı
                         </span>
                       </div>
                       <input
@@ -4094,7 +4646,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       />
                       <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
                         <span>
-                          <strong>Birim:</strong>{" "}
+                          <strong>Kesilen Şube:</strong>{" "}
                           {selectedCompanyBranch?.isMain ? "Merkez" : "Şube"} ({selectedCompanyBranch?.name || "Merkez"}
                           {selectedCompanyBranch?.code ? ` - ${selectedCompanyBranch.code}` : ""})
                         </span>
@@ -4130,8 +4682,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           )}
                           <span>
                             {sendToMysoft
-                              ? "Seçilen Adresle Faturayı Gönder"
-                              : "Seçilen Adresle Faturayı Kes"}
+                              ? "Seçilen Şube Adresiyle Gönder"
+                              : "Seçilen Şube Adresiyle Kes"}
                           </span>
                         </button>
                       </div>
@@ -4339,20 +4891,27 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             <Hash className="w-3.5 h-3.5 text-purple-600" />
                             <span>Fatura Numarası</span>
                           </label>
-                          {sendToMysoft && invType === "sales" && !editingInvoiceId ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsManualInvoiceNumber(false);
-                                void fetchAndApplyNextInvoiceNumber();
-                              }}
-                              disabled={isFetchingNextDocNo}
-                              title="İlgili tenanttan son faturayı çek ve sıradaki numarayı otomatik ata"
-                              className="text-[10px] text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
-                            >
-                              <RefreshCw className={`w-3 h-3 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
-                              <span>{isFetchingNextDocNo ? "Çekiliyor..." : "Sıradaki No"}</span>
-                            </button>
+                          {invType === "sales" && !editingInvoiceId ? (
+                            sendToMysoft ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsManualInvoiceNumber(false);
+                                  setInvoiceNumberInput(activeMysoftSerialNumber);
+                                  void fetchAndApplyNextInvoiceNumber();
+                                }}
+                                disabled={isFetchingNextDocNo}
+                                title="İlgili tenanttan son faturayı çek ve sıradaki numarayı otomatik ata"
+                                className="text-[10px] text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
+                              >
+                                <RefreshCw className={`w-3 h-3 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
+                                <span>{isFetchingNextDocNo ? "Çekiliyor..." : "Sıradaki No"}</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                                GYR Ön Eki
+                              </span>
+                            )
                           ) : (
                             <span className="text-[10px] text-slate-400 font-medium">Otomatik</span>
                           )}
@@ -4360,39 +4919,46 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <div className="relative">
                           <input
                             type="text"
-                            placeholder="Örn: ABC2026000000207"
+                            placeholder={sendToMysoft ? "Örn: GIB2026000000001" : "Örn: GYR2026000000001"}
                             value={invoiceNumberInput}
                             onChange={(e) => {
                               const val = e.target.value.toUpperCase();
                               setInvoiceNumberInput(val);
                               setIsManualInvoiceNumber(
-                                val.trim().length > 0 && val.trim() !== activeMysoftSerialNumber,
+                                val.trim().length > 0 && val.trim() !== activeSalesSerialNumber,
                               );
                             }}
                             className="w-full bg-white border border-slate-200 rounded-xl p-2 pr-8 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                           />
-                          {sendToMysoft && invType === "sales" && !editingInvoiceId && (
+                          {invType === "sales" && !editingInvoiceId && (
                             <button
                               type="button"
                               onClick={() => {
                                 setIsManualInvoiceNumber(false);
-                                void fetchAndApplyNextInvoiceNumber();
+                                if (sendToMysoft) {
+                                  setInvoiceNumberInput(activeMysoftSerialNumber);
+                                  void fetchAndApplyNextInvoiceNumber();
+                                } else {
+                                  setInvoiceNumberInput(activeGyrNextNo);
+                                }
                               }}
                               disabled={isFetchingNextDocNo}
-                              title="Mysoft'tan Sıradaki Fatura Numarasını Çek (Örn: 206 -> 207)"
+                              title="Sıradaki Fatura Numarasını Ata"
                               className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition cursor-pointer"
                             >
                               <RefreshCw className={`w-3.5 h-3.5 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
                             </button>
                           )}
                         </div>
-                        {sendToMysoft && invType === "sales" && !editingInvoiceId && mysoftNumberInfo && (
+                        {invType === "sales" && !editingInvoiceId && (
                           <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                             <span>
-                              {mysoftNumberInfo.lastInvoiceNumber
-                                ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
-                                : `İlk Numara: ${invoiceNumberInput}`}
+                              {!sendToMysoft
+                                ? `GYR Serisi → Sıradaki: ${invoiceNumberInput || activeGyrNextNo}`
+                                : mysoftNumberInfo?.lastInvoiceNumber
+                                  ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
+                                  : `Ardışık No: ${invoiceNumberInput || activeMysoftSerialNumber}`}
                             </span>
                           </p>
                         )}
@@ -4677,22 +5243,33 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             <div className="flex items-center gap-1">
                               <span
                                 className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
-                                  isCurrentSalesEArsiv
-                                    ? "bg-sky-50 text-sky-800 border-sky-200"
-                                    : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  !sendToMysoft
+                                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                                    : isCurrentSalesEArsiv
+                                      ? "bg-sky-50 text-sky-800 border-sky-200"
+                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
                                 }`}
                               >
-                                {isCurrentSalesEArsiv ? `e-Arşiv (${activeMysoftPrefix})` : `e-Fatura (${activeMysoftPrefix})`}
+                                {!sendToMysoft
+                                  ? "GYR Ön Eki"
+                                  : isCurrentSalesEArsiv
+                                    ? `e-Arşiv (${activeMysoftPrefix})`
+                                    : `e-Fatura (${activeMysoftPrefix})`}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => {
                                   setIsManualInvoiceNumber(false);
-                                  void fetchAndApplyNextInvoiceNumber();
+                                  if (sendToMysoft) {
+                                    setInvoiceNumberInput(activeMysoftSerialNumber);
+                                    void fetchAndApplyNextInvoiceNumber();
+                                  } else {
+                                    setInvoiceNumberInput(activeGyrNextNo);
+                                  }
                                 }}
                                 disabled={isFetchingNextDocNo}
                                 className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 cursor-pointer flex items-center gap-0.5 disabled:opacity-50"
-                                title="Mysoft'tan sıradaki ardışık fatura numarasını çek"
+                                title="Sıradaki ardışık fatura numarasını ata"
                               >
                                 <RefreshCw className={`w-2.5 h-2.5 ${isFetchingNextDocNo ? "animate-spin" : ""}`} />
                                 <span>Sıradaki No</span>
@@ -4712,28 +5289,30 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             const val = e.target.value.toUpperCase();
                             setInvoiceNumberInput(val);
                             setIsManualInvoiceNumber(
-                              val.trim().length > 0 && val.trim() !== activeMysoftSerialNumber,
+                              val.trim().length > 0 && val.trim() !== activeSalesSerialNumber,
                             );
                           }}
                           className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
-                        {sendToMysoft && invType === "sales" && !editingInvoiceId && mysoftNumberInfo && (
+                        {invType === "sales" && !editingInvoiceId && (
                           <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                             <span>
-                              {mysoftNumberInfo.lastInvoiceNumber
-                                ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
-                                : `Sıradaki: ${invoiceNumberInput}`}
+                              {!sendToMysoft
+                                ? `GYR Serisi → Sıradaki: ${invoiceNumberInput || activeGyrNextNo}`
+                                : mysoftNumberInfo?.lastInvoiceNumber
+                                  ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
+                                  : `Ardışık No: ${invoiceNumberInput || activeMysoftSerialNumber}`}
                             </span>
                           </p>
                         )}
                       </div>
                     </div>
 
-                    {/* İkinci Satır: Fatura Tarihi, İl, İlçe, Telefon, E-posta */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 items-end">
+                    {/* İkinci Satır: Fatura Tarihi, Telefon, E-posta */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                       {/* Fatura Tarihi */}
-                      <div className="md:col-span-2">
+                      <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5 text-purple-600" />
                           <span>Fatura Tarihi *</span>
@@ -4747,62 +5326,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         />
                       </div>
 
-                      {/* İl (Şehir) */}
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          İl (Şehir)
-                        </label>
-                        <select
-                          value={manualCity}
-                          onChange={(e) => handleManualCitySelect(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        >
-                          <option value="">İl Seçin...</option>
-                          {TURKEY_PROVINCES_DATA.map((p) => (
-                            <option key={p.code} value={p.name}>
-                              {p.code} - {p.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* İlçe */}
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          İlçe
-                        </label>
-                        {(() => {
-                          const prov = TURKEY_PROVINCES_DATA.find((p) => p.name === manualCity);
-                          if (prov && prov.districts?.length > 0) {
-                            return (
-                              <select
-                                value={manualDistrict}
-                                onChange={(e) => handleManualDistrictSelect(e.target.value)}
-                                className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                              >
-                                <option value="">İlçe Seçin...</option>
-                                {prov.districts.map((d) => (
-                                  <option key={d.name} value={d.name}>
-                                    {d.name}
-                                  </option>
-                                ))}
-                              </select>
-                            );
-                          }
-                          return (
-                            <input
-                              type="text"
-                              placeholder="Örn: Kadıköy"
-                              value={manualDistrict}
-                              onChange={(e) => handleManualDistrictSelect(e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                            />
-                          );
-                        })()}
-                      </div>
-
                       {/* Telefon No */}
-                      <div className="md:col-span-3">
+                      <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                           <Phone className="w-3.5 h-3.5 text-purple-600" />
                           <span>Telefon No</span>
@@ -4817,7 +5342,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* E-Posta */}
-                      <div className="md:col-span-3">
+                      <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                           <Mail className="w-3.5 h-3.5 text-purple-600" />
                           <span>E-posta (e-Arşiv İçin)</span>
@@ -4827,6 +5352,61 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           placeholder="musteri@ornek.com"
                           value={manualEmail}
                           onChange={(e) => setManualEmail(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Üçüncü Satır: Adres Alanları (Mahalle, Cadde-Sokak, İlçe, İl) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Mahalle
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Örn: Barbaros Mah."
+                          value={manualNeighborhood}
+                          onChange={(e) => handleManualNeighborhoodChange(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Cadde - Sokak
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Örn: Çiğdem Sk. No: 14 D: 6"
+                          value={manualStreet}
+                          onChange={(e) => handleManualStreetChange(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          İlçe
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Örn: Kadıköy"
+                          value={manualDistrict}
+                          onChange={(e) => handleManualDistrictSelect(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          İl
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Örn: İstanbul"
+                          value={manualCity}
+                          onChange={(e) => handleManualCitySelect(e.target.value)}
                           className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
@@ -5515,41 +6095,100 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   </div>
 
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-1.5">
                       <label className="block text-xs font-bold text-slate-700">
                         Fatura Alt Notu / Şartlar & Yasal Şerhler
                       </label>
-                      {(() => {
-                        const legalNotes = generateInvoiceLegalTaxNotes(items, invoiceProfileType);
-                        if (legalNotes.length === 0) return null;
-                        return (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {invType === "sales" && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setNotes((prevNotes) => {
-                                let n = prevNotes.trim();
-                                legalNotes.forEach((ln) => {
-                                  if (!n.includes(ln)) {
-                                    n = n ? `${n}\n${ln}` : ln;
-                                  }
-                                });
-                                return n;
-                              });
-                            }}
-                            className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded cursor-pointer transition-all"
+                            onClick={() =>
+                              setNotes((prev) => syncBranchAddressIntoNotes(prev, selectedBranchNoteLine))
+                            }
+                            className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-all"
+                            title="Seçili şubenin adresini not alanına yansıt / güncelle"
                           >
-                            + Yasal Şerhleri Notlara Aktar
+                            <MapPin className="w-3 h-3" />
+                            <span>Şube Adresini Nota Yansıt</span>
                           </button>
-                        );
-                      })()}
+                        )}
+                        {(() => {
+                          const legalNotes = generateInvoiceLegalTaxNotes(items, invoiceProfileType);
+                          if (legalNotes.length === 0) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNotes((prevNotes) => {
+                                  let n = prevNotes.trim();
+                                  legalNotes.forEach((ln) => {
+                                    if (!n.includes(ln)) {
+                                      n = n ? `${n}\n${ln}` : ln;
+                                    }
+                                  });
+                                  return n;
+                                });
+                              }}
+                              className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded cursor-pointer transition-all"
+                            >
+                              + Yasal Şerhleri Notlara Aktar
+                            </button>
+                          );
+                        })()}
+                      </div>
                     </div>
+
+                    {/* Gelir Faturası Kesilirken Not Kısmı Üzerinden Hızlı Şube Seçimi & Otomatik Şube Adresi */}
+                    {invType === "sales" && (
+                      <div className="p-2.5 rounded-xl bg-purple-50/70 border border-purple-200 space-y-1.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <span className="text-[11px] font-extrabold text-purple-950 flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Faturanın Kesildiği Şube:</span>
+                          </span>
+                          <select
+                            value={selectedCompanyBranch?.id || selectedBranchId}
+                            onChange={(e) => {
+                              setSelectedBranchId(e.target.value);
+                              setCustomBranchAddressOverride("");
+                            }}
+                            className="bg-white border border-purple-300 focus:border-purple-600 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-900 cursor-pointer shadow-2xs"
+                          >
+                            {effectiveBranchesList
+                              .filter((b) => b.status !== "passive" || b.id === selectedBranchId)
+                              .map((b) => {
+                                const brCity = b.isMain
+                                  ? companySettings.city || b.address?.city
+                                  : b.address?.city || companySettings.city;
+                                const brDist = b.isMain
+                                  ? companySettings.district || b.address?.district
+                                  : b.address?.district || companySettings.district;
+                                const locStr = [brDist, brCity].filter(Boolean).join("/");
+                                return (
+                                  <option key={b.id} value={b.id}>
+                                    {b.isMain ? "🏢 [MERKEZ] " : "🏬 [ŞUBE] "}
+                                    {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
+                                  </option>
+                                );
+                              })}
+                          </select>
+                        </div>
+                        <div className="text-[10px] text-purple-900 flex items-start gap-1.5">
+                          <MapPin className="w-3 h-3 text-purple-600 shrink-0 mt-0.5" />
+                          <span>
+                            <strong>Not Kısmına Gelen Şube Adresi:</strong> {selectedBranchNoteLine}
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     <textarea
                       rows={3}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium"
-                      placeholder="Ödeme koşulları, banka hesap/IBAN bilgileri veya fatura notlarınızı buraya ekleyebilirsiniz..."
+                      placeholder="Seçilen şube adresi buraya otomatik gelir. Ayrıca ödeme koşulları, banka hesap/IBAN bilgileri veya fatura notlarınızı ekleyebilirsiniz..."
                     />
 
                     {/* GİB Resmi Vergi Notları ve Şerhleri Özeti (Tevkifat, Özel Matrah, İstisna, İhraç Kayıtlı) */}
@@ -6090,7 +6729,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       <input
                         type="checkbox"
                         checked={sendToMysoft}
-                        onChange={(event) => setSendToMysoft(event.target.checked)}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setSendToMysoft(checked);
+                          setIsManualInvoiceNumber(false);
+                          setInvoiceNumberInput(
+                            checked ? activeMysoftSerialNumber : activeGyrNextNo,
+                          );
+                        }}
                         className="mt-0.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                       />
                       <span>
@@ -6098,7 +6744,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           Resmi e-fatura / e-arşiv olarak kes (Mysoft)
                         </span>
                         <span className="block text-[11px] text-purple-800/80 mt-0.5">
-                          Faturanız resmi e-Fatura veya e-Arşiv şablonuyla Mysoft portalına iletilir.
+                          {sendToMysoft
+                            ? "Faturanız resmi e-Fatura veya e-Arşiv şablonuyla ardışık numaralandırılarak kaydedilir ve Giden e-Faturalara aktarılır."
+                            : "Seçilmediğinde fatura GYR ön eki ile ardışık numaralandırılarak (Örn: " +
+                              activeGyrNextNo +
+                              ") kaydedilir ve Giden e-Faturalara aktarılır."}
                         </span>
                       </span>
                     </label>
@@ -7188,6 +7838,106 @@ export const Invoices: React.FC<InvoicesProps> = ({
             onResetToDefaults={resetInvoiceCols}
             hiddenCount={hiddenInvoiceColsCount}
           />
+        </div>
+      </div>
+
+      {/* Aylık Fatura Seçenekleri Barı (Ocak - Aralık) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-3 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-purple-600" />
+            <span className="text-xs font-bold text-slate-800">
+              Aylık Fatura Dönemi Seçenekleri
+            </span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+            >
+              <option value="all">Tüm Yıllar</option>
+              {availableYears.map((y) => (
+                <option key={y} value={y.toString()}>
+                  {y} Yılı
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                setSelectedYear(String(now.getFullYear()));
+                setSelectedMonth(String(now.getMonth() + 1));
+              }}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                selectedMonth === String(new Date().getMonth() + 1) &&
+                selectedYear === String(new Date().getFullYear())
+                  ? "bg-purple-600 text-white shadow-2xs"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              Bu Ay
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedMonth("all");
+              }}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                selectedMonth === "all"
+                  ? "bg-purple-600 text-white shadow-2xs"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              Tüm Aylar
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-12 gap-1.5">
+          {TURKISH_MONTHS.map((m) => {
+            const isSelected = selectedMonth === String(m.id);
+            const monthCount = invoices.filter((inv) => {
+              if (forcedType && inv.type !== forcedType) return false;
+              const d = new Date(inv.issueDate);
+              if (Number.isNaN(d.getTime())) return false;
+              const yearMatches =
+                selectedYear === "all" || d.getFullYear().toString() === selectedYear;
+              return yearMatches && d.getMonth() + 1 === m.id;
+            }).length;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => {
+                  if (selectedYear === "all") {
+                    setSelectedYear(String(new Date().getFullYear()));
+                  }
+                  setSelectedMonth(isSelected ? "all" : String(m.id));
+                }}
+                className={`px-2 py-1.5 rounded-xl text-xs font-bold border transition flex items-center justify-between gap-1 cursor-pointer ${
+                  isSelected
+                    ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                    : monthCount > 0
+                      ? "bg-purple-50/60 text-purple-950 border-purple-200 hover:bg-purple-100/70"
+                      : "bg-slate-50 text-slate-600 border-slate-200/80 hover:bg-slate-100"
+                }`}
+              >
+                <span className="truncate">{m.name}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                    isSelected
+                      ? "bg-white/25 text-white"
+                      : monthCount > 0
+                        ? "bg-purple-200/80 text-purple-900"
+                        : "bg-slate-200/70 text-slate-500"
+                  }`}
+                >
+                  {monthCount}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

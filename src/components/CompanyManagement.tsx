@@ -32,6 +32,7 @@ import {
   isProtectedCompanyId,
   parseSeparateAddressFields,
   appendCityDistrictToAddress,
+  compileStructuredAddress,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import { checkRecipientTaxpayerStatus } from "../services/mysoftEDocumentService";
@@ -117,6 +118,7 @@ interface CompanyManagementProps {
   onUpdateCompany?: (comp: CompanyItem) => void;
   onDeleteCompany?: (companyId: string) => void;
   currentUser?: UserProfile | null;
+  settingsInitialTab?: "theme" | "system" | "backup" | "cloud" | "github";
 }
 
 export const CompanyManagement: React.FC<CompanyManagementProps> = ({
@@ -142,6 +144,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   onUpdateCompany,
   onDeleteCompany,
   currentUser,
+  settingsInitialTab,
 }) => {
   const [currentSubTab, setCurrentSubTab] = useState<CompanySubTab>(activeSubTab);
 
@@ -791,11 +794,31 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     e.preventDefault();
     if (!branchForm.name || !branchForm.code) return;
 
+    const rawAddr = (branchForm.address as AddressDetails) || {
+      country: "Türkiye",
+      city: "İstanbul",
+      district: "Şişli",
+    };
+    const finalFullAddr =
+      compileStructuredAddress(
+        rawAddr.neighborhood,
+        rawAddr.street,
+        rawAddr.district,
+        rawAddr.city,
+        rawAddr.buildingNo,
+        rawAddr.doorNo,
+        rawAddr.postalCode
+      ) || rawAddr.fullAddress || "";
+    const normalizedAddr: AddressDetails = {
+      ...rawAddr,
+      fullAddress: finalFullAddr,
+    };
+
     if (editingBranch) {
       onUpdateBranch({
         ...editingBranch,
         ...branchForm,
-        address: branchForm.address as AddressDetails,
+        address: normalizedAddr,
       } as Branch);
     } else {
       const newBranch: Branch = {
@@ -807,11 +830,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         email: branchForm.email || "",
         isMain: !!branchForm.isMain,
         status: (branchForm.status as "active" | "passive") || "active",
-        address: (branchForm.address as AddressDetails) || {
-          country: "Türkiye",
-          city: "İstanbul",
-          district: "Şişli",
-        },
+        address: normalizedAddr,
         createdAt: new Date().toISOString().split("T")[0],
       };
       onAddBranch(newBranch);
@@ -860,13 +879,32 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     if (!warehouseForm.name || !warehouseForm.code) return;
 
     const selectedBranch = branches.find((b) => b.id === warehouseForm.branchId);
+    const rawAddr = (warehouseForm.address as AddressDetails) || {
+      country: "Türkiye",
+      city: "İstanbul",
+      district: "Şişli",
+    };
+    const finalFullAddr =
+      compileStructuredAddress(
+        rawAddr.neighborhood,
+        rawAddr.street,
+        rawAddr.district,
+        rawAddr.city,
+        rawAddr.buildingNo,
+        rawAddr.doorNo,
+        rawAddr.postalCode
+      ) || rawAddr.fullAddress || "";
+    const normalizedAddr: AddressDetails = {
+      ...rawAddr,
+      fullAddress: finalFullAddr,
+    };
 
     if (editingWarehouse) {
       onUpdateWarehouse({
         ...editingWarehouse,
         ...warehouseForm,
         branchName: selectedBranch?.name || warehouseForm.branchName,
-        address: warehouseForm.address as AddressDetails,
+        address: normalizedAddr,
       } as Warehouse);
     } else {
       const newWh: Warehouse = {
@@ -880,11 +918,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         branchId: warehouseForm.branchId || branches[0]?.id || "",
         branchName: selectedBranch?.name || "Merkez",
         status: (warehouseForm.status as "active" | "passive") || "active",
-        address: (warehouseForm.address as AddressDetails) || {
-          country: "Türkiye",
-          city: "İstanbul",
-          district: "Şişli",
-        },
+        address: normalizedAddr,
         createdAt: new Date().toISOString().split("T")[0],
       };
       onAddWarehouse(newWh);
@@ -1332,8 +1366,135 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
               </div>
             </div>
 
-            {/* VKN/TCKN Sorgulamasından Gelen Ayrı Ayrı İl, İlçe, Mahalle ve Açık Adres Alanları */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+            {/* Adres Alanları: Mahalle, Cadde-Sokak, İlçe, İl ve Tam Açık Adres */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Mahalle
+                </label>
+                <input
+                  type="text"
+                  value={profileForm.neighborhood || ""}
+                  onChange={(e) => {
+                    const nextNeighborhood = e.target.value;
+                    updateAndAutoSaveProfile((prev) => {
+                      const nextAddress = compileStructuredAddress(
+                        nextNeighborhood,
+                        prev.street || prev.addressDetails?.street || "",
+                        prev.district,
+                        prev.city,
+                        prev.buildingNo,
+                        prev.doorNo,
+                        prev.postalCode
+                      ) || prev.address || "";
+                      return {
+                        ...prev,
+                        neighborhood: nextNeighborhood,
+                        address: nextAddress,
+                        addressDetails: {
+                          ...(prev.addressDetails || {
+                            country: prev.country || "Türkiye",
+                            city: prev.city || "",
+                            district: prev.district || "",
+                          }),
+                          neighborhood: nextNeighborhood,
+                          fullAddress: nextAddress,
+                        },
+                      };
+                    });
+                  }}
+                  onBlur={() => handleSaveProfile()}
+                  placeholder="Mahalle..."
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Cadde - Sokak
+                </label>
+                <input
+                  type="text"
+                  value={profileForm.street || profileForm.addressDetails?.street || ""}
+                  onChange={(e) => {
+                    const nextStreet = e.target.value;
+                    updateAndAutoSaveProfile((prev) => {
+                      const nextAddress = compileStructuredAddress(
+                        prev.neighborhood,
+                        nextStreet,
+                        prev.district,
+                        prev.city,
+                        prev.buildingNo,
+                        prev.doorNo,
+                        prev.postalCode
+                      ) || prev.address || "";
+                      return {
+                        ...prev,
+                        street: nextStreet,
+                        address: nextAddress,
+                        addressDetails: {
+                          ...(prev.addressDetails || {
+                            country: prev.country || "Türkiye",
+                            city: prev.city || "",
+                            district: prev.district || "",
+                          }),
+                          street: nextStreet,
+                          fullAddress: nextAddress,
+                        },
+                      };
+                    });
+                  }}
+                  onBlur={() => handleSaveProfile()}
+                  placeholder="Cadde, Sokak, No..."
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  İlçe
+                </label>
+                <input
+                  type="text"
+                  value={profileForm.district || ""}
+                  onChange={(e) => {
+                    const nextDistrict = e.target.value;
+                    updateAndAutoSaveProfile((prev) => {
+                      const nextAddress = compileStructuredAddress(
+                        prev.neighborhood,
+                        prev.street || prev.addressDetails?.street || "",
+                        nextDistrict,
+                        prev.city,
+                        prev.buildingNo,
+                        prev.doorNo,
+                        prev.postalCode
+                      ) || appendCityDistrictToAddress(
+                        prev.address || "",
+                        prev.city,
+                        nextDistrict,
+                        prev.city,
+                        prev.district
+                      );
+                      return {
+                        ...prev,
+                        district: nextDistrict,
+                        address: nextAddress,
+                        addressDetails: {
+                          ...(prev.addressDetails || { country: prev.country || "Türkiye" }),
+                          city: prev.city || "",
+                          district: nextDistrict,
+                          neighborhood: prev.neighborhood || "",
+                          fullAddress: nextAddress,
+                        },
+                      };
+                    });
+                  }}
+                  onBlur={() => handleSaveProfile()}
+                  placeholder="İlçe..."
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
+                />
+              </div>
+
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   İl
@@ -1344,7 +1505,15 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   onChange={(e) => {
                     const nextCity = e.target.value;
                     updateAndAutoSaveProfile((prev) => {
-                      const nextAddress = appendCityDistrictToAddress(
+                      const nextAddress = compileStructuredAddress(
+                        prev.neighborhood,
+                        prev.street || prev.addressDetails?.street || "",
+                        prev.district,
+                        nextCity,
+                        prev.buildingNo,
+                        prev.doorNo,
+                        prev.postalCode
+                      ) || appendCityDistrictToAddress(
                         prev.address || "",
                         nextCity,
                         prev.district,
@@ -1370,76 +1539,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                 />
               </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  İlçe
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.district || ""}
-                  onChange={(e) => {
-                    const nextDistrict = e.target.value;
-                    updateAndAutoSaveProfile((prev) => {
-                      const nextAddress = appendCityDistrictToAddress(
-                        prev.address || "",
-                        prev.city,
-                        nextDistrict,
-                        prev.city,
-                        prev.district
-                      );
-                      return {
-                        ...prev,
-                        district: nextDistrict,
-                        address: nextAddress,
-                        addressDetails: {
-                          ...(prev.addressDetails || { country: prev.country || "Türkiye" }),
-                          city: prev.city || "İstanbul",
-                          district: nextDistrict,
-                          neighborhood: prev.neighborhood || "",
-                          fullAddress: nextAddress,
-                        },
-                      };
-                    });
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  placeholder="İlçe..."
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Mahalle
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.neighborhood || ""}
-                  onChange={(e) => {
-                    const nextNeighborhood = e.target.value;
-                    updateAndAutoSaveProfile((prev) => ({
-                      ...prev,
-                      neighborhood: nextNeighborhood,
-                      addressDetails: {
-                        ...(prev.addressDetails || {
-                          country: prev.country || "Türkiye",
-                          city: prev.city || "İstanbul",
-                          district: prev.district || "",
-                        }),
-                        neighborhood: nextNeighborhood,
-                      },
-                    }));
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  placeholder="Mahalle..."
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
             </div>
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Açık Adres
+                Tam Adres (Mahalle, Cadde-Sokak, İlçe, İl)
               </label>
               <textarea
                 rows={2}
@@ -1452,7 +1556,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                     addressDetails: {
                       ...(prev.addressDetails || {
                         country: prev.country || "Türkiye",
-                        city: prev.city || "İstanbul",
+                        city: prev.city || "",
                         district: prev.district || "",
                         neighborhood: prev.neighborhood || "",
                       }),
@@ -1461,7 +1565,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   }));
                 }}
                 onBlur={() => handleSaveProfile()}
-                placeholder="İl / İlçe, Mahalle, Cadde/Sokak, Bina ve Kapı No..."
+                placeholder="Mahalle, Cadde-Sokak, İlçe, İl..."
                 className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-medium focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
               />
             </div>
@@ -2876,7 +2980,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         <div className="space-y-6">
           <Settings
             embedded={true}
-            initialTab="system"
+            initialTab={settingsInitialTab || "system"}
             settings={profileForm}
             onSaveSettings={(newSettings) => {
               setProfileForm(newSettings);

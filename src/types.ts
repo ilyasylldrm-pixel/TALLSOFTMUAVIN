@@ -845,6 +845,19 @@ export interface CompanySettings {
   /** Firma VKN/TCKN; Mysoft e-belge çağrılarında tenantIdentifierNumber olarak kullanılır. */
   tenantIdentifierNumber?: string;
   mysoftCredentials?: MysoftCredentials;
+  /** Son manuel veri yedekleme zamanı (ISO 8601) ve 7 günlük bildirim yapılandırması */
+  lastManualBackupAt?: string;
+  manualBackupReminderDays?: number;
+  manualBackupHistory?: ManualBackupLogEntry[];
+}
+
+export interface ManualBackupLogEntry {
+  id: string;
+  timestamp: string;
+  fileName: string;
+  sizeBytes: number;
+  performedBy?: string;
+  companyId?: string;
 }
 
 export interface LedgerEntry {

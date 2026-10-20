@@ -17,7 +17,7 @@ import { DataImportModal } from "./common/DataImportModal";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, generateAccountStatementAutoTablePDF, printAccountStatementPDF, printHtmlElement, exportElementToPDFWithPrintStyling, LedgerSummaryData, exportToExcel, exportToPDF } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
-import { appendCityDistrictToAddress, formatAddressWithBranch } from "../utils/storage";
+import { appendCityDistrictToAddress, formatAddressWithBranch, compileStructuredAddress } from "../utils/storage";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -82,26 +82,12 @@ import {
 import { checkRecipientTaxpayerStatus } from "../services/mysoftEDocumentService";
 import { readStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
-import {
-  ALL_81_PROVINCES,
-  COMMON_STREET_TYPES,
-  getDistrictsForProvince,
-  getNeighborhoodsForDistrict,
-  getTaxOfficesForProvince,
-  getProvincePlateCode,
-} from "../data/locationAndTaxData";
-import {
-  fetchTrAdresDistricts,
-  fetchTrAdresNeighborhoods,
-  fetchTrAdresProvinces,
-  TrAdresProvince,
-} from "../services/tradresApi";
+import { getProvincePlateCode } from "../data/locationAndTaxData";
 import {
   fetchWhatsAppStatus,
   sendWhatsAppDocumentApi,
   WhatsAppClientStatus,
 } from "../services/whatsappClient";
-import { AddressSelector } from "./AddressSelector";
 import { saveUserFile, uploadFileToStorage, deleteUserFile, UserProfileData } from "../lib/firebase";
 import { UserProfile } from "./AuthModal";
 
@@ -493,82 +479,6 @@ export const Contacts: React.FC<ContactsProps> = ({
     activityStatus: undefined,
   });
 
-  // Custom Input Toggles for Address/Tax Office
-  const [isCustomDistrict, setIsCustomDistrict] = useState<boolean>(false);
-  const [isCustomNeighborhood, setIsCustomNeighborhood] = useState<boolean>(false);
-  const [isCustomStreet, setIsCustomStreet] = useState<boolean>(false);
-  const [isCustomTaxOffice, setIsCustomTaxOffice] = useState<boolean>(false);
-
-  // TrAdres Live API State
-  const [trAdresProvinces, setTrAdresProvinces] = useState<TrAdresProvince[]>([]);
-  const [trAdresDistricts, setTrAdresDistricts] = useState<string[]>([]);
-  const [trAdresNeighborhoods, setTrAdresNeighborhoods] = useState<string[]>([]);
-  const [isLoadingDistricts, setIsLoadingDistricts] = useState<boolean>(false);
-  const [isLoadingNeighborhoods, setIsLoadingNeighborhoods] = useState<boolean>(false);
-
-  // Load 81 Provinces on mount
-  useEffect(() => {
-    let isMounted = true;
-    fetchTrAdresProvinces().then((list) => {
-      if (isMounted && list && list.length > 0) {
-        setTrAdresProvinces(list);
-      }
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Fetch districts when modal is open or city changes
-  useEffect(() => {
-    if (!isModalOpen) return;
-    let isMounted = true;
-    setIsLoadingDistricts(true);
-    fetchTrAdresDistricts(formData.city).then((list) => {
-      if (isMounted) {
-        if (list && list.length > 0) {
-          setTrAdresDistricts(list.map((d) => d.name));
-        } else {
-          setTrAdresDistricts(getDistrictsForProvince(formData.city));
-        }
-        setIsLoadingDistricts(false);
-      }
-    }).catch(() => {
-      if (isMounted) {
-        setTrAdresDistricts(getDistrictsForProvince(formData.city));
-        setIsLoadingDistricts(false);
-      }
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [formData.city, isModalOpen]);
-
-  // Fetch neighborhoods when district changes
-  useEffect(() => {
-    if (!isModalOpen || !formData.district || isCustomDistrict) return;
-    let isMounted = true;
-    setIsLoadingNeighborhoods(true);
-    fetchTrAdresNeighborhoods(formData.district, formData.city).then((list) => {
-      if (isMounted) {
-        if (list && list.length > 0) {
-          setTrAdresNeighborhoods(list.map((n) => n.name));
-        } else {
-          setTrAdresNeighborhoods(getNeighborhoodsForDistrict(formData.city, formData.district));
-        }
-        setIsLoadingNeighborhoods(false);
-      }
-    }).catch(() => {
-      if (isMounted) {
-        setTrAdresNeighborhoods(getNeighborhoodsForDistrict(formData.city, formData.district));
-        setIsLoadingNeighborhoods(false);
-      }
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [formData.city, formData.district, isModalOpen, isCustomDistrict]);
-
   // Computed live dynamic Cari Hesap Kodu
   // Kural: Alıcı ise 120.<İL KODU>.<VKN/TCKN> | Satıcı ise 320.<İL KODU>.<VKN/TCKN>
   const currentComputedAccountCode = useMemo(() => {
@@ -647,11 +557,6 @@ export const Contacts: React.FC<ContactsProps> = ({
           };
         });
 
-        setIsCustomTaxOffice(true);
-        setIsCustomDistrict(true);
-        setIsCustomNeighborhood(true);
-        setIsCustomStreet(true);
-
         const taxpayerTitle = res.companyTitle || res.title || "Mükellef";
         const isTerminated = res.activityStatus === "terminated";
 
@@ -688,7 +593,7 @@ export const Contacts: React.FC<ContactsProps> = ({
     }
   };
 
-  // Address Builder Helper
+  // Address Builder Helper (Format: Mahalle, Cadde-Sokak, İlçe, İl)
   const compileAddress = (
     nh: string,
     st: string,
@@ -700,77 +605,74 @@ export const Contacts: React.FC<ContactsProps> = ({
     brName?: string,
     brCode?: string
   ) => {
-    const parts = [];
-    if (nh && nh !== "Diğer") parts.push(nh.endsWith("Mah.") || nh.endsWith("Mahallesi") ? nh : `${nh} Mah.`);
-    if (st && st !== "Diğer") parts.push(st);
-    if (bld) parts.push(bld.startsWith("No:") || bld.startsWith("No ") ? bld : `No: ${bld}`);
-    if (door) parts.push(door.startsWith("D:") || door.startsWith("Daire:") ? door : `D: ${door}`);
-    let full = parts.join(" ");
-    const loc = [ct, dist !== "Diğer" ? dist : ""].filter(Boolean).join(" / ");
-    if (loc) {
-      full = full ? `${loc}, ${full}` : loc;
-    }
-    if (pc) {
-      full = `${full} (PK: ${pc})`;
-    }
+    const cleanNh = nh && nh !== "Diğer" ? nh.trim() : "";
+    const cleanSt = st && st !== "Diğer" ? st.trim() : "";
+    const cleanDist = dist && dist !== "Diğer" ? dist.trim() : "";
+    const cleanCt = (ct || "").trim();
     const effectiveBrName = brName !== undefined ? brName : formData.branchName;
     const effectiveBrCode = brCode !== undefined ? brCode : formData.branchCode;
-    return formatAddressWithBranch(full, ct, dist !== "Diğer" ? dist : "", effectiveBrName, effectiveBrCode);
+    return compileStructuredAddress(
+      cleanNh,
+      cleanSt,
+      cleanDist,
+      cleanCt,
+      bld,
+      door,
+      pc,
+      effectiveBrName,
+      effectiveBrCode
+    );
   };
 
-  // Synchronize address when location dropdowns change
+  // Synchronize address when location inputs change
   const handleCityChange = (newCity: string) => {
-    const districts = getDistrictsForProvince(newCity);
-    const newDistrict = districts[0] || "Merkez";
-    const neighborhoods = getNeighborhoodsForDistrict(newCity, newDistrict);
-    const newNh = neighborhoods[0] || "Merkez Mahallesi";
-    const taxOffices = getTaxOfficesForProvince(newCity);
-    const newTaxOffice = taxOffices[0] || "";
-
-    setIsCustomDistrict(false);
-    setIsCustomNeighborhood(false);
-
-    const newAddress = compileAddress(newNh, formData.street, formData.buildingNo, newDistrict, newCity, formData.doorNo, formData.postalCode);
+    const newAddress = compileAddress(
+      formData.neighborhood,
+      formData.street,
+      formData.buildingNo,
+      formData.district,
+      newCity,
+      formData.doorNo,
+      formData.postalCode
+    );
 
     setFormData((prev) => ({
       ...prev,
       city: newCity,
-      district: newDistrict,
-      neighborhood: newNh,
-      taxOffice: newTaxOffice,
       address: newAddress,
       shippingAddress: prev.isSameShippingAddress ? newAddress : prev.shippingAddress,
     }));
   };
 
   const handleDistrictChange = (newDistrict: string) => {
-    if (newDistrict === "__custom__") {
-      setIsCustomDistrict(true);
-      setFormData((prev) => ({ ...prev, district: "" }));
-      return;
-    }
-    setIsCustomDistrict(false);
-    const neighborhoods = getNeighborhoodsForDistrict(formData.city, newDistrict);
-    const newNh = neighborhoods[0] || "Merkez Mahallesi";
-    const newAddress = compileAddress(newNh, formData.street, formData.buildingNo, newDistrict, formData.city, formData.doorNo, formData.postalCode);
+    const newAddress = compileAddress(
+      formData.neighborhood,
+      formData.street,
+      formData.buildingNo,
+      newDistrict,
+      formData.city,
+      formData.doorNo,
+      formData.postalCode
+    );
 
     setFormData((prev) => ({
       ...prev,
       district: newDistrict,
-      neighborhood: newNh,
       address: newAddress,
       shippingAddress: prev.isSameShippingAddress ? newAddress : prev.shippingAddress,
     }));
   };
 
   const handleNeighborhoodChange = (newNh: string) => {
-    if (newNh === "__custom__") {
-      setIsCustomNeighborhood(true);
-      setFormData((prev) => ({ ...prev, neighborhood: "" }));
-      return;
-    }
-    setIsCustomNeighborhood(false);
-    const newAddress = compileAddress(newNh, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode);
+    const newAddress = compileAddress(
+      newNh,
+      formData.street,
+      formData.buildingNo,
+      formData.district,
+      formData.city,
+      formData.doorNo,
+      formData.postalCode
+    );
 
     setFormData((prev) => ({
       ...prev,
@@ -781,13 +683,15 @@ export const Contacts: React.FC<ContactsProps> = ({
   };
 
   const handleStreetChange = (newStreet: string) => {
-    if (newStreet === "__custom__") {
-      setIsCustomStreet(true);
-      setFormData((prev) => ({ ...prev, street: "" }));
-      return;
-    }
-    setIsCustomStreet(false);
-    const newAddress = compileAddress(formData.neighborhood, newStreet, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode);
+    const newAddress = compileAddress(
+      formData.neighborhood,
+      newStreet,
+      formData.buildingNo,
+      formData.district,
+      formData.city,
+      formData.doorNo,
+      formData.postalCode
+    );
 
     setFormData((prev) => ({
       ...prev,
@@ -798,7 +702,15 @@ export const Contacts: React.FC<ContactsProps> = ({
   };
 
   const handleBuildingNoChange = (newBld: string) => {
-    const newAddress = compileAddress(formData.neighborhood, formData.street, newBld, formData.district, formData.city, formData.doorNo, formData.postalCode);
+    const newAddress = compileAddress(
+      formData.neighborhood,
+      formData.street,
+      newBld,
+      formData.district,
+      formData.city,
+      formData.doorNo,
+      formData.postalCode
+    );
     setFormData((prev) => ({
       ...prev,
       buildingNo: newBld,
@@ -810,18 +722,31 @@ export const Contacts: React.FC<ContactsProps> = ({
   const handleOpenAddModal = (contact?: Contact) => {
     if (contact) {
       setEditingContact(contact);
-      const ct = contact.city || "İstanbul";
-      const dist = contact.district || getDistrictsForProvince(ct)[0] || "Kadıköy";
-      const nh = contact.neighborhood || getNeighborhoodsForDistrict(ct, dist)[0] || "Caferağa";
-      const st = contact.street || COMMON_STREET_TYPES[0];
+      const ct = contact.city || "";
+      const dist = contact.district || "";
+      const nh = contact.neighborhood || "";
+      const st = contact.street || "";
       const hasCustomCode = Boolean(contact.accountCode && String(contact.accountCode).trim());
+      const builtAddress =
+        contact.address ||
+        compileStructuredAddress(
+          nh,
+          st,
+          dist,
+          ct,
+          contact.buildingNo,
+          contact.doorNo,
+          contact.postalCode,
+          contact.branchName,
+          contact.branchCode
+        );
 
       setFormData({
         accountCode: contact.accountCode || "",
         isCustomAccountCode: hasCustomCode,
         contactType: contact.contactType || "customer",
         taxNumber: contact.taxNumber || "",
-        taxOffice: contact.taxOffice || getTaxOfficesForProvince(ct)[0] || "",
+        taxOffice: contact.taxOffice || "",
         companyTitle: contact.companyTitle || contact.companyName || "",
         name: contact.name || "",
         city: ct,
@@ -829,21 +754,15 @@ export const Contacts: React.FC<ContactsProps> = ({
         neighborhood: nh,
         street: st,
         buildingNo: contact.buildingNo || "",
-        doorNo: "",
+        doorNo: contact.doorNo || "",
         postalCode: contact.postalCode || "",
         branchName: contact.branchName || "",
         branchCode: contact.branchCode || "",
-        address: formatAddressWithBranch(
-          contact.address || "",
-          ct,
-          dist !== "Diğer" ? dist : "",
-          contact.branchName,
-          contact.branchCode
-        ),
+        address: builtAddress,
         contactPerson: contact.contactPerson || "",
         phone: contact.phone || contact.mobile || "",
         email: contact.email || "",
-        shippingAddress: contact.shippingAddress || "",
+        shippingAddress: contact.shippingAddress || builtAddress,
         isSameShippingAddress: !contact.shippingAddress || contact.shippingAddress === contact.address,
         bankAccountName: contact.bankAccountName || contact.companyTitle || contact.name || "",
         bankName: contact.bankName || "",
@@ -871,43 +790,32 @@ export const Contacts: React.FC<ContactsProps> = ({
       } else {
         setTaxpayerFetchStatus(null);
       }
-      setIsCustomDistrict(false);
-      setIsCustomNeighborhood(false);
-      setIsCustomStreet(false);
-      setIsCustomTaxOffice(false);
     } else {
       setEditingContact(null);
       setTaxpayerFetchStatus(null);
-      const defaultCity = "İstanbul";
-      const defaultDist = "Kadıköy";
-      const defaultNh = "Caferağa (Moda)";
-      const defaultSt = "Bağdat Caddesi";
-      const defaultBld = "No: 12";
-      const defaultTaxOffice = "Kadıköy V.D.";
-      const defaultAddr = compileAddress(defaultNh, defaultSt, defaultBld, defaultDist, defaultCity, "D: 4", "34710", "", "");
 
       setFormData({
         accountCode: "",
         isCustomAccountCode: false,
         contactType: "customer",
         taxNumber: "",
-        taxOffice: defaultTaxOffice,
+        taxOffice: "",
         companyTitle: "",
         name: "",
-        city: defaultCity,
-        district: defaultDist,
-        neighborhood: defaultNh,
-        street: defaultSt,
-        buildingNo: defaultBld,
-        doorNo: "D: 4",
-        postalCode: "34710",
+        city: "",
+        district: "",
+        neighborhood: "",
+        street: "",
+        buildingNo: "",
+        doorNo: "",
+        postalCode: "",
         branchName: "",
         branchCode: "",
-        address: defaultAddr,
+        address: "",
         contactPerson: "",
         phone: "",
         email: "",
-        shippingAddress: defaultAddr,
+        shippingAddress: "",
         isSameShippingAddress: true,
         bankAccountName: "",
         bankName: "",
@@ -919,10 +827,6 @@ export const Contacts: React.FC<ContactsProps> = ({
         gbAlias: undefined,
         activityStatus: undefined,
       });
-      setIsCustomDistrict(false);
-      setIsCustomNeighborhood(false);
-      setIsCustomStreet(false);
-      setIsCustomTaxOffice(false);
     }
     setIsModalOpen(true);
   };
@@ -1957,13 +1861,6 @@ export const Contacts: React.FC<ContactsProps> = ({
 
   if (isModalOpen) {
     return (() => {
-        const districtOptions =
-          trAdresDistricts.length > 0 ? trAdresDistricts : getDistrictsForProvince(formData.city);
-        const neighborhoodOptions =
-          trAdresNeighborhoods.length > 0
-            ? trAdresNeighborhoods
-            : getNeighborhoodsForDistrict(formData.city, formData.district);
-        const taxOfficeOptions = getTaxOfficesForProvince(formData.city);
         const currentPlateCode = getProvincePlateCode(formData.city);
         const prefixNumber = formData.contactType === "vendor" || formData.contactType === "supplier" ? "320" : "120";
 
@@ -2313,41 +2210,17 @@ export const Contacts: React.FC<ContactsProps> = ({
 
                     {/* VERGİ DAİRESİ */}
                     <div className="sm:col-span-5">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-bold truncate" style={{ color: theme.pageText }}>
-                          VERGİ DAİRESİ {formData.city ? `(${formData.city})` : ""}
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setIsCustomTaxOffice(!isCustomTaxOffice)}
-                          className="text-[11px] font-semibold text-purple-600 hover:text-purple-700 underline cursor-pointer"
-                        >
-                          {isCustomTaxOffice ? "Listeden Seç" : "Manuel Gir"}
-                        </button>
-                      </div>
-                      {isCustomTaxOffice ? (
-                        <input
-                          type="text"
-                          placeholder="ör: Mecidiyeköy Vergi Dairesi"
-                          value={formData.taxOffice}
-                          onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
-                          className="w-full rounded-xl p-2 text-xs border"
-                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
-                        />
-                      ) : (
-                        <select
-                          value={formData.taxOffice}
-                          onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
-                          className="w-full rounded-xl p-2 text-xs font-medium border cursor-pointer"
-                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
-                        >
-                          {taxOfficeOptions.map((vd) => (
-                            <option key={vd} value={vd}>
-                              {vd}
-                            </option>
-                          ))}
-                        </select>
-                      )}
+                      <label className="block text-xs font-bold truncate mb-1" style={{ color: theme.pageText }}>
+                        VERGİ DAİRESİ {formData.city ? `(${formData.city})` : ""}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="ör: Mecidiyeköy Vergi Dairesi"
+                        value={formData.taxOffice}
+                        onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
+                        className="w-full rounded-xl p-2 text-xs border"
+                        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                      />
                     </div>
                   </div>
 
@@ -2400,7 +2273,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                     </div>
                   </div>
 
-                  {/* 4. Cari Hesap Adres Bilgileri BÖLÜMÜ */}
+                  {/* 4. Cari Hesap Adres Bilgileri BÖLÜMÜ (Mahalle, Cadde-Sokak, İlçe, İl) */}
                   <div
                     className="space-y-3 p-4 rounded-2xl border"
                     style={{ backgroundColor: theme.pageBg, borderColor: theme.cardBorder }}
@@ -2412,146 +2285,81 @@ export const Contacts: React.FC<ContactsProps> = ({
                       <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-purple-600" />
                         <span className="text-xs font-bold" style={{ color: theme.pageText }}>
-                          Cari Hesap Adres Bilgileri
+                          Cari Hesap Adres Bilgileri (Mahalle, Cadde-Sokak, İlçe, İl)
                         </span>
                       </div>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        TrAdres Canlı Katalog
+                      <span className="text-[10px] font-bold text-purple-700 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full">
+                        Mahalle, Cadde-Sokak, İlçe, İl
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      {/* İl Seçimi */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                      {/* 1. Mahalle */}
                       <div>
                         <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
-                          İl (Türkiye 81 İl) *
-                        </label>
-                        <select
-                          value={formData.city}
-                          onChange={(e) => handleCityChange(e.target.value)}
-                          className="w-full rounded-xl p-2 text-xs font-semibold border cursor-pointer"
-                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
-                        >
-                          {(trAdresProvinces.length > 0 ? trAdresProvinces : ALL_81_PROVINCES).map((prov) => (
-                            <option key={prov.code} value={prov.name}>
-                              {prov.code} - {prov.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* İlçe */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-[11px] font-semibold flex items-center gap-1" style={{ color: theme.pageText }}>
-                            <span>İlçe</span>
-                            {isLoadingDistricts && <span className="text-[10px] text-purple-600 font-normal">yükleniyor...</span>}
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setIsCustomDistrict(!isCustomDistrict)}
-                            className="text-[10px] text-purple-600 hover:underline cursor-pointer"
-                          >
-                            {isCustomDistrict ? "Listeden" : "Manuel"}
-                          </button>
-                        </div>
-                        {isCustomDistrict ? (
-                          <input
-                            type="text"
-                            placeholder="İlçe girin"
-                            value={formData.district}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, val, formData.city, formData.doorNo, formData.postalCode);
-                              setFormData(prev => ({ ...prev, district: val, address: newAddr }));
-                            }}
-                            className="w-full rounded-xl p-2 text-xs border"
-                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
-                          />
-                        ) : (
-                          <select
-                            value={formData.district}
-                            onChange={(e) => handleDistrictChange(e.target.value)}
-                            className="w-full rounded-xl p-2 text-xs font-medium border cursor-pointer"
-                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
-                          >
-                            {districtOptions.map((d) => (
-                              <option key={d} value={d}>{d}</option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-
-                      {/* Mahalle */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-[11px] font-semibold flex items-center gap-1" style={{ color: theme.pageText }}>
-                            <span>Mahalle</span>
-                            {isLoadingNeighborhoods && <span className="text-[10px] text-purple-600 font-normal">yükleniyor...</span>}
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setIsCustomNeighborhood(!isCustomNeighborhood)}
-                            className="text-[10px] text-purple-600 hover:underline cursor-pointer"
-                          >
-                            {isCustomNeighborhood ? "Listeden" : "Manuel"}
-                          </button>
-                        </div>
-                        {isCustomNeighborhood ? (
-                          <input
-                            type="text"
-                            placeholder="Mahalle girin"
-                            value={formData.neighborhood}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const newAddr = compileAddress(val, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, formData.postalCode);
-                              setFormData(prev => ({ ...prev, neighborhood: val, address: newAddr }));
-                            }}
-                            className="w-full rounded-xl p-2 text-xs border"
-                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
-                          />
-                        ) : (
-                          <select
-                            value={formData.neighborhood}
-                            onChange={(e) => handleNeighborhoodChange(e.target.value)}
-                            className="w-full rounded-xl p-2 text-xs font-medium border cursor-pointer"
-                            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
-                          >
-                            {neighborhoodOptions.map((n) => (
-                              <option key={n} value={n}>{n}</option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-                      {/* Cadde / Sokak */}
-                      <div className="sm:col-span-2">
-                        <label className="block text-[11px] font-semibold mb-1 flex items-center justify-between" style={{ color: theme.pageText }}>
-                          <span>Cadde / Sokak / Bulvar</span>
-                          <span className="text-[10px] font-normal" style={{ color: theme.pageTextMuted }}>Öneri listeli</span>
+                          Mahalle *
                         </label>
                         <input
                           type="text"
-                          list="contacts-street-datalist"
-                          placeholder="ör: Bağdat Caddesi / Atatürk Bulvarı / 101. Sokak"
-                          value={formData.street}
-                          onChange={(e) => handleStreetChange(e.target.value)}
-                          className="w-full rounded-xl p-2 text-xs border"
+                          placeholder="ör: Mecidiyeköy Mah."
+                          value={formData.neighborhood}
+                          onChange={(e) => handleNeighborhoodChange(e.target.value)}
+                          className="w-full rounded-xl p-2 text-xs font-medium border"
                           style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
                         />
-                        <datalist id="contacts-street-datalist">
-                          {COMMON_STREET_TYPES.map((st, idx) => (
-                            <option key={`${st}-${idx}`} value={st} />
-                          ))}
-                        </datalist>
                       </div>
 
+                      {/* 2. Cadde - Sokak */}
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
+                          Cadde - Sokak *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="ör: Büyükdere Cad. No: 195"
+                          value={formData.street}
+                          onChange={(e) => handleStreetChange(e.target.value)}
+                          className="w-full rounded-xl p-2 text-xs font-medium border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                        />
+                      </div>
+
+                      {/* 3. İlçe */}
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
+                          İlçe *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="ör: Şişli"
+                          value={formData.district}
+                          onChange={(e) => handleDistrictChange(e.target.value)}
+                          className="w-full rounded-xl p-2 text-xs font-medium border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                        />
+                      </div>
+
+                      {/* 4. İl */}
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
+                          İl *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="ör: İstanbul"
+                          value={formData.city}
+                          onChange={(e) => handleCityChange(e.target.value)}
+                          className="w-full rounded-xl p-2 text-xs font-semibold border"
+                          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       {/* Bina No */}
                       <div>
                         <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
-                          Bina No / Blok
+                          Bina No / Blok (İsteğe Bağlı)
                         </label>
                         <input
                           type="text"
@@ -2566,7 +2374,7 @@ export const Contacts: React.FC<ContactsProps> = ({
                       {/* Posta Kodu / Kapı */}
                       <div>
                         <label className="block text-[11px] font-semibold mb-1" style={{ color: theme.pageText }}>
-                          Daire / Posta Kodu
+                          Daire / Posta Kodu (İsteğe Bağlı)
                         </label>
                         <input
                           type="text"
@@ -2575,7 +2383,12 @@ export const Contacts: React.FC<ContactsProps> = ({
                           onChange={(e) => {
                             const val = e.target.value;
                             const newAddr = compileAddress(formData.neighborhood, formData.street, formData.buildingNo, formData.district, formData.city, formData.doorNo, val, formData.branchName, formData.branchCode);
-                            setFormData(prev => ({ ...prev, postalCode: val, address: newAddr }));
+                            setFormData(prev => ({
+                              ...prev,
+                              postalCode: val,
+                              address: newAddr,
+                              shippingAddress: prev.isSameShippingAddress ? newAddr : prev.shippingAddress,
+                            }));
                           }}
                           className="w-full rounded-xl p-2 text-xs border"
                           style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.pageText }}

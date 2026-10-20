@@ -421,9 +421,14 @@ export function buildMysoftInvoiceOutboxPayload(
       const effBranchName = (invoice.branchName || "Merkez").trim();
       const effBranchCode = (invoice.branchCode || "").trim();
       const effBranchAddr = (invoice.branchAddress || company.address || "").trim();
-      if ((effBranchName || effBranchAddr) && !rawNoteText.includes("Düzenleyen Şube:") && !rawNoteText.includes("Düzenleyen Merkez")) {
+      if (
+        (effBranchName || effBranchAddr) &&
+        !rawNoteText.includes("Düzenleyen Şube:") &&
+        !rawNoteText.includes("Düzenleyen Merkez") &&
+        !rawNoteText.includes("Şube Adresi")
+      ) {
         noteList.push({
-          note: `Düzenleyen Merkez / Şube: ${effBranchName}${effBranchCode ? ` (${effBranchCode})` : ""}${effBranchAddr ? ` - Adres: ${effBranchAddr}` : ""}`,
+          note: `Şube Adresi (${effBranchName}${effBranchCode ? ` - ${effBranchCode}` : ""}): ${effBranchAddr}`,
         });
       }
       const effBankName = (invoice.paymentAccountName || company.defaultBankName || company.bankName || "").trim();

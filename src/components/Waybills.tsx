@@ -14,6 +14,7 @@ import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { useTheme } from "../context/ThemeContext";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
+import { compileStructuredAddress, parseCommaAddressParts } from "../utils/storage";
 import {
   Truck,
   Plus,
@@ -221,6 +222,12 @@ export const Waybills: React.FC<WaybillsProps> = ({
   const [driverName, setDriverName] = useState("Ahmet Demir");
   const [driverTckn, setDriverTckn] = useState("10293847562");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryAddressParts, setDeliveryAddressParts] = useState({
+    neighborhood: "",
+    street: "",
+    district: "",
+    city: "",
+  });
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(warehouses[0]?.id || "");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<WaybillItem[]>([
@@ -256,9 +263,16 @@ export const Waybills: React.FC<WaybillsProps> = ({
       );
       const chosen = filtered[0] || contacts[0];
       setSelectedContactId(chosen?.id || "");
-      setDeliveryAddress(chosen?.address || chosen?.addressDetails?.fullAddress || "");
+      const parsed = parseCommaAddressParts(chosen?.address || chosen?.addressDetails?.fullAddress || "");
+      const nVal = chosen?.addressDetails?.neighborhood || parsed.neighborhood || "";
+      const sVal = chosen?.addressDetails?.street || parsed.street || "";
+      const dVal = chosen?.district || chosen?.addressDetails?.district || parsed.district || "";
+      const cVal = chosen?.city || chosen?.addressDetails?.city || parsed.city || "";
+      setDeliveryAddressParts({ neighborhood: nVal, street: sVal, district: dVal, city: cVal });
+      setDeliveryAddress(compileStructuredAddress(nVal, sVal, dVal, cVal) || chosen?.address || chosen?.addressDetails?.fullAddress || "");
     } else {
       setSelectedContactId("");
+      setDeliveryAddressParts({ neighborhood: "", street: "", district: "", city: "" });
       setDeliveryAddress("");
     }
 
@@ -326,6 +340,13 @@ export const Waybills: React.FC<WaybillsProps> = ({
     setVehiclePlate(waybill.vehiclePlate || "");
     setDriverName(waybill.driverName || "");
     setDriverTckn(waybill.driverTckn || "");
+    const parsedWbAddr = parseCommaAddressParts(waybill.deliveryAddress || "");
+    setDeliveryAddressParts({
+      neighborhood: parsedWbAddr.neighborhood || "",
+      street: parsedWbAddr.street || "",
+      district: parsedWbAddr.district || "",
+      city: parsedWbAddr.city || "",
+    });
     setDeliveryAddress(waybill.deliveryAddress || "");
     setSelectedWarehouseId(waybill.warehouseId || warehouses[0]?.id || "");
     setNotes(waybill.notes || "");
@@ -369,7 +390,13 @@ export const Waybills: React.FC<WaybillsProps> = ({
     setSelectedContactId(cId);
     const c = contacts.find((item) => item.id === cId);
     if (c) {
-      setDeliveryAddress(c.address || c.addressDetails?.fullAddress || "");
+      const parsed = parseCommaAddressParts(c.address || c.addressDetails?.fullAddress || "");
+      const nVal = c.addressDetails?.neighborhood || parsed.neighborhood || "";
+      const sVal = c.addressDetails?.street || parsed.street || "";
+      const dVal = c.district || c.addressDetails?.district || parsed.district || "";
+      const cVal = c.city || c.addressDetails?.city || parsed.city || "";
+      setDeliveryAddressParts({ neighborhood: nVal, street: sVal, district: dVal, city: cVal });
+      setDeliveryAddress(compileStructuredAddress(nVal, sVal, dVal, cVal) || c.address || c.addressDetails?.fullAddress || "");
     }
   };
 
@@ -480,7 +507,13 @@ export const Waybills: React.FC<WaybillsProps> = ({
         vehiclePlate,
         driverName,
         driverTckn,
-        deliveryAddress,
+        deliveryAddress:
+          compileStructuredAddress(
+            deliveryAddressParts.neighborhood,
+            deliveryAddressParts.street,
+            deliveryAddressParts.district,
+            deliveryAddressParts.city,
+          ) || deliveryAddress,
         warehouseId: whObj?.id,
         warehouseName: whObj?.name,
         items,
@@ -514,7 +547,13 @@ export const Waybills: React.FC<WaybillsProps> = ({
       vehiclePlate,
       driverName,
       driverTckn,
-      deliveryAddress,
+      deliveryAddress:
+        compileStructuredAddress(
+          deliveryAddressParts.neighborhood,
+          deliveryAddressParts.street,
+          deliveryAddressParts.district,
+          deliveryAddressParts.city,
+        ) || deliveryAddress,
       warehouseId: whObj?.id,
       warehouseName: whObj?.name,
       items,
@@ -894,15 +933,90 @@ export const Waybills: React.FC<WaybillsProps> = ({
                   />
                 </div>
 
-                <div className="md:col-span-3">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Teslimat Adresi</label>
-                  <input
-                    type="text"
-                    placeholder="Sevkiyatın teslim edileceği açık adres..."
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                  />
+                <div className="md:col-span-3 bg-white p-3 rounded-xl border border-slate-200 space-y-2">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Teslimat Adresi (Mahalle, Cadde-Sokak, İlçe, İl)
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">1. Mahalle</label>
+                      <input
+                        type="text"
+                        placeholder="Örn: Barbaros Mah."
+                        value={deliveryAddressParts.neighborhood}
+                        onChange={(e) => {
+                          const next = { ...deliveryAddressParts, neighborhood: e.target.value };
+                          setDeliveryAddressParts(next);
+                          setDeliveryAddress(compileStructuredAddress(next.neighborhood, next.street, next.district, next.city));
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">2. Cadde-Sokak / No</label>
+                      <input
+                        type="text"
+                        placeholder="Örn: Atatürk Cad. No:14"
+                        value={deliveryAddressParts.street}
+                        onChange={(e) => {
+                          const next = { ...deliveryAddressParts, street: e.target.value };
+                          setDeliveryAddressParts(next);
+                          setDeliveryAddress(compileStructuredAddress(next.neighborhood, next.street, next.district, next.city));
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">3. İlçe</label>
+                      <input
+                        type="text"
+                        placeholder="Örn: Kadıköy"
+                        value={deliveryAddressParts.district}
+                        onChange={(e) => {
+                          const next = { ...deliveryAddressParts, district: e.target.value };
+                          setDeliveryAddressParts(next);
+                          setDeliveryAddress(compileStructuredAddress(next.neighborhood, next.street, next.district, next.city));
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">4. İl</label>
+                      <input
+                        type="text"
+                        placeholder="Örn: İstanbul"
+                        value={deliveryAddressParts.city}
+                        onChange={(e) => {
+                          const next = { ...deliveryAddressParts, city: e.target.value };
+                          setDeliveryAddressParts(next);
+                          setDeliveryAddress(compileStructuredAddress(next.neighborhood, next.street, next.district, next.city));
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-medium"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Kaydedilecek Tam Teslimat Adresi (Mahalle, Cadde-Sokak, İlçe, İl)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Mahalle, Cadde-Sokak, İlçe, İl..."
+                      value={deliveryAddress}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const parsed = parseCommaAddressParts(val);
+                        setDeliveryAddressParts({
+                          neighborhood: parsed.neighborhood,
+                          street: parsed.street,
+                          district: parsed.district,
+                          city: parsed.city,
+                        });
+                        setDeliveryAddress(val);
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-medium"
+                    />
+                  </div>
                 </div>
               </div>
 

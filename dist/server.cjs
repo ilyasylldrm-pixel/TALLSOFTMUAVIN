@@ -269,15 +269,38 @@ var init_schema = __esm({
 var db_exports = {};
 __export(db_exports, {
   createPool: () => createPool,
-  db: () => db
+  db: () => db,
+  ensureProxyAndSocketReady: () => ensureProxyAndSocketReady
 });
-function ensureHealthyCloudSqlProxy() {
+function getSocketFilePath() {
+  const sqlHost = (process.env.SQL_HOST || "").trim();
+  if (!sqlHost || !sqlHost.startsWith("/")) {
+    return null;
+  }
+  return import_path4.default.join(sqlHost, ".s.PGSQL.5432");
+}
+function getProxyProcesses() {
+  try {
+    const out = (0, import_child_process3.execSync)("ps -eo pid,args", { encoding: "utf8" });
+    return out.split("\n").map((line) => line.trim()).filter((line) => line.includes("/app/cloud_sql_proxy") && !line.includes("ps -eo")).map((line) => {
+      const firstSpace = line.indexOf(" ");
+      const pid = parseInt(line.slice(0, firstSpace).trim(), 10);
+      const cmd = line.slice(firstSpace + 1).trim();
+      return { pid, cmd };
+    }).filter((p) => Number.isFinite(p.pid) && p.pid > 1 && p.pid !== process.pid);
+  } catch {
+    return [];
+  }
+}
+function installProxyWrapperAndSpawnIfNeeded(forceRestart = false) {
   try {
     const proxyPath = "/app/cloud_sql_proxy";
     const proxyBinPath = "/app/cloud_sql_proxy.bin";
     if (import_fs4.default.existsSync(proxyPath) && !import_fs4.default.existsSync(proxyBinPath)) {
-      import_fs4.default.renameSync(proxyPath, proxyBinPath);
-      const wrapperScript = `#!/bin/bash
+      const stat = import_fs4.default.statSync(proxyPath);
+      if (stat.size > 1e4) {
+        import_fs4.default.renameSync(proxyPath, proxyBinPath);
+        const wrapperScript = `#!/bin/bash
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
@@ -290,16 +313,33 @@ for arg in "$@"; do
 done
 exec /app/cloud_sql_proxy.bin "\${ARGS[@]}"
 `;
-      import_fs4.default.writeFileSync(proxyPath, wrapperScript, { mode: 493 });
+        import_fs4.default.writeFileSync(proxyPath, wrapperScript, { mode: 493 });
+      }
     }
-    const psOut = (0, import_child_process3.execSync)("ps -ef | grep cloud_sql_proxy | grep -v grep || true", { encoding: "utf8" });
-    if (psOut.includes("--impersonate-service-account=")) {
-      const sqlHost = process.env.SQL_HOST || "";
-      const instanceName = sqlHost.replace("/app/cloudsql/", "").trim();
-      (0, import_child_process3.execSync)("pkill -f cloud_sql_proxy || true");
-      if (instanceName && import_fs4.default.existsSync(proxyBinPath)) {
+    const sqlHost = (process.env.SQL_HOST || "").trim();
+    if (!sqlHost.startsWith("/app/cloudsql/")) {
+      return;
+    }
+    const instanceName = sqlHost.replace("/app/cloudsql/", "").trim();
+    const socketFile = getSocketFilePath();
+    const procs = getProxyProcesses();
+    const hasBrokenImpersonation = procs.some((p) => p.cmd.includes("--impersonate-service-account="));
+    const isProxyRunning = procs.length > 0;
+    const isSocketPresent = socketFile ? import_fs4.default.existsSync(socketFile) : true;
+    if (forceRestart || hasBrokenImpersonation || !isProxyRunning || !isSocketPresent) {
+      if (hasBrokenImpersonation || forceRestart) {
+        for (const p of procs) {
+          try {
+            process.kill(p.pid, "SIGTERM");
+          } catch {
+          }
+        }
+      }
+      import_fs4.default.mkdirSync("/app/cloudsql", { recursive: true });
+      const executable = import_fs4.default.existsSync(proxyBinPath) ? proxyBinPath : proxyPath;
+      if (instanceName && import_fs4.default.existsSync(executable)) {
         const child = (0, import_child_process3.spawn)(
-          proxyBinPath,
+          executable,
           [
             instanceName,
             "--unix-socket=/app/cloudsql",
@@ -318,18 +358,55 @@ exec /app/cloud_sql_proxy.bin "\${ARGS[@]}"
   } catch {
   }
 }
-var import_node_postgres, import_pg, import_fs4, import_child_process3, createPool, pool, db;
+async function ensureProxyAndSocketReady(forceRestart = false) {
+  const socketFile = getSocketFilePath();
+  if (!socketFile) return;
+  if (!forceRestart && import_fs4.default.existsSync(socketFile)) {
+    const procs = getProxyProcesses();
+    if (procs.length > 0 && !procs.some((p) => p.cmd.includes("--impersonate-service-account="))) {
+      return;
+    }
+  }
+  if (global._proxyReadyPromise) {
+    return global._proxyReadyPromise;
+  }
+  global._proxyReadyPromise = (async () => {
+    try {
+      installProxyWrapperAndSpawnIfNeeded(forceRestart);
+      const maxWaitMs = 8e3;
+      const start = Date.now();
+      while (Date.now() - start < maxWaitMs) {
+        if (import_fs4.default.existsSync(socketFile)) {
+          await sleep(150);
+          return;
+        }
+        await sleep(120);
+      }
+    } finally {
+      global._proxyReadyPromise = void 0;
+    }
+  })();
+  return global._proxyReadyPromise;
+}
+function isTransientSocketError(err) {
+  const msg = String(err?.message || err?.cause?.message || err || "");
+  const code = String(err?.code || err?.cause?.code || "");
+  return code === "ENOENT" || code === "ECONNRESET" || code === "ECONNREFUSED" || code === "57P01" || msg.includes("ENOENT") || msg.includes("ECONNRESET") || msg.includes("ECONNREFUSED") || msg.includes("Connection terminated");
+}
+var import_node_postgres, import_pg, import_fs4, import_path4, import_child_process3, sleep, createPool, pool, db;
 var init_db = __esm({
   "src/db/index.ts"() {
     import_node_postgres = require("drizzle-orm/node-postgres");
     import_pg = require("pg");
     import_fs4 = __toESM(require("fs"), 1);
+    import_path4 = __toESM(require("path"), 1);
     import_child_process3 = require("child_process");
     init_schema();
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     createPool = () => {
       if (!global._postgresPool) {
-        ensureHealthyCloudSqlProxy();
-        global._postgresPool = new import_pg.Pool({
+        installProxyWrapperAndSpawnIfNeeded(false);
+        const rawPool = new import_pg.Pool({
           host: process.env.SQL_HOST,
           user: process.env.SQL_USER,
           password: process.env.SQL_PASSWORD,
@@ -337,8 +414,53 @@ var init_db = __esm({
           max: 10,
           connectionTimeoutMillis: 15e3
         });
-        global._postgresPool.on("error", () => {
+        rawPool.on("error", () => {
         });
+        const origQuery = rawPool.query.bind(rawPool);
+        rawPool.query = async (...args) => {
+          if (typeof args[args.length - 1] === "function") {
+            return origQuery(...args);
+          }
+          await ensureProxyAndSocketReady(false);
+          let lastErr;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              return await origQuery(...args);
+            } catch (err) {
+              lastErr = err;
+              if (isTransientSocketError(err) && attempt < 2) {
+                await ensureProxyAndSocketReady(true);
+                await sleep(300 * (attempt + 1));
+                continue;
+              }
+              throw err;
+            }
+          }
+          throw lastErr;
+        };
+        const origConnect = rawPool.connect.bind(rawPool);
+        rawPool.connect = async (...args) => {
+          if (typeof args[0] === "function") {
+            return origConnect(...args);
+          }
+          await ensureProxyAndSocketReady(false);
+          let lastErr;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              return await origConnect(...args);
+            } catch (err) {
+              lastErr = err;
+              if (isTransientSocketError(err) && attempt < 2) {
+                await ensureProxyAndSocketReady(true);
+                await sleep(300 * (attempt + 1));
+                continue;
+              }
+              throw err;
+            }
+          }
+          throw lastErr;
+        };
+        global._postgresPool = rawPool;
       }
       return global._postgresPool;
     };
@@ -349,7 +471,7 @@ var init_db = __esm({
 
 // server.ts
 var import_express6 = __toESM(require("express"), 1);
-var import_path4 = __toESM(require("path"), 1);
+var import_path5 = __toESM(require("path"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
 var import_compression = __toESM(require("compression"), 1);
 var import_genai = require("@google/genai");
@@ -1887,23 +2009,23 @@ var MysoftEdocumentClient = class {
     }
   }
   /** Execute a documented Mysoft API operation. */
-  async request(path5, options = {}) {
+  async request(path6, options = {}) {
     try {
-      return await this.requestOnce(path5, options);
+      return await this.requestOnce(path6, options);
     } catch (error) {
-      if (!this.canRetryWithoutTenant(path5, options, error)) throw error;
-      return this.requestOnce(path5, this.withoutTenant(options));
+      if (!this.canRetryWithoutTenant(path6, options, error)) throw error;
+      return this.requestOnce(path6, this.withoutTenant(options));
     }
   }
-  async requestOnce(path5, options = {}) {
+  async requestOnce(path6, options = {}) {
     this.ensureConfigured();
     const method = options.method || (options.body === void 0 ? "GET" : "POST");
-    if (!path5.startsWith("/")) path5 = `/${path5}`;
+    if (!path6.startsWith("/")) path6 = `/${path6}`;
     if (this.config.mockMode) {
-      return this.mockResponse(path5, options);
+      return this.mockResponse(path6, options);
     }
     const token = await this.getAccessToken();
-    const url = new URL(path5, `${this.config.baseUrl}/`);
+    const url = new URL(path6, `${this.config.baseUrl}/`);
     appendQuery(url, options.query);
     const headers = {
       Accept: "application/json",
@@ -1960,12 +2082,12 @@ var MysoftEdocumentClient = class {
     }
     return { ...options, query, body };
   }
-  canRetryWithoutTenant(path5, options, error) {
+  canRetryWithoutTenant(path6, options, error) {
     if (!this.sentTenant(options) || !isMysoftTenantScopeError(error)) return false;
-    return !/\/api\/Tenant\//i.test(path5);
+    return !/\/api\/Tenant\//i.test(path6);
   }
-  mockResponse(path5, _options) {
-    const emptyList = path5.toLowerCase().includes("list") ? { data: [], succeed: true, message: "Mysoft mock mode: no remote records", afterValue: 0 } : { data: null, succeed: true, message: "Mysoft mock mode", afterValue: 0 };
+  mockResponse(path6, _options) {
+    const emptyList = path6.toLowerCase().includes("list") ? { data: [], succeed: true, message: "Mysoft mock mode: no remote records", afterValue: 0 } : { data: null, succeed: true, message: "Mysoft mock mode", afterValue: 0 };
     return emptyList;
   }
   /** Resolve an optional request tenant against the server-side default.
@@ -6519,11 +6641,11 @@ var import_fs5 = __toESM(require("fs"), 1);
 function loadServerEnv() {
   const cwd = process.cwd();
   for (const candidate of [
-    import_path4.default.join(cwd, ".env"),
-    import_path4.default.join(cwd, "muavin.env"),
-    import_path4.default.join(cwd, "dist", "muavin.env"),
-    import_path4.default.join(cwd, "..", ".env"),
-    import_path4.default.join(cwd, "..", "muavin.env")
+    import_path5.default.join(cwd, ".env"),
+    import_path5.default.join(cwd, "muavin.env"),
+    import_path5.default.join(cwd, "dist", "muavin.env"),
+    import_path5.default.join(cwd, "..", ".env"),
+    import_path5.default.join(cwd, "..", "muavin.env")
   ]) {
     import_dotenv.default.config({ path: candidate });
   }
@@ -8152,7 +8274,7 @@ ${JSON.stringify(
     res.status(500).json({ success: false, error: err.message || "Veri \xE7ekme hatas\u0131." });
   }
 });
-var CLOUD_SYNC_FILE_PATH = import_path4.default.join(process.cwd(), "data", "cloud_sync_store.json");
+var CLOUD_SYNC_FILE_PATH = import_path5.default.join(process.cwd(), "data", "cloud_sync_store.json");
 function sanitizeLegacyDemoIdentity(obj) {
   if (!obj || typeof obj !== "object") return obj;
   const copy = { ...obj };
@@ -8214,7 +8336,7 @@ var memoryCloudSyncStore = (() => {
 })();
 function persistServerCloudSyncStore() {
   try {
-    const dir = import_path4.default.dirname(CLOUD_SYNC_FILE_PATH);
+    const dir = import_path5.default.dirname(CLOUD_SYNC_FILE_PATH);
     if (!import_fs5.default.existsSync(dir)) {
       import_fs5.default.mkdirSync(dir, { recursive: true });
     }
@@ -8380,8 +8502,7 @@ app.post("/api/cloud-sync/company", (req, res) => {
       transactions: data.transactions,
       contacts: data.contacts,
       accounts: data.accounts
-    }).catch((dbErr) => {
-      console.warn("PostgreSQL background sync warning:", dbErr?.message);
+    }).catch(() => {
     });
     res.json({
       success: true,
@@ -8478,8 +8599,7 @@ app.get("/api/db/state", requireAuth, async (req, res) => {
       settings: fallbackCompanyData.settings || null,
       updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
     });
-  } catch (error) {
-    console.warn("PostgreSQL state fetch fallback active:", error?.message);
+  } catch {
     res.json({
       success: true,
       userId: uid,
@@ -8530,8 +8650,7 @@ app.post("/api/db/sync", requireAuth, async (req, res) => {
       accounts: mergedSlice.accounts
     });
     res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
-  } catch (error) {
-    console.warn("PostgreSQL batch sync fallback active:", error?.message);
+  } catch {
     res.json({ success: true, userId: uid, companyId: targetCompanyId, updatedAt: nowIso });
   }
 });
@@ -8717,7 +8836,7 @@ async function startServer() {
         return res.status(404).type("text/plain").send("Not Found");
       }
       try {
-        const templatePath = import_path4.default.join(process.cwd(), "index.html");
+        const templatePath = import_path5.default.join(process.cwd(), "index.html");
         let template = import_fs5.default.readFileSync(templatePath, "utf-8");
         template = await vite.transformIndexHtml(req.originalUrl, template);
         res.status(200).set({
@@ -8732,7 +8851,7 @@ async function startServer() {
       }
     });
   } else {
-    const distPath = typeof __dirname !== "undefined" && import_path4.default.basename(__dirname) === "dist" ? __dirname : import_path4.default.join(process.cwd(), "dist");
+    const distPath = typeof __dirname !== "undefined" && import_path5.default.basename(__dirname) === "dist" ? __dirname : import_path5.default.join(process.cwd(), "dist");
     app.use(
       import_express6.default.static(distPath, {
         maxAge: "1y",
@@ -8749,11 +8868,11 @@ async function startServer() {
       })
     );
     app.get("*", (req, res, next) => {
-      if (req.originalUrl.startsWith("/api") || import_path4.default.extname(req.path)) {
+      if (req.originalUrl.startsWith("/api") || import_path5.default.extname(req.path)) {
         return next();
       }
       res.setHeader("Cache-Control", "no-cache, must-revalidate");
-      res.sendFile(import_path4.default.join(distPath, "index.html"));
+      res.sendFile(import_path5.default.join(distPath, "index.html"));
     });
   }
   const server = app.listen(PORT, "0.0.0.0", () => {
@@ -8762,7 +8881,7 @@ async function startServer() {
     console.log(`  \u279C  Network: http://0.0.0.0:${PORT}/`);
     console.log(`Muavin Muhasebe sunucusu \xE7al\u0131\u015F\u0131yor: http://0.0.0.0:${PORT}`);
     try {
-      const sessionPath = import_path4.default.join(process.cwd(), "data", "whatsapp_sessions", "creds.json");
+      const sessionPath = import_path5.default.join(process.cwd(), "data", "whatsapp_sessions", "creds.json");
       if (import_fs5.default.existsSync(sessionPath)) {
         console.log("Mevcut WhatsApp oturumu tespit edildi, ba\u011Flant\u0131 ba\u015Flat\u0131l\u0131yor...");
         whatsAppService.init(true).catch((err) => {

@@ -39,12 +39,22 @@ import {
   CheckCircle2,
   Building2,
   Globe,
+  Bell,
+  AlertTriangle,
+  Clock,
+  History,
 } from "lucide-react";
 import { GitHubSyncPanel } from "./GitHubSyncPanel";
 import { Logo } from "./Logo";
 import { readAndOptimizeLogoFile, clampLogoScale } from "../utils/logoUpload";
 import { saveCloudLogo } from "../services/cloudBrandingService";
-import { getActiveCompanyId } from "../utils/storage";
+import {
+  getActiveCompanyId,
+  getManualBackupStatus,
+  snoozeManualBackupReminder,
+  simulateOverdueManualBackup,
+  ManualBackupStatus,
+} from "../utils/storage";
 
 interface SettingsProps {
   settings: CompanySettings;
@@ -79,10 +89,29 @@ export const Settings: React.FC<SettingsProps> = ({
     initialTab === "github" && !isAdmin ? (embedded ? "system" : "theme") : initialTab || (embedded ? "system" : "theme")
   );
   const [formData, setFormData] = useState<CompanySettings>(settings);
+  const [backupStatus, setBackupStatus] = useState<ManualBackupStatus>(() =>
+    getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings)
+  );
+
+  React.useEffect(() => {
+    if (initialTab) {
+      if (initialTab === "github" && !isAdmin) return;
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isAdmin]);
 
   React.useEffect(() => {
     setFormData(settings);
-  }, [settings]);
+    setBackupStatus(getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings));
+  }, [settings, activeCompany?.id]);
+
+  React.useEffect(() => {
+    const refresh = () => {
+      setBackupStatus(getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), formData));
+    };
+    window.addEventListener("muavin:backup-status-changed", refresh);
+    return () => window.removeEventListener("muavin:backup-status-changed", refresh);
+  }, [activeCompany?.id, formData]);
   const [isSaved, setIsSaved] = useState(false);
   const [cloudTelemetry, setCloudTelemetry] = useState<any>(null);
   const [pingLatency, setPingLatency] = useState<number | null>(null);
@@ -1215,57 +1244,292 @@ export const Settings: React.FC<SettingsProps> = ({
 
       {/* ─── TAB 3: BACKUP & DATA ─── */}
       {activeTab === "backup" && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
-          <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2 flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-purple-600" />
-              Veri Tabanı Yedekleme, Aktarma ve Sıfırlama
-            </span>
-            <span className="text-[10px] text-slate-500 font-normal">Yerel Güvenli Depolama</span>
-          </h3>
+        <div className="space-y-6 text-xs">
+          {/* 1. Automated 7-Day Manual Backup Notification System Status & Settings */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-[#0f6bae]" />
+                  <span>Otomatik Manuel Veri Yedekleme Bildirim Sistemi (7 Günlük Kontrol)</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Son 7 gün (veya belirlediğiniz periyot) içinde manuel veri yedeği alınmadığında kullanıcıları otomatik olarak uyarır.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {backupStatus.isOverdue ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Yedekleme Gecikti ({backupStatus.daysSinceLastBackup !== null ? `${backupStatus.daysSinceLastBackup} Gün` : "Hiç Alınmadı"})</span>
+                  </span>
+                ) : backupStatus.isApproaching ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Yedekleme Zamanı Yaklaşıyor</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Manuel Yedek Güncel</span>
+                  </span>
+                )}
+              </div>
+            </div>
 
-          <p className="text-slate-600 leading-relaxed">
-            Uygulama verileriniz (firmalar, şubeler, depolar, faturalar, cari hesaplar, stoklar) tarayıcınızda ve yerel bellekte güvenle saklanmaktadır. İstediğiniz an tam sistem yedeğini (JSON formatında) indirebilir veya dışarıdan yükleyebilirsiniz.
-          </p>
+            {/* Status Summary Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <span className="text-[11px] text-slate-500 font-semibold block">Son Manuel Yedekleme Tarihi</span>
+                <div className="text-sm font-bold text-slate-900 font-mono tabular-nums">
+                  {backupStatus.lastBackupAt
+                    ? new Date(backupStatus.lastBackupAt).toLocaleString("tr-TR")
+                    : "Henüz Manuel Yedek Alınmadı"}
+                </div>
+                <span className="text-[11px] text-slate-500 block font-mono tabular-nums">
+                  {backupStatus.daysSinceLastBackup !== null
+                    ? `${backupStatus.daysSinceLastBackup} gün (${backupStatus.hoursSinceLastBackup ?? 0} saat) önce`
+                    : "İlk manuel yedeğinizi indirmeniz önerilir"}
+                </span>
+              </div>
 
-          <div className="flex flex-wrap items-center gap-3 pt-2">
-            {onExportBackup && (
-              <button
-                type="button"
-                onClick={onExportBackup}
-                className="bg-slate-900 hover:bg-slate-950 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
-              >
-                <Download className="w-4 h-4 text-purple-400" />
-                <span>Tüm Sistem Verilerini İndir (JSON Yedeği)</span>
-              </button>
-            )}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <span className="text-[11px] text-slate-500 font-semibold block">Uyarı Eşiği & Denetim Periyodu</span>
+                <div className="text-sm font-bold text-slate-900 font-mono tabular-nums">
+                  {formData.manualBackupReminderDays || 7} Gün (Otomatik Kontrol)
+                </div>
+                <span className="text-[11px] text-slate-500 block">
+                  {formData.manualBackupReminderEnabled !== false
+                    ? "Üst bildirim çubuğu ve zil uyarısı aktif"
+                    : "Otomatik bildirimler devre dışı"}
+                </span>
+              </div>
 
-            {onImportBackup && (
-              <label className="bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors border border-purple-200">
-                <Upload className="w-4 h-4 text-purple-700" />
-                <span>Yedek JSON Dosyası Yükle</span>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <span className="text-[11px] text-slate-500 font-semibold block">Sonraki Zorunlu Yedekleme Durumu</span>
+                <div
+                  className={`text-sm font-bold font-mono tabular-nums ${
+                    backupStatus.isOverdue
+                      ? "text-rose-700"
+                      : backupStatus.isApproaching
+                      ? "text-amber-700"
+                      : "text-emerald-700"
+                  }`}
+                >
+                  {backupStatus.isOverdue
+                    ? "Hemen Yedek Alınmalı"
+                    : `${Math.max(0, backupStatus.thresholdDays - (backupStatus.daysSinceLastBackup || 0))} Gün Kaldı`}
+                </div>
+                <span className="text-[11px] text-slate-500 block font-mono tabular-nums">
+                  {backupStatus.isSnoozed && backupStatus.snoozedUntil
+                    ? `Erteleme: ${new Date(backupStatus.snoozedUntil).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar`
+                    : `Toplam ${backupStatus.history.length} kayıtlı yedek`}
+                </span>
+              </div>
+            </div>
+
+            {/* Notification Preferences Controls */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+              <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200 flex items-start gap-3">
                 <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleFileUpload}
-                  className="hidden"
+                  type="checkbox"
+                  id="toggle-backup-reminder"
+                  checked={formData.manualBackupReminderEnabled !== false}
+                  onChange={(e) => {
+                    const updated: CompanySettings = {
+                      ...formData,
+                      manualBackupReminderEnabled: e.target.checked,
+                    };
+                    setFormData(updated);
+                    onSaveSettings(updated);
+                  }}
+                  className="mt-0.5 w-4 h-4 rounded border-slate-300 text-[#0f6bae] focus:ring-[#0f6bae] cursor-pointer"
                 />
-              </label>
-            )}
+                <div className="flex-1">
+                  <label htmlFor="toggle-backup-reminder" className="font-bold text-slate-900 cursor-pointer block">
+                    Otomatik 7 Günlük Manuel Yedekleme Uyarılarını Etkinleştir
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                    Açık olduğunda, son manuel veri yedeğinin üzerinden {formData.manualBackupReminderDays || 7} gün geçtiyse uygulama üst kısmında ve bildirim merkezinde otomatik hatırlatma gösterilir.
+                  </p>
+                </div>
+              </div>
 
-            {onResetDemoData && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm("Tüm veriler sıfırlanıp varsayılan demo veriler yüklensin mi?")) {
-                    onResetDemoData();
-                  }
-                }}
-                className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors border border-rose-200 sm:ml-auto"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>Örnek Demo Verileri Yeniden Yükle</span>
-              </button>
+              <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200 flex flex-col justify-between gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <label htmlFor="backup-reminder-days" className="font-bold text-slate-900 block">
+                      Hatırlatma Periyodu (Gün)
+                    </label>
+                    <p className="text-[11px] text-slate-500">
+                      Manuel yedek alınmadığında kaç gün sonra uyarı verileceği (Varsayılan: 7 gün)
+                    </p>
+                  </div>
+                  <select
+                    id="backup-reminder-days"
+                    value={formData.manualBackupReminderDays || 7}
+                    onChange={(e) => {
+                      const days = Number(e.target.value) || 7;
+                      const updated: CompanySettings = {
+                        ...formData,
+                        manualBackupReminderDays: days,
+                      };
+                      setFormData(updated);
+                      onSaveSettings(updated);
+                    }}
+                    className="bg-white border border-slate-300 text-slate-900 font-mono font-bold rounded-lg px-3 py-2 text-xs cursor-pointer shrink-0"
+                  >
+                    <option value={3}>3 Gün</option>
+                    <option value={7}>7 Gün (Önerilen)</option>
+                    <option value={14}>14 Gün</option>
+                    <option value={30}>30 Gün</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Simulation / Verification Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+              <div className="text-[11px] text-slate-500">
+                7 günlük gecikme bildirimini ve üst uyarı çubuğunu test etmek için simülasyon aracını kullanabilirsiniz:
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const compId = activeCompany?.id || getActiveCompanyId();
+                    const simulated = simulateOverdueManualBackup(compId, 8);
+                    setBackupStatus(simulated);
+                    triggerFormErrorNotification(
+                      "Son manuel yedek tarihi 8 gün öncesine ayarlandı. 7 günlük otomatik yedekleme uyarısı tetiklendi.",
+                      "Yedekleme Uyarısı Simülasyonu"
+                    );
+                  }}
+                  className="px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                  <span>7 Günlük Gecikme Uyarısını Test Et (8 Gün Önce)</span>
+                </button>
+
+                {backupStatus.isOverdue && !backupStatus.isSnoozed && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const compId = activeCompany?.id || getActiveCompanyId();
+                      snoozeManualBackupReminder(compId, 24);
+                      setBackupStatus(getManualBackupStatus(compId, formData));
+                    }}
+                    className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    Uyarısını 24 Saat Ertele
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Manual Backup Export / Import Actions */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-[#0f6bae]" />
+                Veri Tabanı Yedekleme, Aktarma ve Sıfırlama
+              </span>
+              <span className="text-[11px] text-slate-500 font-normal">Yerel & Bulut Güvenli Depolama</span>
+            </h3>
+
+            <p className="text-slate-600 leading-relaxed">
+              Uygulama verileriniz (firmalar, şubeler, depolar, faturalar, cari hesaplar, stoklar) hem merkezi veritabanında hem de yerel bellekte güvenle saklanmaktadır. İstediğiniz an tam sistem yedeğini (JSON formatında) indirebilir veya dışarıdan yükleyebilirsiniz. Manuel yedek indirdiğinizde 7 günlük otomatik hatırlatma sayacı sıfırlanır.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              {onExportBackup && (
+                <button
+                  type="button"
+                  onClick={onExportBackup}
+                  className="bg-slate-900 hover:bg-slate-950 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors shadow-xs whitespace-nowrap shrink-0"
+                >
+                  <Download className="w-4 h-4 text-sky-400" />
+                  <span>Tüm Sistem Verilerini İndir (Manuel JSON Yedeği Al)</span>
+                </button>
+              )}
+
+              {onImportBackup && (
+                <label className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors border border-slate-300 whitespace-nowrap shrink-0">
+                  <Upload className="w-4 h-4 text-[#0f6bae]" />
+                  <span>Yedek JSON Dosyası Yükle</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              )}
+
+              {onResetDemoData && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm("Tüm veriler sıfırlanıp varsayılan demo veriler yüklensin mi?")) {
+                      onResetDemoData();
+                    }
+                  }}
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors border border-rose-200 sm:ml-auto whitespace-nowrap shrink-0"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Örnek Demo Verileri Yeniden Yükle</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 3. Manual Backup History Log Table */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-[#0f6bae]" />
+                <h4 className="text-sm font-bold text-slate-900">Manuel Yedekleme Geçmişi</h4>
+              </div>
+              <span className="text-[11px] text-slate-500 font-mono tabular-nums">
+                Son {backupStatus.history.length} İşlem
+              </span>
+            </div>
+
+            {backupStatus.history.length === 0 ? (
+              <div className="p-8 text-center space-y-2">
+                <p className="text-xs font-semibold text-slate-700">Henüz kayıtlı manuel veri yedeği bulunmuyor.</p>
+                <p className="text-[11px] text-slate-500">
+                  Yukarıdaki "Tüm Sistem Verilerini İndir (Manuel JSON Yedeği Al)" butonuna tıklayarak ilk yedeğinizi oluşturabilirsiniz.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600">
+                      <th className="py-2.5 px-4">Tarih & Saat</th>
+                      <th className="py-2.5 px-4">Yedek Dosya Adı</th>
+                      <th className="py-2.5 px-4">İşlemi Yapan</th>
+                      <th className="py-2.5 px-4 text-right">Boyut</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {backupStatus.history.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-2.5 px-4 font-mono tabular-nums text-slate-800">
+                          {new Date(entry.timestamp).toLocaleString("tr-TR")}
+                        </td>
+                        <td className="py-2.5 px-4 font-mono text-slate-700">{entry.fileName}</td>
+                        <td className="py-2.5 px-4 text-slate-600">{entry.performedBy || "Sistem Kullanıcısı"}</td>
+                        <td className="py-2.5 px-4 text-right font-mono tabular-nums text-slate-600">
+                          {entry.sizeBytes > 0 ? `${(entry.sizeBytes / 1024).toFixed(1)} KB` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

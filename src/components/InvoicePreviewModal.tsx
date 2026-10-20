@@ -762,14 +762,27 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   );
                 })()}
 
-                {invoice.notes && (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 space-y-1">
-                    <span className="text-[10px] font-bold uppercase text-slate-500 block">
-                      FATURA NOTU
-                    </span>
-                    <p className="whitespace-pre-line leading-relaxed">{invoice.notes}</p>
-                  </div>
-                )}
+                {(() => {
+                  const rawNotes = (invoice.notes || "").trim();
+                  const isSales = invoice.type === "sales";
+                  const brName = (invoice.branchName || companySettings?.branchName || "Merkez").trim();
+                  const brCode = (invoice.branchCode || companySettings?.branchCode || "").trim();
+                  const brAddr = (invoice.branchAddress || companySettings?.address || "").replace(/\s*\((?:Şube|Merkez):[^)]+\)\s*$/i, "").trim();
+                  const branchLine =
+                    isSales && brAddr && !rawNotes.toLowerCase().includes("şube adresi")
+                      ? `Şube Adresi (${brName}${brCode ? ` - ${brCode}` : ""}): ${brAddr}`
+                      : "";
+                  const finalNotes = [branchLine, rawNotes].filter(Boolean).join("\n");
+                  if (!finalNotes) return null;
+                  return (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-500 block">
+                        FATURA NOTU
+                      </span>
+                      <p className="whitespace-pre-line leading-relaxed">{finalNotes}</p>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Totals Summary */}

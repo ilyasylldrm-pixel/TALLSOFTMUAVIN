@@ -110,6 +110,10 @@ import {
   deleteCompanyItem,
   DEFAULT_COMPANY,
   syncAllCompaniesAndUsersData,
+  getManualBackupStatus,
+  recordManualBackup,
+  snoozeManualBackupReminder,
+  ManualBackupStatus,
 } from "./utils/storage";
 import {
   verifyAndSyncAllUsersLocalDb,
@@ -125,6 +129,10 @@ import {
 } from "./services/systemSyncService";
 import { deleteUserProfile } from "./lib/firebase";
 import { readStoredMysoftTenantVkn, writeStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
+import {
+  upsertOutgoingEDocumentFromSalesInvoice,
+  removeOutgoingEDocumentForInvoice,
+} from "./services/mysoftEDocumentService";
 import { CompanyModal } from "./components/CompanyModal";
 
 import {
@@ -164,7 +172,7 @@ import {
   isCompanyMysoftMatched,
 } from "./types";
 
-import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X, Lock } from "lucide-react";
+import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X, Lock, AlertTriangle, Download, Clock } from "lucide-react";
 import { DetailPageLayout } from "./components/common/DetailPageLayout";
 
 import { FinanceSubModule } from "./components/Accounts";
@@ -218,6 +226,24 @@ export default function App() {
   const [companies, setCompanies] = useState<CompanyItem[]>(() => getCompaniesList());
   const [activeCompanyId, setActiveCompanyIdState] = useState<string>(() => getActiveCompanyId());
   const [isNewCompanyModalOpen, setIsNewCompanyModalOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"theme" | "system" | "backup" | "cloud" | "github">("system");
+  const [backupStatus, setBackupStatus] = useState<ManualBackupStatus>(() =>
+    getManualBackupStatus(getActiveCompanyId(), data.settings)
+  );
+
+  // Automated 7-day manual backup check on mount, company switch, settings change, and 60s interval
+  useEffect(() => {
+    const refreshBackupStatus = () => {
+      setBackupStatus(getManualBackupStatus(activeCompanyId, data.settings));
+    };
+    refreshBackupStatus();
+    const intervalId = window.setInterval(refreshBackupStatus, 60 * 1000);
+    window.addEventListener("muavin:backup-status-changed", refreshBackupStatus);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("muavin:backup-status-changed", refreshBackupStatus);
+    };
+  }, [activeCompanyId, data.settings]);
 
   const handleSelectCompany = (companyId: string, compList?: CompanyItem[]) => {
     setActiveCompanyId(companyId);
@@ -1254,8 +1280,9 @@ export default function App() {
       let updatedSettings = prev.settings;
       if (!isDraftOrCancelled && invoice.type === "sales" && invoice.docKind !== "receipt") {
         const cleanNo = String(invoice.invoiceNumber || "").trim().toUpperCase();
-        const serialMatch = cleanNo.match(/^([A-Z0-9]{3})(\d{4})(\d{9})$/);
-        if (serialMatch) {
+        const serialMatch = cleanNo.match(/^([A-Z0-9]{3})(20\d{2})(\d{1,9})$/);
+        const isGyrDoc = cleanNo.startsWith("GYR") || invoice.eDocumentType === "paper";
+        if (serialMatch && !isGyrDoc) {
           const usedPrefix = serialMatch[1];
           const usedYear = serialMatch[2];
           const usedSeq = parseInt(serialMatch[3], 10) || 0;
@@ -1269,11 +1296,11 @@ export default function App() {
             ...prev.settings,
             ...(isEArsivDoc
               ? {
-                  eArsivPrefix: prev.settings.eArsivPrefix || usedPrefix,
+                  eArsivPrefix: usedPrefix,
                   eArsivNextNumber: nextSerialNo,
                 }
               : {
-                  eFaturaPrefix: prev.settings.eFaturaPrefix || usedPrefix,
+                  eFaturaPrefix: usedPrefix,
                   eFaturaNextNumber: nextSerialNo,
                 }),
           };
@@ -1284,11 +1311,11 @@ export default function App() {
               ...activeComp,
               ...(isEArsivDoc
                 ? {
-                    eArsivPrefix: activeComp.eArsivPrefix || usedPrefix,
+                    eArsivPrefix: usedPrefix,
                     eArsivNextNumber: nextSerialNo,
                   }
                 : {
-                    eFaturaPrefix: activeComp.eFaturaPrefix || usedPrefix,
+                    eFaturaPrefix: usedPrefix,
                     eFaturaNextNumber: nextSerialNo,
                   }),
             };
@@ -1296,6 +1323,10 @@ export default function App() {
             setCompanies(updatedCompList);
           }
         }
+      }
+
+      if (invoice.type === "sales" && invoice.docKind !== "receipt") {
+        upsertOutgoingEDocumentFromSalesInvoice(invoice, updatedSettings, activeCompanyId);
       }
 
       return {
@@ -1484,8 +1515,9 @@ export default function App() {
           updatedInvoice.docKind !== "receipt"
         ) {
           const cleanNo = String(updatedInvoice.invoiceNumber || "").trim().toUpperCase();
-          const serialMatch = cleanNo.match(/^([A-Z0-9]{3})(\d{4})(\d{9})$/);
-          if (serialMatch) {
+          const serialMatch = cleanNo.match(/^([A-Z0-9]{3})(20\d{2})(\d{1,9})$/);
+          const isGyrDoc = cleanNo.startsWith("GYR") || updatedInvoice.eDocumentType === "paper";
+          if (serialMatch && !isGyrDoc) {
             const usedPrefix = serialMatch[1];
             const usedYear = serialMatch[2];
             const usedSeq = parseInt(serialMatch[3], 10) || 0;
@@ -1499,11 +1531,11 @@ export default function App() {
               ...prev.settings,
               ...(isEArsivDoc
                 ? {
-                    eArsivPrefix: prev.settings.eArsivPrefix || usedPrefix,
+                    eArsivPrefix: usedPrefix,
                     eArsivNextNumber: nextSerialNo,
                   }
                 : {
-                    eFaturaPrefix: prev.settings.eFaturaPrefix || usedPrefix,
+                    eFaturaPrefix: usedPrefix,
                     eFaturaNextNumber: nextSerialNo,
                   }),
             };
@@ -1514,11 +1546,11 @@ export default function App() {
                 ...activeComp,
                 ...(isEArsivDoc
                   ? {
-                      eArsivPrefix: activeComp.eArsivPrefix || usedPrefix,
+                      eArsivPrefix: usedPrefix,
                       eArsivNextNumber: nextSerialNo,
                     }
                   : {
-                      eFaturaPrefix: activeComp.eFaturaPrefix || usedPrefix,
+                      eFaturaPrefix: usedPrefix,
                       eFaturaNextNumber: nextSerialNo,
                     }),
               };
@@ -1527,6 +1559,10 @@ export default function App() {
             }
           }
         }
+      }
+
+      if (updatedInvoice.type === "sales" && updatedInvoice.docKind !== "receipt") {
+        upsertOutgoingEDocumentFromSalesInvoice(updatedInvoice, updatedSettings, activeCompanyId);
       }
 
       return {
@@ -1540,6 +1576,7 @@ export default function App() {
 
   const handleDeleteInvoice = (id: string) => {
     void deleteInvoiceFromDatabase(id, activeCompanyId);
+    removeOutgoingEDocumentForInvoice(id);
     setData((prev) => ({
       ...prev,
       invoices: prev.invoices.filter((i) => i.id !== id),
@@ -1547,7 +1584,10 @@ export default function App() {
   };
 
   const handleBulkDeleteInvoices = (ids: string[]) => {
-    ids.forEach((id) => void deleteInvoiceFromDatabase(id, activeCompanyId));
+    ids.forEach((id) => {
+      void deleteInvoiceFromDatabase(id, activeCompanyId);
+      removeOutgoingEDocumentForInvoice(id);
+    });
     setData((prev) => ({
       ...prev,
       invoices: prev.invoices.filter((i) => !ids.includes(i.id)),
@@ -2391,17 +2431,57 @@ export default function App() {
   const handleExportBackup = () => {
     const jsonStr = exportBackupJSON();
     const blob = new Blob([jsonStr], { type: "application/json" });
+    const fileName = `Muavin_Yedek_${new Date().toISOString().split("T")[0]}.json`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `Muavin_Yedek_${new Date().toISOString().split("T")[0]}.json`;
+    a.download = fileName;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    const updatedStatus = recordManualBackup(
+      activeCompanyId,
+      currentUser?.name || currentUser?.email || "Sistem Kullanıcısı",
+      fileName,
+      blob.size
+    );
+    setBackupStatus(updatedStatus);
+    setData((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        lastManualBackupAt: updatedStatus.lastBackupAt || new Date().toISOString(),
+        manualBackupHistory: updatedStatus.history,
+      },
+    }));
+    triggerFormErrorNotification(
+      `Manuel veri yedeğiniz (${fileName}) indirildi. 7 günlük yedekleme hatırlatma sayacı güncellendi.`,
+      "Manuel Yedekleme Tamamlandı"
+    );
+  };
+
+  const handleSnoozeBackupReminder = () => {
+    snoozeManualBackupReminder(activeCompanyId, 24);
+    setBackupStatus(getManualBackupStatus(activeCompanyId, data.settings));
+  };
+
+  const handleOpenBackupSettings = () => {
+    setSettingsInitialTab("backup");
+    setCurrentTab("company_settings");
   };
 
   const handleImportBackup = (jsonStr: string) => {
     const ok = importBackupJSON(jsonStr);
     if (ok) {
-      setData(getStoredData());
+      recordManualBackup(
+        activeCompanyId,
+        currentUser?.name || currentUser?.email || "Sistem Kullanıcısı (İçe Aktarma)",
+        `Yuklenen_Yedek_${new Date().toISOString().split("T")[0]}.json`,
+        jsonStr.length
+      );
+      const fresh = getStoredData(activeCompanyId);
+      setData(fresh);
+      setBackupStatus(getManualBackupStatus(activeCompanyId, fresh.settings));
     }
     return ok;
   };
@@ -2774,7 +2854,63 @@ export default function App() {
           onOpenNewCompanyModal={
             isAdminOrSysAdmin(currentUser) ? () => setIsNewCompanyModalOpen(true) : undefined
           }
+          backupStatus={backupStatus}
+          onTriggerManualBackup={handleExportBackup}
+          onSnoozeBackupReminder={handleSnoozeBackupReminder}
+          onOpenBackupSettings={handleOpenBackupSettings}
         />
+
+        {/* Automated 7-Day Manual Data Backup Alert Banner */}
+        {backupStatus.isOverdue &&
+          !backupStatus.isSnoozed &&
+          data.settings?.manualBackupReminderEnabled !== false && (
+            <div
+              role="alert"
+              className="w-full bg-rose-50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-800/70 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-rose-950 dark:text-rose-100"
+            >
+              <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5 sm:mt-0" />
+                <div className="min-w-0 leading-relaxed">
+                  <span className="font-bold">Otomatik Veri Güvenliği Uyarısı:</span>{" "}
+                  <span>
+                    {backupStatus.lastBackupAt
+                      ? `Son manuel veri yedeğinizin üzerinden ${backupStatus.daysSinceLastBackup} gün geçti (Son yedek: ${new Date(
+                          backupStatus.lastBackupAt
+                        ).toLocaleDateString("tr-TR")}).`
+                      : `Son ${backupStatus.thresholdDays} gün içinde hiç manuel veri yedeği alınmadı.`}{" "}
+                    Veri kaybı riskine karşı lütfen güncel sistem yedeğinizi indirin.
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleExportBackup}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-2xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Şimdi Manuel Yedek Al</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenBackupSettings}
+                  className="px-3 py-1.5 bg-white hover:bg-rose-100/80 dark:bg-slate-900 dark:hover:bg-slate-800 text-rose-900 dark:text-rose-200 border border-rose-300 dark:border-rose-700 font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Yedekleme Ayarları
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSnoozeBackupReminder}
+                  className="px-2.5 py-1.5 text-rose-700 hover:text-rose-950 dark:text-rose-300 dark:hover:text-white font-medium rounded-lg flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  title="Bu uyarıyı 24 saatliğine gizle"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>24 Saat Ertele</span>
+                </button>
+              </div>
+            </div>
+          )}
 
         <main className="flex-1 pb-12 bg-theme-page">
           <ErrorBoundary key={currentTab}>
@@ -2856,6 +2992,8 @@ export default function App() {
               onSelectTab={setCurrentTab}
               onAddContact={handleAddContact}
               onSaveCompanySettings={handleSaveSettings}
+              onAddBranch={handleAddBranch}
+              onUpdateBranch={handleUpdateBranch}
             />
           )}
 
@@ -2864,6 +3002,8 @@ export default function App() {
               family="invoice"
               direction={currentTab === "e_documents_outgoing" ? "outgoing" : "incoming"}
               companySettings={data.settings}
+              companyId={activeCompanyId}
+              invoices={data.invoices}
               tenantIdentifierNumber={
                 data.settings.tenantIdentifierNumber || readStoredMysoftTenantVkn()
               }
@@ -3240,6 +3380,7 @@ export default function App() {
               onUpdateCompany={handleUpdateCompany}
               onDeleteCompany={handleDeleteCompany}
               currentUser={currentUser}
+              settingsInitialTab={settingsInitialTab}
               activeSubTab={
                 currentTab === "company_companies"
                   ? "companies"
