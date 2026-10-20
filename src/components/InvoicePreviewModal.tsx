@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import QRCode from "qrcode";
 import { Invoice, InvoiceItem, CompanySettings, Contact, getContactAccountCode } from "../types";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { getCurrencySymbol, formatDate, exportElementToPDF, printHtmlElement, exportToExcel } from "../utils/exportUtils";
+import { openInvoicePrintModal, setActiveInvoicePrintContext } from "../utils/printEngine";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
 import { formatAddressWithBranch } from "../utils/storage";
 import {
@@ -91,6 +93,58 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   };
   const [isDownloading, setIsDownloading] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setActiveInvoicePrintContext({
+      invoice,
+      companySettings,
+      contact,
+      isDraft,
+      onSaveCompanySettings,
+    });
+    return () => {
+      setActiveInvoicePrintContext(null);
+    };
+  }, [isOpen, invoice, companySettings, contact, isDraft, onSaveCompanySettings]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const invType = invoice.type || "sales";
+    const invNumber = invoice.invoiceNumber || "TASLAK-0001";
+    const issueDate = invoice.issueDate || new Date().toISOString().split("T")[0];
+    const items: InvoiceItem[] = invoice.items || [];
+    const currency = invoice.currency || companySettings?.currency || "TRY";
+    const { subtotal, totalVat, grandTotal, payableAmount } = computeInvoiceTotals(items);
+    const ettn = invoice.id
+      ? `8a491029-3810-4b10-9201-${String(invoice.id).replace(/[^a-zA-Z0-9]/g, "").padEnd(12, "0").slice(0, 12)}`
+      : "8a491029-3810-4b10-8201-948123019283";
+
+    const qrPayload = JSON.stringify({
+      vkntckn: companySettings?.taxNumber || "1111111111",
+      avkntckn: invoice.taxNumber || contact?.taxNumber || "11111111111",
+      senaryo: invoice.invoiceScenario || "TICARIFATURA",
+      tip: invoice.invoiceProfileType || (invType === "sales" ? "SATIS" : "ALIS"),
+      tarih: issueDate,
+      no: invNumber,
+      ettn,
+      parabirimi: currency,
+      malhizmettoplam: (invoice.subtotal ?? subtotal).toFixed(2),
+      hesaplanankdv: (invoice.totalVat ?? totalVat).toFixed(2),
+      vergilerdahil: (invoice.grandTotal ?? grandTotal).toFixed(2),
+      odenecek: (invoice.payableAmount ?? payableAmount).toFixed(2),
+    });
+
+    QRCode.toDataURL(qrPayload, {
+      width: 240,
+      margin: 1,
+      errorCorrectionLevel: "M",
+      color: { dark: "#0f172a", light: "#ffffff" },
+    })
+      .then((url) => setQrCodeUrl(url))
+      .catch((err) => console.error("QR generation error:", err));
+  }, [isOpen, invoice, companySettings, contact]);
 
   if (!isOpen) return null;
 
@@ -173,7 +227,16 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
     if (onPrint) {
       onPrint();
     } else {
-      printHtmlElement("invoice-preview-paper", `${invNumber}_Fatura`);
+      openInvoicePrintModal(
+        {
+          invoice,
+          companySettings,
+          contact,
+          isDraft,
+          onSaveCompanySettings,
+        },
+        { title: `${invNumber}_Fatura` }
+      );
     }
   };
 
@@ -321,10 +384,11 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
           <button
             type="button"
             onClick={handlePrint}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-100 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+            className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+            title="Logolu ve QR Kodlu Kurumsal PDF Şablonunu Aç & Yazdır"
           >
-            <Printer className="w-4 h-4 text-slate-300" />
-            <span>Yazdır</span>
+            <Printer className="w-4 h-4 text-purple-300" />
+            <span>PDF Şablonu & Yazdır</span>
           </button>
 
           <button
@@ -966,11 +1030,15 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             {/* Stamp & Legal Seals */}
             <div className="pt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-xs gap-4">
               <div className="flex items-center gap-3 text-slate-500">
-                <div className="w-14 h-14 bg-slate-100 border border-slate-300 rounded-lg flex items-center justify-center p-1 shrink-0">
-                  <QrCode className="w-10 h-10 text-slate-800" />
+                <div className="w-16 h-16 bg-white border border-slate-300 rounded-lg flex items-center justify-center p-1 shrink-0 shadow-2xs">
+                  {qrCodeUrl ? (
+                    <img src={qrCodeUrl} alt="GİB e-Belge Karekod" className="w-full h-full object-contain" />
+                  ) : (
+                    <QrCode className="w-10 h-10 text-slate-800" />
+                  )}
                 </div>
                 <div>
-                  <p className="font-bold text-slate-700">e-Arşiv Karekod Doğrulama</p>
+                  <p className="font-bold text-slate-700">GİB e-Belge Karekod Doğrulama</p>
                   <p className="text-[10px] text-slate-400">
                     Bu fatura 5070 sayılı Elektronik İmza Kanunu kapsamında üretilmiştir.
                   </p>

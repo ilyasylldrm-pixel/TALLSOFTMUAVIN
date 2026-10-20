@@ -751,6 +751,7 @@ export async function logSystemAction(log: Omit<SystemAuditLogItem, "id">): Prom
 
 // 2. Audit Logları Getirme
 export async function getSystemAuditLogs(maxCount: number = 30): Promise<SystemAuditLogItem[]> {
+  if (isFirestoreWriteQuotaExhausted()) return [];
   try {
     const colRef = collection(db, AUDIT_COLLECTION);
     const q = query(colRef, orderBy("timestamp", "desc"), limit(maxCount));
@@ -761,7 +762,7 @@ export async function getSystemAuditLogs(maxCount: number = 30): Promise<SystemA
     });
     return list;
   } catch (err) {
-    console.warn("Audit logları çekilemedi:", err);
+    checkAndMarkFirestoreQuotaError(err);
     return [];
   }
 }
@@ -846,23 +847,25 @@ export async function fetchCentralPayrollParameters(): Promise<{
   lastUpdated: string | null;
   updatedBy: string | null;
 }> {
-  try {
-    const docRef = doc(db, "system_settings", SETTINGS_DOC_ID);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      if (data?.data && typeof data.data === "object") {
-        const centralParams = data.data as PayrollYearlyParameters;
-        saveActivePayrollParameters(centralParams);
-        return {
-          params: centralParams,
-          lastUpdated: data.lastUpdated || centralParams.lastUpdated || null,
-          updatedBy: data.updatedBy || centralParams.updatedBy || null
-        };
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const docRef = doc(db, "system_settings", SETTINGS_DOC_ID);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data?.data && typeof data.data === "object") {
+          const centralParams = data.data as PayrollYearlyParameters;
+          saveActivePayrollParameters(centralParams);
+          return {
+            params: centralParams,
+            lastUpdated: data.lastUpdated || centralParams.lastUpdated || null,
+            updatedBy: data.updatedBy || centralParams.updatedBy || null
+          };
+        }
       }
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
     }
-  } catch (err) {
-    console.warn("Merkezi parametre çekilirken hata (yerel kullanılacak):", err);
   }
   const local = getActivePayrollParameters();
   return {
@@ -877,6 +880,9 @@ export async function fetchCentralPayrollParameters(): Promise<{
 export function subscribeToCentralPayrollParameters(
   onUpdate: (params: PayrollYearlyParameters, meta: { lastUpdated: string; updatedBy: string }) => void
 ): () => void {
+  if (isFirestoreWriteQuotaExhausted()) {
+    return () => {};
+  }
   try {
     const docRef = doc(db, "system_settings", SETTINGS_DOC_ID);
     const unsubscribe = onSnapshot(
@@ -906,12 +912,12 @@ export function subscribeToCentralPayrollParameters(
         }
       },
       (error) => {
-        console.warn("Merkezi parametre dinleme hatası (yerel mod devrede):", error);
+        checkAndMarkFirestoreQuotaError(error);
       }
     );
     return unsubscribe;
   } catch (err) {
-    console.warn("Firestore dinleyicisi başlatılamadı:", err);
+    checkAndMarkFirestoreQuotaError(err);
     return () => {};
   }
 }
@@ -959,6 +965,7 @@ export async function publishBroadcastAnnouncement(
 
 // 7. Sistem Duyurularını Çekme
 export async function getBroadcastAnnouncements(): Promise<BroadcastAnnouncement[]> {
+  if (isFirestoreWriteQuotaExhausted()) return [];
   try {
     const colRef = collection(db, BROADCAST_COLLECTION);
     const q = query(colRef, orderBy("createdAt", "desc"), limit(20));
@@ -969,7 +976,7 @@ export async function getBroadcastAnnouncements(): Promise<BroadcastAnnouncement
     });
     return list;
   } catch (err) {
-    console.warn("Duyurular alınamadı:", err);
+    checkAndMarkFirestoreQuotaError(err);
     return [];
   }
 }
@@ -978,6 +985,9 @@ export async function getBroadcastAnnouncements(): Promise<BroadcastAnnouncement
 export function subscribeToBroadcastAnnouncements(
   onUpdate: (announcements: BroadcastAnnouncement[]) => void
 ): () => void {
+  if (isFirestoreWriteQuotaExhausted()) {
+    return () => {};
+  }
   try {
     const colRef = collection(db, BROADCAST_COLLECTION);
     const q = query(colRef, orderBy("createdAt", "desc"), limit(20));
@@ -991,12 +1001,12 @@ export function subscribeToBroadcastAnnouncements(
         onUpdate(list);
       },
       (err) => {
-        console.warn("Duyuru dinleme hatası:", err);
+        checkAndMarkFirestoreQuotaError(err);
       }
     );
     return unsubscribe;
   } catch (err) {
-    console.warn("Duyuru dinleme başlatılamadı:", err);
+    checkAndMarkFirestoreQuotaError(err);
     return () => {};
   }
 }
@@ -1258,6 +1268,9 @@ export async function verifyAndSyncAllUsersLocalDb(
 export function subscribeToCentralSyncState(
   onSyncReceived?: (meta: { lastUpdated: string; updatedBy: string; actionName?: string }) => void
 ): () => void {
+  if (isFirestoreWriteQuotaExhausted()) {
+    return () => {};
+  }
   try {
     const syncDocRef = doc(db, "system_settings", "central_sync_state");
     const unsubscribe = onSnapshot(
@@ -1355,12 +1368,13 @@ export function subscribeToCentralSyncState(
           );
         }
       },
-      () => {
-        // Ignore offline listener errors
+      (err) => {
+        checkAndMarkFirestoreQuotaError(err);
       }
     );
     return unsubscribe;
-  } catch {
+  } catch (err) {
+    checkAndMarkFirestoreQuotaError(err);
     return () => {};
   }
 }

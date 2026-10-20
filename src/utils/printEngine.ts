@@ -3,11 +3,23 @@
  * Works reliably across standard browsers, nested iframes, and sandboxed environments.
  */
 
+import type { Invoice, CompanySettings, Contact } from "../types";
+
+export interface InvoicePrintPayload {
+  invoice: Partial<Invoice>;
+  companySettings: CompanySettings;
+  contact?: Contact;
+  isDraft?: boolean;
+  onSaveCompanySettings?: (settings: CompanySettings) => void;
+}
+
 export interface PrintOptions {
   orientation?: "portrait" | "landscape";
   title?: string;
   autoClose?: boolean;
   forceModal?: boolean;
+  documentType?: "invoice" | "generic";
+  invoiceData?: InvoicePrintPayload;
   onBeforePrint?: () => void;
   onAfterPrint?: () => void;
 }
@@ -18,12 +30,23 @@ export interface PrintModalData {
   elementHtml: string;
   sourceElementId?: string;
   orientation: "portrait" | "landscape";
+  documentType?: "invoice" | "generic";
+  invoiceData?: InvoicePrintPayload;
 }
 
 // Global subscribers for the Universal Print Modal
 type PrintModalListener = (data: PrintModalData | null) => void;
 const listeners: Set<PrintModalListener> = new Set();
 let currentModalData: PrintModalData | null = null;
+let activeInvoiceContext: InvoicePrintPayload | null = null;
+
+export function setActiveInvoicePrintContext(ctx: InvoicePrintPayload | null): void {
+  activeInvoiceContext = ctx;
+}
+
+export function getActiveInvoicePrintContext(): InvoicePrintPayload | null {
+  return activeInvoiceContext;
+}
 
 export function subscribePrintModal(listener: PrintModalListener): () => void {
   listeners.add(listener);
@@ -37,8 +60,35 @@ export function subscribePrintModal(listener: PrintModalListener): () => void {
 }
 
 export function openPrintModal(data: Omit<PrintModalData, "isOpen">): void {
-  currentModalData = { ...data, isOpen: true };
+  const isInvoiceSource =
+    data.documentType === "invoice" ||
+    data.sourceElementId === "invoice-preview-paper" ||
+    Boolean(data.invoiceData);
+  const resolvedInvoiceData = data.invoiceData || (isInvoiceSource ? activeInvoiceContext || undefined : undefined);
+
+  currentModalData = {
+    ...data,
+    documentType: resolvedInvoiceData ? "invoice" : data.documentType || "generic",
+    invoiceData: resolvedInvoiceData,
+    isOpen: true,
+  };
   listeners.forEach((l) => l(currentModalData));
+}
+
+export function openInvoicePrintModal(
+  payload: InvoicePrintPayload,
+  options?: { title?: string; orientation?: "portrait" | "landscape" }
+): void {
+  activeInvoiceContext = payload;
+  const invNo = payload.invoice.invoiceNumber || "TASLAK-0001";
+  openPrintModal({
+    title: options?.title || `${invNo}_Fatura`,
+    elementHtml: "",
+    sourceElementId: "universal-print-preview-paper",
+    orientation: options?.orientation || "portrait",
+    documentType: "invoice",
+    invoiceData: payload,
+  });
 }
 
 export function closePrintModal(): void {
@@ -275,13 +325,20 @@ export async function printHtmlElement(
 
   options.onBeforePrint?.();
 
-  // If forceModal is set, open modal directly
-  if (options.forceModal) {
+  const isInvoiceTarget =
+    options.documentType === "invoice" ||
+    Boolean(options.invoiceData) ||
+    sourceId === "invoice-preview-paper";
+
+  // If forceModal is set or if printing an invoice template, open UniversalPrintModal directly
+  if (options.forceModal || isInvoiceTarget) {
     openPrintModal({
       title,
       elementHtml: targetElement.outerHTML,
       sourceElementId: sourceId,
       orientation,
+      documentType: isInvoiceTarget ? "invoice" : options.documentType,
+      invoiceData: options.invoiceData || (isInvoiceTarget ? activeInvoiceContext || undefined : undefined),
     });
     options.onAfterPrint?.();
     return true;

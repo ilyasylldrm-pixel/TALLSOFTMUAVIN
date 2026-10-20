@@ -83,6 +83,20 @@ function safeSaveBrandingToStorage(config: CloudBrandingConfig) {
  * Cloud Console (Firestore) üzerinden en güncel kurumsal logoyu ve marka ayarlarını çeker.
  */
 export async function fetchCloudLogo(): Promise<CloudBrandingConfig> {
+  if (isFirestoreWriteQuotaExhausted()) {
+    if (typeof window !== "undefined") {
+      const cached =
+        window.localStorage?.getItem("muavin_cloud_branding") ||
+        window.sessionStorage?.getItem("muavin_cloud_branding");
+      if (cached) {
+        try {
+          return JSON.parse(cached);
+        } catch {}
+      }
+    }
+    return DEFAULT_CLOUD_BRANDING;
+  }
+
   try {
     const brandingRef = doc(db, BRANDING_DOC_PATH.collection, BRANDING_DOC_PATH.id);
     const snap = await getDoc(brandingRef);
@@ -106,7 +120,6 @@ export async function fetchCloudLogo(): Promise<CloudBrandingConfig> {
     }
   } catch (error) {
     checkAndMarkFirestoreQuotaError(error);
-    console.warn("Cloud Console logo çekme uyarısı (yerel önbellek kullanılacak):", error);
     if (typeof window !== "undefined") {
       const cached = window.localStorage?.getItem("muavin_cloud_branding") || window.sessionStorage?.getItem("muavin_cloud_branding");
       if (cached) {
@@ -127,6 +140,9 @@ export function subscribeToCloudLogo(
   onUpdate: (config: CloudBrandingConfig) => void,
   onError?: (err: Error) => void
 ): () => void {
+  if (isFirestoreWriteQuotaExhausted()) {
+    return () => {};
+  }
   try {
     const brandingRef = doc(db, BRANDING_DOC_PATH.collection, BRANDING_DOC_PATH.id);
     return onSnapshot(
@@ -149,13 +165,14 @@ export function subscribeToCloudLogo(
         }
       },
       (error) => {
-        checkAndMarkFirestoreQuotaError(error);
-        console.warn("Cloud Console logo canlı dinleme bağlantı uyarısı:", error);
+        if (!checkAndMarkFirestoreQuotaError(error)) {
+          console.warn("Cloud Console logo canlı dinleme bağlantı uyarısı:", error);
+        }
         if (onError) onError(error);
       }
     );
   } catch (err) {
-    console.error("Cloud Console logo dinleyici başlatılamadı:", err);
+    checkAndMarkFirestoreQuotaError(err);
     return () => {};
   }
 }

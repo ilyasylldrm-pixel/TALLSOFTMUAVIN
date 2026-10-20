@@ -23,6 +23,7 @@ import { AiExpenseScannerModal, ExtractedExpenseData } from "./AiExpenseScannerM
 import { ExportButtons } from "./ExportButtons";
 import { Pagination } from "./common/Pagination";
 import { ExportData, formatCurrency, formatDate, exportToExcel, exportToPDF } from "../utils/exportUtils";
+import { openInvoicePrintModal } from "../utils/printEngine";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
@@ -8361,8 +8362,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                               <button
                                 onClick={() => setPrintingInvoice(inv)}
-                                title="Faturayı Görüntüle & e-Fatura Yazdır"
+                                title="Faturayı Görüntüle & Detay"
                                 className="p-1.5 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 transition-colors cursor-pointer"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  openInvoicePrintModal({
+                                    invoice: inv,
+                                    companySettings,
+                                    contact: contacts.find((c) => c.id === inv.contactId),
+                                    isDraft: inv.status === "draft",
+                                    onSaveCompanySettings,
+                                  })
+                                }
+                                title="Logolu & QR Kodlu Kurumsal PDF Şablonu / Yazdır"
+                                className="p-1.5 rounded-lg border border-slate-200 hover:border-purple-300 hover:bg-purple-50 text-slate-600 hover:text-purple-700 transition-colors cursor-pointer"
                               >
                                 <Printer className="w-3.5 h-3.5" />
                               </button>
@@ -8439,12 +8456,29 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 <div className="flex items-center gap-2">
                                   <button
                                     type="button"
+                                    onClick={() =>
+                                      openInvoicePrintModal({
+                                        invoice: inv,
+                                        companySettings,
+                                        contact: contacts.find((c) => c.id === inv.contactId),
+                                        isDraft: inv.status === "draft",
+                                        onSaveCompanySettings,
+                                      })
+                                    }
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                                    title="Logolu ve QR Kodlu PDF Şablonu / Yazdır"
+                                  >
+                                    <Printer className="w-3.5 h-3.5" />
+                                    <span>PDF Şablonu / Yazdır</span>
+                                  </button>
+                                  <button
+                                    type="button"
                                     onClick={() => setPrintingInvoice(inv)}
                                     className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                                    title="Yazdır / Görüntüle"
+                                    title="Tam Sayfa Önizleme"
                                   >
-                                    <Printer className="w-3.5 h-3.5 text-indigo-600" />
-                                    <span>Yazdır / e-Belge</span>
+                                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span>e-Belge Detay</span>
                                   </button>
                                   <button
                                     type="button"

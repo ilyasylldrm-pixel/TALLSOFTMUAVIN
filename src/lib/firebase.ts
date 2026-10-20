@@ -190,20 +190,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   return errInfo;
 }
 
-// Validate Connection to Firestore (Non-blocking bootstrap validation)
-if (typeof window !== "undefined") {
-  setTimeout(async () => {
-    if (isFirestoreWriteQuotaExhausted()) return;
-    try {
-      await getDocFromServer(doc(db, "test", "connection"));
-    } catch (error) {
-      checkAndMarkFirestoreQuotaError(error);
-      if (error instanceof Error && error.message.includes("the client is offline")) {
-        console.warn("Firestore: Cihaz/istemci yerel modda çevrimdışı önbellek ile çalışıyor.");
-      }
-    }
-  }, 1000);
-}
+// Connection validation is handled lazily on actual operations to preserve Firestore free-tier daily read quota.
+
 
 export const storage = getStorage(app);
 
@@ -437,16 +425,18 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
 
 export async function getUserProfile(userId: string): Promise<UserProfileData | null> {
   if (isUserMarkedDeleted({ userId })) return null;
-  try {
-    const userRef = doc(db, "users", userId);
-    const snapshot = await getDoc(userRef);
-    if (snapshot.exists()) {
-      const data = snapshot.data() as UserProfileData;
-      if (isUserMarkedDeleted(data)) return null;
-      return data;
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const userRef = doc(db, "users", userId);
+      const snapshot = await getDoc(userRef);
+      if (snapshot.exists()) {
+        const data = snapshot.data() as UserProfileData;
+        if (isUserMarkedDeleted(data)) return null;
+        return data;
+      }
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
     }
-  } catch (err) {
-    console.error("Error fetching user profile from Firestore:", err);
   }
 
   // Fallback to local backup
@@ -515,19 +505,21 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
   }
 
   // 0b. Check central_sync_state in Firestore so existing companies & users from central cloud registry are never lost
-  try {
-    const syncSnap = await getDoc(doc(db, "system_settings", "central_sync_state"));
-    if (syncSnap.exists()) {
-      const syncData = syncSnap.data();
-      if (Array.isArray(syncData?.companiesRegistry) && syncData.companiesRegistry.length > 0) {
-        saveCompaniesList(syncData.companiesRegistry, false);
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const syncSnap = await getDoc(doc(db, "system_settings", "central_sync_state"));
+      if (syncSnap.exists()) {
+        const syncData = syncSnap.data();
+        if (Array.isArray(syncData?.companiesRegistry) && syncData.companiesRegistry.length > 0) {
+          saveCompaniesList(syncData.companiesRegistry, false);
+        }
+        if (Array.isArray(syncData?.usersRegistry) && syncData.usersRegistry.length > 0) {
+          saveLocalUsersBackup(syncData.usersRegistry, false);
+        }
       }
-      if (Array.isArray(syncData?.usersRegistry) && syncData.usersRegistry.length > 0) {
-        saveLocalUsersBackup(syncData.usersRegistry, false);
-      }
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
     }
-  } catch {
-    // offline fallback
   }
 
   const localList = getLocalUsersBackup();
@@ -598,38 +590,40 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
     }
   });
 
-  // 4. Fetch Firestore users and merge (never destructively delete docs during read)
-  try {
-    const usersCol = collection(db, "users");
-    const snapshot = await getDocs(usersCol);
-    snapshot.forEach((docSnap) => {
-      const u = docSnap.data() as UserProfileData;
-      const docWithId = { ...u, userId: u.userId || docSnap.id };
-      if (!isProtectedUserIdentifier(docWithId)) {
-        if (
-          isUserMarkedDeleted(docWithId) ||
-          isUserMarkedDeleted({ userId: docSnap.id }) ||
-          (docWithId.companyId && !isProtectedCompanyId(docWithId.companyId) && deletedCompIds.has(docWithId.companyId))
-        ) {
-          return;
+  // 4. Fetch Firestore users and merge if quota is available (never destructively delete docs during read)
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const usersCol = collection(db, "users");
+      const snapshot = await getDocs(usersCol);
+      snapshot.forEach((docSnap) => {
+        const u = docSnap.data() as UserProfileData;
+        const docWithId = { ...u, userId: u.userId || docSnap.id };
+        if (!isProtectedUserIdentifier(docWithId)) {
+          if (
+            isUserMarkedDeleted(docWithId) ||
+            isUserMarkedDeleted({ userId: docSnap.id }) ||
+            (docWithId.companyId && !isProtectedCompanyId(docWithId.companyId) && deletedCompIds.has(docWithId.companyId))
+          ) {
+            return;
+          }
         }
-      }
-      const key = (docWithId.email || docWithId.userId || "").toLowerCase();
-      if (key) {
-        const existing = mergedMap.get(key);
-        const mergedUser: UserProfileData = {
-          ...existing,
-          ...docWithId,
-          username: docWithId.username || existing?.username,
-          passwordPlain: docWithId.passwordPlain || existing?.passwordPlain,
-        };
-        if (isProtectedUserIdentifier(mergedUser) || !isUserMarkedDeleted(mergedUser)) {
-          mergedMap.set(key, enrichUserProfileCredentials(mergedUser, companies));
+        const key = (docWithId.email || docWithId.userId || "").toLowerCase();
+        if (key) {
+          const existing = mergedMap.get(key);
+          const mergedUser: UserProfileData = {
+            ...existing,
+            ...docWithId,
+            username: docWithId.username || existing?.username,
+            passwordPlain: docWithId.passwordPlain || existing?.passwordPlain,
+          };
+          if (isProtectedUserIdentifier(mergedUser) || !isUserMarkedDeleted(mergedUser)) {
+            mergedMap.set(key, enrichUserProfileCredentials(mergedUser, companies));
+          }
         }
-      }
-    });
-  } catch (err) {
-    console.error("Error fetching all users for admin from Firestore, using local backup:", err);
+      });
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
+    }
   }
 
   const finalUsers = Array.from(mergedMap.values())
@@ -652,36 +646,38 @@ export async function findUserProfileByEmail(identifier: string): Promise<UserPr
     return null;
   }
 
-  // 1. Direct Firestore query by email or username
-  try {
-    const usersCol = collection(db, "users");
-    // Check by email first
-    const qEmail = query(usersCol, where("email", "==", clean));
-    const snapshotEmail = await getDocs(qEmail);
-    if (!snapshotEmail.empty) {
-      const found = snapshotEmail.docs[0].data() as UserProfileData;
-      if (!isUserMarkedDeleted(found)) return found;
-    }
+  // 1. Direct Firestore query by email or username (when quota is available)
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const usersCol = collection(db, "users");
+      // Check by email first
+      const qEmail = query(usersCol, where("email", "==", clean));
+      const snapshotEmail = await getDocs(qEmail);
+      if (!snapshotEmail.empty) {
+        const found = snapshotEmail.docs[0].data() as UserProfileData;
+        if (!isUserMarkedDeleted(found)) return found;
+      }
 
-    // Check by username
-    const qUser = query(usersCol, where("username", "==", clean));
-    const snapshotUser = await getDocs(qUser);
-    if (!snapshotUser.empty) {
-      const found = snapshotUser.docs[0].data() as UserProfileData;
-      if (!isUserMarkedDeleted(found)) return found;
-    }
+      // Check by username
+      const qUser = query(usersCol, where("username", "==", clean));
+      const snapshotUser = await getDocs(qUser);
+      if (!snapshotUser.empty) {
+        const found = snapshotUser.docs[0].data() as UserProfileData;
+        if (!isUserMarkedDeleted(found)) return found;
+      }
 
-    // 2. Case-insensitive Firestore search across all profiles
-    const allUsers = await getAllUsersProfiles();
-    const match = allUsers.find(
-      (u) =>
-        !isUserMarkedDeleted(u) &&
-        ((u.email && u.email.trim().toLowerCase() === clean) ||
-          (u.username && u.username.trim().toLowerCase() === clean))
-    );
-    if (match) return match;
-  } catch (err) {
-    console.error("Error looking up user profile by email/username in Firestore:", err);
+      // 2. Case-insensitive Firestore search across all profiles
+      const allUsers = await getAllUsersProfiles();
+      const match = allUsers.find(
+        (u) =>
+          !isUserMarkedDeleted(u) &&
+          ((u.email && u.email.trim().toLowerCase() === clean) ||
+            (u.username && u.username.trim().toLowerCase() === clean))
+      );
+      if (match) return match;
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
+    }
   }
 
   // 3. Fallback to local persistent backup
@@ -915,22 +911,54 @@ export async function deleteUserProfileAndData(
   }
 }
 
+const LOCAL_USER_FILES_BACKUP_KEY = "muavin_user_files_backup";
+
+function getLocalUserFilesBackup(): UserFileMetadata[] {
+  try {
+    const raw = safeGetStorageItem(LOCAL_USER_FILES_BACKUP_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalUserFilesBackup(files: UserFileMetadata[]): void {
+  try {
+    safeSetStorageItem(LOCAL_USER_FILES_BACKUP_KEY, JSON.stringify(files.slice(0, 200)));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
 // Admin Operations: Get all user files across the database
 export async function getAllFilesForAdmin(): Promise<UserFileMetadata[]> {
+  const localFiles = getLocalUserFilesBackup();
+  if (isFirestoreWriteQuotaExhausted()) {
+    return localFiles.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+  }
   try {
     const filesCol = collection(db, "user_files");
     const snapshot = await getDocs(filesCol);
-    const filesList: UserFileMetadata[] = [];
+    const mergedMap = new Map<string, UserFileMetadata>();
+    localFiles.forEach((f) => {
+      if (f?.id) mergedMap.set(f.id, f);
+    });
     snapshot.forEach((docSnap) => {
-      filesList.push({
+      mergedMap.set(docSnap.id, {
         id: docSnap.id,
-        ...(docSnap.data() as Omit<UserFileMetadata, "id">)
+        ...(docSnap.data() as Omit<UserFileMetadata, "id">),
       });
     });
-    return filesList.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+    const filesList = Array.from(mergedMap.values()).sort(
+      (a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
+    );
+    saveLocalUserFilesBackup(filesList);
+    return filesList;
   } catch (err) {
-    console.error("Error fetching all files for admin:", err);
-    return [];
+    checkAndMarkFirestoreQuotaError(err);
+    return localFiles.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
   }
 }
 
@@ -981,8 +1009,12 @@ export async function saveUserFile(file: Omit<UserFileMetadata, "id">): Promise<
   if (file.fileData && file.fileData.length > 900000) {
     throw new Error("Veritabanı uyarısı: Dosya boyutu veritabanı doküman limitini (1 MB) aşıyor.");
   }
+  const localId = `local_${Date.now()}`;
+  const existingLocal = getLocalUserFilesBackup();
+
   if (isFirestoreWriteQuotaExhausted()) {
-    return `local_${Date.now()}`;
+    saveLocalUserFilesBackup([{ id: localId, ...file }, ...existingLocal]);
+    return localId;
   }
   try {
     const filesCol = collection(db, "user_files");
@@ -991,49 +1023,60 @@ export async function saveUserFile(file: Omit<UserFileMetadata, "id">): Promise<
       createdAt: serverTimestamp()
     });
     const docRef = await addDoc(filesCol, sanitized);
+    saveLocalUserFilesBackup([{ id: docRef.id, ...file }, ...existingLocal]);
     return docRef.id;
   } catch (err) {
     checkAndMarkFirestoreQuotaError(err);
-    return `local_${Date.now()}`;
+    saveLocalUserFilesBackup([{ id: localId, ...file }, ...existingLocal]);
+    return localId;
   }
 }
 
 export async function getUserFiles(userId: string): Promise<UserFileMetadata[]> {
+  const now = Date.now();
+  const localUserFiles = getLocalUserFilesBackup().filter(
+    (f) => f && f.userId === userId && (!f.expiresAt || f.expiresAt > now)
+  );
+  if (isFirestoreWriteQuotaExhausted()) {
+    return localUserFiles.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+  }
   try {
     const filesCol = collection(db, "user_files");
     const q = query(filesCol, where("userId", "==", userId));
     const snapshot = await getDocs(q);
     
-    const files: UserFileMetadata[] = [];
-    const now = Date.now();
+    const mergedMap = new Map<string, UserFileMetadata>();
+    localUserFiles.forEach((f) => mergedMap.set(f.id, f));
 
     for (const docSnap of snapshot.docs) {
       const data = docSnap.data() as Omit<UserFileMetadata, "id">;
       // If file has expired, purge it in background
       if (data.expiresAt && data.expiresAt <= now) {
         if (!isFirestoreWriteQuotaExhausted()) {
-          deleteUserFile(docSnap.id, data.storagePath).catch((err) =>
-            console.warn("Expired file cleanup error:", err)
-          );
+          deleteUserFile(docSnap.id, data.storagePath).catch(() => {});
         }
         continue;
       }
 
-      files.push({
+      mergedMap.set(docSnap.id, {
         id: docSnap.id,
         ...data
       });
     }
     
+    const files = Array.from(mergedMap.values());
     // Sort client-side by upload date
     return files.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
   } catch (err) {
-    console.error("Error fetching user files:", err);
-    return [];
+    checkAndMarkFirestoreQuotaError(err);
+    return localUserFiles.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
   }
 }
 
 export async function deleteUserFile(fileId: string, storagePath?: string): Promise<void> {
+  const existingLocal = getLocalUserFilesBackup();
+  saveLocalUserFilesBackup(existingLocal.filter((f) => f && f.id !== fileId));
+
   if (storagePath) {
     await deleteFileFromStorage(storagePath);
   }
