@@ -2525,6 +2525,23 @@ export const Accounts: React.FC<AccountsProps> = ({
         headerIcon={<Pencil className="w-5 h-5 text-purple-700" />}
         actions={
           <div className="flex items-center gap-2">
+            {onDeleteAccount && (
+              <button
+                type="button"
+                onClick={() => {
+                  const deletedId = editingAccount.id;
+                  onDeleteAccount(deletedId);
+                  if (selectedCashAccountId === deletedId) setSelectedCashAccountId(null);
+                  if (selectedBankAccountId === deletedId) setSelectedBankAccountId(null);
+                  handleBackToList();
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer flex items-center gap-1.5"
+                title="Bu kasa veya banka hesabını sil"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Hesabı Sil</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handleBackToList}
@@ -5590,7 +5607,7 @@ export const Accounts: React.FC<AccountsProps> = ({
             }`}
           >
             <Building className="w-4 h-4" />
-            <span>Banka & POS ({accounts.filter((a) => a.type === "bank" || a.type === "credit_card").length})</span>
+            <span>Banka & POS ({accounts.filter((a) => a.type === "bank" || a.type === "credit_card" || a.type === "pos").length})</span>
           </button>
 
           <button
@@ -5679,6 +5696,21 @@ export const Accounts: React.FC<AccountsProps> = ({
                           >
                             <Edit2 className="w-3.5 h-3.5 text-amber-900" />
                           </button>
+                          {onDeleteAccount && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onDeleteAccount(acc.id);
+                                if (selectedCashAccountId === acc.id) {
+                                  setSelectedCashAccountId(null);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg border border-rose-300 bg-rose-50/90 hover:bg-rose-200 text-rose-700 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Kasayı Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-700" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleShowAccountReceipt(acc)}
@@ -5729,6 +5761,31 @@ export const Accounts: React.FC<AccountsProps> = ({
                   </div>
                 );
               })}
+            {accounts.filter((a) => a.type === "cash").length === 0 && (
+              <div className="sm:col-span-2 lg:col-span-3 rounded-2xl p-6 border border-dashed border-amber-300 bg-amber-50/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">Kayıtlı Nakit Kasa Bulunmuyor</h4>
+                    <p className="text-xs text-slate-500">Yeni bir nakit kasa oluşturarak tahsilat ve tediye işlemlerinizi takip edebilirsiniz.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccType("cash");
+                    setIsAccountModalOpen(true);
+                    detailNav.openCreate();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Yeni Kasa Ekle</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
@@ -5784,12 +5841,28 @@ export const Accounts: React.FC<AccountsProps> = ({
 
               <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                 {selectedCashAccountId && (
-                  <button
-                    onClick={() => setSelectedCashAccountId(null)}
-                    className="text-xs text-amber-700 hover:text-amber-900 font-bold bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-xl border border-amber-200 transition-colors cursor-pointer"
-                  >
-                    Tüm Kasaları Göster
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setSelectedCashAccountId(null)}
+                      className="text-xs text-amber-700 hover:text-amber-900 font-bold bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-xl border border-amber-200 transition-colors cursor-pointer"
+                    >
+                      Tüm Kasaları Göster
+                    </button>
+                    {onDeleteAccount && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onDeleteAccount(selectedCashAccountId);
+                          setSelectedCashAccountId(null);
+                        }}
+                        className="text-xs text-rose-700 hover:text-rose-900 font-bold bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-xl border border-rose-200 transition-colors cursor-pointer flex items-center gap-1"
+                        title="Seçili kasayı sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Seçili Kasayı Sil</span>
+                      </button>
+                    )}
+                  </>
                 )}
                 <button
                   type="button"
@@ -6184,7 +6257,7 @@ export const Accounts: React.FC<AccountsProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {accounts
-              .filter((a) => a.type === "bank" || a.type === "credit_card")
+              .filter((a) => a.type === "bank" || a.type === "credit_card" || a.type === "pos")
               .map((acc) => {
                 const isSelected = selectedBankAccountId === acc.id;
                 return (
@@ -6225,6 +6298,21 @@ export const Accounts: React.FC<AccountsProps> = ({
                           >
                             <Edit2 className="w-3.5 h-3.5 text-blue-900" />
                           </button>
+                          {onDeleteAccount && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onDeleteAccount(acc.id);
+                                if (selectedBankAccountId === acc.id) {
+                                  setSelectedBankAccountId(null);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg border border-rose-300 bg-rose-50/90 hover:bg-rose-200 text-rose-700 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Banka Hesabını Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-700" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleShowAccountReceipt(acc)}
@@ -6290,6 +6378,31 @@ export const Accounts: React.FC<AccountsProps> = ({
                   </div>
                 );
               })}
+            {accounts.filter((a) => a.type === "bank" || a.type === "credit_card" || a.type === "pos").length === 0 && (
+              <div className="sm:col-span-2 lg:col-span-3 rounded-2xl p-6 border border-dashed border-blue-300 bg-blue-50/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 border border-blue-200 text-blue-700 flex items-center justify-center shrink-0">
+                    <Building className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">Kayıtlı Banka Hesabı Bulunmuyor</h4>
+                    <p className="text-xs text-slate-500">Yeni bir banka veya POS hesabı oluşturarak havale, EFT ve POS işlemlerinizi takip edebilirsiniz.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccType("bank");
+                    setIsAccountModalOpen(true);
+                    detailNav.openCreate();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Yeni Banka Ekle</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
@@ -6356,12 +6469,28 @@ export const Accounts: React.FC<AccountsProps> = ({
 
               <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                 {selectedBankAccountId && (
-                  <button
-                    onClick={() => setSelectedBankAccountId(null)}
-                    className="text-xs text-blue-700 hover:text-blue-900 font-bold bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl border border-blue-200 transition-colors cursor-pointer"
-                  >
-                    Tüm Bankaları Göster
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setSelectedBankAccountId(null)}
+                      className="text-xs text-blue-700 hover:text-blue-900 font-bold bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl border border-blue-200 transition-colors cursor-pointer"
+                    >
+                      Tüm Bankaları Göster
+                    </button>
+                    {onDeleteAccount && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onDeleteAccount(selectedBankAccountId);
+                          setSelectedBankAccountId(null);
+                        }}
+                        className="text-xs text-rose-700 hover:text-rose-900 font-bold bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-xl border border-rose-200 transition-colors cursor-pointer flex items-center gap-1"
+                        title="Seçili banka hesabını sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Seçili Bankayı Sil</span>
+                      </button>
+                    )}
+                  </>
                 )}
                 <button
                   type="button"

@@ -127,6 +127,8 @@ import {
   deleteInvoiceFromDatabase,
   saveTransactionToDatabase,
   deleteTransactionFromDatabase,
+  saveAccountToDatabase,
+  deleteAccountFromDatabase,
 } from "./services/systemSyncService";
 import { deleteUserProfile } from "./lib/firebase";
 import { readStoredMysoftTenantVkn, writeStoredMysoftTenantVkn } from "./utils/mysoftTenantStorage";
@@ -1291,27 +1293,72 @@ export default function App() {
 
   // Handlers for Accounts & Finance Entities
   const handleUpdateAccount = (account: Account) => {
-    setData((prev) => ({
-      ...prev,
-      accounts: prev.accounts.map((a) => (a.id === account.id ? account : a)),
-      transactions: prev.transactions.map((t) =>
+    void saveAccountToDatabase(account, activeCompanyId);
+    setData((prev) => {
+      const updatedAccounts = prev.accounts.map((a) => (a.id === account.id ? account : a));
+      let updatedTransactions = prev.transactions.map((t) =>
         t.accountId === account.id ? { ...t, accountName: account.name } : t
-      ),
-      invoices: prev.invoices.map((inv) =>
-        inv.paymentAccountId === account.id ? { ...inv, paymentAccountName: account.name } : inv
-      ),
-    }));
+      );
+
+      // Eğer kullanıcı düzenleme ekranında hesap bakiyesini değiştirdiyse hareket toplamıyla farkı açılış/düzeltme fişi olarak eşitle
+      const currentTxSum = updatedTransactions.reduce((sum, tx) => {
+        if (tx.accountId !== account.id) return sum;
+        const isInc = tx.type === "income" || tx.type === "collection";
+        return sum + (isInc ? Number(tx.amount) || 0 : -(Number(tx.amount) || 0));
+      }, 0);
+      const targetBal = Math.round((Number(account.balance) || 0) * 100) / 100;
+      const diff = Math.round((targetBal - currentTxSum) * 100) / 100;
+      if (Math.abs(diff) >= 0.01) {
+        const adjTx: Transaction = {
+          id: `tx_adj_${account.id}_${Date.now()}`,
+          date: new Date().toISOString().split("T")[0],
+          type: diff > 0 ? "income" : "expense",
+          amount: Math.abs(diff),
+          currency: account.currency || "TRY",
+          accountId: account.id,
+          accountName: account.name,
+          category: "Bakiye Düzeltme / Devir",
+          description: `${account.name} bakiye güncellemesi`,
+        };
+        void saveTransactionToDatabase(adjTx, activeCompanyId);
+        updatedTransactions = [adjTx, ...updatedTransactions];
+      }
+
+      const nextState = {
+        ...prev,
+        accounts: updatedAccounts,
+        transactions: updatedTransactions,
+        invoices: prev.invoices.map((inv) =>
+          inv.paymentAccountId === account.id ? { ...inv, paymentAccountName: account.name } : inv
+        ),
+      };
+      saveStoredData("ACCOUNTS", nextState.accounts, activeCompanyId);
+      saveStoredData("TRANSACTIONS", nextState.transactions, activeCompanyId);
+      void pushCompanyDataToCloud(activeCompanyId, nextState);
+      return nextState;
+    });
   };
 
   const handleDeleteAccount = (id: string) => {
+    if (!id) return;
+    void deleteAccountFromDatabase(id, activeCompanyId);
     const accountTxs = data.transactions.filter((t) => t.accountId === id);
     if (accountTxs.length > 0) {
       handleBulkDeleteTransactions(accountTxs.map((t) => t.id));
     }
-    setData((prev) => ({
-      ...prev,
-      accounts: prev.accounts.filter((a) => a.id !== id),
-    }));
+    setData((prev) => {
+      const updatedAccounts = prev.accounts.filter((a) => a.id !== id);
+      const updatedTransactions = prev.transactions.filter((t) => t.accountId !== id);
+      const nextState = {
+        ...prev,
+        accounts: updatedAccounts,
+        transactions: updatedTransactions,
+      };
+      saveStoredData("ACCOUNTS", updatedAccounts, activeCompanyId);
+      saveStoredData("TRANSACTIONS", updatedTransactions, activeCompanyId);
+      void pushCompanyDataToCloud(activeCompanyId, nextState);
+      return nextState;
+    });
   };
 
   const handleUpdateTransaction = (tx: Transaction) => {
@@ -4287,11 +4334,15 @@ export default function App() {
               activeFinanceSubTab={financeSubTab}
               globalSearchTerm={searchTerm}
               onSelectFinanceSubTab={setFinanceSubTab}
-              onAddAccount={(acc) =>
+              onAddAccount={(acc) => {
+                void saveAccountToDatabase(acc, activeCompanyId);
                 setData((p) => {
                   const initBal = Number(acc.balance) || 0;
                   if (initBal === 0) {
-                    return { ...p, accounts: [...p.accounts, acc] };
+                    const nextState = { ...p, accounts: [...p.accounts, acc] };
+                    saveStoredData("ACCOUNTS", nextState.accounts, activeCompanyId);
+                    void pushCompanyDataToCloud(activeCompanyId, nextState);
+                    return nextState;
                   }
                   const openingTx: Transaction = {
                     id: "tx_open_" + acc.id,
@@ -4305,13 +4356,17 @@ export default function App() {
                     description: `${acc.name} açılış devir bakiyesi`,
                   };
                   void saveTransactionToDatabase(openingTx, activeCompanyId);
-                  return {
+                  const nextState = {
                     ...p,
                     accounts: [...p.accounts, acc],
                     transactions: [openingTx, ...p.transactions],
                   };
-                })
-              }
+                  saveStoredData("ACCOUNTS", nextState.accounts, activeCompanyId);
+                  saveStoredData("TRANSACTIONS", nextState.transactions, activeCompanyId);
+                  void pushCompanyDataToCloud(activeCompanyId, nextState);
+                  return nextState;
+                });
+              }}
               onUpdateAccount={handleUpdateAccount}
               onDeleteAccount={handleDeleteAccount}
               onTransferBetweenAccounts={handleTransferBetweenAccounts}

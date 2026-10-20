@@ -1680,14 +1680,36 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   </span>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => handleSaveProfile()}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-all flex items-center gap-1"
-              >
-                <Save className="w-3 h-3 text-white" />
-                <span>Banka & Firma Bilgilerini Kaydet</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {(profileForm.defaultBankName || profileForm.defaultIban || profileForm.defaultBankAccountName) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cleared = {
+                        ...profileForm,
+                        defaultBankName: "",
+                        defaultBankAccountName: "",
+                        defaultIban: "",
+                      };
+                      setProfileForm(cleared);
+                      handleSaveProfile(cleared);
+                    }}
+                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-all flex items-center gap-1"
+                    title="Varsayılan banka ve IBAN bilgilerini sil"
+                  >
+                    <Trash2 className="w-3 h-3 text-rose-700" />
+                    <span>Banka Bilgilerini Sil</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleSaveProfile()}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-all flex items-center gap-1"
+                >
+                  <Save className="w-3 h-3 text-white" />
+                  <span>Banka & Firma Bilgilerini Kaydet</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

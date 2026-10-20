@@ -6601,6 +6601,15 @@ async function upsertAccountRecord(uid, a) {
     throw new Error("Database query failed. Please try again later.", { cause: error });
   }
 }
+async function deleteAccountRecord(uid, id) {
+  try {
+    await db.delete(transactions).where((0, import_drizzle_orm3.and)((0, import_drizzle_orm3.eq)(transactions.accountId, id), (0, import_drizzle_orm3.eq)(transactions.userId, uid)));
+    await db.delete(accounts).where((0, import_drizzle_orm3.and)((0, import_drizzle_orm3.eq)(accounts.id, id), (0, import_drizzle_orm3.eq)(accounts.userId, uid)));
+  } catch (error) {
+    console.error("Database query failed in deleteAccountRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
 async function syncUserBatchToPostgres(uid, email, payload) {
   try {
     await getOrCreateUser(uid, email);
@@ -8846,6 +8855,56 @@ app.delete("/api/db/transactions/:id", requireAuth, async (req, res) => {
   }
   try {
     await deleteTransactionRecord(companyId, id);
+    res.json({ success: true, deletedId: id });
+  } catch (error) {
+    res.json({ success: true, deletedId: id });
+  }
+});
+app.post("/api/db/accounts", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const { account, companyId } = req.body || {};
+  if (!account || typeof account !== "object") {
+    return res.status(400).json({ error: "Ge\xE7ersiz kasa/banka hesab\u0131 kayd\u0131" });
+  }
+  const targetCompanyId = String(companyId || req.headers["x-company-id"] || uid).trim();
+  const email = req.user?.email || `${targetCompanyId}@muavin.com`;
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const list = Array.isArray(entry.accounts) ? [...entry.accounts] : [];
+  const idx = list.findIndex((item) => item && item.id === account.id);
+  if (idx >= 0) list[idx] = { ...list[idx], ...account };
+  else list.push(account);
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: { ...entry, accounts: list },
+    updatedAt: nowIso
+  };
+  persistServerCloudSyncStore();
+  try {
+    await getOrCreateUser(targetCompanyId, email);
+    const saved = await upsertAccountRecord(targetCompanyId, account);
+    res.json({ success: true, account: saved });
+  } catch (error) {
+    res.json({ success: true, account });
+  }
+});
+app.delete("/api/db/accounts/:id", requireAuth, async (req, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const id = String(req.params.id || "").trim();
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
+  if (entry) {
+    if (Array.isArray(entry.accounts)) {
+      entry.accounts = entry.accounts.filter((item) => item && item.id !== id);
+    }
+    if (Array.isArray(entry.transactions)) {
+      entry.transactions = entry.transactions.filter((item) => item && item.accountId !== id);
+    }
+    memoryCloudSyncStore.companiesData[companyId].updatedAt = nowIso;
+    persistServerCloudSyncStore();
+  }
+  try {
+    await deleteAccountRecord(companyId, id);
     res.json({ success: true, deletedId: id });
   } catch (error) {
     res.json({ success: true, deletedId: id });

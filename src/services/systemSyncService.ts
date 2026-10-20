@@ -332,6 +332,34 @@ export async function deleteTransactionFromDatabase(transactionId: string, compa
   }
 }
 
+export async function saveAccountToDatabase(account: any, companyId?: string): Promise<void> {
+  if (typeof window === "undefined" || !account) return;
+  try {
+    const headers = await getDatabaseAuthHeaders(companyId);
+    await fetch("/api/db/accounts", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ account, companyId }),
+    });
+  } catch {
+    // offline fallback
+  }
+}
+
+export async function deleteAccountFromDatabase(accountId: string, companyId?: string): Promise<void> {
+  if (typeof window === "undefined" || !accountId) return;
+  try {
+    const headers = await getDatabaseAuthHeaders(companyId);
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    await fetch(`/api/db/accounts/${encodeURIComponent(accountId)}${qs}`, {
+      method: "DELETE",
+      headers,
+    });
+  } catch {
+    // offline fallback
+  }
+}
+
 /**
  * Aktif şirketin tüm güncel verilerini (ayarlar, şubeler, depolar, faturalar, cariler, kasa/banka, stok vb.)
  * hem merkezi PostgreSQL veritabanına (/api/db/sync) hem sunucu bulut deposuna (/api/cloud-sync/company) hem de Firestore'a gönderir.
@@ -596,15 +624,13 @@ export async function pullLatestCompanyDataFromCloud(
       COMPANY_SLICE_MAPPING.forEach(({ dataKey, storageKey }) => {
         const remoteArr = chosenRemote[dataKey];
         if (Array.isArray(remoteArr)) {
+          const localArr = Array.isArray((localData as any)[dataKey]) ? (localData as any)[dataKey] : [];
           if (preferRemoteState) {
-            const localArr = Array.isArray((localData as any)[dataKey]) ? (localData as any)[dataKey] : [];
-            const finalArr = isRemoteNewerOrEqual
-              ? remoteArr
-              : mergeRecordsById(remoteArr, localArr);
+            const finalArr = isRemoteNewerOrEqual ? remoteArr : localArr;
             saveStoredData(storageKey, finalArr, cid);
           } else {
-            const mergedArr = mergeRecordsById((localData as any)[dataKey], remoteArr);
-            saveStoredData(storageKey, mergedArr, cid);
+            const finalArr = isRemoteNewerOrEqual ? mergeRecordsById(localArr, remoteArr) : localArr;
+            saveStoredData(storageKey, finalArr, cid);
           }
         }
       });

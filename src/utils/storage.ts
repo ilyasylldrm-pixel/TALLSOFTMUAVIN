@@ -1516,6 +1516,17 @@ export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any, target
   }
 
   safeSetStorageItem(storageKey, JSON.stringify(payloadToSave));
+  if (
+    key === "ACCOUNTS" ||
+    key === "TRANSACTIONS" ||
+    key === "INVOICES" ||
+    key === "CONTACTS" ||
+    key === "PRODUCTS" ||
+    key === "CHEQUES" ||
+    key === "PROMISSORY_NOTES"
+  ) {
+    safeSetStorageItem(`muavin_company_updated_at_${activeCompId}`, new Date().toISOString());
+  }
 }
 
 export function resetToDemoData() {

@@ -495,6 +495,16 @@ export async function upsertAccountRecord(uid: string, a: Record<string, any>) {
   }
 }
 
+export async function deleteAccountRecord(uid: string, id: string) {
+  try {
+    await db.delete(transactions).where(and(eq(transactions.accountId, id), eq(transactions.userId, uid)));
+    await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.userId, uid)));
+  } catch (error) {
+    console.error("Database query failed in deleteAccountRecord:", error);
+    throw new Error("Database query failed. Please try again later.", { cause: error });
+  }
+}
+
 export async function syncUserBatchToPostgres(
   uid: string,
   email: string,

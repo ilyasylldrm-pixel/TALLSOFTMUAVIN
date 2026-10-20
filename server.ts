@@ -21,6 +21,7 @@ import {
   deleteTransactionRecord,
   upsertContactRecord,
   upsertAccountRecord,
+  deleteAccountRecord,
   syncUserBatchToPostgres,
 } from "./src/db/repository.ts";
 import fs from "fs";
@@ -2357,6 +2358,60 @@ app.delete("/api/db/transactions/:id", requireAuth, async (req: AuthRequest, res
   }
   try {
     await deleteTransactionRecord(companyId, id);
+    res.json({ success: true, deletedId: id });
+  } catch (error: any) {
+    res.json({ success: true, deletedId: id });
+  }
+});
+
+// Doğrudan Kasa ve Banka Hesabı (Account) Ekleme / Güncelleme / Silme Uç Noktaları
+app.post("/api/db/accounts", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const { account, companyId } = req.body || {};
+  if (!account || typeof account !== "object") {
+    return res.status(400).json({ error: "Geçersiz kasa/banka hesabı kaydı" });
+  }
+  const targetCompanyId = String(companyId || req.headers["x-company-id"] || uid).trim();
+  const email = req.user?.email || `${targetCompanyId}@muavin.com`;
+  const nowIso = new Date().toISOString();
+  const entry = memoryCloudSyncStore.companiesData[targetCompanyId]?.data || {};
+  const list: any[] = Array.isArray(entry.accounts) ? [...entry.accounts] : [];
+  const idx = list.findIndex((item) => item && item.id === account.id);
+  if (idx >= 0) list[idx] = { ...list[idx], ...account };
+  else list.push(account);
+  memoryCloudSyncStore.companiesData[targetCompanyId] = {
+    data: { ...entry, accounts: list },
+    updatedAt: nowIso,
+  };
+  persistServerCloudSyncStore();
+
+  try {
+    await getOrCreateUser(targetCompanyId, email);
+    const saved = await upsertAccountRecord(targetCompanyId, account);
+    res.json({ success: true, account: saved });
+  } catch (error: any) {
+    res.json({ success: true, account });
+  }
+});
+
+app.delete("/api/db/accounts/:id", requireAuth, async (req: AuthRequest, res) => {
+  const uid = req.user?.uid || "comp_default";
+  const id = String(req.params.id || "").trim();
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
+  const nowIso = new Date().toISOString();
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
+  if (entry) {
+    if (Array.isArray(entry.accounts)) {
+      entry.accounts = entry.accounts.filter((item: any) => item && item.id !== id);
+    }
+    if (Array.isArray(entry.transactions)) {
+      entry.transactions = entry.transactions.filter((item: any) => item && item.accountId !== id);
+    }
+    memoryCloudSyncStore.companiesData[companyId].updatedAt = nowIso;
+    persistServerCloudSyncStore();
+  }
+  try {
+    await deleteAccountRecord(companyId, id);
     res.json({ success: true, deletedId: id });
   } catch (error: any) {
     res.json({ success: true, deletedId: id });
