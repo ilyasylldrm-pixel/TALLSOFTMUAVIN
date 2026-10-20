@@ -36,7 +36,12 @@ interface AssetReturnModalProps {
   onOpenPrintModal?: (asset: AssetCustody, isReturnProtocol?: boolean) => void;
 }
 
-export const AssetReturnModal: React.FC<AssetReturnModalProps> = ({
+export const AssetReturnModal: React.FC<AssetReturnModalProps> = (props) => {
+  if (!props.isOpen || !props.asset) return null;
+  return <AssetReturnModalInner key={props.asset.id} {...props} asset={props.asset} />;
+};
+
+const AssetReturnModalInner: React.FC<AssetReturnModalProps & { asset: AssetCustody }> = ({
   isOpen,
   onClose,
   asset,
@@ -44,8 +49,6 @@ export const AssetReturnModal: React.FC<AssetReturnModalProps> = ({
   onConfirmReturn,
   onOpenPrintModal,
 }) => {
-  if (!isOpen || !asset) return null;
-
   const todayStr = new Date().toISOString().split("T")[0];
   const [returnDate, setReturnDate] = useState(todayStr);
   const [conditionOnReturn, setConditionOnReturn] = useState(

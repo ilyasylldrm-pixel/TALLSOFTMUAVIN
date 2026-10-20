@@ -29,13 +29,15 @@ import {
   XCircle,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
-import type {
-  CompanySettings,
-  EDocumentDirection,
-  Invoice,
-  ManagedCompany,
-  MysoftDocumentFamily,
-  MysoftEDocument,
+import {
+  isAdminOrSysAdmin,
+  isCompanyMysoftMatched,
+  type CompanySettings,
+  type EDocumentDirection,
+  type Invoice,
+  type ManagedCompany,
+  type MysoftDocumentFamily,
+  type MysoftEDocument,
 } from "../types";
 import {
   getMysoftEDocument,
@@ -74,6 +76,7 @@ export interface EDocumentsProps {
   tenantIdentifierNumber?: string;
   /** Local invoices so Gelir Faturaları appear immediately in Giden e-Faturalar */
   invoices?: Invoice[];
+  currentUser?: { id?: string; email?: string; role?: string; username?: string } | null;
   /** Optional local import hook. */
   onImportInvoice?: (document: MysoftEDocument) => void;
 }
@@ -366,17 +369,40 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   companyId,
   tenantIdentifierNumber,
   invoices = [],
+  currentUser,
   onImportInvoice,
 }) => {
   const { theme } = useTheme();
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const isDespatch = family === "despatch";
-  const hintedTaxNumber = normalizeMysoftTenantIdentifier(
-    tenantIdentifierNumber ||
-      activeCompany?.tenantIdentifierNumber ||
-      companySettings?.tenantIdentifierNumber ||
-      companySettings?.mysoftCredentials?.tenantIdentifierNumber,
+  const effectiveUser = useMemo(() => {
+    if (currentUser !== undefined) return currentUser;
+    try {
+      const raw =
+        localStorage.getItem("muavin_active_user") ||
+        sessionStorage.getItem("muavin_active_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, [currentUser]);
+  const isAdmin = isAdminOrSysAdmin(effectiveUser);
+  const isMysoftMatched = isCompanyMysoftMatched(
+    activeCompany as any,
+    companySettings,
   );
+  const hintedTaxNumber = normalizeMysoftTenantIdentifier(
+    activeCompany?.tenantIdentifierNumber ||
+      companySettings?.tenantIdentifierNumber ||
+      companySettings?.mysoftCredentials?.tenantIdentifierNumber ||
+      activeCompany?.taxNumber ||
+      companySettings?.taxNumber ||
+      companySettings?.vkn ||
+      companySettings?.tckn ||
+      tenantIdentifierNumber,
+  );
+  // Şirket eşleşmesi Admin tarafından yapıldıktan sonra veya şirket kullanıcısı oturumunda Mysoft iş ortakları gizlenir
+  const shouldHideMysoftPartners = !isAdmin || isMysoftMatched;
   const activeManagedCompanyId = companyId || activeCompany?.id;
   const {
     tenants,
@@ -390,7 +416,11 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     lookupLoading: isLookingUpVkn,
     lookupByVkn,
     reload: loadTenants,
-  } = useMysoftTenants({ hintVkn: hintedTaxNumber });
+  } = useMysoftTenants({
+    hintVkn: hintedTaxNumber,
+    lockedVkn: shouldHideMysoftPartners ? hintedTaxNumber : undefined,
+    hidePartners: shouldHideMysoftPartners,
+  });
   const [activeDirection, setActiveDirection] = useState<"inbox" | "outbox">(
     () => normalizeDirection(direction),
   );
@@ -1088,67 +1118,69 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         }
       />
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 min-w-[180px]">
-            <Building2 className="w-4 h-4 text-[#0f6bae]" />
-            Mysoft iş ortakları
-          </div>
-          <select
-            aria-label="Mysoft iş ortağı"
-            value={activeTenantIdentifierNumber || ""}
-            onChange={(event) => setSelectedTaxNumber(event.target.value || undefined)}
-            disabled={tenantsLoading || tenants.length === 0}
-            className="flex-1 h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-sm text-slate-700 outline-none focus:border-[#0f6bae]"
-          >
-            <option value="">
-              {tenantsLoading
-                ? "İş ortakları yükleniyor..."
-                : tenants.length === 0
-                  ? "Listede iş ortağı yok"
-                  : "İş ortağı seçin"}
-            </option>
-            {tenants.map((tenant, idx) => (
-              <option key={`${tenant.taxNumber}_${tenant.id || idx}`} value={tenant.taxNumber}>
-                {tenant.name} — {tenant.taxNumber}
-                {tenant.id ? ` (#${tenant.id})` : ""}
+      {!shouldHideMysoftPartners && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 min-w-[180px]">
+              <Building2 className="w-4 h-4 text-[#0f6bae]" />
+              Mysoft iş ortakları
+            </div>
+            <select
+              aria-label="Mysoft iş ortağı"
+              value={activeTenantIdentifierNumber || ""}
+              onChange={(event) => setSelectedTaxNumber(event.target.value || undefined)}
+              disabled={tenantsLoading || tenants.length === 0}
+              className="flex-1 h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-sm text-slate-700 outline-none focus:border-[#0f6bae]"
+            >
+              <option value="">
+                {tenantsLoading
+                  ? "İş ortakları yükleniyor..."
+                  : tenants.length === 0
+                    ? "Listede iş ortağı yok"
+                    : "İş ortağı seçin"}
               </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => void loadTenants()}
-            disabled={tenantsLoading}
-            className="h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 flex items-center gap-2"
-          >
-            {tenantsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            İş ortaklarını yenile
-          </button>
+              {tenants.map((tenant, idx) => (
+                <option key={`${tenant.taxNumber}_${tenant.id || idx}`} value={tenant.taxNumber}>
+                  {tenant.name} — {tenant.taxNumber}
+                  {tenant.id ? ` (#${tenant.id})` : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void loadTenants()}
+              disabled={tenantsLoading}
+              className="h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 flex items-center gap-2"
+            >
+              {tenantsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              İş ortaklarını yenile
+            </button>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              value={manualVkn}
+              onChange={(event) => setManualVkn(event.target.value)}
+              placeholder="VKN / TCKN ile firma getir"
+              className="flex-1 h-10 px-3 rounded-xl border border-slate-200 text-sm outline-none focus:border-[#0f6bae]"
+            />
+            <button
+              type="button"
+              onClick={() => void handleLookupVkn()}
+              disabled={isLookingUpVkn}
+              className="h-10 px-3 rounded-xl bg-[#eaedff] text-[#0f6bae] text-xs font-semibold hover:bg-[#dae2fd] disabled:opacity-60"
+            >
+              {isLookingUpVkn ? "Sorgulanıyor..." : "VKN ile getir"}
+            </button>
+          </div>
+          {partnerHint && <p className="text-xs text-amber-700">{partnerHint}</p>}
+          {tenantError && <p className="text-xs text-rose-600">{tenantError}</p>}
+          {activeTenantIdentifierNumber && (
+            <p className="text-xs text-slate-500">
+              Belge çekimi seçilen VKN ile yapılacak: {activeTenantIdentifierNumber}
+            </p>
+          )}
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            value={manualVkn}
-            onChange={(event) => setManualVkn(event.target.value)}
-            placeholder="VKN / TCKN ile firma getir"
-            className="flex-1 h-10 px-3 rounded-xl border border-slate-200 text-sm outline-none focus:border-[#0f6bae]"
-          />
-          <button
-            type="button"
-            onClick={() => void handleLookupVkn()}
-            disabled={isLookingUpVkn}
-            className="h-10 px-3 rounded-xl bg-[#eaedff] text-[#0f6bae] text-xs font-semibold hover:bg-[#dae2fd] disabled:opacity-60"
-          >
-            {isLookingUpVkn ? "Sorgulanıyor..." : "VKN ile getir"}
-          </button>
-        </div>
-        {partnerHint && <p className="text-xs text-amber-700">{partnerHint}</p>}
-        {tenantError && <p className="text-xs text-rose-600">{tenantError}</p>}
-        {activeTenantIdentifierNumber && (
-          <p className="text-xs text-slate-500">
-            Belge çekimi seçilen VKN ile yapılacak: {activeTenantIdentifierNumber}
-          </p>
-        )}
-      </div>
+      )}
 
       {notice && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm">

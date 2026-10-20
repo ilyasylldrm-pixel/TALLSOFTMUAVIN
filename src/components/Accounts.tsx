@@ -69,6 +69,9 @@ import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { UniversalWhatsAppModal, QuickTemplateOption } from "./common/UniversalWhatsAppModal";
 import { TableColumnFilterInput } from "./common/TableColumnFilterInput";
+import { TableCheckbox } from "./common/TableCheckbox";
+import { BulkActionBar } from "./common/BulkActionBar";
+import { useTableSelection } from "../hooks/useTableSelection";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import { Logo } from "./Logo";
 import { useColumnVisibility, ColumnDef } from "../hooks/useColumnVisibility";
@@ -286,10 +289,12 @@ interface AccountsProps {
   onAddTransaction?: (tx: Transaction) => void;
   onUpdateTransaction?: (tx: Transaction) => void;
   onDeleteTransaction?: (id: string) => void;
+  onBulkDeleteTransactions?: (ids: string[]) => void;
   onAddCheque?: (cheque: Cheque) => void;
   onUpdateCheque?: (cheque: Cheque) => void;
   onUpdateChequeStatus?: (id: string, status: ChequeStatus) => void;
   onDeleteCheque?: (id: string) => void;
+  onBulkDeleteCheques?: (ids: string[]) => void;
   onEndorseCheque?: (
     chequeId: string,
     targetContactId: string,
@@ -300,6 +305,7 @@ interface AccountsProps {
   onUpdatePromissoryNote?: (note: PromissoryNote) => void;
   onUpdateNoteStatus?: (id: string, status: PromissoryNoteStatus) => void;
   onDeletePromissoryNote?: (id: string) => void;
+  onBulkDeletePromissoryNotes?: (ids: string[]) => void;
   onEndorsePromissoryNote?: (
     noteId: string,
     targetContactId: string,
@@ -325,20 +331,33 @@ export const Accounts: React.FC<AccountsProps> = ({
   onAddTransaction,
   onUpdateTransaction,
   onDeleteTransaction,
+  onBulkDeleteTransactions,
   onAddCheque,
   onUpdateCheque,
   onUpdateChequeStatus,
   onDeleteCheque,
+  onBulkDeleteCheques,
   onEndorseCheque,
   onAddPromissoryNote,
   onUpdatePromissoryNote,
   onUpdateNoteStatus,
   onDeletePromissoryNote,
+  onBulkDeletePromissoryNotes,
   onEndorsePromissoryNote,
 }) => {
   const { theme } = useTheme();
   const [internalSubModule, setInternalSubModule] = useState<FinanceSubModule>("kasa");
   const activeSubModule = activeFinanceSubTab || internalSubModule;
+
+  // Tablo Satır / İşlem Seçme (Multi-Select) Hook'ları
+  const kasaSelection = useTableSelection();
+  const bankaSelection = useTableSelection();
+  const chequeSelection = useTableSelection();
+  const noteSelection = useTableSelection();
+  const virmanSelection = useTableSelection();
+
+  // Hızlı İşlem Seçme Menüsü (Dropdown)
+  const [isQuickActionMenuOpen, setIsQuickActionMenuOpen] = useState(false);
 
   // Display limit states for Finance Sub-Modules
   const [kasaDisplayLimit, setKasaDisplayLimit] = useState<number>(100);
@@ -359,7 +378,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   } = useColumnVisibility("kasa_transactions", KASA_TABLE_COLUMNS);
 
   const visibleKasaColCount = React.useMemo(() => {
-    return KASA_TABLE_COLUMNS.filter((col) => isKasaColVisible(col.id)).length;
+    return 1 + KASA_TABLE_COLUMNS.filter((col) => isKasaColVisible(col.id)).length;
   }, [isKasaColVisible]);
 
   // Kolon Yönetimi (Show/Hide) - Banka
@@ -374,7 +393,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   } = useColumnVisibility("bank_transactions", BANKA_TABLE_COLUMNS);
 
   const visibleBankaColCount = React.useMemo(() => {
-    return BANKA_TABLE_COLUMNS.filter((col) => isBankaColVisible(col.id)).length;
+    return 1 + BANKA_TABLE_COLUMNS.filter((col) => isBankaColVisible(col.id)).length;
   }, [isBankaColVisible]);
 
   // Kolon Yönetimi (Show/Hide) - Çekler
@@ -389,7 +408,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   } = useColumnVisibility("cheques", CHEQUE_TABLE_COLUMNS);
 
   const visibleChequeColCount = React.useMemo(() => {
-    return CHEQUE_TABLE_COLUMNS.filter((col) => isChequeColVisible(col.id)).length;
+    return 1 + CHEQUE_TABLE_COLUMNS.filter((col) => isChequeColVisible(col.id)).length;
   }, [isChequeColVisible]);
 
   // Kolon Yönetimi (Show/Hide) - Senetler
@@ -404,7 +423,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   } = useColumnVisibility("promissory_notes", NOTE_TABLE_COLUMNS);
 
   const visibleNoteColCount = React.useMemo(() => {
-    return NOTE_TABLE_COLUMNS.filter((col) => isNoteColVisible(col.id)).length;
+    return 1 + NOTE_TABLE_COLUMNS.filter((col) => isNoteColVisible(col.id)).length;
   }, [isNoteColVisible]);
 
   const setActiveSubModule = (tab: FinanceSubModule) => {
@@ -889,9 +908,14 @@ export const Accounts: React.FC<AccountsProps> = ({
   const [posSlipNo, setPosSlipNo] = useState<string>("");
   const [autoRecordPosCommission, setAutoRecordPosCommission] = useState<boolean>(true);
 
-  const handleOpenAddTxModal = (context: "kasa" | "banka" | "pos", preselectedAccountId?: string) => {
+  const handleOpenAddTxModal = (
+    context: "kasa" | "banka" | "pos",
+    preselectedAccountId?: string,
+    preselectedType: "income" | "expense" = "income",
+    preselectedCategory?: string
+  ) => {
     setAddTxContext(context);
-    setTxType("income");
+    setTxType(preselectedType);
     setTxContactId("");
     setTxAmount("");
     const today = new Date().toISOString().split("T")[0];
@@ -901,12 +925,17 @@ export const Accounts: React.FC<AccountsProps> = ({
     if (context === "kasa") {
       const defaultAcc = preselectedAccountId || selectedCashAccountId || accounts.find((a) => a.type === "cash")?.id || accounts[0]?.id || "";
       setTxAccountId(defaultAcc);
-      setTxCategory("Kasa Tahsilat / Nakit Gelir");
-      setTxDocumentNo(`MKB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
+      setTxCategory(
+        preselectedCategory ||
+          (preselectedType === "income" ? "Kasa Tahsilat / Nakit Gelir" : "Kasa Tediye / Nakit Ödeme")
+      );
+      setTxDocumentNo(
+        `${preselectedType === "income" ? "THS" : "TDY"}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+      );
     } else if (context === "pos") {
       const defaultAcc = preselectedAccountId || selectedBankAccountId || accounts.find((a) => a.type === "credit_card" || a.type === "bank")?.id || accounts[0]?.id || "";
       setTxAccountId(defaultAcc);
-      setTxCategory("POS Tahsilatı (Kredi Kartı)");
+      setTxCategory(preselectedCategory || "POS Tahsilatı (Kredi Kartı)");
       const slipCode = `SLP-${Math.floor(100000 + Math.random() * 900000)}`;
       setTxDocumentNo(slipCode);
       setPosSlipNo(slipCode);
@@ -921,7 +950,10 @@ export const Accounts: React.FC<AccountsProps> = ({
         accounts[0]?.id ||
         "";
       setTxAccountId(defaultAcc);
-      setTxCategory("Banka Havale / EFT");
+      setTxCategory(
+        preselectedCategory ||
+          (preselectedType === "income" ? "Banka Gelen Havale / EFT" : "Banka Giden Havale / EFT")
+      );
       setTxDocumentNo(`DKN-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`);
     }
 
@@ -1119,6 +1151,8 @@ export const Accounts: React.FC<AccountsProps> = ({
   // Filters
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [kasaFilterType, setKasaFilterType] = useState<"all" | "income" | "expense">("all");
+  const [bankFilterType, setBankFilterType] = useState<"all" | "income" | "expense" | "pos">("all");
   const [chequeFilterType, setChequeFilterType] = useState<"all" | "received" | "issued">("all");
   const [noteFilterType, setNoteFilterType] = useState<"all" | "received" | "issued">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1430,6 +1464,8 @@ export const Accounts: React.FC<AccountsProps> = ({
       const acc = accounts.find((a) => a.id === t.accountId);
       if (acc?.type !== "cash") return false;
       if (selectedCashAccountId && t.accountId !== selectedCashAccountId) return false;
+      if (kasaFilterType === "income" && t.type !== "income" && t.type !== "collection") return false;
+      if (kasaFilterType === "expense" && t.type !== "expense" && t.type !== "payment") return false;
       if (startDate && t.date < startDate) return false;
       if (endDate && t.date > endDate) return false;
       if (activeSearchQuery) {
@@ -1464,6 +1500,14 @@ export const Accounts: React.FC<AccountsProps> = ({
       const acc = accounts.find((a) => a.id === t.accountId);
       if (acc?.type !== "bank" && acc?.type !== "credit_card") return false;
       if (selectedBankAccountId && t.accountId !== selectedBankAccountId) return false;
+      if (bankFilterType === "income" && t.type !== "income" && t.type !== "collection") return false;
+      if (bankFilterType === "expense" && t.type !== "expense" && t.type !== "payment") return false;
+      if (bankFilterType === "pos") {
+        const cat = (t.category || "").toLowerCase();
+        const desc = (t.description || "").toLowerCase();
+        const doc = (t.documentNo || "").toLowerCase();
+        if (!cat.includes("pos") && !desc.includes("pos") && !doc.startsWith("slp-")) return false;
+      }
       if (startDate && t.date < startDate) return false;
       if (endDate && t.date > endDate) return false;
       if (activeSearchQuery) {
@@ -1706,12 +1750,18 @@ export const Accounts: React.FC<AccountsProps> = ({
   const displayedNotes = filteredNotes.slice(0, noteDisplayLimit);
   const displayedVirmanTransactions = virmanTransactions.slice(0, virmanDisplayLimit);
 
+  const displayedKasaIds = displayedKasaTransactions.map((t) => t.id);
+  const displayedBankIds = displayedBankTransactions.map((t) => t.id);
+  const displayedChequeIds = displayedCheques.map((c) => c.id);
+  const displayedNoteIds = displayedNotes.map((n) => n.id);
+  const displayedVirmanIds = displayedVirmanTransactions.map((t) => t.id);
+
   // Direct Excel (.xlsx) & PDF (.pdf) Export Data Getters and Handlers
-  const getKasaExportData = (): ExportData => {
+  const getKasaExportData = (list: Transaction[] = kasaTransactions): ExportData => {
     const selectedAcc = accounts.find((a) => a.id === selectedCashAccountId);
     const subtitle = selectedAcc
-      ? `Seçili Kasa: ${selectedAcc.name} (${selectedAcc.currency || "TRY"}) - Toplam ${kasaTransactions.length} Hareket`
-      : `Tüm Nakit Kasalar - Toplam ${kasaTransactions.length} Hareket`;
+      ? `Seçili Kasa: ${selectedAcc.name} (${selectedAcc.currency || "TRY"}) - Toplam ${list.length} Hareket`
+      : `Tüm Nakit Kasalar - Toplam ${list.length} Hareket`;
 
     const headers = [
       "Sıra",
@@ -1725,7 +1775,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       "Para Birimi",
     ];
 
-    const rows = kasaTransactions.map((tx, idx) => {
+    const rows = list.map((tx, idx) => {
       const typeLabel =
         tx.type === "income" || tx.type === "collection"
           ? "Giriş / Tahsilat"
@@ -1756,11 +1806,32 @@ export const Accounts: React.FC<AccountsProps> = ({
   const handleExportKasaExcel = () => exportToExcel(getKasaExportData());
   const handleExportKasaPDF = () => exportToPDF(getKasaExportData());
 
-  const getBankaExportData = (): ExportData => {
+  const handleBulkDeleteKasa = () => {
+    const ids = Array.from(kasaSelection.selectedIds);
+    if (ids.length === 0) return;
+    if (onBulkDeleteTransactions) {
+      onBulkDeleteTransactions(ids);
+    } else if (onDeleteTransaction) {
+      ids.forEach((id) => onDeleteTransaction(id));
+    }
+    kasaSelection.clearSelection();
+  };
+
+  const handleBulkExportKasaExcel = () => {
+    const selectedList = kasaTransactions.filter((t) => kasaSelection.isSelected(t.id));
+    if (selectedList.length > 0) exportToExcel(getKasaExportData(selectedList));
+  };
+
+  const handleBulkExportKasaPDF = () => {
+    const selectedList = kasaTransactions.filter((t) => kasaSelection.isSelected(t.id));
+    if (selectedList.length > 0) exportToPDF(getKasaExportData(selectedList));
+  };
+
+  const getBankaExportData = (list: Transaction[] = bankTransactions): ExportData => {
     const selectedAcc = accounts.find((a) => a.id === selectedBankAccountId);
     const subtitle = selectedAcc
-      ? `Seçili Banka Hesabı: ${selectedAcc.name} (${selectedAcc.currency || "TRY"}) - Toplam ${bankTransactions.length} Hareket`
-      : `Tüm Banka ve POS Hesapları - Toplam ${bankTransactions.length} Hareket`;
+      ? `Seçili Banka Hesabı: ${selectedAcc.name} (${selectedAcc.currency || "TRY"}) - Toplam ${list.length} Hareket`
+      : `Tüm Banka ve POS Hesapları - Toplam ${list.length} Hareket`;
 
     const headers = [
       "Sıra",
@@ -1774,7 +1845,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       "Para Birimi",
     ];
 
-    const rows = bankTransactions.map((tx, idx) => {
+    const rows = list.map((tx, idx) => {
       const typeLabel =
         tx.type === "income" || tx.type === "collection"
           ? "Gelen Havale / Tahsilat"
@@ -1805,7 +1876,28 @@ export const Accounts: React.FC<AccountsProps> = ({
   const handleExportBankaExcel = () => exportToExcel(getBankaExportData());
   const handleExportBankaPDF = () => exportToPDF(getBankaExportData());
 
-  const getChequesExportData = (): ExportData => {
+  const handleBulkDeleteBanka = () => {
+    const ids = Array.from(bankaSelection.selectedIds);
+    if (ids.length === 0) return;
+    if (onBulkDeleteTransactions) {
+      onBulkDeleteTransactions(ids);
+    } else if (onDeleteTransaction) {
+      ids.forEach((id) => onDeleteTransaction(id));
+    }
+    bankaSelection.clearSelection();
+  };
+
+  const handleBulkExportBankaExcel = () => {
+    const selectedList = bankTransactions.filter((t) => bankaSelection.isSelected(t.id));
+    if (selectedList.length > 0) exportToExcel(getBankaExportData(selectedList));
+  };
+
+  const handleBulkExportBankaPDF = () => {
+    const selectedList = bankTransactions.filter((t) => bankaSelection.isSelected(t.id));
+    if (selectedList.length > 0) exportToPDF(getBankaExportData(selectedList));
+  };
+
+  const getChequesExportData = (list: Cheque[] = filteredCheques): ExportData => {
     const headers = [
       "Sıra",
       "Çek No",
@@ -1828,7 +1920,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       bounced: "Karşılıksız",
     };
 
-    const rows = filteredCheques.map((c, idx) => [
+    const rows = list.map((c, idx) => [
       idx + 1,
       c.chequeNumber || "-",
       c.type === "received" ? "Alınan (Müşteri) Çeki" : "Verilen (Firma) Çeki",
@@ -1847,7 +1939,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       filename: `Cek_Portfoy_Listesi_${new Date().toISOString().split("T")[0]}`,
       sheetName: "Çek Portföyü",
       title: "ÇEK PORTFÖYÜ LİSTESİ",
-      subtitle: `Toplam ${filteredCheques.length} Adet Çek Kaydı`,
+      subtitle: `Toplam ${list.length} Adet Çek Kaydı`,
       headers,
       rows,
     };
@@ -1856,7 +1948,35 @@ export const Accounts: React.FC<AccountsProps> = ({
   const handleExportChequesExcel = () => exportToExcel(getChequesExportData());
   const handleExportChequesPDF = () => exportToPDF(getChequesExportData());
 
-  const getNotesExportData = (): ExportData => {
+  const handleBulkDeleteChequesLocal = () => {
+    const ids = Array.from(chequeSelection.selectedIds);
+    if (ids.length === 0) return;
+    if (onBulkDeleteCheques) {
+      onBulkDeleteCheques(ids);
+    } else if (onDeleteCheque) {
+      ids.forEach((id) => onDeleteCheque(id));
+    }
+    chequeSelection.clearSelection();
+  };
+
+  const handleBulkExportChequesExcel = () => {
+    const selectedList = filteredCheques.filter((c) => chequeSelection.isSelected(c.id));
+    if (selectedList.length > 0) exportToExcel(getChequesExportData(selectedList));
+  };
+
+  const handleBulkExportChequesPDF = () => {
+    const selectedList = filteredCheques.filter((c) => chequeSelection.isSelected(c.id));
+    if (selectedList.length > 0) exportToPDF(getChequesExportData(selectedList));
+  };
+
+  const handleBulkUpdateChequeStatus = (status: ChequeStatus) => {
+    if (!onUpdateChequeStatus) return;
+    const ids = Array.from(chequeSelection.selectedIds);
+    ids.forEach((id) => onUpdateChequeStatus(id, status));
+    chequeSelection.clearSelection();
+  };
+
+  const getNotesExportData = (list: PromissoryNote[] = filteredNotes): ExportData => {
     const headers = [
       "Sıra",
       "Senet No",
@@ -1877,7 +1997,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       protested: "Protestolu",
     };
 
-    const rows = filteredNotes.map((n, idx) => [
+    const rows = list.map((n, idx) => [
       idx + 1,
       n.noteNumber || "-",
       n.type === "received" ? "Alınan (Müşteri) Senedi" : "Verilen (Firma) Senedi",
@@ -1894,7 +2014,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       filename: `Senet_Portfoy_Listesi_${new Date().toISOString().split("T")[0]}`,
       sheetName: "Senet Portföyü",
       title: "SENET PORTFÖYÜ LİSTESİ",
-      subtitle: `Toplam ${filteredNotes.length} Adet Senet Kaydı`,
+      subtitle: `Toplam ${list.length} Adet Senet Kaydı`,
       headers,
       rows,
     };
@@ -1903,7 +2023,35 @@ export const Accounts: React.FC<AccountsProps> = ({
   const handleExportNotesExcel = () => exportToExcel(getNotesExportData());
   const handleExportNotesPDF = () => exportToPDF(getNotesExportData());
 
-  const getVirmanExportData = (): ExportData => {
+  const handleBulkDeleteNotesLocal = () => {
+    const ids = Array.from(noteSelection.selectedIds);
+    if (ids.length === 0) return;
+    if (onBulkDeletePromissoryNotes) {
+      onBulkDeletePromissoryNotes(ids);
+    } else if (onDeletePromissoryNote) {
+      ids.forEach((id) => onDeletePromissoryNote(id));
+    }
+    noteSelection.clearSelection();
+  };
+
+  const handleBulkExportNotesExcel = () => {
+    const selectedList = filteredNotes.filter((n) => noteSelection.isSelected(n.id));
+    if (selectedList.length > 0) exportToExcel(getNotesExportData(selectedList));
+  };
+
+  const handleBulkExportNotesPDF = () => {
+    const selectedList = filteredNotes.filter((n) => noteSelection.isSelected(n.id));
+    if (selectedList.length > 0) exportToPDF(getNotesExportData(selectedList));
+  };
+
+  const handleBulkUpdateNoteStatus = (status: PromissoryNoteStatus) => {
+    if (!onUpdateNoteStatus) return;
+    const ids = Array.from(noteSelection.selectedIds);
+    ids.forEach((id) => onUpdateNoteStatus(id, status));
+    noteSelection.clearSelection();
+  };
+
+  const getVirmanExportData = (list: Transaction[] = virmanTransactions): ExportData => {
     const headers = [
       "Sıra",
       "Tarih",
@@ -1916,7 +2064,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       "Para Birimi",
     ];
 
-    const rows = virmanTransactions.map((tx, idx) => [
+    const rows = list.map((tx, idx) => [
       idx + 1,
       tx.date || "-",
       tx.documentNo || "-",
@@ -1932,7 +2080,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       filename: `Virman_Transfer_Gecmisi_${new Date().toISOString().split("T")[0]}`,
       sheetName: "Virman Transfer",
       title: "HESAPLAR ARASI VİRMAN TRANSFER GEÇMİŞİ",
-      subtitle: `Toplam ${virmanTransactions.length} Adet Virman Hareketi`,
+      subtitle: `Toplam ${list.length} Adet Virman Hareketi`,
       headers,
       rows,
     };
@@ -1940,6 +2088,27 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   const handleExportVirmanExcel = () => exportToExcel(getVirmanExportData());
   const handleExportVirmanPDF = () => exportToPDF(getVirmanExportData());
+
+  const handleBulkDeleteVirman = () => {
+    const ids = Array.from(virmanSelection.selectedIds);
+    if (ids.length === 0) return;
+    if (onBulkDeleteTransactions) {
+      onBulkDeleteTransactions(ids);
+    } else if (onDeleteTransaction) {
+      ids.forEach((id) => onDeleteTransaction(id));
+    }
+    virmanSelection.clearSelection();
+  };
+
+  const handleBulkExportVirmanExcel = () => {
+    const selectedList = virmanTransactions.filter((t) => virmanSelection.isSelected(t.id));
+    if (selectedList.length > 0) exportToExcel(getVirmanExportData(selectedList));
+  };
+
+  const handleBulkExportVirmanPDF = () => {
+    const selectedList = virmanTransactions.filter((t) => virmanSelection.isSelected(t.id));
+    if (selectedList.length > 0) exportToPDF(getVirmanExportData(selectedList));
+  };
 
   const renderDateFilterBar = (subModuleName: string) => {
     const isFiltered = Boolean(startDate || endDate);
@@ -3494,6 +3663,85 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
 
             <form id="add-transaction-form" onSubmit={handleSaveTransaction} className="space-y-4 text-xs">
+              {/* Hazır Finansal İşlem Seçimi */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  İşlem Seçin (Hazır İşlem Türü)
+                </label>
+                <select
+                  value={`${txType}:${txCategory}`}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    const [selectedDir, ...catParts] = val.split(":");
+                    const selectedCat = catParts.join(":");
+                    const newDir = (selectedDir === "expense" ? "expense" : "income") as "income" | "expense";
+                    setTxType(newDir);
+                    setTxCategory(selectedCat);
+                    if (addTxContext === "kasa") {
+                      setTxDocumentNo(
+                        `${newDir === "income" ? "THS" : "TDY"}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+                      );
+                    }
+                  }}
+                  className="w-full bg-indigo-50/60 border border-indigo-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-indigo-500"
+                >
+                  {addTxContext === "kasa" && (
+                    <>
+                      <optgroup label="➕ Nakit Giriş / Tahsilat İşlemleri">
+                        <option value="income:Kasa Tahsilat / Nakit Gelir">Nakit Kasa Tahsilatı (Genel Giriş +)</option>
+                        <option value="income:Cari Nakit Tahsilatı">Cari Hesap Nakit Tahsilatı (+)</option>
+                        <option value="income:Fatura Nakit Tahsilatı">Satış Faturası Nakit Tahsilatı (+)</option>
+                        <option value="income:Peşin Satış Tahsilatı">Peşin Satış / Perakende Nakit Girişi (+)</option>
+                        <option value="income:Bankadan Kasaya Nakit Çekim">Bankadan Kasaya Nakit Çekim (+)</option>
+                        <option value="income:Ortaklar Cari Nakit Girişi">Ortaklar Cari / Sermaye Nakit Girişi (+)</option>
+                      </optgroup>
+                      <optgroup label="➖ Nakit Çıkış / Tediye İşlemleri">
+                        <option value="expense:Kasa Tediye / Nakit Ödeme">Nakit Kasa Tediyesi (Genel Çıkış -)</option>
+                        <option value="expense:Tedarikçi Cari Nakit Ödemesi">Tedarikçi / Cari Nakit Ödemesi (-)</option>
+                        <option value="expense:Gider Faturası Nakit Ödemesi">Alış / Gider Faturası Nakit Ödemesi (-)</option>
+                        <option value="expense:Personel Maaş / Avans Ödemesi">Personel Maaş / Avans Nakit Ödemesi (-)</option>
+                        <option value="expense:Ofis & İşletme Gideri">Ofis, Mutfak, Ulaşım & İşletme Masrafı (-)</option>
+                        <option value="expense:Kira / Aidat Nakit Ödemesi">Kira / Aidat Nakit Ödemesi (-)</option>
+                        <option value="expense:Vergi / SGK / Harç Ödemesi">Vergi / SGK / Resmi Harç Ödemesi (-)</option>
+                        <option value="expense:Kasadan Bankaya Nakit Yatırma">Kasadan Bankaya Nakit Yatırma (-)</option>
+                      </optgroup>
+                    </>
+                  )}
+                  {addTxContext === "banka" && (
+                    <>
+                      <optgroup label="➕ Banka Gelen Transfer / Tahsilat İşlemleri">
+                        <option value="income:Banka Gelen Havale / EFT">Gelen Havale / EFT / FAST Tahsilatı (+)</option>
+                        <option value="income:Müşteri Cari Banka Tahsilatı">Müşteri Cari Hesap Havale/EFT Tahsilatı (+)</option>
+                        <option value="income:Fatura Banka Tahsilatı">Satış Faturası Banka Havale/EFT Tahsilatı (+)</option>
+                        <option value="income:Döviz Bozdurma / Kur Girişi">Döviz Satış / Hesaba TL Aktarımı (+)</option>
+                        <option value="income:Mevduat Faiz / Fon Getirisi">Mevduat Faiz / Repo / Fon Getirisi (+)</option>
+                      </optgroup>
+                      <optgroup label="➖ Banka Giden Transfer / Ödeme İşlemleri">
+                        <option value="expense:Banka Giden Havale / EFT">Gönderilen Havale / EFT / FAST Ödemesi (-)</option>
+                        <option value="expense:Tedarikçi Cari Banka Ödemesi">Tedarikçi Cari Hesap Havale/EFT Ödemesi (-)</option>
+                        <option value="expense:Gider Faturası Banka Ödemesi">Alış / Gider Faturası Banka Ödemesi (-)</option>
+                        <option value="expense:Personel Maaş Banka Ödemesi">Personel Maaş / Prim Banka Ödemesi (-)</option>
+                        <option value="expense:Kira Banka Transferi">İşyeri / Ofis Kira Banka Ödemesi (-)</option>
+                        <option value="expense:Vergi / SGK Banka Ödemesi">Vergi / SGK / Bağ-Kur Banka Ödemesi (-)</option>
+                        <option value="expense:Banka Kredi / Taksit Ödemesi">Ticari Kredi / Kredi Kartı Borç Ödemesi (-)</option>
+                        <option value="expense:Banka Havale / EFT Masrafı">Banka İşlem / EFT Masraf & Komisyonu (-)</option>
+                      </optgroup>
+                    </>
+                  )}
+                  {addTxContext === "pos" && (
+                    <>
+                      <optgroup label="💳 POS Kredi Kartı İşlemleri">
+                        <option value="income:POS Tahsilatı (Kredi Kartı)">Fiziksel POS Tek Çekim Tahsilatı (+)</option>
+                        <option value="income:POS Taksitli Kredi Kartı Tahsilatı">POS Taksitli Kredi Kartı Tahsilatı (+)</option>
+                        <option value="income:Sanal POS / E-Ticaret Tahsilatı">Sanal POS / Online Ödeme Tahsilatı (+)</option>
+                        <option value="expense:POS İade / İptal İşlemi">POS Satış İptal / Müşteri İade Çıkışı (-)</option>
+                      </optgroup>
+                    </>
+                  )}
+                </select>
+              </div>
+
               {/* İşlem Tipi */}
               <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
                 <button
@@ -4823,6 +5071,222 @@ export const Accounts: React.FC<AccountsProps> = ({
         description="Nakit Kasa, Banka Hesapları, Çek, Senet ve Hesaplar Arası Virman Yönetimi."
         actions={
           <>
+            {/* Hızlı İşlem Seçme Menüsü (Dropdown) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsQuickActionMenuOpen((prev) => !prev)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-xs shrink-0"
+                title="Finansal işlem türü seçerek hızlı kayıt oluşturun"
+              >
+                <CheckCircle2 className="w-4 h-4 text-indigo-100" />
+                <span>İşlem Seç</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isQuickActionMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {isQuickActionMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsQuickActionMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 text-xs max-h-[80vh] overflow-y-auto">
+                    <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-700 bg-amber-50/70">
+                      💵 Nakit Kasa İşlemleri
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("kasa");
+                        handleOpenAddTxModal("kasa");
+                        setTxType("income");
+                        setTxCategory("Kasa Tahsilat / Nakit Gelir");
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Nakit Kasa Tahsilatı (Giriş +)</span>
+                      <span className="text-[10px] font-bold text-emerald-600">+ Tahsilat</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("kasa");
+                        handleOpenAddTxModal("kasa");
+                        setTxType("expense");
+                        setTxCategory("Kasa Tediye / Nakit Ödeme");
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Nakit Kasa Tediyesi (Çıkış -)</span>
+                      <span className="text-[10px] font-bold text-rose-600">- Ödeme</span>
+                    </button>
+
+                    <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-blue-50/70">
+                      🏦 Banka & POS İşlemleri
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("banka");
+                        handleOpenAddTxModal("banka");
+                        setTxType("income");
+                        setTxCategory("Banka Gelen Havale / EFT");
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Gelen Havale / EFT Tahsilatı (+)</span>
+                      <span className="text-[10px] font-bold text-emerald-600">+ Gelen</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("banka");
+                        handleOpenAddTxModal("banka");
+                        setTxType("expense");
+                        setTxCategory("Banka Giden Havale / EFT");
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Giden Havale / EFT Ödemesi (-)</span>
+                      <span className="text-[10px] font-bold text-rose-600">- Giden</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("banka");
+                        handleOpenAddTxModal("pos");
+                        setTxType("income");
+                        setTxCategory("POS Tahsilatı (Kredi Kartı)");
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Kredi Kartı POS Slip Tahsilatı</span>
+                      <span className="text-[10px] font-bold text-emerald-600">POS</span>
+                    </button>
+
+                    <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50/70">
+                      📑 Çek & Senet İşlemleri
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("cek");
+                        setChqType("received");
+                        setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
+                        setIsChequeModalOpen(true);
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Müşteri Çeki Girişi (Alınan Çek)</span>
+                      <span className="text-[10px] font-bold text-indigo-600">Çek Al</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("cek");
+                        setChqType("issued");
+                        setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
+                        setIsChequeModalOpen(true);
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Firma Borç Çeki Çıkışı (Verilen)</span>
+                      <span className="text-[10px] font-bold text-amber-600">Çek Ver</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("cek");
+                        handleOpenEndorseModal("cheque");
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Portföyden Çek Ciro Et</span>
+                      <span className="text-[10px] font-bold text-purple-600">Ciro</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("senet");
+                        setNtType("received");
+                        setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
+                        setIsNoteModalOpen(true);
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Müşteri Senedi Girişi (Alınan)</span>
+                      <span className="text-[10px] font-bold text-purple-600">Senet Al</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setActiveSubModule("senet");
+                        setNtType("issued");
+                        setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
+                        setIsNoteModalOpen(true);
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Borç Senedi Çıkışı (Verilen)</span>
+                      <span className="text-[10px] font-bold text-amber-600">Senet Ver</span>
+                    </button>
+
+                    <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50/70">
+                      🔄 Virman & Hesap Tanımları
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setIsTransferModalOpen(true);
+                        detailNav.openTransfer();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Hesaplar Arası Virman / Transfer</span>
+                      <span className="text-[10px] font-bold text-emerald-600">Virman</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setAccType("cash");
+                        setIsAccountModalOpen(true);
+                        detailNav.openCreate();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Yeni Nakit Kasa Hesabı Aç</span>
+                      <span className="text-[10px] font-bold text-slate-500">Kasa</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickActionMenuOpen(false);
+                        setAccType("bank");
+                        setIsAccountModalOpen(true);
+                        detailNav.openCreate();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <span>Yeni Banka Hesabı Aç</span>
+                      <span className="text-[10px] font-bold text-slate-500">Banka</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
             {activeSubModule !== "virman" && (
               <button
                 onClick={() => {
@@ -5263,15 +5727,54 @@ export const Accounts: React.FC<AccountsProps> = ({
 
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-amber-600" />
-                <span>Nakit Kasa Gelir ve Gider Hareketleri</span>
-                {selectedCashAccountId && (
-                  <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
-                    Seçili: {accounts.find((a) => a.id === selectedCashAccountId)?.name}
-                  </span>
-                )}
-              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <Banknote className="w-4 h-4 text-amber-600" />
+                  <span>Nakit Kasa Gelir ve Gider Hareketleri</span>
+                  {selectedCashAccountId && (
+                    <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
+                      Seçili: {accounts.find((a) => a.id === selectedCashAccountId)?.name}
+                    </span>
+                  )}
+                </h3>
+
+                {/* Kasa İşlem Türü Filtre Seçimi */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setKasaFilterType("all")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      kasaFilterType === "all"
+                        ? "bg-amber-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Tüm İşlemler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKasaFilterType("income")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      kasaFilterType === "income"
+                        ? "bg-emerald-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Tahsilat (+)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKasaFilterType("expense")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      kasaFilterType === "expense"
+                        ? "bg-rose-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Tediye (-)
+                  </button>
+                </div>
+              </div>
 
               <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                 {selectedCashAccountId && (
@@ -5326,6 +5829,14 @@ export const Accounts: React.FC<AccountsProps> = ({
               <table className="w-full text-left text-xs min-w-[750px] border-separate border-spacing-y-2">
                 <thead>
                   <tr className="bg-slate-50/70 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3 w-9 text-center">
+                      <TableCheckbox
+                        checked={kasaSelection.isAllSelected(displayedKasaIds)}
+                        indeterminate={kasaSelection.isIndeterminate(displayedKasaIds)}
+                        onChange={() => kasaSelection.toggleAll(displayedKasaIds)}
+                        ariaLabel="Tüm kasa işlemlerini seç"
+                      />
+                    </th>
                     {isKasaColVisible("date") && <th className="py-2.5 px-4">Tarih</th>}
                     {isKasaColVisible("documentNo") && <th className="py-2.5 px-4">Evrak / Makbuz No</th>}
                     {isKasaColVisible("accountName") && <th className="py-2.5 px-4">Kasa</th>}
@@ -5337,6 +5848,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                   {/* Sütun Bazlı Filtreleme Satırı */}
                   {showKasaColFilters && (
                     <tr className="bg-slate-50/40 transition-colors">
+                      <th className="py-1.5 px-2 w-9" />
                       {isKasaColVisible("date") && (
                         <th className="py-1.5 px-2 font-normal">
                           <TableColumnFilterInput
@@ -5422,13 +5934,26 @@ export const Accounts: React.FC<AccountsProps> = ({
                     displayedKasaTransactions.map((tx) => {
                       const isIncome = tx.type === "income" || tx.type === "collection";
                       const isExpanded = !!expandedRows[tx.id];
+                      const isSelected = kasaSelection.isSelected(tx.id);
                       return (
                         <React.Fragment key={tx.id}>
                           <tr
-                            className="bg-white hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs"
+                            className={`${
+                              isSelected ? "bg-indigo-50/70" : "bg-white"
+                            } hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs`}
                           >
+                            <td
+                              className="py-3 px-3 text-center w-9 rounded-l-xl border-y border-l border-slate-200/80"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <TableCheckbox
+                                checked={isSelected}
+                                onChange={() => kasaSelection.toggleRow(tx.id)}
+                                ariaLabel={`${tx.documentNo || tx.description} işlemini seç`}
+                              />
+                            </td>
                             {isKasaColVisible("date") && (
-                              <td className="py-3 px-4 font-medium text-slate-600 font-mono tabular-nums border-y border-slate-200/80 first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r">
+                              <td className="py-3 px-4 font-medium text-slate-600 font-mono tabular-nums border-y border-slate-200/80 last:rounded-r-xl last:border-r">
                                 {formatDate(tx.date)}
                               </td>
                             )}
@@ -5631,6 +6156,16 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             )}
           </div>
+
+          <BulkActionBar
+            selectedCount={kasaSelection.selectedCount}
+            totalCount={displayedKasaIds.length}
+            onSelectAll={() => kasaSelection.selectAll(displayedKasaIds)}
+            onClearSelection={kasaSelection.clearSelection}
+            onBulkDelete={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteKasa : undefined}
+            onBulkExportExcel={handleBulkExportKasaExcel}
+            onBulkExportPDF={handleBulkExportKasaPDF}
+          />
         </div>
       )}
 
@@ -5751,15 +6286,65 @@ export const Accounts: React.FC<AccountsProps> = ({
 
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <Building className="w-4 h-4 text-blue-600" />
-                <span>Banka Hesabı Havale / EFT / POS Hareketleri</span>
-                {selectedBankAccountId && (
-                  <span className="text-xs font-bold text-blue-800 bg-blue-100 px-2.5 py-0.5 rounded-full border border-blue-200">
-                    Seçili: {accounts.find((a) => a.id === selectedBankAccountId)?.name}
-                  </span>
-                )}
-              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <Building className="w-4 h-4 text-blue-600" />
+                  <span>Banka Hesabı Havale / EFT / POS Hareketleri</span>
+                  {selectedBankAccountId && (
+                    <span className="text-xs font-bold text-blue-800 bg-blue-100 px-2.5 py-0.5 rounded-full border border-blue-200">
+                      Seçili: {accounts.find((a) => a.id === selectedBankAccountId)?.name}
+                    </span>
+                  )}
+                </h3>
+
+                {/* Banka İşlem Türü Filtre Seçimi */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setBankFilterType("all")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      bankFilterType === "all"
+                        ? "bg-blue-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Tümü
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBankFilterType("income")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      bankFilterType === "income"
+                        ? "bg-emerald-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Gelen (+)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBankFilterType("expense")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      bankFilterType === "expense"
+                        ? "bg-rose-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Giden (-)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBankFilterType("pos")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      bankFilterType === "pos"
+                        ? "bg-indigo-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    POS Slip
+                  </button>
+                </div>
+              </div>
 
               <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                 {selectedBankAccountId && (
@@ -5833,6 +6418,14 @@ export const Accounts: React.FC<AccountsProps> = ({
               <table className="w-full text-left text-xs min-w-[750px] border-separate border-spacing-y-2">
                 <thead>
                   <tr className="bg-slate-50/70 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3 w-9 text-center">
+                      <TableCheckbox
+                        checked={bankaSelection.isAllSelected(displayedBankIds)}
+                        indeterminate={bankaSelection.isIndeterminate(displayedBankIds)}
+                        onChange={() => bankaSelection.toggleAll(displayedBankIds)}
+                        ariaLabel="Tüm banka işlemlerini seç"
+                      />
+                    </th>
                     {isBankaColVisible("date") && <th className="py-2.5 px-4">Tarih</th>}
                     {isBankaColVisible("documentNo") && <th className="py-2.5 px-4">Dekont No</th>}
                     {isBankaColVisible("accountName") && <th className="py-2.5 px-4">Banka Hesabı</th>}
@@ -5844,6 +6437,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                   {/* Sütun Bazlı Filtreleme Satırı */}
                   {showBankColFilters && (
                     <tr className="bg-slate-50/40 transition-colors">
+                      <th className="py-1.5 px-2 w-9" />
                       {isBankaColVisible("date") && (
                         <th className="py-1.5 px-2 font-normal">
                           <TableColumnFilterInput
@@ -5929,13 +6523,26 @@ export const Accounts: React.FC<AccountsProps> = ({
                     displayedBankTransactions.map((tx) => {
                       const isIncome = tx.type === "income" || tx.type === "collection";
                       const isExpanded = !!expandedRows[tx.id];
+                      const isSelected = bankaSelection.isSelected(tx.id);
                       return (
                         <React.Fragment key={tx.id}>
                           <tr
-                            className="bg-white hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs"
+                            className={`${
+                              isSelected ? "bg-indigo-50/70" : "bg-white"
+                            } hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs`}
                           >
+                            <td
+                              className="py-3 px-3 text-center w-9 rounded-l-xl border-y border-l border-slate-200/80"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <TableCheckbox
+                                checked={isSelected}
+                                onChange={() => bankaSelection.toggleRow(tx.id)}
+                                ariaLabel={`${tx.documentNo || tx.description} işlemini seç`}
+                              />
+                            </td>
                             {isBankaColVisible("date") && (
-                              <td className="py-3 px-4 font-medium text-slate-600 font-mono tabular-nums border-y border-slate-200/80 first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r">
+                              <td className="py-3 px-4 font-medium text-slate-600 font-mono tabular-nums border-y border-slate-200/80 last:rounded-r-xl last:border-r">
                                 {formatDate(tx.date)}
                               </td>
                             )}
@@ -6138,6 +6745,16 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             )}
           </div>
+
+          <BulkActionBar
+            selectedCount={bankaSelection.selectedCount}
+            totalCount={displayedBankIds.length}
+            onSelectAll={() => bankaSelection.selectAll(displayedBankIds)}
+            onClearSelection={bankaSelection.clearSelection}
+            onBulkDelete={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteBanka : undefined}
+            onBulkExportExcel={handleBulkExportBankaExcel}
+            onBulkExportPDF={handleBulkExportBankaPDF}
+          />
         </div>
       )}
 
@@ -6252,6 +6869,14 @@ export const Accounts: React.FC<AccountsProps> = ({
             <table className="w-full text-left text-xs min-w-[800px] border-separate border-spacing-y-2">
               <thead>
                 <tr className="bg-slate-50/70 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-2.5 px-3 w-9 text-center">
+                    <TableCheckbox
+                      checked={chequeSelection.isAllSelected(displayedChequeIds)}
+                      indeterminate={chequeSelection.isIndeterminate(displayedChequeIds)}
+                      onChange={() => chequeSelection.toggleAll(displayedChequeIds)}
+                      ariaLabel="Tüm çekleri seç"
+                    />
+                  </th>
                   {isChequeColVisible("noType") && <th className="py-2.5 px-4">Çek No & Tipi</th>}
                   {isChequeColVisible("bank") && <th className="py-2.5 px-4">Banka / Şube</th>}
                   {isChequeColVisible("contact") && <th className="py-2.5 px-4">Keşideci / Cari</th>}
@@ -6263,6 +6888,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                 {/* Sütun Bazlı Filtreleme Satırı */}
                 {showChequeColFilters && (
                   <tr className="bg-slate-50/40 transition-colors">
+                    <th className="py-1.5 px-2 w-9" />
                     {isChequeColVisible("noType") && (
                       <th className="py-1.5 px-2 font-normal">
                         <TableColumnFilterInput
@@ -6347,13 +6973,26 @@ export const Accounts: React.FC<AccountsProps> = ({
                 ) : (
                   displayedCheques.map((c) => {
                     const isExpanded = !!expandedRows[c.id];
+                    const isSelected = chequeSelection.isSelected(c.id);
                     return (
                       <React.Fragment key={c.id}>
                         <tr
-                          className="bg-white hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs"
+                          className={`${
+                            isSelected ? "bg-indigo-50/70" : "bg-white"
+                          } hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs`}
                         >
+                          <td
+                            className="py-3 px-3 text-center w-9 rounded-l-xl border-y border-l border-slate-200/80"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <TableCheckbox
+                              checked={isSelected}
+                              onChange={() => chequeSelection.toggleRow(c.id)}
+                              ariaLabel={`${c.chequeNumber} çekini seç`}
+                            />
+                          </td>
                           {isChequeColVisible("noType") && (
-                            <td className="py-3 px-4 first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r border-y border-slate-200/80">
+                            <td className="py-3 px-4 last:rounded-r-xl last:border-r border-y border-slate-200/80">
                               <div className="font-mono font-bold text-slate-900">{c.chequeNumber}</div>
                               <span
                                 className={`inline-block mt-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -6589,6 +7228,36 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
           )}
         </div>
+
+        <BulkActionBar
+          selectedCount={chequeSelection.selectedCount}
+          totalCount={displayedChequeIds.length}
+          onSelectAll={() => chequeSelection.selectAll(displayedChequeIds)}
+          onClearSelection={chequeSelection.clearSelection}
+          onBulkDelete={onDeleteCheque || onBulkDeleteCheques ? handleBulkDeleteChequesLocal : undefined}
+          onBulkExportExcel={handleBulkExportChequesExcel}
+          onBulkExportPDF={handleBulkExportChequesPDF}
+          extraActions={
+            onUpdateChequeStatus ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleBulkUpdateChequeStatus("collected")}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Tahsil Edildi İşaretle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkUpdateChequeStatus("portfolio")}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Portföye Al
+                </button>
+              </div>
+            ) : undefined
+          }
+        />
         </div>
       )}
 
@@ -6703,6 +7372,14 @@ export const Accounts: React.FC<AccountsProps> = ({
             <table className="w-full text-left text-xs min-w-[800px] border-separate border-spacing-y-2">
               <thead>
                 <tr className="bg-slate-50/70 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-2.5 px-3 w-9 text-center">
+                    <TableCheckbox
+                      checked={noteSelection.isAllSelected(displayedNoteIds)}
+                      indeterminate={noteSelection.isIndeterminate(displayedNoteIds)}
+                      onChange={() => noteSelection.toggleAll(displayedNoteIds)}
+                      ariaLabel="Tüm senetleri seç"
+                    />
+                  </th>
                   {isNoteColVisible("noType") && <th className="py-2.5 px-4">Senet No & Tipi</th>}
                   {isNoteColVisible("debtor") && <th className="py-2.5 px-4">Borçlu / Cari</th>}
                   {isNoteColVisible("issueDate") && <th className="py-2.5 px-4">Keşide / Düzenleme</th>}
@@ -6714,6 +7391,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                 {/* Sütun Bazlı Filtreleme Satırı */}
                 {showNoteColFilters && (
                   <tr className="bg-slate-50/40 transition-colors">
+                    <th className="py-1.5 px-2 w-9" />
                     {isNoteColVisible("noType") && (
                       <th className="py-1.5 px-2 font-normal">
                         <TableColumnFilterInput
@@ -6798,13 +7476,26 @@ export const Accounts: React.FC<AccountsProps> = ({
                 ) : (
                   displayedNotes.map((n) => {
                     const isExpanded = !!expandedRows[n.id];
+                    const isSelected = noteSelection.isSelected(n.id);
                     return (
                       <React.Fragment key={n.id}>
                         <tr
-                          className="bg-white hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs"
+                          className={`${
+                            isSelected ? "bg-indigo-50/70" : "bg-white"
+                          } hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs`}
                         >
+                          <td
+                            className="py-3 px-3 text-center w-9 rounded-l-xl border-y border-l border-slate-200/80"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <TableCheckbox
+                              checked={isSelected}
+                              onChange={() => noteSelection.toggleRow(n.id)}
+                              ariaLabel={`${n.noteNumber} senedini seç`}
+                            />
+                          </td>
                           {isNoteColVisible("noType") && (
-                            <td className="py-3 px-4 first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r border-y border-slate-200/80">
+                            <td className="py-3 px-4 last:rounded-r-xl last:border-r border-y border-slate-200/80">
                               <div className="font-mono font-bold text-slate-900">{n.noteNumber}</div>
                               <span
                                 className={`inline-block mt-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -7038,6 +7729,36 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
           )}
         </div>
+
+        <BulkActionBar
+          selectedCount={noteSelection.selectedCount}
+          totalCount={displayedNoteIds.length}
+          onSelectAll={() => noteSelection.selectAll(displayedNoteIds)}
+          onClearSelection={noteSelection.clearSelection}
+          onBulkDelete={onDeletePromissoryNote || onBulkDeletePromissoryNotes ? handleBulkDeleteNotesLocal : undefined}
+          onBulkExportExcel={handleBulkExportNotesExcel}
+          onBulkExportPDF={handleBulkExportNotesPDF}
+          extraActions={
+            onUpdateNoteStatus ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleBulkUpdateNoteStatus("collected")}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Tahsil Edildi İşaretle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkUpdateNoteStatus("portfolio")}
+                  className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Portföye Al
+                </button>
+              </div>
+            ) : undefined
+          }
+        />
         </div>
       )}
 
@@ -7238,6 +7959,14 @@ export const Accounts: React.FC<AccountsProps> = ({
               <table className="w-full text-left text-xs min-w-[700px] border-separate border-spacing-y-2">
                 <thead>
                   <tr className="bg-slate-50/70 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3 w-9 text-center">
+                      <TableCheckbox
+                        checked={virmanSelection.isAllSelected(displayedVirmanIds)}
+                        indeterminate={virmanSelection.isIndeterminate(displayedVirmanIds)}
+                        onChange={() => virmanSelection.toggleAll(displayedVirmanIds)}
+                        ariaLabel="Tüm virman işlemlerini seç"
+                      />
+                    </th>
                     <th className="py-2.5 px-4">Tarih</th>
                     <th className="py-2.5 px-4">Hesap</th>
                     <th className="py-2.5 px-4">Kategori / Açıklama</th>
@@ -7248,19 +7977,32 @@ export const Accounts: React.FC<AccountsProps> = ({
                 <tbody>
                   {virmanTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400">
+                      <td colSpan={6} className="text-center py-8 text-slate-400">
                         Seçilen tarih aralığında virman transfer hareketi bulunmuyor.
                       </td>
                     </tr>
                   ) : (
                     displayedVirmanTransactions.map((tx) => {
                       const isExpanded = !!expandedRows[tx.id];
+                      const isSelected = virmanSelection.isSelected(tx.id);
                       return (
                         <React.Fragment key={tx.id}>
                           <tr
-                            className="bg-white hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs"
+                            className={`${
+                              isSelected ? "bg-indigo-50/70" : "bg-white"
+                            } hover:bg-blue-50/80 transition-all group cursor-pointer shadow-2xs`}
                           >
-                            <td className="py-3 px-4 font-medium text-slate-600 rounded-l-xl border-y border-l border-slate-200/80">
+                            <td
+                              className="py-3 px-3 text-center w-9 rounded-l-xl border-y border-l border-slate-200/80"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <TableCheckbox
+                                checked={isSelected}
+                                onChange={() => virmanSelection.toggleRow(tx.id)}
+                                ariaLabel={`${tx.documentNo || tx.description} işlemini seç`}
+                              />
+                            </td>
+                            <td className="py-3 px-4 font-medium text-slate-600 border-y border-slate-200/80">
                               {formatDate(tx.date)}
                             </td>
                             <td className="py-3 px-4 font-bold text-slate-900 border-y border-slate-200/80">
@@ -7328,7 +8070,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setTransferAmount(tx.amount.toString());
+                                    setTransferAmount(tx.amount);
                                     setTransferDesc(`Virman Tekrarı: ${tx.description || ""}`);
                                     window.scrollTo({ top: 0, behavior: "smooth" });
                                   }}
@@ -7354,7 +8096,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                           {/* Master-Detail Expanded Row Section */}
                           {isExpanded && (
                             <tr className="bg-slate-50/70 border-y border-slate-200" data-skip-row-highlight="true">
-                              <td colSpan={5} className="p-0">
+                              <td colSpan={6} className="p-0">
                                 <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-50 via-[#eaedff]/30 to-white border-l-4 border-l-[#005289] space-y-3">
                                   <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-200">
                                     <div className="flex flex-wrap items-center gap-2">
@@ -7430,6 +8172,16 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             )}
           </div>
+
+          <BulkActionBar
+            selectedCount={virmanSelection.selectedCount}
+            totalCount={displayedVirmanIds.length}
+            onSelectAll={() => virmanSelection.selectAll(displayedVirmanIds)}
+            onClearSelection={virmanSelection.clearSelection}
+            onBulkDelete={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteVirman : undefined}
+            onBulkExportExcel={handleBulkExportVirmanExcel}
+            onBulkExportPDF={handleBulkExportVirmanPDF}
+          />
         </div>
       )}
 

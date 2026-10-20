@@ -250,14 +250,16 @@ export const Settings: React.FC<SettingsProps> = ({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => onOpenSubModule("mysoft")}
-              className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
-            >
-              <Globe className="w-4 h-4 text-indigo-600" />
-              <span>Mysoft VKN/TCKN Eşleştirme</span>
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => onOpenSubModule("mysoft")}
+                className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
+              >
+                <Globe className="w-4 h-4 text-indigo-600" />
+                <span>Mysoft VKN/TCKN Eşleştirme</span>
+              </button>
+            )}
 
             {isMysoftMatched && (
               <button

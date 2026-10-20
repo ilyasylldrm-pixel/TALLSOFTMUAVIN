@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from "react";
 import { Building2, Loader2, RefreshCw } from "lucide-react";
 import { useMysoftTenants } from "../hooks/useMysoftTenants";
+import { isAdminOrSysAdmin } from "../types";
+import { normalizeMysoftTenantIdentifier } from "../services/mysoftEDocumentService";
 
 export interface MysoftTenantPickerProps {
   value?: string;
@@ -8,6 +10,8 @@ export interface MysoftTenantPickerProps {
   /** compact = fatura formu; panel = e-belge ekranı */
   variant?: "compact" | "panel";
   className?: string;
+  hideWhenMatched?: boolean;
+  currentUser?: { id?: string; email?: string; role?: string; username?: string } | null;
   onSelect?: (vkn: string | undefined) => void;
 }
 
@@ -16,8 +20,26 @@ export const MysoftTenantPicker: React.FC<MysoftTenantPickerProps> = ({
   hintVkn,
   variant = "panel",
   className = "",
+  hideWhenMatched = false,
+  currentUser,
   onSelect,
 }) => {
+  const effectiveUser = React.useMemo(() => {
+    if (currentUser !== undefined) return currentUser;
+    try {
+      const raw =
+        localStorage.getItem("muavin_active_user") ||
+        sessionStorage.getItem("muavin_active_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, [currentUser]);
+
+  const isAdmin = isAdminOrSysAdmin(effectiveUser);
+  const matchedVkn = normalizeMysoftTenantIdentifier(value || hintVkn);
+  const shouldHidePicker = !isAdmin || (hideWhenMatched && Boolean(matchedVkn));
+
   const {
     tenants,
     loading,
@@ -31,7 +53,11 @@ export const MysoftTenantPicker: React.FC<MysoftTenantPickerProps> = ({
     lookupByVkn,
     reload,
     selectedTenant,
-  } = useMysoftTenants({ hintVkn: value || hintVkn });
+  } = useMysoftTenants({
+    hintVkn: value || hintVkn,
+    lockedVkn: shouldHidePicker ? matchedVkn : undefined,
+    hidePartners: shouldHidePicker,
+  });
 
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
@@ -75,6 +101,10 @@ export const MysoftTenantPicker: React.FC<MysoftTenantPickerProps> = ({
       onSelectRef.current?.(tenant.taxNumber);
     }
   };
+
+  if (shouldHidePicker) {
+    return null;
+  }
 
   if (variant === "compact") {
     return (

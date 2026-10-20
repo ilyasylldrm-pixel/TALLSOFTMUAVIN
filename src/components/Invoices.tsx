@@ -6757,6 +6757,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <MysoftTenantPicker
                           value={mysoftTenantVkn}
                           variant="compact"
+                          hideWhenMatched={true}
                           hintVkn={
                             companySettings.tenantIdentifierNumber ||
                             companySettings.taxNumber ||

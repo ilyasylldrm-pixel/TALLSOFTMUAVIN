@@ -175,6 +175,15 @@ export const ServiceWhatsAppModal: React.FC<ServiceWhatsAppModalProps> = ({
     setMessage(text);
   }, [templateType, serviceRecord, serviceType, serviceDetails, invoiceNumber, companySettings]);
 
+  const [waStatus, setWaStatus] = useState<WhatsAppClientStatus | null>(null);
+  const [isDirectSending, setIsDirectSending] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchWhatsAppStatus().then(setWaStatus).catch(() => {});
+    }
+  }, [isOpen]);
+
   if (!isOpen || !serviceRecord) return null;
 
   // Format phone number for WhatsApp URL (e.g. +905551234567 -> 905551234567)
@@ -200,15 +209,6 @@ export const ServiceWhatsAppModal: React.FC<ServiceWhatsAppModalProps> = ({
       setCopied(false);
     }
   };
-
-  const [waStatus, setWaStatus] = useState<WhatsAppClientStatus | null>(null);
-  const [isDirectSending, setIsDirectSending] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchWhatsAppStatus().then(setWaStatus).catch(() => {});
-    }
-  }, [isOpen]);
 
   const handleSendDirect = async () => {
     if (!cleanPhone || !message.trim()) {

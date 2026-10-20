@@ -1993,6 +1993,13 @@ export default function App() {
     }));
   };
 
+  const handleBulkDeleteCheques = (ids: string[]) => {
+    setData((prev) => ({
+      ...prev,
+      cheques: (prev.cheques || []).filter((c) => !ids.includes(c.id)),
+    }));
+  };
+
   const handleAddPromissoryNote = (note: PromissoryNote) => {
     setData((prev) => {
       let updatedContacts = prev.contacts;
@@ -2087,6 +2094,13 @@ export default function App() {
     setData((prev) => ({
       ...prev,
       promissoryNotes: (prev.promissoryNotes || []).filter((n) => n.id !== id),
+    }));
+  };
+
+  const handleBulkDeletePromissoryNotes = (ids: string[]) => {
+    setData((prev) => ({
+      ...prev,
+      promissoryNotes: (prev.promissoryNotes || []).filter((n) => !ids.includes(n.id)),
     }));
   };
 
@@ -2739,7 +2753,7 @@ export default function App() {
 
   const isCurrentTabAuthorized = (tab: NavItem): boolean => {
     if (tab === "dashboard") return true;
-    if (tab === "admin" || tab === "company_companies") return isAdminOrSysAdmin(currentUser);
+    if (tab === "admin" || tab === "company_companies" || tab === "company_mysoft") return isAdminOrSysAdmin(currentUser);
     if (tab === "company_logs" || tab === "e_document_logs") {
       return isCompanyMysoftMatched(activeCompanyObj, data.settings);
     }
@@ -3002,10 +3016,18 @@ export default function App() {
               family="invoice"
               direction={currentTab === "e_documents_outgoing" ? "outgoing" : "incoming"}
               companySettings={data.settings}
+              activeCompany={activeCompanyObj || undefined}
               companyId={activeCompanyId}
               invoices={data.invoices}
+              currentUser={currentUser}
               tenantIdentifierNumber={
-                data.settings.tenantIdentifierNumber || readStoredMysoftTenantVkn()
+                activeCompanyObj?.tenantIdentifierNumber ||
+                data.settings.tenantIdentifierNumber ||
+                data.settings.mysoftCredentials?.tenantIdentifierNumber ||
+                activeCompanyObj?.vkn ||
+                activeCompanyObj?.tckn ||
+                data.settings.taxNumber ||
+                readStoredMysoftTenantVkn()
               }
               globalSearchTerm={searchTerm}
               onImportInvoice={handleImportMysoftInvoice}
@@ -3046,16 +3068,19 @@ export default function App() {
               onAddTransaction={handleAddTransaction}
               onUpdateTransaction={handleUpdateTransaction}
               onDeleteTransaction={handleDeleteTransaction}
+              onBulkDeleteTransactions={handleBulkDeleteTransactions}
               onAddCheque={handleAddCheque}
               onUpdateCheque={handleUpdateCheque}
               onUpdateChequeStatus={handleUpdateChequeStatus}
               onDeleteCheque={handleDeleteCheque}
+              onBulkDeleteCheques={handleBulkDeleteCheques}
               onEndorseCheque={handleEndorseCheque}
               onAddPromissoryNote={handleAddPromissoryNote}
               onUpdatePromissoryNote={handleUpdatePromissoryNote}
               onUpdateNoteStatus={handleUpdateNoteStatus}
               onEndorsePromissoryNote={handleEndorsePromissoryNote}
               onDeletePromissoryNote={handleDeletePromissoryNote}
+              onBulkDeletePromissoryNotes={handleBulkDeletePromissoryNotes}
             />
           )}
 
@@ -3198,8 +3223,17 @@ export default function App() {
               family="despatch"
               direction={currentTab === "waybills_dispatch" ? "outgoing" : "incoming"}
               companySettings={data.settings}
+              activeCompany={activeCompanyObj || undefined}
+              companyId={activeCompanyId}
+              currentUser={currentUser}
               tenantIdentifierNumber={
-                data.settings.tenantIdentifierNumber || readStoredMysoftTenantVkn()
+                activeCompanyObj?.tenantIdentifierNumber ||
+                data.settings.tenantIdentifierNumber ||
+                data.settings.mysoftCredentials?.tenantIdentifierNumber ||
+                activeCompanyObj?.vkn ||
+                activeCompanyObj?.tckn ||
+                data.settings.taxNumber ||
+                readStoredMysoftTenantVkn()
               }
               globalSearchTerm={searchTerm}
             />

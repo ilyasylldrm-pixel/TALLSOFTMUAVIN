@@ -1089,18 +1089,20 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 </button>
               )}
 
-              <button
-                type="button"
-                onClick={() => handleTabChange("mysoft")}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  currentSubTab === "mysoft"
-                    ? "bg-[#0f6bae] text-white shadow-2xs"
-                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
-                }`}
-              >
-                <Globe className="w-4 h-4" />
-                <span>Mysoft VKN/TCKN Eşleştirme</span>
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("mysoft")}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    currentSubTab === "mysoft"
+                      ? "bg-[#0f6bae] text-white shadow-2xs"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                  <span>Mysoft VKN/TCKN Eşleştirme</span>
+                </button>
+              )}
 
               {isMysoftMatched && (
                 <button
@@ -1570,40 +1572,48 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
               />
             </div>
 
-            <div className="rounded-lg border border-[#c6cdff] bg-[#eaedff]/50 p-4 space-y-3">
-              <div>
-                <h4 className="text-sm font-extrabold text-[#131b2e] flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-[#0f6bae]" />
-                  Mysoft e-Belge mükellefi
-                </h4>
-                <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                  Demo firma VKN yerine erişim anahtarınıza bağlı gerçek mükellef VKN/TCKN
-                  seçin. Fatura kesimi ve e-belge senkronu bu değeri kullanır.
-                </p>
-              </div>
-              <MysoftTenantPicker
-                variant="compact"
-                hintVkn={profileForm.tenantIdentifierNumber}
-                onSelect={(vkn) =>
-                  updateAndAutoSaveProfile(
-                    (prev) => ({
-                      ...prev,
-                      tenantIdentifierNumber: vkn,
-                      mysoftCredentials: {
-                        ...prev.mysoftCredentials,
-                        tenantIdentifierNumber: vkn,
-                      },
-                    }),
-                    true
-                  )
-                }
-              />
-              {profileForm.tenantIdentifierNumber && (
-                <p className="text-[11px] font-mono text-[#0f6bae] font-bold">
-                  Kayıtlı Mysoft tenantIdentifierNumber: {profileForm.tenantIdentifierNumber}
-                </p>
+            {isAdmin &&
+              !isCompanyMysoftMatched(
+                effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null,
+                profileForm || settings,
+              ) && (
+                <div className="rounded-lg border border-[#c6cdff] bg-[#eaedff]/50 p-4 space-y-3">
+                  <div>
+                    <h4 className="text-sm font-extrabold text-[#131b2e] flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-[#0f6bae]" />
+                      Mysoft e-Belge mükellefi
+                    </h4>
+                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                      Demo firma VKN yerine erişim anahtarınıza bağlı gerçek mükellef VKN/TCKN
+                      seçin. Fatura kesimi ve e-belge senkronu bu değeri kullanır.
+                    </p>
+                  </div>
+                  <MysoftTenantPicker
+                    variant="compact"
+                    hideWhenMatched={true}
+                    currentUser={currentUser}
+                    hintVkn={profileForm.tenantIdentifierNumber}
+                    onSelect={(vkn) =>
+                      updateAndAutoSaveProfile(
+                        (prev) => ({
+                          ...prev,
+                          tenantIdentifierNumber: vkn,
+                          mysoftCredentials: {
+                            ...prev.mysoftCredentials,
+                            tenantIdentifierNumber: vkn,
+                          },
+                        }),
+                        true
+                      )
+                    }
+                  />
+                  {profileForm.tenantIdentifierNumber && (
+                    <p className="text-[11px] font-mono text-[#0f6bae] font-bold">
+                      Kayıtlı Mysoft tenantIdentifierNumber: {profileForm.tenantIdentifierNumber}
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
               <div>
@@ -3204,6 +3214,19 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
       {/* SUB-TAB: MYSOFT ENTEGRASYON & VKN/TCKN EŞLEŞTİRME MASASI */}
       {currentSubTab === "mysoft" && (
+        !isAdmin ? (
+          <div className="p-8 max-w-xl mx-auto bg-white rounded-2xl border border-amber-200 shadow-xs text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900">
+              Yönetici Yetkisi Gerekli
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Mysoft şirket eşleştirmesi ve iş ortakları yönetimi münhasıran <strong>Admin / Sistem Yöneticisi</strong> yetkisindedir.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
             <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -3357,6 +3380,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             })()}
           </div>
         </div>
+        )
       )}
 
       {/* Şube Ekle / Düzenle Modal */}

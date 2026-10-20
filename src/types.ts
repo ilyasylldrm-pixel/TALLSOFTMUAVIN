@@ -2025,7 +2025,7 @@ export function isModuleOrSubModuleAllowed(
     return isCompanyMysoftMatched(activeCompany);
   }
   if (isAdminOrSysAdmin(currentUser)) return true;
-  if (moduleKey === "admin" || moduleKey === "company_companies") return false;
+  if (moduleKey === "admin" || moduleKey === "company_companies" || moduleKey === "company_mysoft") return false;
 
   // 1. Şirket bazlı modül ve alt modül kısıtlaması
   if (activeCompany?.moduleRestrictionEnabled && Array.isArray(activeCompany.allowedModules)) {

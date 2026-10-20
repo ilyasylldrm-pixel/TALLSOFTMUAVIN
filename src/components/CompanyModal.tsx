@@ -60,7 +60,17 @@ interface CompanyModalProps {
   currentUser?: { id?: string; email?: string; role?: string; username?: string } | null;
 }
 
-export const CompanyModal: React.FC<CompanyModalProps> = ({
+export const CompanyModal: React.FC<CompanyModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return (
+    <CompanyModalInner
+      key={`${props.initialCompany?.id || "new"}_${props.mode || "create"}`}
+      {...props}
+    />
+  );
+};
+
+const CompanyModalInner: React.FC<CompanyModalProps> = ({
   isOpen,
   onClose,
   onSave,
@@ -69,8 +79,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   mode = "create",
   currentUser,
 }) => {
-  if (!isOpen) return null;
-
   const effectiveUser = React.useMemo(() => {
     if (currentUser) return currentUser;
     try {

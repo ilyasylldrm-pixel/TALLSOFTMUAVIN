@@ -10,23 +10,43 @@ import {
   readStoredMysoftTenantVkn,
   writeStoredMysoftTenantVkn,
 } from "../utils/mysoftTenantStorage";
+import { isAdminOrSysAdmin } from "../types";
 
 export interface UseMysoftTenantsOptions {
   /** Pre-select when it matches a linked tenant (company profile VKN, etc.). */
   hintVkn?: string;
+  /** Locked VKN when company matching is already completed by Admin. */
+  lockedVkn?: string;
+  /** Hide and skip loading Mysoft business partners list for company users once matched. */
+  hidePartners?: boolean;
   /** Load tenant directory on mount. */
   autoLoad?: boolean;
 }
 
-function pickInitialVkn(hintVkn?: string): string | undefined {
-  const stored = readStoredMysoftTenantVkn();
+function getEffectiveUserFromStorage(): { id?: string; email?: string; role?: string; username?: string } | null {
+  try {
+    const raw =
+      localStorage.getItem("muavin_active_user") ||
+      sessionStorage.getItem("muavin_active_user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function pickInitialVkn(hintVkn?: string, lockedVkn?: string): string | undefined {
+  const locked = normalizeMysoftTenantIdentifier(lockedVkn);
+  if (locked) return locked;
   const hint = normalizeMysoftTenantIdentifier(hintVkn);
-  return stored || hint;
+  if (hint) return hint;
+  const stored = readStoredMysoftTenantVkn();
+  return stored;
 }
 
 function pickFromRows(rows: MysoftTenant[], current?: string, hint?: string): string | undefined {
   const hintMatch = hint ? rows.find((row) => row.taxNumber === hint) : undefined;
   if (hintMatch) return hintMatch.taxNumber;
+  if (hint) return hint;
   if (rows.length === 1) return rows[0].taxNumber;
   if (current && rows.some((row) => row.taxNumber === current)) return current;
   if (rows.length > 0) return rows[0].taxNumber;
@@ -46,15 +66,18 @@ function deduplicateTenants(rows: MysoftTenant[]): MysoftTenant[] {
 }
 
 export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
-  const hintVkn = normalizeMysoftTenantIdentifier(options.hintVkn);
-  const autoLoad = options.autoLoad !== false;
+  const lockedVkn = normalizeMysoftTenantIdentifier(options.lockedVkn);
+  const hintVkn = normalizeMysoftTenantIdentifier(options.hintVkn) || lockedVkn;
+  const isAdmin = isAdminOrSysAdmin(getEffectiveUserFromStorage());
+  const hidePartners = Boolean(options.hidePartners) || (!isAdmin && Boolean(hintVkn));
+  const autoLoad = options.autoLoad !== false && !hidePartners;
 
   const [tenants, setTenants] = useState<MysoftTenant[]>([]);
   const [loading, setLoading] = useState(autoLoad);
   const [error, setError] = useState<string | null>(null);
   const [partnerHint, setPartnerHint] = useState<string | null>(null);
   const [selectedVkn, setSelectedVknState] = useState<string | undefined>(() =>
-    pickInitialVkn(hintVkn),
+    pickInitialVkn(hintVkn, lockedVkn),
   );
   const [manualVkn, setManualVkn] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -68,20 +91,33 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
   const applyPick = useCallback(
     (rows: MysoftTenant[]) => {
       setSelectedVknState((current) => {
-        const next = pickFromRows(rows, current, hintVkn);
+        const next = lockedVkn || pickFromRows(rows, current, hintVkn);
         if (next) writeStoredMysoftTenantVkn(next);
         return next;
       });
     },
-    [hintVkn],
+    [hintVkn, lockedVkn],
   );
 
   const reload = useCallback(async () => {
+    if (hidePartners) {
+      const targetVkn = lockedVkn || hintVkn;
+      if (targetVkn) {
+        setSelectedVknState(targetVkn);
+        writeStoredMysoftTenantVkn(targetVkn);
+      }
+      setTenants([]);
+      setPartnerHint(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     const status = await getMysoftConnectionStatus().catch(() => null);
     const identity = status?.identity;
-    if (identity?.businessPartnerId) {
+    if (identity?.businessPartnerId && isAdmin) {
       setPartnerHint(
         `İş ortağı ${identity.businessPartnerId}: belge çekmeden önce listeden müşteri seçin (VKN/TCKN).`,
       );
@@ -100,7 +136,9 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
       }
     } catch (loadError) {
       setTenants([]);
-      setSelectedVkn(undefined);
+      if (!hintVkn) {
+        setSelectedVkn(undefined);
+      }
       setError(
         loadError instanceof Error
           ? loadError.message
@@ -109,7 +147,7 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [applyPick, setSelectedVkn]);
+  }, [applyPick, setSelectedVkn, hidePartners, lockedVkn, hintVkn, isAdmin]);
 
   const lookupByVkn = useCallback(async () => {
     const vkn = normalizeMysoftTenantIdentifier(manualVkn);
@@ -145,9 +183,22 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
   }, [manualVkn, setSelectedVkn]);
 
   useEffect(() => {
+    const targetVkn = lockedVkn || hintVkn;
+    if (targetVkn && targetVkn !== selectedVkn) {
+      setSelectedVknState(targetVkn);
+      writeStoredMysoftTenantVkn(targetVkn);
+    }
+  }, [lockedVkn, hintVkn, selectedVkn]);
+
+  useEffect(() => {
+    if (hidePartners) {
+      setLoading(false);
+      setPartnerHint(null);
+      return;
+    }
     if (!autoLoad) return;
     void reload();
-  }, [autoLoad, reload]);
+  }, [autoLoad, hidePartners, reload]);
 
   useEffect(() => {
     if (!hintVkn || tenants.length === 0) return;
@@ -171,3 +222,4 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
     reload,
   };
 }
+
