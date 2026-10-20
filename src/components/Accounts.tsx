@@ -5828,6 +5828,18 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             </div>
 
+            <BulkActionBar
+              selectedCount={kasaSelection.selectedCount}
+              totalCount={kasaTransactions.length}
+              itemLabel="kasa işlemi"
+              deleteLabel="Seçilen İşlemleri Sil"
+              onSelectAll={() => kasaSelection.selectAll(kasaTransactions.map((t) => t.id))}
+              onClearSelection={kasaSelection.clearSelection}
+              onDelete={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteKasa : undefined}
+              onExportExcel={handleBulkExportKasaExcel}
+              onExportPdf={handleBulkExportKasaPDF}
+            />
+
             <div
               className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden p-2"
               style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
@@ -6162,16 +6174,6 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             )}
           </div>
-
-          <BulkActionBar
-            selectedCount={kasaSelection.selectedCount}
-            totalCount={displayedKasaIds.length}
-            onSelectAll={() => kasaSelection.selectAll(displayedKasaIds)}
-            onClearSelection={kasaSelection.clearSelection}
-            onBulkDelete={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteKasa : undefined}
-            onBulkExportExcel={handleBulkExportKasaExcel}
-            onBulkExportPDF={handleBulkExportKasaPDF}
-          />
         </div>
       )}
 
@@ -6416,6 +6418,18 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </button>
               </div>
             </div>
+
+            <BulkActionBar
+              selectedCount={bankaSelection.selectedCount}
+              totalCount={bankTransactions.length}
+              itemLabel="banka işlemi"
+              deleteLabel="Seçilen İşlemleri Sil"
+              onSelectAll={() => bankaSelection.selectAll(bankTransactions.map((t) => t.id))}
+              onClearSelection={bankaSelection.clearSelection}
+              onDelete={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteBanka : undefined}
+              onExportExcel={handleBulkExportBankaExcel}
+              onExportPdf={handleBulkExportBankaPDF}
+            />
 
             <div
               className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden p-2"
@@ -6751,16 +6765,6 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             )}
           </div>
-
-          <BulkActionBar
-            selectedCount={bankaSelection.selectedCount}
-            totalCount={displayedBankIds.length}
-            onSelectAll={() => bankaSelection.selectAll(displayedBankIds)}
-            onClearSelection={bankaSelection.clearSelection}
-            onBulkDelete={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteBanka : undefined}
-            onBulkExportExcel={handleBulkExportBankaExcel}
-            onBulkExportPDF={handleBulkExportBankaPDF}
-          />
         </div>
       )}
 
@@ -6867,6 +6871,38 @@ export const Accounts: React.FC<AccountsProps> = ({
               />
             </div>
           </div>
+
+          <BulkActionBar
+            selectedCount={chequeSelection.selectedCount}
+            totalCount={filteredCheques.length}
+            itemLabel="çek"
+            deleteLabel="Seçilen Çekleri Sil"
+            onSelectAll={() => chequeSelection.selectAll(filteredCheques.map((c) => c.id))}
+            onClearSelection={chequeSelection.clearSelection}
+            onDelete={onDeleteCheque || onBulkDeleteCheques ? handleBulkDeleteChequesLocal : undefined}
+            onExportExcel={handleBulkExportChequesExcel}
+            onExportPdf={handleBulkExportChequesPDF}
+            customActions={
+              onUpdateChequeStatus ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleBulkUpdateChequeStatus("collected")}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Tahsil Edildi İşaretle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkUpdateChequeStatus("portfolio")}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Portföye Al
+                  </button>
+                </div>
+              ) : undefined
+            }
+          />
 
           <div
             className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden p-2"
@@ -7234,36 +7270,6 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
           )}
         </div>
-
-        <BulkActionBar
-          selectedCount={chequeSelection.selectedCount}
-          totalCount={displayedChequeIds.length}
-          onSelectAll={() => chequeSelection.selectAll(displayedChequeIds)}
-          onClearSelection={chequeSelection.clearSelection}
-          onBulkDelete={onDeleteCheque || onBulkDeleteCheques ? handleBulkDeleteChequesLocal : undefined}
-          onBulkExportExcel={handleBulkExportChequesExcel}
-          onBulkExportPDF={handleBulkExportChequesPDF}
-          extraActions={
-            onUpdateChequeStatus ? (
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleBulkUpdateChequeStatus("collected")}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
-                >
-                  Tahsil Edildi İşaretle
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleBulkUpdateChequeStatus("portfolio")}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
-                >
-                  Portföye Al
-                </button>
-              </div>
-            ) : undefined
-          }
-        />
         </div>
       )}
 
@@ -7370,6 +7376,38 @@ export const Accounts: React.FC<AccountsProps> = ({
               />
             </div>
           </div>
+
+          <BulkActionBar
+            selectedCount={noteSelection.selectedCount}
+            totalCount={filteredNotes.length}
+            itemLabel="senet"
+            deleteLabel="Seçilen Senetleri Sil"
+            onSelectAll={() => noteSelection.selectAll(filteredNotes.map((n) => n.id))}
+            onClearSelection={noteSelection.clearSelection}
+            onDelete={onDeletePromissoryNote || onBulkDeletePromissoryNotes ? handleBulkDeleteNotesLocal : undefined}
+            onExportExcel={handleBulkExportNotesExcel}
+            onExportPdf={handleBulkExportNotesPDF}
+            customActions={
+              onUpdateNoteStatus ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleBulkUpdateNoteStatus("collected")}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Tahsil Edildi İşaretle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkUpdateNoteStatus("portfolio")}
+                    className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Portföye Al
+                  </button>
+                </div>
+              ) : undefined
+            }
+          />
 
           <div
             className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden p-2"
@@ -7735,36 +7773,6 @@ export const Accounts: React.FC<AccountsProps> = ({
             </div>
           )}
         </div>
-
-        <BulkActionBar
-          selectedCount={noteSelection.selectedCount}
-          totalCount={displayedNoteIds.length}
-          onSelectAll={() => noteSelection.selectAll(displayedNoteIds)}
-          onClearSelection={noteSelection.clearSelection}
-          onBulkDelete={onDeletePromissoryNote || onBulkDeletePromissoryNotes ? handleBulkDeleteNotesLocal : undefined}
-          onBulkExportExcel={handleBulkExportNotesExcel}
-          onBulkExportPDF={handleBulkExportNotesPDF}
-          extraActions={
-            onUpdateNoteStatus ? (
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleBulkUpdateNoteStatus("collected")}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
-                >
-                  Tahsil Edildi İşaretle
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleBulkUpdateNoteStatus("portfolio")}
-                  className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
-                >
-                  Portföye Al
-                </button>
-              </div>
-            ) : undefined
-          }
-        />
         </div>
       )}
 
@@ -7957,6 +7965,18 @@ export const Accounts: React.FC<AccountsProps> = ({
                   <span className="hidden sm:inline">PDF İndir</span>
                 </button>
               </div>
+
+            <BulkActionBar
+              selectedCount={virmanSelection.selectedCount}
+              totalCount={virmanTransactions.length}
+              itemLabel="virman işlemi"
+              deleteLabel="Seçilen Virmanları Sil"
+              onSelectAll={() => virmanSelection.selectAll(virmanTransactions.map((t) => t.id))}
+              onClearSelection={virmanSelection.clearSelection}
+              onDelete={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteVirman : undefined}
+              onExportExcel={handleBulkExportVirmanExcel}
+              onExportPdf={handleBulkExportVirmanPDF}
+            />
 
             <div
               className="overflow-x-auto custom-scrollbar w-full rounded-2xl border shadow-2xs overflow-hidden p-2"
@@ -8178,16 +8198,6 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             )}
           </div>
-
-          <BulkActionBar
-            selectedCount={virmanSelection.selectedCount}
-            totalCount={displayedVirmanIds.length}
-            onSelectAll={() => virmanSelection.selectAll(displayedVirmanIds)}
-            onClearSelection={virmanSelection.clearSelection}
-            onBulkDelete={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteVirman : undefined}
-            onBulkExportExcel={handleBulkExportVirmanExcel}
-            onBulkExportPDF={handleBulkExportVirmanPDF}
-          />
         </div>
       )}
 

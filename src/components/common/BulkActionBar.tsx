@@ -16,36 +16,49 @@ export interface BulkActionBarProps {
   onClearSelection: () => void;
   onSelectAll?: () => void;
   onDelete?: () => void | Promise<void>;
+  onBulkDelete?: () => void | Promise<void>;
   deleteLabel?: string;
   onExportExcel?: () => void;
+  onBulkExportExcel?: () => void;
   onExportPdf?: () => void;
+  onBulkExportPDF?: () => void;
   customActions?: React.ReactNode;
+  extraActions?: React.ReactNode;
   className?: string;
 }
 
 export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   selectedCount,
   totalCount,
-  itemLabel = "öğe",
+  itemLabel = "işlem",
   onClearSelection,
   onSelectAll,
   onDelete,
+  onBulkDelete,
   deleteLabel = "Seçilenleri Sil",
   onExportExcel,
+  onBulkExportExcel,
   onExportPdf,
+  onBulkExportPDF,
   customActions,
+  extraActions,
   className = "",
 }) => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const resolvedOnDelete = onDelete || onBulkDelete;
+  const resolvedOnExportExcel = onExportExcel || onBulkExportExcel;
+  const resolvedOnExportPdf = onExportPdf || onBulkExportPDF;
+  const resolvedCustomActions = customActions || extraActions;
+
   if (selectedCount === 0) return null;
 
   const handleConfirmDelete = async () => {
-    if (!onDelete) return;
+    if (!resolvedOnDelete) return;
     try {
       setIsDeleting(true);
-      await onDelete();
+      await resolvedOnDelete();
       setShowConfirmModal(false);
     } catch (err) {
       console.error("Toplu silme hatası:", err);
@@ -93,12 +106,12 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
         {/* Right: Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          {customActions}
+          {resolvedCustomActions}
 
-          {onExportExcel && (
+          {resolvedOnExportExcel && (
             <button
               type="button"
-              onClick={onExportExcel}
+              onClick={resolvedOnExportExcel}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
               title="Seçilen satırları Excel (.xlsx) olarak indir"
             >
@@ -107,10 +120,10 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
             </button>
           )}
 
-          {onExportPdf && (
+          {resolvedOnExportPdf && (
             <button
               type="button"
-              onClick={onExportPdf}
+              onClick={resolvedOnExportPdf}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
               title="Seçilen satırları PDF olarak indir"
             >
@@ -119,7 +132,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
             </button>
           )}
 
-          {onDelete && (
+          {resolvedOnDelete && (
             <button
               type="button"
               onClick={() => setShowConfirmModal(true)}
