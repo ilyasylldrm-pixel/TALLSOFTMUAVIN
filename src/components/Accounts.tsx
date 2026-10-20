@@ -5833,7 +5833,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                       <TableCheckbox
                         checked={kasaSelection.isAllSelected(displayedKasaIds)}
                         indeterminate={kasaSelection.isIndeterminate(displayedKasaIds)}
-                        onChange={() => kasaSelection.toggleAll(displayedKasaIds)}
+                        onChange={() => kasaSelection.toggleSelectAll(displayedKasaIds)}
                         ariaLabel="Tüm kasa işlemlerini seç"
                       />
                     </th>
@@ -5948,7 +5948,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                             >
                               <TableCheckbox
                                 checked={isSelected}
-                                onChange={() => kasaSelection.toggleRow(tx.id)}
+                                onChange={() => kasaSelection.toggleSelect(tx.id)}
                                 ariaLabel={`${tx.documentNo || tx.description} işlemini seç`}
                               />
                             </td>
@@ -6422,7 +6422,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                       <TableCheckbox
                         checked={bankaSelection.isAllSelected(displayedBankIds)}
                         indeterminate={bankaSelection.isIndeterminate(displayedBankIds)}
-                        onChange={() => bankaSelection.toggleAll(displayedBankIds)}
+                        onChange={() => bankaSelection.toggleSelectAll(displayedBankIds)}
                         ariaLabel="Tüm banka işlemlerini seç"
                       />
                     </th>
@@ -6537,7 +6537,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                             >
                               <TableCheckbox
                                 checked={isSelected}
-                                onChange={() => bankaSelection.toggleRow(tx.id)}
+                                onChange={() => bankaSelection.toggleSelect(tx.id)}
                                 ariaLabel={`${tx.documentNo || tx.description} işlemini seç`}
                               />
                             </td>
@@ -6873,7 +6873,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                     <TableCheckbox
                       checked={chequeSelection.isAllSelected(displayedChequeIds)}
                       indeterminate={chequeSelection.isIndeterminate(displayedChequeIds)}
-                      onChange={() => chequeSelection.toggleAll(displayedChequeIds)}
+                      onChange={() => chequeSelection.toggleSelectAll(displayedChequeIds)}
                       ariaLabel="Tüm çekleri seç"
                     />
                   </th>
@@ -6987,7 +6987,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                           >
                             <TableCheckbox
                               checked={isSelected}
-                              onChange={() => chequeSelection.toggleRow(c.id)}
+                              onChange={() => chequeSelection.toggleSelect(c.id)}
                               ariaLabel={`${c.chequeNumber} çekini seç`}
                             />
                           </td>
@@ -7376,7 +7376,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                     <TableCheckbox
                       checked={noteSelection.isAllSelected(displayedNoteIds)}
                       indeterminate={noteSelection.isIndeterminate(displayedNoteIds)}
-                      onChange={() => noteSelection.toggleAll(displayedNoteIds)}
+                      onChange={() => noteSelection.toggleSelectAll(displayedNoteIds)}
                       ariaLabel="Tüm senetleri seç"
                     />
                   </th>
@@ -7490,7 +7490,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                           >
                             <TableCheckbox
                               checked={isSelected}
-                              onChange={() => noteSelection.toggleRow(n.id)}
+                              onChange={() => noteSelection.toggleSelect(n.id)}
                               ariaLabel={`${n.noteNumber} senedini seç`}
                             />
                           </td>
@@ -7963,7 +7963,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                       <TableCheckbox
                         checked={virmanSelection.isAllSelected(displayedVirmanIds)}
                         indeterminate={virmanSelection.isIndeterminate(displayedVirmanIds)}
-                        onChange={() => virmanSelection.toggleAll(displayedVirmanIds)}
+                        onChange={() => virmanSelection.toggleSelectAll(displayedVirmanIds)}
                         ariaLabel="Tüm virman işlemlerini seç"
                       />
                     </th>
@@ -7998,7 +7998,7 @@ export const Accounts: React.FC<AccountsProps> = ({
                             >
                               <TableCheckbox
                                 checked={isSelected}
-                                onChange={() => virmanSelection.toggleRow(tx.id)}
+                                onChange={() => virmanSelection.toggleSelect(tx.id)}
                                 ariaLabel={`${tx.documentNo || tx.description} işlemini seç`}
                               />
                             </td>

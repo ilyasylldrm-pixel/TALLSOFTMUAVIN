@@ -6,7 +6,9 @@ export interface TableSelectionHook {
   selectedCount: number;
   isSelected: (id: string) => boolean;
   toggleSelect: (id: string) => void;
+  toggleRow: (id: string) => void;
   toggleSelectAll: (currentIds: string[]) => void;
+  toggleAll: (currentIds: string[]) => void;
   selectAll: (ids: string[]) => void;
   clearSelection: () => void;
   isAllSelected: (currentIds: string[]) => boolean;
@@ -84,10 +86,13 @@ export function useTableSelection(): TableSelectionHook {
     selectedCount,
     isSelected,
     toggleSelect,
+    toggleRow: toggleSelect,
     toggleSelectAll,
+    toggleAll: toggleSelectAll,
     selectAll,
     clearSelection,
     isAllSelected,
     isIndeterminate,
   };
 }
+
