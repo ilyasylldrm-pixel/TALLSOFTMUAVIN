@@ -1087,7 +1087,7 @@ export function getStoredData(targetCompanyId?: string) {
 
   const get = <T>(key: string, fallback: T): T => {
     try {
-      const item = localStorage.getItem(key) || sessionStorage.getItem(key);
+      const item = safeGetStorageItem(key);
       return item ? JSON.parse(item) : fallback;
     } catch (e) {
       console.error(`Error loading ${key} from storage`, e);
