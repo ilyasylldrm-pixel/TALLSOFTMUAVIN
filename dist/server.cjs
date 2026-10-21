@@ -6713,6 +6713,13 @@ app.use((req, res, next) => {
   res.setHeader("Vary", "Accept-Encoding");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("Keep-Alive", "timeout=65");
+  if (req.path.startsWith("/api/") || req.path.endsWith(".html") || req.path === "/") {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  } else if (req.path.includes("/assets/")) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  }
   next();
 });
 app.use(import_express6.default.json({ limit: "25mb" }));
