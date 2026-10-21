@@ -6720,8 +6720,18 @@ function loadServerEnv() {
   }
 }
 loadServerEnv();
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+});
+var isProduction = process.env.NODE_ENV === "development" ? false : process.env.NODE_ENV === "production" || Boolean(process.env.K_SERVICE) || Boolean(process.env.K_REVISION) || typeof __filename !== "undefined" && /[\\/]dist[\\/]/.test(__filename) || typeof __dirname !== "undefined" && import_path5.default.basename(__dirname) === "dist" || Boolean(process.argv[1] && /[\\/]dist[\\/]/.test(process.argv[1]));
+if (isProduction && process.env.NODE_ENV !== "production") {
+  process.env.NODE_ENV = "production";
+}
 var app = (0, import_express6.default)();
-var PORT = process.env.NODE_ENV === "production" ? Number(process.env.PORT) || 8080 : 3e3;
+var PORT = Number(process.env.PORT) || 3e3;
 app.use(
   (0, import_compression.default)({
     level: 6,
@@ -8943,7 +8953,7 @@ app.delete("/api/db/accounts/:id", requireAuth, async (req, res) => {
   }
 });
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProduction) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: {
@@ -8977,7 +8987,10 @@ async function startServer() {
       }
     });
   } else {
-    const distPath = typeof __dirname !== "undefined" && import_path5.default.basename(__dirname) === "dist" ? __dirname : import_path5.default.join(process.cwd(), "dist");
+    let distPath = typeof __dirname !== "undefined" && import_path5.default.basename(__dirname) === "dist" ? __dirname : import_path5.default.join(process.cwd(), "dist");
+    if (!import_fs5.default.existsSync(import_path5.default.join(distPath, "index.html")) && import_fs5.default.existsSync(import_path5.default.join(process.cwd(), "build", "index.html"))) {
+      distPath = import_path5.default.join(process.cwd(), "build");
+    }
     app.use(
       import_express6.default.static(distPath, {
         maxAge: "1y",
@@ -8998,7 +9011,12 @@ async function startServer() {
         return next();
       }
       res.setHeader("Cache-Control", "no-cache, must-revalidate");
-      res.sendFile(import_path5.default.join(distPath, "index.html"));
+      const indexPath = import_path5.default.join(distPath, "index.html");
+      if (import_fs5.default.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(200).send("Muavin Muhasebe Server is running.");
+      }
     });
   }
   const server = app.listen(PORT, "0.0.0.0", () => {

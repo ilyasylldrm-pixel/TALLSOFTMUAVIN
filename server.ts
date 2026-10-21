@@ -43,11 +43,33 @@ function loadServerEnv() {
 
 loadServerEnv();
 
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+});
+
+// Auto-detect production mode:
+// Running as compiled bundle in dist/, or in Google Cloud Run (K_SERVICE), or explicitly NODE_ENV=production
+const isProduction =
+  process.env.NODE_ENV === "development"
+    ? false
+    : (
+        process.env.NODE_ENV === "production" ||
+        Boolean(process.env.K_SERVICE) ||
+        Boolean(process.env.K_REVISION) ||
+        (typeof __filename !== "undefined" && /[\\/]dist[\\/]/.test(__filename)) ||
+        (typeof __dirname !== "undefined" && path.basename(__dirname) === "dist") ||
+        Boolean(process.argv[1] && /[\\/]dist[\\/]/.test(process.argv[1]))
+      );
+
+if (isProduction && process.env.NODE_ENV !== "production") {
+  process.env.NODE_ENV = "production";
+}
+
 const app = express();
-// AI Studio dev server must run on port 3000 in development per environment constraints.
-const PORT = process.env.NODE_ENV === "production"
-  ? (Number(process.env.PORT) || 8080)
-  : 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // High Performance Middleware Stack (Gzip/Deflate compression for all JSON and static assets)
 app.use(
@@ -2428,7 +2450,7 @@ app.delete("/api/db/accounts/:id", requireAuth, async (req: AuthRequest, res) =>
 });
 
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProduction) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: {
@@ -2470,9 +2492,13 @@ async function startServer() {
     });
   } else {
     // Support both root directory with /dist and running directly inside dist (IIS/Windows deployment)
-    const distPath = (typeof __dirname !== "undefined" && path.basename(__dirname) === "dist")
+    let distPath = (typeof __dirname !== "undefined" && path.basename(__dirname) === "dist")
       ? __dirname
       : path.join(process.cwd(), "dist");
+
+    if (!fs.existsSync(path.join(distPath, "index.html")) && fs.existsSync(path.join(process.cwd(), "build", "index.html"))) {
+      distPath = path.join(process.cwd(), "build");
+    }
 
     // Optimized static assets caching: 1 year for immutable hashed bundles, revalidate for index.html
     app.use(
@@ -2496,7 +2522,12 @@ async function startServer() {
         return next();
       }
       res.setHeader("Cache-Control", "no-cache, must-revalidate");
-      res.sendFile(path.join(distPath, "index.html"));
+      const indexPath = path.join(distPath, "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(200).send("Muavin Muhasebe Server is running.");
+      }
     });
   }
 
