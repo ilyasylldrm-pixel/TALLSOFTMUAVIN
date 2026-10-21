@@ -41,7 +41,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --cpu-boost \
   --execution-environment gen2 \
   --timeout 300s \
-  --set-env-vars="NODE_ENV=production,NODE_OPTIONS=--max-old-space-size=3072"
+  --set-env-vars="NODE_ENV=production,NODE_OPTIONS=--max-old-space-size=3072 --experimental-require-module"
 
 echo "======================================================================"
 echo " Dağıtım Başarıyla Tamamlandı!"

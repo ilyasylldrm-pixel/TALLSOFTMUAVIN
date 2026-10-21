@@ -4103,18 +4103,30 @@ function getMysoftRouter() {
 var import_express2 = require("express");
 
 // src/services/whatsappService.ts
-var BaileysImport = __toESM(require("@whiskeysockets/baileys"), 1);
 var import_qrcode = __toESM(require("qrcode"), 1);
 var import_pino = __toESM(require("pino"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs = __toESM(require("fs"), 1);
-var baileysObj = BaileysImport.default || BaileysImport;
-var makeWASocket2 = typeof BaileysImport.default === "function" ? BaileysImport.default : typeof BaileysImport.makeWASocket === "function" ? BaileysImport.makeWASocket : typeof BaileysImport.default?.default === "function" ? BaileysImport.default.default : typeof BaileysImport.default?.makeWASocket === "function" ? BaileysImport.default.makeWASocket : BaileysImport;
-var DisconnectReason2 = baileysObj.DisconnectReason || BaileysImport.DisconnectReason;
-var useMultiFileAuthState2 = baileysObj.useMultiFileAuthState || BaileysImport.useMultiFileAuthState;
-var fetchLatestBaileysVersion2 = baileysObj.fetchLatestBaileysVersion || BaileysImport.fetchLatestBaileysVersion;
-var makeCacheableSignalKeyStore2 = baileysObj.makeCacheableSignalKeyStore || BaileysImport.makeCacheableSignalKeyStore;
-var Browsers2 = baileysObj.Browsers || BaileysImport.Browsers;
+var baileysModulePromise = null;
+async function getBaileys() {
+  if (!baileysModulePromise) {
+    baileysModulePromise = (async () => {
+      const dynamicImport = new Function("specifier", "return import(specifier)");
+      const mod = await dynamicImport("@whiskeysockets/baileys");
+      const baileysObj = mod.default || mod;
+      const makeWASocket = typeof mod.default === "function" ? mod.default : typeof mod.makeWASocket === "function" ? mod.makeWASocket : typeof baileysObj.default === "function" ? baileysObj.default : typeof baileysObj.makeWASocket === "function" ? baileysObj.makeWASocket : baileysObj;
+      return {
+        makeWASocket,
+        DisconnectReason: baileysObj.DisconnectReason || mod.DisconnectReason,
+        useMultiFileAuthState: baileysObj.useMultiFileAuthState || mod.useMultiFileAuthState,
+        fetchLatestBaileysVersion: baileysObj.fetchLatestBaileysVersion || mod.fetchLatestBaileysVersion,
+        makeCacheableSignalKeyStore: baileysObj.makeCacheableSignalKeyStore || mod.makeCacheableSignalKeyStore,
+        Browsers: baileysObj.Browsers || mod.Browsers
+      };
+    })();
+  }
+  return await baileysModulePromise;
+}
 var toQRCodeDataURL = async (text2, options) => {
   const qr = import_qrcode.default.default || import_qrcode.default;
   if (typeof qr.toDataURL === "function") {
@@ -4357,23 +4369,31 @@ var WhatsAppService = class {
       await this.cleanupSocket();
       this.status = "connecting";
       this.lastError = null;
-      const { state, saveCreds } = await useMultiFileAuthState2(this.sessionDir);
-      const { version } = await fetchLatestBaileysVersion2().catch(() => ({
+      const {
+        makeWASocket,
+        DisconnectReason,
+        useMultiFileAuthState,
+        fetchLatestBaileysVersion,
+        makeCacheableSignalKeyStore,
+        Browsers
+      } = await getBaileys();
+      const { state, saveCreds } = await useMultiFileAuthState(this.sessionDir);
+      const { version } = await fetchLatestBaileysVersion().catch(() => ({
         version: [2, 3e3, 1043857760]
       }));
       const silentLogger = createLogger({ level: "silent" });
-      if (typeof makeWASocket2 !== "function") {
+      if (typeof makeWASocket !== "function") {
         throw new Error("makeWASocket fonksiyonu y\xFCklenemedi. Mod\xFCl yap\u0131s\u0131 do\u011Frulanamad\u0131.");
       }
-      this.sock = makeWASocket2({
+      this.sock = makeWASocket({
         version,
         logger: silentLogger,
         auth: {
           creds: state.creds,
-          keys: typeof makeCacheableSignalKeyStore2 === "function" ? makeCacheableSignalKeyStore2(state.keys, silentLogger) : state.keys
+          keys: typeof makeCacheableSignalKeyStore === "function" ? makeCacheableSignalKeyStore(state.keys, silentLogger) : state.keys
         },
         printQRInTerminal: false,
-        browser: Browsers2?.ubuntu ? Browsers2.ubuntu("Chrome") : ["Ubuntu", "Chrome", "20.0.04"],
+        browser: Browsers?.ubuntu ? Browsers.ubuntu("Chrome") : ["Ubuntu", "Chrome", "20.0.04"],
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
         connectTimeoutMs: 6e4,
@@ -4405,7 +4425,7 @@ var WhatsAppService = class {
         }
         if (connection === "close") {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
-          const isLoggedOut = statusCode === DisconnectReason2?.loggedOut || statusCode === 401;
+          const isLoggedOut = statusCode === DisconnectReason?.loggedOut || statusCode === 401;
           const shouldReconnect = !isLoggedOut;
           console.log(`WhatsApp ba\u011Flant\u0131s\u0131 kapand\u0131. Sebep Kodu: ${statusCode}, Yeniden ba\u011Flanacak m\u0131: ${shouldReconnect}`);
           this.status = "disconnected";
@@ -6063,10 +6083,6 @@ function getGitHubRouter() {
   return router;
 }
 
-// src/lib/firebase-admin.ts
-var import_app = require("firebase-admin/app");
-var import_auth = require("firebase-admin/auth");
-
 // firebase-applet-config.json
 var firebase_applet_config_default = {
   projectId: "yachty-courier-bt3g1",
@@ -6082,12 +6098,20 @@ var firebase_applet_config_default = {
 };
 
 // src/lib/firebase-admin.ts
-if (!(0, import_app.getApps)().length) {
-  (0, import_app.initializeApp)({
-    projectId: firebase_applet_config_default.projectId
-  });
+var _adminAuth = null;
+async function getAdminAuth() {
+  if (!_adminAuth) {
+    const { initializeApp, getApps } = await import("firebase-admin/app");
+    const { getAuth } = await import("firebase-admin/auth");
+    if (!getApps().length) {
+      initializeApp({
+        projectId: firebase_applet_config_default.projectId
+      });
+    }
+    _adminAuth = getAuth();
+  }
+  return _adminAuth;
 }
-var adminAuth = (0, import_auth.getAuth)();
 
 // src/middleware/auth.ts
 var requireAuth = async (req, res, next) => {
@@ -6098,6 +6122,7 @@ var requireAuth = async (req, res, next) => {
     const token = authHeader.split("Bearer ")[1].trim();
     if (token.split(".").length === 3) {
       try {
+        const adminAuth = await getAdminAuth();
         const decodedToken = await adminAuth.verifyIdToken(token);
         req.user = decodedToken;
         return next();
