@@ -6726,8 +6726,8 @@ process.on("unhandledRejection", (reason, promise) => {
 process.on("uncaughtException", (error) => {
   console.error("Uncaught Exception:", error);
 });
-var isProduction = process.env.NODE_ENV === "development" ? false : process.env.NODE_ENV === "production" || Boolean(process.env.K_SERVICE) || Boolean(process.env.K_REVISION) || typeof __filename !== "undefined" && /[\\/]dist[\\/]/.test(__filename) || typeof __dirname !== "undefined" && import_path5.default.basename(__dirname) === "dist" || Boolean(process.argv[1] && /[\\/]dist[\\/]/.test(process.argv[1]));
-if (isProduction && process.env.NODE_ENV !== "production") {
+var isProduction = process.env.NODE_ENV === "development" ? false : process.env.NODE_ENV === "production" || Boolean(process.env.K_SERVICE) || Boolean(process.env.K_REVISION) || Boolean(process.env.PORT) || typeof __filename !== "undefined" && __filename.includes("dist") || typeof __dirname !== "undefined" && __dirname.includes("dist") || Boolean(process.argv[1] && (process.argv[1].includes("dist") || process.argv[1].endsWith("server.js") || process.argv[1].endsWith("server.cjs"))) || import_fs5.default.existsSync(import_path5.default.join(process.cwd(), "dist", "index.html"));
+if (isProduction) {
   process.env.NODE_ENV = "production";
 }
 var app = (0, import_express6.default)();

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "NODE_OPTIONS=\"--max-old-space-size=2048\" vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs && rm -rf build && cp -r dist build",
-    "start": "node server.ts",
+    "start": "node dist/server.cjs",
     "clean": "rm -rf dist build server.js",
     "deploy:cloudrun": "bash deploy-cloudrun.sh",
     "lint": "tsc --noEmit"

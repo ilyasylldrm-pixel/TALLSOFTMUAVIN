@@ -59,12 +59,14 @@ const isProduction =
         process.env.NODE_ENV === "production" ||
         Boolean(process.env.K_SERVICE) ||
         Boolean(process.env.K_REVISION) ||
-        (typeof __filename !== "undefined" && /[\\/]dist[\\/]/.test(__filename)) ||
-        (typeof __dirname !== "undefined" && path.basename(__dirname) === "dist") ||
-        Boolean(process.argv[1] && /[\\/]dist[\\/]/.test(process.argv[1]))
+        Boolean(process.env.PORT) ||
+        (typeof __filename !== "undefined" && __filename.includes("dist")) ||
+        (typeof __dirname !== "undefined" && __dirname.includes("dist")) ||
+        Boolean(process.argv[1] && (process.argv[1].includes("dist") || process.argv[1].endsWith("server.js") || process.argv[1].endsWith("server.cjs"))) ||
+        fs.existsSync(path.join(process.cwd(), "dist", "index.html"))
       );
 
-if (isProduction && process.env.NODE_ENV !== "production") {
+if (isProduction) {
   process.env.NODE_ENV = "production";
 }
 
