@@ -641,8 +641,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setUsers(fetchedUsers);
       setAllFiles(fetchedFiles);
       setDraftPermissions({});
-    } catch (err) {
-      console.error("Admin dashboard fetch error:", err);
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      if (!msg.includes("Quota") && !msg.includes("quota") && !msg.includes("resource-exhausted")) {
+        console.error("Admin dashboard fetch error:", err);
+      }
     } finally {
       setLoading(false);
     }
