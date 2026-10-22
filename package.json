@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "NODE_OPTIONS=\"--max-old-space-size=2048\" vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs && rm -rf build && cp -r dist build",
-    "start": "node dist/server.cjs",
+    "start": "node server.ts",
     "clean": "rm -rf dist build server.js",
     "deploy:cloudrun": "bash deploy-cloudrun.sh",
     "lint": "tsc --noEmit"
@@ -32,7 +32,7 @@
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "firebase": "^12.16.0",
-    "firebase-admin": "^13.10.0",
+    "firebase-admin": "^14.2.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
@@ -52,8 +52,5 @@
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
     "xlsx": "^0.18.5"
-  },
-  "overrides": {
-    "jwks-rsa": "^3.1.0"
   }
 }

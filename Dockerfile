@@ -35,7 +35,7 @@ RUN apk add --no-cache dumb-init curl git
 ENV NODE_ENV=production
 ENV PORT=3000
 # V8 Heap & GC Tuning for Google Cloud Run (4GB RAM Profile)
-ENV NODE_OPTIONS="--max-old-space-size=3072 --enable-source-maps=false --experimental-require-module"
+ENV NODE_OPTIONS="--max-old-space-size=3072 --enable-source-maps=false"
 
 # Copy package manifest and install runtime-only dependencies
 COPY package.json ./

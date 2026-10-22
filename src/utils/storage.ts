@@ -170,8 +170,6 @@ export const DELETED_USERS_STORAGE_KEY = "muavin_deleted_users_registry_v3";
 
 export const PROTECTED_COMPANY_IDS = new Set<string>([
   DEFAULT_COMPANY.id,
-  DEFAULT_CORPORATE_COMPANY.id,
-  DEFAULT_INDIVIDUAL_COMPANY.id,
 ]);
 
 export const PROTECTED_USER_KEYS = new Set<string>([
@@ -217,26 +215,18 @@ export function isProtectedUserIdentifier(
 
 export function getDeletedCompanyIds(): string[] {
   try {
-    // Clean up legacy v1/v2 keys so no existing company remains hidden from earlier sessions
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage?.removeItem("muavin_deleted_companies_registry_v1");
-        window.localStorage?.removeItem("muavin_deleted_companies_registry_v2");
-      }
-    } catch {}
     const raw = safeGetStorageItem(DELETED_COMPANIES_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter(
-          (x) =>
-            typeof x === "string" &&
-            x.trim().length > 0 &&
-            !PROTECTED_COMPANY_IDS.has(x.trim())
-        )
-      : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    const set = new Set<string>(
+      Array.isArray(parsed)
+        ? parsed.map((x) => String(x || "").trim()).filter(Boolean)
+        : []
+    );
+    set.add("comp_sirket");
+    set.add("comp_sahis");
+    return Array.from(set).filter((x) => !PROTECTED_COMPANY_IDS.has(x));
   } catch {
-    return [];
+    return ["comp_sirket", "comp_sahis"];
   }
 }
 
@@ -260,23 +250,33 @@ export function isCompanyMarkedDeleted(companyId?: string | null): boolean {
 
 export function getDeletedUserKeys(): string[] {
   try {
-    // Clean up legacy v1/v2 keys so no existing user remains hidden from earlier sessions
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage?.removeItem("muavin_deleted_users_registry_v1");
-        window.localStorage?.removeItem("muavin_deleted_users_registry_v2");
-      }
-    } catch {}
     const raw = safeGetStorageItem(DELETED_USERS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed
-          .map((x) => String(x || "").trim().toLowerCase())
-          .filter((x) => Boolean(x) && !PROTECTED_USER_KEYS.has(x))
-      : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    const set = new Set<string>(
+      Array.isArray(parsed)
+        ? parsed.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
+        : []
+    );
+    set.add("anadolu_kurumsal");
+    set.add("yonetici@anadolukurumsal.com");
+    set.add("usr_anadolu_kurumsal");
+    set.add("usr_comp_comp_sirket");
+    set.add("ahmet_yilmaz");
+    set.add("ahmet@yilmazticaret.com");
+    set.add("usr_ahmet_yilmaz");
+    set.add("usr_comp_comp_sahis");
+    return Array.from(set).filter((x) => !PROTECTED_USER_KEYS.has(x));
   } catch {
-    return [];
+    return [
+      "anadolu_kurumsal",
+      "yonetici@anadolukurumsal.com",
+      "usr_anadolu_kurumsal",
+      "usr_comp_comp_sirket",
+      "ahmet_yilmaz",
+      "ahmet@yilmazticaret.com",
+      "usr_ahmet_yilmaz",
+      "usr_comp_comp_sahis",
+    ];
   }
 }
 

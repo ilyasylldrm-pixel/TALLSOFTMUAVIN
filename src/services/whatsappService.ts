@@ -1,49 +1,29 @@
-import type * as BaileysTypes from "@whiskeysockets/baileys";
+import * as BaileysImport from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
 import pino from "pino";
 import path from "path";
 import fs from "fs";
 
-type WASocket = BaileysTypes.WASocket;
+// Robust CJS / ESM Interop Resolver for Baileys
+const baileysObj = (BaileysImport as any).default || BaileysImport;
 
-let baileysModulePromise: Promise<{
-  makeWASocket: any;
-  DisconnectReason: any;
-  useMultiFileAuthState: any;
-  fetchLatestBaileysVersion: any;
-  makeCacheableSignalKeyStore: any;
-  Browsers: any;
-}> | null = null;
+const makeWASocket =
+  typeof (BaileysImport as any).default === "function"
+    ? (BaileysImport as any).default
+    : typeof BaileysImport.makeWASocket === "function"
+    ? BaileysImport.makeWASocket
+    : typeof (BaileysImport as any).default?.default === "function"
+    ? (BaileysImport as any).default.default
+    : typeof (BaileysImport as any).default?.makeWASocket === "function"
+    ? (BaileysImport as any).default.makeWASocket
+    : (BaileysImport as any);
 
-async function getBaileys() {
-  if (!baileysModulePromise) {
-    baileysModulePromise = (async () => {
-      const dynamicImport = new Function("specifier", "return import(specifier)");
-      const mod = await dynamicImport("@whiskeysockets/baileys");
-      const baileysObj = mod.default || mod;
-      const makeWASocket =
-        typeof mod.default === "function"
-          ? mod.default
-          : typeof mod.makeWASocket === "function"
-          ? mod.makeWASocket
-          : typeof baileysObj.default === "function"
-          ? baileysObj.default
-          : typeof baileysObj.makeWASocket === "function"
-          ? baileysObj.makeWASocket
-          : baileysObj;
-
-      return {
-        makeWASocket,
-        DisconnectReason: baileysObj.DisconnectReason || mod.DisconnectReason,
-        useMultiFileAuthState: baileysObj.useMultiFileAuthState || mod.useMultiFileAuthState,
-        fetchLatestBaileysVersion: baileysObj.fetchLatestBaileysVersion || mod.fetchLatestBaileysVersion,
-        makeCacheableSignalKeyStore: baileysObj.makeCacheableSignalKeyStore || mod.makeCacheableSignalKeyStore,
-        Browsers: baileysObj.Browsers || mod.Browsers,
-      };
-    })();
-  }
-  return await baileysModulePromise;
-}
+const DisconnectReason = baileysObj.DisconnectReason || BaileysImport.DisconnectReason;
+const useMultiFileAuthState = baileysObj.useMultiFileAuthState || BaileysImport.useMultiFileAuthState;
+const fetchLatestBaileysVersion = baileysObj.fetchLatestBaileysVersion || BaileysImport.fetchLatestBaileysVersion;
+const makeCacheableSignalKeyStore = baileysObj.makeCacheableSignalKeyStore || BaileysImport.makeCacheableSignalKeyStore;
+const Browsers = baileysObj.Browsers || BaileysImport.Browsers;
+type WASocket = BaileysImport.WASocket;
 
 const toQRCodeDataURL = async (text: string, options: any): Promise<string> => {
   const qr: any = (QRCode as any).default || QRCode;
@@ -247,15 +227,6 @@ class WhatsAppService {
 
       this.status = "connecting";
       this.lastError = null;
-
-      const {
-        makeWASocket,
-        DisconnectReason,
-        useMultiFileAuthState,
-        fetchLatestBaileysVersion,
-        makeCacheableSignalKeyStore,
-        Browsers,
-      } = await getBaileys();
 
       const { state, saveCreds } = await useMultiFileAuthState(this.sessionDir);
       const { version } = await fetchLatestBaileysVersion().catch(() => ({

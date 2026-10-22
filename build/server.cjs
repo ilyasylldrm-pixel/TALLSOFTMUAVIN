@@ -4103,30 +4103,18 @@ function getMysoftRouter() {
 var import_express2 = require("express");
 
 // src/services/whatsappService.ts
+var BaileysImport = __toESM(require("@whiskeysockets/baileys"), 1);
 var import_qrcode = __toESM(require("qrcode"), 1);
 var import_pino = __toESM(require("pino"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs = __toESM(require("fs"), 1);
-var baileysModulePromise = null;
-async function getBaileys() {
-  if (!baileysModulePromise) {
-    baileysModulePromise = (async () => {
-      const dynamicImport = new Function("specifier", "return import(specifier)");
-      const mod = await dynamicImport("@whiskeysockets/baileys");
-      const baileysObj = mod.default || mod;
-      const makeWASocket = typeof mod.default === "function" ? mod.default : typeof mod.makeWASocket === "function" ? mod.makeWASocket : typeof baileysObj.default === "function" ? baileysObj.default : typeof baileysObj.makeWASocket === "function" ? baileysObj.makeWASocket : baileysObj;
-      return {
-        makeWASocket,
-        DisconnectReason: baileysObj.DisconnectReason || mod.DisconnectReason,
-        useMultiFileAuthState: baileysObj.useMultiFileAuthState || mod.useMultiFileAuthState,
-        fetchLatestBaileysVersion: baileysObj.fetchLatestBaileysVersion || mod.fetchLatestBaileysVersion,
-        makeCacheableSignalKeyStore: baileysObj.makeCacheableSignalKeyStore || mod.makeCacheableSignalKeyStore,
-        Browsers: baileysObj.Browsers || mod.Browsers
-      };
-    })();
-  }
-  return await baileysModulePromise;
-}
+var baileysObj = BaileysImport.default || BaileysImport;
+var makeWASocket2 = typeof BaileysImport.default === "function" ? BaileysImport.default : typeof BaileysImport.makeWASocket === "function" ? BaileysImport.makeWASocket : typeof BaileysImport.default?.default === "function" ? BaileysImport.default.default : typeof BaileysImport.default?.makeWASocket === "function" ? BaileysImport.default.makeWASocket : BaileysImport;
+var DisconnectReason2 = baileysObj.DisconnectReason || BaileysImport.DisconnectReason;
+var useMultiFileAuthState2 = baileysObj.useMultiFileAuthState || BaileysImport.useMultiFileAuthState;
+var fetchLatestBaileysVersion2 = baileysObj.fetchLatestBaileysVersion || BaileysImport.fetchLatestBaileysVersion;
+var makeCacheableSignalKeyStore2 = baileysObj.makeCacheableSignalKeyStore || BaileysImport.makeCacheableSignalKeyStore;
+var Browsers2 = baileysObj.Browsers || BaileysImport.Browsers;
 var toQRCodeDataURL = async (text2, options) => {
   const qr = import_qrcode.default.default || import_qrcode.default;
   if (typeof qr.toDataURL === "function") {
@@ -4369,31 +4357,23 @@ var WhatsAppService = class {
       await this.cleanupSocket();
       this.status = "connecting";
       this.lastError = null;
-      const {
-        makeWASocket,
-        DisconnectReason,
-        useMultiFileAuthState,
-        fetchLatestBaileysVersion,
-        makeCacheableSignalKeyStore,
-        Browsers
-      } = await getBaileys();
-      const { state, saveCreds } = await useMultiFileAuthState(this.sessionDir);
-      const { version } = await fetchLatestBaileysVersion().catch(() => ({
+      const { state, saveCreds } = await useMultiFileAuthState2(this.sessionDir);
+      const { version } = await fetchLatestBaileysVersion2().catch(() => ({
         version: [2, 3e3, 1043857760]
       }));
       const silentLogger = createLogger({ level: "silent" });
-      if (typeof makeWASocket !== "function") {
+      if (typeof makeWASocket2 !== "function") {
         throw new Error("makeWASocket fonksiyonu y\xFCklenemedi. Mod\xFCl yap\u0131s\u0131 do\u011Frulanamad\u0131.");
       }
-      this.sock = makeWASocket({
+      this.sock = makeWASocket2({
         version,
         logger: silentLogger,
         auth: {
           creds: state.creds,
-          keys: typeof makeCacheableSignalKeyStore === "function" ? makeCacheableSignalKeyStore(state.keys, silentLogger) : state.keys
+          keys: typeof makeCacheableSignalKeyStore2 === "function" ? makeCacheableSignalKeyStore2(state.keys, silentLogger) : state.keys
         },
         printQRInTerminal: false,
-        browser: Browsers?.ubuntu ? Browsers.ubuntu("Chrome") : ["Ubuntu", "Chrome", "20.0.04"],
+        browser: Browsers2?.ubuntu ? Browsers2.ubuntu("Chrome") : ["Ubuntu", "Chrome", "20.0.04"],
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
         connectTimeoutMs: 6e4,
@@ -4425,7 +4405,7 @@ var WhatsAppService = class {
         }
         if (connection === "close") {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
-          const isLoggedOut = statusCode === DisconnectReason?.loggedOut || statusCode === 401;
+          const isLoggedOut = statusCode === DisconnectReason2?.loggedOut || statusCode === 401;
           const shouldReconnect = !isLoggedOut;
           console.log(`WhatsApp ba\u011Flant\u0131s\u0131 kapand\u0131. Sebep Kodu: ${statusCode}, Yeniden ba\u011Flanacak m\u0131: ${shouldReconnect}`);
           this.status = "disconnected";
@@ -6083,6 +6063,10 @@ function getGitHubRouter() {
   return router;
 }
 
+// src/lib/firebase-admin.ts
+var import_app = require("firebase-admin/app");
+var import_auth = require("firebase-admin/auth");
+
 // firebase-applet-config.json
 var firebase_applet_config_default = {
   projectId: "yachty-courier-bt3g1",
@@ -6098,20 +6082,12 @@ var firebase_applet_config_default = {
 };
 
 // src/lib/firebase-admin.ts
-var _adminAuth = null;
-async function getAdminAuth() {
-  if (!_adminAuth) {
-    const { initializeApp, getApps } = await import("firebase-admin/app");
-    const { getAuth } = await import("firebase-admin/auth");
-    if (!getApps().length) {
-      initializeApp({
-        projectId: firebase_applet_config_default.projectId
-      });
-    }
-    _adminAuth = getAuth();
-  }
-  return _adminAuth;
+if (!(0, import_app.getApps)().length) {
+  (0, import_app.initializeApp)({
+    projectId: firebase_applet_config_default.projectId
+  });
 }
+var adminAuth = (0, import_auth.getAuth)();
 
 // src/middleware/auth.ts
 var requireAuth = async (req, res, next) => {
@@ -6122,7 +6098,6 @@ var requireAuth = async (req, res, next) => {
     const token = authHeader.split("Bearer ")[1].trim();
     if (token.split(".").length === 3) {
       try {
-        const adminAuth = await getAdminAuth();
         const decodedToken = await adminAuth.verifyIdToken(token);
         req.user = decodedToken;
         return next();
@@ -6720,18 +6695,8 @@ function loadServerEnv() {
   }
 }
 loadServerEnv();
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
-});
-process.on("uncaughtException", (error) => {
-  console.error("Uncaught Exception:", error);
-});
-var isProduction = process.env.NODE_ENV === "development" ? false : process.env.NODE_ENV === "production" || Boolean(process.env.K_SERVICE) || Boolean(process.env.K_REVISION) || Boolean(process.env.PORT) || typeof __filename !== "undefined" && __filename.includes("dist") || typeof __dirname !== "undefined" && __dirname.includes("dist") || Boolean(process.argv[1] && (process.argv[1].includes("dist") || process.argv[1].endsWith("server.js") || process.argv[1].endsWith("server.cjs"))) || import_fs5.default.existsSync(import_path5.default.join(process.cwd(), "dist", "index.html"));
-if (isProduction) {
-  process.env.NODE_ENV = "production";
-}
 var app = (0, import_express6.default)();
-var PORT = Number(process.env.PORT) || 3e3;
+var PORT = process.env.NODE_ENV === "production" ? Number(process.env.PORT) || 8080 : 3e3;
 app.use(
   (0, import_compression.default)({
     level: 6,
@@ -8953,7 +8918,7 @@ app.delete("/api/db/accounts/:id", requireAuth, async (req, res) => {
   }
 });
 async function startServer() {
-  if (!isProduction) {
+  if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: {
@@ -8987,10 +8952,7 @@ async function startServer() {
       }
     });
   } else {
-    let distPath = typeof __dirname !== "undefined" && import_path5.default.basename(__dirname) === "dist" ? __dirname : import_path5.default.join(process.cwd(), "dist");
-    if (!import_fs5.default.existsSync(import_path5.default.join(distPath, "index.html")) && import_fs5.default.existsSync(import_path5.default.join(process.cwd(), "build", "index.html"))) {
-      distPath = import_path5.default.join(process.cwd(), "build");
-    }
+    const distPath = typeof __dirname !== "undefined" && import_path5.default.basename(__dirname) === "dist" ? __dirname : import_path5.default.join(process.cwd(), "dist");
     app.use(
       import_express6.default.static(distPath, {
         maxAge: "1y",
@@ -9011,12 +8973,7 @@ async function startServer() {
         return next();
       }
       res.setHeader("Cache-Control", "no-cache, must-revalidate");
-      const indexPath = import_path5.default.join(distPath, "index.html");
-      if (import_fs5.default.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        res.status(200).send("Muavin Muhasebe Server is running.");
-      }
+      res.sendFile(import_path5.default.join(distPath, "index.html"));
     });
   }
   const server = app.listen(PORT, "0.0.0.0", () => {
