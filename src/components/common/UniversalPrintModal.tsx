@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import QRCode from "qrcode";
 import {
   Printer,
   Download,
@@ -11,12 +10,10 @@ import {
   Sparkles,
   QrCode,
   Upload,
-  Eye,
-  EyeOff,
-  Palette,
   Building2,
-  ShieldCheck,
-  CreditCard,
+  Stamp,
+  Save,
+  Check,
 } from "lucide-react";
 import {
   subscribePrintModal,
@@ -25,69 +22,18 @@ import {
   PrintModalData,
 } from "../../utils/printEngine";
 import { exportElementToPDFWithPrintStyling } from "../../utils/pdfService";
-import { getCurrencySymbol, formatDate } from "../../utils/exportUtils";
-import { numberToTurkishWords } from "../../utils/numberToTurkishWords";
-import {
-  computeInvoiceTotals,
-  formatWithholdingBadge,
-  generateInvoiceLegalTaxNotes,
-} from "../../utils/taxCalculationService";
-import { formatAddressWithBranch } from "../../utils/storage";
-import { getContactAccountCode, InvoiceItem } from "../../types";
-import { Logo } from "../Logo";
+import { InvoiceColorTheme, InvoiceDesignSettings, InvoiceTemplateStyle } from "../../types";
 import { readAndOptimizeLogoFile } from "../../utils/logoUpload";
 import { saveCloudLogo } from "../../services/cloudBrandingService";
-
-type InvoicePdfTheme = "navy" | "royal" | "classic";
-
-const THEME_CONFIG: Record<
-  InvoicePdfTheme,
-  {
-    label: string;
-    primaryBg: string;
-    primaryText: string;
-    accentBg: string;
-    accentBorder: string;
-    accentLightBg: string;
-    tableHeaderBg: string;
-    tableHeaderText: string;
-    qrDark: string;
-  }
-> = {
-  navy: {
-    label: "Resmi Kurumsal (Lacivert)",
-    primaryBg: "#0f172a",
-    primaryText: "#0f172a",
-    accentBg: "#1e3a8a",
-    accentBorder: "#cbd5e1",
-    accentLightBg: "#f8fafc",
-    tableHeaderBg: "#0f172a",
-    tableHeaderText: "#ffffff",
-    qrDark: "#0f172a",
-  },
-  royal: {
-    label: "Modern İndigo",
-    primaryBg: "#312e81",
-    primaryText: "#1e1b4b",
-    accentBg: "#4338ca",
-    accentBorder: "#c7d2fe",
-    accentLightBg: "#eef2ff",
-    tableHeaderBg: "#312e81",
-    tableHeaderText: "#ffffff",
-    qrDark: "#1e1b4b",
-  },
-  classic: {
-    label: "Lazer Baskı (Siyah/Beyaz)",
-    primaryBg: "#111827",
-    primaryText: "#111827",
-    accentBg: "#1f2937",
-    accentBorder: "#9ca3af",
-    accentLightBg: "#f9fafb",
-    tableHeaderBg: "#f3f4f6",
-    tableHeaderText: "#111827",
-    qrDark: "#000000",
-  },
-};
+import { getActiveCompanyId, getCompaniesList, updateCompanyItem } from "../../utils/storage";
+import {
+  OfficialGIBInvoicePaper,
+  INVOICE_COLOR_THEMES,
+  resolveInvoiceDesignSettings,
+  resolveOfficialEDocumentKind,
+  getIndependentInvoiceCssConfig,
+  saveCompanyInvoiceCssToFirestore,
+} from "../OfficialGIBInvoicePaper";
 
 export const UniversalPrintModal: React.FC = () => {
   const [modalData, setModalData] = useState<PrintModalData | null>(null);
@@ -96,13 +42,13 @@ export const UniversalPrintModal: React.FC = () => {
   const [isExportingPDF, setIsExportingPDF] = useState<boolean>(false);
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
 
-  // Invoice PDF Template Customization States
-  const [pdfTheme, setPdfTheme] = useState<InvoicePdfTheme>("navy");
-  const [showQrCode, setShowQrCode] = useState<boolean>(true);
-  const [showCompanyLogo, setShowCompanyLogo] = useState<boolean>(true);
-  const [logoScale, setLogoScale] = useState<"sm" | "md" | "lg">("md");
+  // Invoice Design Customization States
+  const [previewDocType, setPreviewDocType] = useState<"auto" | "e_fatura" | "e_arsiv">("auto");
+  const [design, setDesign] = useState<InvoiceDesignSettings>(() =>
+    resolveInvoiceDesignSettings(undefined)
+  );
   const [customLogoOverride, setCustomLogoOverride] = useState<string | null>(null);
-  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
+  const [savedNotice, setSavedNotice] = useState(false);
 
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -114,6 +60,8 @@ export const UniversalPrintModal: React.FC = () => {
         setCurrentOrientation(data.orientation || "portrait");
         setZoomLevel(100);
         setCustomLogoOverride(null);
+        setPreviewDocType("auto");
+        setDesign(resolveInvoiceDesignSettings(data.invoiceData?.companySettings));
       }
     });
     return () => unsubscribe();
@@ -124,63 +72,6 @@ export const UniversalPrintModal: React.FC = () => {
       modalData?.documentType === "invoice" &&
       modalData?.invoiceData?.invoice
   );
-
-  // Generate Official GIB e-Fatura / e-Arşiv QR Code when in invoice mode
-  useEffect(() => {
-    if (!isInvoiceMode || !modalData?.invoiceData) {
-      setQrCodeDataUrl("");
-      return;
-    }
-
-    const { invoice, companySettings, contact } = modalData.invoiceData;
-    const invType = invoice.type || "sales";
-    const invNumber = invoice.invoiceNumber || "TASLAK-0001";
-    const issueDate = invoice.issueDate || new Date().toISOString().split("T")[0];
-    const items: InvoiceItem[] = invoice.items || [];
-    const currency = invoice.currency || companySettings?.currency || "TRY";
-
-    const { subtotal, totalVat, grandTotal, payableAmount } = computeInvoiceTotals(items);
-    const finalSubtotal = invoice.subtotal ?? subtotal;
-    const finalVat = invoice.totalVat ?? totalVat;
-    const finalGrand = invoice.grandTotal ?? grandTotal;
-    const finalPayable = invoice.payableAmount ?? payableAmount;
-
-    const ettn = invoice.id
-      ? `8a491029-3810-4b10-9201-${String(invoice.id).replace(/[^a-zA-Z0-9]/g, "").padEnd(12, "0").slice(0, 12)}`
-      : "8a491029-3810-4b10-8201-948123019283";
-
-    const sellerVkn = companySettings?.taxNumber || "1111111111";
-    const buyerVkn = invoice.taxNumber || contact?.taxNumber || "11111111111";
-
-    const qrPayload = JSON.stringify({
-      vkntckn: sellerVkn,
-      avkntckn: buyerVkn,
-      senaryo: invoice.invoiceScenario || "TICARIFATURA",
-      tip: invoice.invoiceProfileType || (invType === "sales" ? "SATIS" : "ALIS"),
-      tarih: issueDate,
-      no: invNumber,
-      ettn,
-      parabirimi: currency,
-      malhizmettoplam: finalSubtotal.toFixed(2),
-      hesaplanankdv: finalVat.toFixed(2),
-      vergilerdahil: finalGrand.toFixed(2),
-      odenecek: finalPayable.toFixed(2),
-    });
-
-    const themeConf = THEME_CONFIG[pdfTheme];
-
-    QRCode.toDataURL(qrPayload, {
-      width: 280,
-      margin: 1,
-      errorCorrectionLevel: "M",
-      color: {
-        dark: themeConf.qrDark,
-        light: "#ffffff",
-      },
-    })
-      .then((url) => setQrCodeDataUrl(url))
-      .catch((err) => console.error("Invoice QR generation error:", err));
-  }, [isInvoiceMode, modalData, pdfTheme]);
 
   if (!modalData || !modalData.isOpen) return null;
 
@@ -194,23 +85,48 @@ export const UniversalPrintModal: React.FC = () => {
     try {
       const optimizedDataUrl = await readAndOptimizeLogoFile(file);
       setCustomLogoOverride(optimizedDataUrl);
-      setShowCompanyLogo(true);
+      setDesign((prev) => ({ ...prev, showCompanyLogo: true }));
       if (modalData.invoiceData?.companySettings) {
         const updatedSettings = {
           ...modalData.invoiceData.companySettings,
           logoUrl: optimizedDataUrl,
+          invoiceDesign: { ...design, showCompanyLogo: true },
         };
         modalData.invoiceData.onSaveCompanySettings?.(updatedSettings);
-        void saveCloudLogo(optimizedDataUrl, {
-          brandName: updatedSettings.companyName || "E-MUAVİN",
-          description: "Fatura PDF şablonu üzerinden güncellenen şirket logosu",
-        });
+        void saveCloudLogo(
+          optimizedDataUrl,
+          {
+            brandName: updatedSettings.companyName || "E-MUAVİN",
+            description: "Fatura PDF şablonu üzerinden güncellenen şirket logosu",
+          },
+          getActiveCompanyId()
+        );
       }
     } catch (err) {
       console.error("Logo yükleme hatası:", err);
     } finally {
       e.target.value = "";
     }
+  };
+
+  const handleSaveDesignToCompany = async () => {
+    const baseSettings = modalData.invoiceData?.companySettings;
+    const currentCss = getIndependentInvoiceCssConfig(baseSettings);
+    const mergedDesign: InvoiceDesignSettings = {
+      ...design,
+      cssConfig: currentCss,
+    };
+    if (baseSettings) {
+      const updatedSettings = {
+        ...baseSettings,
+        ...(customLogoOverride ? { logoUrl: customLogoOverride } : {}),
+        invoiceDesign: mergedDesign,
+      };
+      modalData.invoiceData?.onSaveCompanySettings?.(updatedSettings);
+    }
+    await saveCompanyInvoiceCssToFirestore(baseSettings, currentCss, mergedDesign);
+    setSavedNotice(true);
+    setTimeout(() => setSavedNotice(false), 2500);
   };
 
   const handleDirectPrint = async () => {
@@ -236,7 +152,6 @@ export const UniversalPrintModal: React.FC = () => {
     setIsExportingPDF(true);
     try {
       const fileName = `${(modalData.title || "Belge").trim().replace(/[\s/\\:]+/g, "_")}.pdf`;
-      // When in Invoice Template mode, always export the live rendered #universal-print-preview-paper
       const elToExport = isInvoiceMode
         ? "universal-print-preview-paper"
         : modalData.sourceElementId && document.getElementById(modalData.sourceElementId)
@@ -260,762 +175,15 @@ export const UniversalPrintModal: React.FC = () => {
     }
   };
 
-  const renderInvoicePdfTemplate = () => {
-    if (!modalData.invoiceData) return null;
-    const { invoice, companySettings, contact, isDraft } = modalData.invoiceData;
-    const themeConf = THEME_CONFIG[pdfTheme];
-
-    const invType = invoice.type || "sales";
-    const invNumber = invoice.invoiceNumber || "TASLAK-0001";
-    const issueDate = invoice.issueDate || new Date().toISOString().split("T")[0];
-    const dueDate = invoice.dueDate || issueDate;
-    const items: InvoiceItem[] = invoice.items || [];
-    const currency = invoice.currency || companySettings?.currency || "TRY";
-    const currSymbol = getCurrencySymbol(currency);
-
-    const {
-      grossTotal: computedGrossTotal,
-      totalDiscount: computedTotalDiscount,
-      subtotal: computedSubtotal,
-      totalVat: computedVat,
-      totalWithholding: computedWithholding,
-      grandTotal: computedGrandTotal,
-      payableAmount: computedPayableAmount,
-      computedItems,
-    } = computeInvoiceTotals(items);
-
-    const grossTotal = invoice.grossTotal ?? computedGrossTotal;
-    const totalDiscount = invoice.totalDiscount ?? computedTotalDiscount;
-    const subtotal = invoice.subtotal ?? computedSubtotal;
-    const totalVat = invoice.totalVat ?? computedVat;
-    const totalWithholding = invoice.totalWithholding ?? computedWithholding;
-    const grandTotal = invoice.grandTotal ?? computedGrandTotal;
-    const payableAmount = invoice.payableAmount ?? computedPayableAmount;
-    const paidAmount = invoice.paidAmount ?? 0;
-    const remainingAmount = invoice.remainingAmount ?? payableAmount - paidAmount;
-    const hasDiscounts =
-      totalDiscount > 0 ||
-      computedItems.some(
-        (i) => (i.discountAmount && i.discountAmount > 0) || (i.discountRate && i.discountRate > 0)
-      );
-
-    const contactName =
-      invoice.contactName || contact?.companyTitle || contact?.name || "Belirtilmemiş Müşteri / Cari";
-    const contactTaxOffice = invoice.taxOffice || contact?.taxOffice || "-";
-    const contactTaxNo = invoice.taxNumber || contact?.taxNumber || "-";
-    const customerBranchName = (invoice.customerBranchName || contact?.branchName || "").trim();
-    const customerBranchCode = (invoice.customerBranchCode || contact?.branchCode || "").trim();
-    const rawContactAddress = (
-      invoice.customerAddress ||
-      contact?.address ||
-      [contact?.neighborhood, contact?.street, contact?.buildingNo, contact?.doorNo]
-        .filter(Boolean)
-        .join(" ") ||
-      ""
-    ).trim();
-    const contactCity = (invoice.customerCity || contact?.city || "").trim();
-    const contactDistrict = (invoice.customerDistrict || contact?.district || "").trim();
-    const contactAddress =
-      formatAddressWithBranch(
-        rawContactAddress,
-        contactCity,
-        contactDistrict,
-        customerBranchName,
-        customerBranchCode
-      ) || "Adres Belirtilmemiş";
-    const contactPhone = invoice.customerPhone || contact?.phone || "-";
-    const contactEmail = invoice.customerEmail || contact?.email || "-";
-    const accountCode = contact
-      ? getContactAccountCode(contact)
-      : invType === "sales"
-      ? "120.01.001"
-      : "320.01.001";
-
-    const sellerBranchName = (invoice.branchName || companySettings?.branchName || "").trim();
-    const sellerBranchCode = (invoice.branchCode || companySettings?.branchCode || "").trim();
-    const sellerAddress =
-      formatAddressWithBranch(
-        invoice.branchAddress || companySettings?.address,
-        invoice.branchCity || companySettings?.city,
-        invoice.branchDistrict || companySettings?.district,
-        sellerBranchName,
-        sellerBranchCode
-      ) ||
-      [companySettings?.address, companySettings?.city].filter(Boolean).join(", ") ||
-      "Merkez Adres";
-
-    const ettn = invoice.id
-      ? `8a491029-3810-4b10-9201-${String(invoice.id).replace(/[^a-zA-Z0-9]/g, "").padEnd(12, "0").slice(0, 12)}`
-      : "8a491029-3810-4b10-8201-948123019283";
-
-    const writtenAmount = numberToTurkishWords(payableAmount);
-    const activeLogoSrc = customLogoOverride || companySettings?.logoUrl || "";
-    const logoHeightClass =
-      logoScale === "sm" ? "max-h-10" : logoScale === "lg" ? "max-h-20" : "max-h-14";
-
-    const docTypeTitle =
-      invoice.docKind === "receipt"
-        ? invType === "sales"
-          ? "PERAKENDE SATIŞ FİŞİ"
-          : "GİDER / MASRAF FİŞİ"
-        : invoice.invoiceScenario === "EARSIVFATURA"
-        ? "e-ARŞİV FATURA"
-        : invType === "sales"
-        ? "e-FATURA / e-ARŞİV FATURA"
-        : "ALIŞ (GİDER) FATURASI";
-
-    const paymentMethodLabel =
-      invoice.paymentMethod === "nakit"
-        ? "Nakit Ödeme"
-        : invoice.paymentMethod === "kredi_karti"
-        ? "Kredi Kartı / POS"
-        : invoice.paymentMethod === "eft_havale"
-        ? "Banka Havale / EFT"
-        : "Cari Açık Hesap";
-
-    const legalNotes = generateInvoiceLegalTaxNotes(
-      invoice.items || [],
-      invoice.invoiceProfileType,
-      currSymbol
-    );
-
-    const bankName =
-      invoice.paymentAccountName ||
-      companySettings?.defaultBankName ||
-      companySettings?.bankName ||
-      "";
-    const bankHolder =
-      invoice.paymentAccountHolderName ||
-      companySettings?.defaultBankAccountName ||
-      companySettings?.companyTitle ||
-      companySettings?.companyName ||
-      "";
-    const bankIban =
-      invoice.paymentIban ||
-      companySettings?.defaultBankIban ||
-      companySettings?.defaultIban ||
-      companySettings?.iban ||
-      "";
-
-    return (
-      <div className="space-y-5 text-slate-900 font-sans text-xs leading-normal">
-        {/* Top Corporate Theme Accent Bar */}
-        <div
-          style={{
-            backgroundColor: themeConf.primaryBg,
-            WebkitPrintColorAdjust: "exact",
-            printColorAdjust: "exact",
-          }}
-          className="h-2 w-full rounded-t-lg"
-        />
-
-        {/* 1. THREE-COLUMN OFFICIAL E-DOCUMENT HEADER */}
-        <div className="grid grid-cols-12 gap-4 items-start border-b-2 border-slate-900 pb-5">
-          {/* Left Column: Company Logo & Seller Identity (5 cols) */}
-          <div className="col-span-12 sm:col-span-5 space-y-2">
-            {showCompanyLogo && (
-              <div className="mb-2 flex items-center">
-                {activeLogoSrc ? (
-                  <img
-                    src={activeLogoSrc}
-                    alt={companySettings?.companyName || "Şirket Logosu"}
-                    className={`${logoHeightClass} w-auto max-w-[220px] object-contain`}
-                  />
-                ) : (
-                  <Logo size={logoScale} />
-                )}
-              </div>
-            )}
-
-            <div className="space-y-0.5">
-              <h1
-                style={{ color: themeConf.primaryText }}
-                className="text-sm sm:text-base font-black uppercase tracking-tight leading-snug"
-              >
-                {companySettings?.companyTitle || companySettings?.companyName || "KURUMSAL FİRMA ÜNVANI"}
-              </h1>
-              {sellerBranchName && (
-                <p className="text-[11px] font-bold text-slate-700">
-                  Şube: {sellerBranchName}
-                  {sellerBranchCode ? ` (${sellerBranchCode})` : ""}
-                </p>
-              )}
-              <p className="text-[11px] text-slate-600 leading-snug">{sellerAddress}</p>
-            </div>
-
-            <div className="pt-1 space-y-0.5 text-[11px] text-slate-700">
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                <span>
-                  <strong className="text-slate-900">Vergi Dairesi:</strong>{" "}
-                  {companySettings?.taxOffice || "-"}
-                </span>
-                <span>
-                  <strong className="text-slate-900">VKN / TCKN:</strong>{" "}
-                  <span className="font-mono font-bold">{companySettings?.taxNumber || "-"}</span>
-                </span>
-              </div>
-              {(companySettings?.mersisNo || companySettings?.tradeRegistryNo) && (
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-600">
-                  {companySettings?.mersisNo && (
-                    <span>
-                      <strong>Mersis No:</strong> {companySettings.mersisNo}
-                    </span>
-                  )}
-                  {companySettings?.tradeRegistryNo && (
-                    <span>
-                      <strong>Tic. Sicil No:</strong> {companySettings.tradeRegistryNo}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="text-[10px] text-slate-600">
-                <span>Tel: {companySettings?.phone || "-"}</span>
-                {companySettings?.email ? ` • E-posta: ${companySettings.email}` : ""}
-                {companySettings?.website ? ` • ${companySettings.website}` : ""}
-              </div>
-            </div>
-          </div>
-
-          {/* Center Column: Official GIB Seal & Document Type Title (3 cols) */}
-          <div className="col-span-12 sm:col-span-3 flex flex-col items-center justify-center text-center py-1">
-            <div
-              style={{
-                borderColor: themeConf.primaryBg,
-                color: themeConf.primaryText,
-              }}
-              className="w-16 h-16 rounded-full border-2 flex flex-col items-center justify-center p-1 shadow-2xs bg-white"
-            >
-              <span className="text-[8px] font-black tracking-widest uppercase leading-none">
-                T.C. GİB
-              </span>
-              <span className="text-[11px] font-black tracking-tight leading-tight my-0.5">
-                e-BELGE
-              </span>
-              <span className="text-[7px] font-bold uppercase tracking-wider text-slate-500 leading-none">
-                RESMİ NÜSHA
-              </span>
-            </div>
-
-            <div
-              style={{
-                backgroundColor: themeConf.primaryBg,
-                WebkitPrintColorAdjust: "exact",
-                printColorAdjust: "exact",
-              }}
-              className="mt-2.5 px-3 py-1 rounded text-white text-[11px] font-black uppercase tracking-wider"
-            >
-              {docTypeTitle}
-            </div>
-
-            {isDraft && (
-              <span className="mt-1 text-[10px] font-extrabold uppercase tracking-widest text-amber-700">
-                • TASLAK BELGE •
-              </span>
-            )}
-          </div>
-
-          {/* Right Column: Scannable QR Code & Invoice Metadata Table (4 cols) */}
-          <div className="col-span-12 sm:col-span-4 flex flex-col items-end gap-2">
-            <div className="flex items-start gap-2.5 w-full justify-end">
-              {showQrCode && qrCodeDataUrl && (
-                <div className="border border-slate-300 rounded-lg p-1.5 bg-white flex flex-col items-center shrink-0">
-                  <img
-                    src={qrCodeDataUrl}
-                    alt="e-Belge Doğrulama Karekodu"
-                    className="w-20 h-20 object-contain"
-                  />
-                  <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 mt-0.5">
-                    GİB KAREKOD
-                  </span>
-                </div>
-              )}
-
-              <div className="border border-slate-300 rounded-lg overflow-hidden text-[10px] w-full max-w-[215px]">
-                <table className="w-full border-collapse">
-                  <tbody className="divide-y divide-slate-200">
-                    <tr className="bg-slate-50">
-                      <td className="py-1 px-2 font-bold text-slate-600">Fatura No:</td>
-                      <td className="py-1 px-2 font-mono font-black text-slate-900 text-right">
-                        {invNumber}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 px-2 font-bold text-slate-600">Fatura Tarihi:</td>
-                      <td className="py-1 px-2 font-mono font-semibold text-slate-900 text-right">
-                        {formatDate(issueDate)}
-                      </td>
-                    </tr>
-                    <tr className="bg-slate-50">
-                      <td className="py-1 px-2 font-bold text-slate-600">Vade Tarihi:</td>
-                      <td className="py-1 px-2 font-mono font-semibold text-slate-900 text-right">
-                        {formatDate(dueDate)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 px-2 font-bold text-slate-600">Senaryo:</td>
-                      <td className="py-1 px-2 font-mono font-bold text-slate-800 text-right">
-                        {invoice.invoiceScenario || "TICARIFATURA"}
-                      </td>
-                    </tr>
-                    <tr className="bg-slate-50">
-                      <td className="py-1 px-2 font-bold text-slate-600">Fatura Tipi:</td>
-                      <td className="py-1 px-2 font-mono font-bold text-slate-800 text-right">
-                        {invoice.invoiceProfileType || (invType === "sales" ? "SATIS" : "ALIS")}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 px-2 font-bold text-slate-600">Ödeme Şekli:</td>
-                      <td className="py-1 px-2 font-bold text-slate-800 text-right">
-                        {paymentMethodLabel}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. ETTN & ELECTRONIC SIGNATURE IDENTIFIER BAR */}
-        <div
-          style={{
-            backgroundColor: themeConf.accentLightBg,
-            borderColor: themeConf.accentBorder,
-            WebkitPrintColorAdjust: "exact",
-            printColorAdjust: "exact",
-          }}
-          className="px-3.5 py-1.5 rounded-lg border flex flex-wrap items-center justify-between gap-2 text-[10px]"
-        >
-          <div className="flex items-center gap-2">
-            <span className="font-black uppercase tracking-wider text-slate-700">ETTN:</span>
-            <span className="font-mono font-bold text-slate-900">{ettn}</span>
-          </div>
-          <div className="flex items-center gap-3 text-slate-600 font-medium">
-            <span>Özelleştirme No: <strong className="font-mono text-slate-800">TR1.2</strong></span>
-            <span>•</span>
-            <span>Para Birimi: <strong className="font-mono text-slate-800">{currency}</strong></span>
-          </div>
-        </div>
-
-        {/* 3. BUYER (SAYIN / ALICI) & DELIVERY / ACCOUNT DETAILS */}
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-          <div className="sm:col-span-8 p-3.5 rounded-xl border border-slate-300 bg-white space-y-1.5">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-1">
-              <span
-                style={{ color: themeConf.primaryText }}
-                className="text-[10px] font-black uppercase tracking-wider"
-              >
-                SAYIN / ALICI (MÜŞTERİ) BİLGİLERİ
-              </span>
-              <span className="font-mono text-[10px] font-bold text-slate-600">
-                Cari Kodu: {accountCode}
-              </span>
-            </div>
-            <p className="text-sm font-black text-slate-900">{contactName}</p>
-            {customerBranchName && (
-              <p className="text-[11px] font-bold text-slate-700">
-                Şube / Birim: {customerBranchName}
-                {customerBranchCode ? ` (${customerBranchCode})` : ""}
-              </p>
-            )}
-            <p className="text-[11px] text-slate-700">
-              <strong className="text-slate-900">Adres:</strong> {contactAddress}
-            </p>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5 text-[11px] text-slate-700">
-              <span>
-                <strong className="text-slate-900">Vergi Dairesi:</strong> {contactTaxOffice}
-              </span>
-              <span>
-                <strong className="text-slate-900">VKN / TCKN:</strong>{" "}
-                <span className="font-mono font-bold">{contactTaxNo}</span>
-              </span>
-              {contactPhone && contactPhone !== "-" && (
-                <span>
-                  <strong className="text-slate-900">Tel:</strong> {contactPhone}
-                </span>
-              )}
-              {contactEmail && contactEmail !== "-" && (
-                <span>
-                  <strong className="text-slate-900">E-posta:</strong> {contactEmail}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="sm:col-span-4 p-3.5 rounded-xl border border-slate-300 bg-slate-50/60 flex flex-col justify-between space-y-2">
-            <div>
-              <div className="border-b border-slate-200 pb-1 mb-1.5">
-                <span
-                  style={{ color: themeConf.primaryText }}
-                  className="text-[10px] font-black uppercase tracking-wider"
-                >
-                  MALİ & ÖDEME ÖZETİ
-                </span>
-              </div>
-              <div className="space-y-1 text-[11px]">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Belge Durumu:</span>
-                  <span className="font-bold text-slate-900">
-                    {isDraft ? "Taslak" : remainingAmount <= 0 ? "Ödendi / Kapalı" : "Açık Fatura"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Kalem Sayısı:</span>
-                  <span className="font-mono font-bold text-slate-900">{computedItems.length} Adet</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Ödeme Yöntemi:</span>
-                  <span className="font-bold text-slate-900">{paymentMethodLabel}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-200 flex items-baseline justify-between">
-              <span className="text-[10px] font-black uppercase text-slate-600">Ödenecek Toplam:</span>
-              <span
-                style={{ color: themeConf.primaryText }}
-                className="text-sm font-black font-mono"
-              >
-                {currSymbol}
-                {payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 4. INVOICE LINE ITEMS TABLE */}
-        <div className="border border-slate-300 rounded-xl overflow-hidden">
-          <table className="w-full text-left text-[11px] border-collapse">
-            <thead>
-              <tr
-                style={{
-                  backgroundColor: themeConf.tableHeaderBg,
-                  color: themeConf.tableHeaderText,
-                  WebkitPrintColorAdjust: "exact",
-                  printColorAdjust: "exact",
-                }}
-                className="uppercase text-[10px] font-bold tracking-wider border-b border-slate-300"
-              >
-                <th className="py-2 px-2.5 w-10 text-center">#</th>
-                <th className="py-2 px-3">Mal / Hizmet Açıklaması</th>
-                <th className="py-2 px-2.5 text-center">Miktar</th>
-                <th className="py-2 px-2.5 text-center">Birim</th>
-                <th className="py-2 px-2.5 text-right">Birim Fiyat</th>
-                {hasDiscounts && (
-                  <>
-                    <th className="py-2 px-2.5 text-center">İsk. %</th>
-                    <th className="py-2 px-2.5 text-right">İsk. Tutarı</th>
-                  </>
-                )}
-                <th className="py-2 px-2.5 text-center">KDV %</th>
-                <th className="py-2 px-2.5 text-right">KDV Tutarı</th>
-                <th className="py-2 px-3 text-right">Mal / Hizmet Tutarı</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {computedItems.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={hasDiscounts ? 10 : 8}
-                    className="py-6 text-center text-slate-400 font-medium"
-                  >
-                    Faturada henüz mal veya hizmet kalemi bulunmuyor.
-                  </td>
-                </tr>
-              ) : (
-                computedItems.map((item, idx) => {
-                  const withholdingBadge = formatWithholdingBadge(item);
-                  const isSpecialTaxBase =
-                    item.specialTaxBase !== undefined && item.specialTaxBase !== null;
-                  const isExempt = item.exemptionCode || item.vatRate === 0;
-
-                  return (
-                    <tr key={item.id || idx} className={idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"}>
-                      <td className="py-2 px-2.5 text-center font-mono text-slate-500">
-                        {idx + 1}
-                      </td>
-                      <td className="py-2 px-3 font-semibold text-slate-900">
-                        <div>{item.description || item.productName || "Mal / Hizmet Kalemi"}</div>
-                        {(withholdingBadge || isSpecialTaxBase || (isExempt && item.exemptionCode)) && (
-                          <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[9px] text-slate-600 font-normal">
-                            {withholdingBadge && (
-                              <span>Tevkifat: <strong>{withholdingBadge}</strong></span>
-                            )}
-                            {isSpecialTaxBase && (
-                              <span>
-                                Özel Matrah:{" "}
-                                <strong>
-                                  {currSymbol}
-                                  {Number(item.specialTaxBase).toLocaleString("tr-TR", {
-                                    minimumFractionDigits: 2,
-                                  })}
-                                </strong>
-                              </span>
-                            )}
-                            {isExempt && item.exemptionCode && (
-                              <span>İstisna Kodu: <strong>{item.exemptionCode}</strong></span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-2 px-2.5 text-center font-mono font-bold text-slate-900">
-                        {item.quantity}
-                      </td>
-                      <td className="py-2 px-2.5 text-center text-slate-600">
-                        {item.unit || "Adet"}
-                      </td>
-                      <td className="py-2 px-2.5 text-right font-mono text-slate-800">
-                        {currSymbol}
-                        {(item.unitPrice || 0).toLocaleString("tr-TR", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </td>
-                      {hasDiscounts && (
-                        <>
-                          <td className="py-2 px-2.5 text-center font-mono text-rose-700">
-                            {item.discountRate && item.discountRate > 0
-                              ? `%${item.discountRate}`
-                              : "-"}
-                          </td>
-                          <td className="py-2 px-2.5 text-right font-mono text-rose-700">
-                            {item.discountAmount && item.discountAmount > 0
-                              ? `-${currSymbol}${item.discountAmount.toLocaleString("tr-TR", {
-                                  minimumFractionDigits: 2,
-                                })}`
-                              : "-"}
-                          </td>
-                        </>
-                      )}
-                      <td className="py-2 px-2.5 text-center font-mono font-bold text-slate-800">
-                        %{item.vatRate || 0}
-                      </td>
-                      <td className="py-2 px-2.5 text-right font-mono text-slate-700">
-                        {currSymbol}
-                        {(item.vatAmount || 0).toLocaleString("tr-TR", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono font-black text-slate-900">
-                        {currSymbol}
-                        {(item.totalWithVat || 0).toLocaleString("tr-TR", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* 5. BOTTOM CALCULATIONS, AMOUNT IN WORDS, BANK IBAN & NOTES */}
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
-          {/* Left Column (7 cols): Written Amount, Bank IBAN, Legal & Custom Notes */}
-          <div className="sm:col-span-7 space-y-2.5">
-            <div
-              style={{
-                backgroundColor: themeConf.accentLightBg,
-                borderColor: themeConf.accentBorder,
-                WebkitPrintColorAdjust: "exact",
-                printColorAdjust: "exact",
-              }}
-              className="p-2.5 rounded-lg border"
-            >
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">
-                YALNIZ (YAZIYLA ÖDENECEK TUTAR)
-              </span>
-              <p className="font-extrabold text-slate-900 text-xs mt-0.5"># {writtenAmount} #</p>
-            </div>
-
-            {(bankName || bankIban) && (
-              <div className="p-2.5 rounded-lg border border-slate-300 bg-white space-y-1">
-                <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">
-                  BANKA VE HAVALE / EFT IBAN BİLGİLERİ
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
-                  {bankName && (
-                    <p>
-                      <span className="text-slate-500">Banka:</span>{" "}
-                      <strong className="text-slate-900">{bankName}</strong>
-                    </p>
-                  )}
-                  {bankHolder && (
-                    <p>
-                      <span className="text-slate-500">Alıcı:</span>{" "}
-                      <strong className="text-slate-900">{bankHolder}</strong>
-                    </p>
-                  )}
-                  {bankIban && (
-                    <p className="sm:col-span-2">
-                      <span className="text-slate-500">IBAN:</span>{" "}
-                      <strong className="font-mono text-slate-900 tracking-wide">{bankIban}</strong>
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {legalNotes.length > 0 && (
-              <div className="p-2.5 rounded-lg border border-slate-300 bg-slate-50 space-y-1 text-[10px]">
-                <span className="font-black uppercase tracking-wider text-slate-700 block">
-                  GİB RESMİ VERGİ ŞERHLERİ VE YASAL İBARELER
-                </span>
-                {legalNotes.map((ln, idx) => (
-                  <p key={idx} className="text-slate-700 leading-snug">
-                    • {ln}
-                  </p>
-                ))}
-              </div>
-            )}
-
-            {invoice.notes && invoice.notes.trim() && (
-              <div className="p-2.5 rounded-lg border border-slate-200 bg-white text-[11px] space-y-0.5">
-                <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">
-                  FATURA NOTU / AÇIKLAMA
-                </span>
-                <p className="text-slate-700 whitespace-pre-line leading-snug">{invoice.notes}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Right Column (5 cols): Financial Totals Table */}
-          <div className="sm:col-span-5 border border-slate-300 rounded-xl overflow-hidden bg-white">
-            <div className="divide-y divide-slate-200 text-[11px]">
-              {totalDiscount > 0 && (
-                <>
-                  <div className="flex justify-between py-1.5 px-3">
-                    <span className="text-slate-600">Mal / Hizmet Brüt Tutar:</span>
-                    <span className="font-mono font-bold text-slate-900">
-                      {currSymbol}
-                      {grossTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1.5 px-3 text-rose-700 bg-rose-50/40">
-                    <span className="font-semibold">Toplam İskonto (-):</span>
-                    <span className="font-mono font-bold">
-                      -{currSymbol}
-                      {totalDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </>
-              )}
-
-              <div className="flex justify-between py-1.5 px-3">
-                <span className="text-slate-600 font-semibold">Ara Toplam (KDV Matrahı):</span>
-                <span className="font-mono font-bold text-slate-900">
-                  {currSymbol}
-                  {subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-
-              <div className="flex justify-between py-1.5 px-3">
-                <span className="text-slate-600 font-semibold">Hesaplanan KDV Toplamı:</span>
-                <span className="font-mono font-bold text-slate-900">
-                  {currSymbol}
-                  {totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-
-              {totalWithholding > 0 && (
-                <div className="flex justify-between py-1.5 px-3 text-amber-800 bg-amber-50/50">
-                  <span className="font-semibold">Hesaplanan KDV Tevkifatı (-):</span>
-                  <span className="font-mono font-bold">
-                    -{currSymbol}
-                    {totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              )}
-
-              <div className="flex justify-between py-1.5 px-3 bg-slate-50">
-                <span className="text-slate-700 font-bold">Vergiler Dahil Toplam:</span>
-                <span className="font-mono font-bold text-slate-900">
-                  {currSymbol}
-                  {grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  backgroundColor: themeConf.primaryBg,
-                  color: "#ffffff",
-                  WebkitPrintColorAdjust: "exact",
-                  printColorAdjust: "exact",
-                }}
-                className="flex justify-between items-center py-2.5 px-3"
-              >
-                <span className="text-xs font-black uppercase tracking-wider">
-                  ÖDENECEK TUTAR:
-                </span>
-                <span className="text-base font-mono font-black">
-                  {currSymbol}
-                  {payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-
-              {paidAmount > 0 && (
-                <>
-                  <div className="flex justify-between py-1.5 px-3 text-emerald-700">
-                    <span className="font-semibold">Tahsil Edilen / Ödenen:</span>
-                    <span className="font-mono font-bold">
-                      {currSymbol}
-                      {paidAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1.5 px-3 text-rose-700 font-bold">
-                    <span>Kalan Açık Bakiye:</span>
-                    <span className="font-mono">
-                      {currSymbol}
-                      {remainingAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* 6. FOOTER: QR VERIFICATION & STAMP / SIGNATURE BLOCKS */}
-        <div className="pt-4 border-t-2 border-slate-300 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-          <div className="sm:col-span-6 flex items-center gap-3">
-            {showQrCode && qrCodeDataUrl ? (
-              <img
-                src={qrCodeDataUrl}
-                alt="e-Fatura Doğrulama QR"
-                className="w-14 h-14 border border-slate-300 rounded p-0.5 bg-white shrink-0"
-              />
-            ) : (
-              <div className="w-12 h-12 border border-slate-300 rounded flex items-center justify-center bg-slate-50 shrink-0">
-                <ShieldCheck className="w-6 h-6 text-slate-700" />
-              </div>
-            )}
-            <div className="space-y-0.5 text-[10px] text-slate-600">
-              <p className="font-bold text-slate-900">
-                5070 Sayılı Elektronik İmza Kanunu Uyarınca Elektronik Ortamda Düzenlenmiştir
-              </p>
-              <p className="leading-snug">
-                İşbu fatura GİB e-Belge standartlarına uygun olarak üretilmiştir. Karekodu okutarak
-                fatura doğrulamasını gerçekleştirebilirsiniz. İrsaliye yerine geçer.
-              </p>
-            </div>
-          </div>
-
-          <div className="sm:col-span-6 grid grid-cols-2 gap-3 text-center text-[10px]">
-            <div className="border border-dashed border-slate-300 rounded-lg p-2.5 space-y-6">
-              <p className="font-bold text-slate-800 uppercase">Düzenleyen Kaşe / İmza</p>
-              <p className="text-[9px] text-slate-500 truncate">
-                {companySettings?.companyName || "Firma Yetkilisi"}
-              </p>
-            </div>
-            <div className="border border-dashed border-slate-300 rounded-lg p-2.5 space-y-6">
-              <p className="font-bold text-slate-800 uppercase">Teslim Alan / Onay</p>
-              <p className="text-[9px] text-slate-500 truncate">{contactName}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const activeDocMeta =
+    isInvoiceMode && modalData.invoiceData
+      ? resolveOfficialEDocumentKind(
+          modalData.invoiceData.invoice,
+          modalData.invoiceData.companySettings,
+          modalData.invoiceData.contact,
+          previewDocType
+        )
+      : null;
 
   return (
     <div
@@ -1023,7 +191,6 @@ export const UniversalPrintModal: React.FC = () => {
       aria-modal="true"
       className="fixed inset-0 z-[9999] flex flex-col bg-slate-950/85 backdrop-blur-md animate-fadeIn"
     >
-      {/* Hidden file input for instant company logo upload inside Invoice PDF Template */}
       <input
         ref={logoInputRef}
         type="file"
@@ -1035,7 +202,7 @@ export const UniversalPrintModal: React.FC = () => {
       {/* 1. Top Control Bar */}
       <div className="bg-slate-900 border-b border-slate-800 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-md shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-300 shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-red-600/30 border border-red-500/40 flex items-center justify-center text-red-300 shrink-0">
             <Printer className="w-4 h-4" />
           </div>
           <div className="min-w-0">
@@ -1043,9 +210,13 @@ export const UniversalPrintModal: React.FC = () => {
               {modalData.title || "Belge Yazdırma & PDF Önizleme"}
             </h2>
             <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-              <span>{isInvoiceMode ? "Kurumsal Fatura PDF Şablonu" : "Evrensel Yazdırma Motoru"}</span>
+              <span>
+                {isInvoiceMode
+                  ? `Resmi GİB ${activeDocMeta?.docTitle || "e-Belge"} XSLT Şablonu`
+                  : "Evrensel Yazdırma Motoru"}
+              </span>
               <span>•</span>
-              <span className="font-semibold text-purple-300 uppercase">
+              <span className="font-semibold text-amber-300 uppercase">
                 {currentOrientation === "landscape" ? "A4 Yan (Yatay)" : "A4 Dikey"}
               </span>
             </div>
@@ -1054,24 +225,78 @@ export const UniversalPrintModal: React.FC = () => {
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Invoice Template Specific Controls: Theme, Logo & QR Toggles */}
           {isInvoiceMode && (
             <div className="flex flex-wrap items-center gap-1.5 mr-1">
-              {/* Theme Selector */}
+              {/* Document Type Mode Switcher (Otomatik / e-Fatura / e-Arşiv) */}
               <div className="bg-slate-800 p-0.5 rounded-xl border border-slate-700 flex items-center">
-                {(["navy", "royal", "classic"] as InvoicePdfTheme[]).map((tKey) => (
+                {(
+                  [
+                    { id: "auto", label: "Oto" },
+                    { id: "e_fatura", label: "e-Fatura" },
+                    { id: "e_arsiv", label: "e-Arşiv" },
+                  ] as const
+                ).map((m) => (
                   <button
-                    key={tKey}
+                    key={m.id}
                     type="button"
-                    onClick={() => setPdfTheme(tKey)}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                      pdfTheme === tKey
+                    onClick={() => setPreviewDocType(m.id)}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      previewDocType === m.id
+                        ? "bg-red-700 text-white shadow-xs"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Template Style Selector */}
+              <div className="bg-slate-800 p-0.5 rounded-xl border border-slate-700 hidden lg:flex items-center">
+                {(
+                  [
+                    { id: "gib_standard", label: "GİB XSLT" },
+                    { id: "gib_modern", label: "Modern" },
+                    { id: "gib_compact", label: "Kompakt" },
+                  ] as { id: InvoiceTemplateStyle; label: string }[]
+                ).map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setDesign((prev) => ({ ...prev, templateStyle: st.id }))}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      (design.templateStyle || "gib_standard") === st.id
                         ? "bg-indigo-600 text-white shadow-xs"
                         : "text-slate-400 hover:text-white"
                     }`}
-                    title={THEME_CONFIG[tKey].label}
                   >
-                    {tKey === "navy" ? "Lacivert" : tKey === "royal" ? "İndigo" : "Klasik S/B"}
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Color Theme Selector */}
+              <div className="bg-slate-800 p-0.5 rounded-xl border border-slate-700 flex items-center">
+                {(
+                  [
+                    { id: "gib_red", label: "GİB Kırmızı" },
+                    { id: "navy", label: "Lacivert" },
+                    { id: "royal", label: "Mavi" },
+                    { id: "classic", label: "Klasik S/B" },
+                  ] as { id: InvoiceColorTheme; label: string }[]
+                ).map((tKey) => (
+                  <button
+                    key={tKey.id}
+                    type="button"
+                    onClick={() => setDesign((prev) => ({ ...prev, colorTheme: tKey.id }))}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      (design.colorTheme || "gib_red") === tKey.id
+                        ? "bg-slate-700 text-white shadow-xs border border-slate-500"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                    title={INVOICE_COLOR_THEMES[tKey.id].label}
+                  >
+                    {tKey.label}
                   </button>
                 ))}
               </div>
@@ -1079,16 +304,18 @@ export const UniversalPrintModal: React.FC = () => {
               {/* Company Logo Toggle & Upload */}
               <button
                 type="button"
-                onClick={() => setShowCompanyLogo((v) => !v)}
+                onClick={() =>
+                  setDesign((prev) => ({ ...prev, showCompanyLogo: prev.showCompanyLogo === false }))
+                }
                 className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
-                  showCompanyLogo
+                  design.showCompanyLogo !== false
                     ? "bg-slate-800 border-emerald-500/50 text-emerald-300"
                     : "bg-slate-800 border-slate-700 text-slate-400"
                 }`}
                 title="Şirket logosunu göster / gizle"
               >
                 <Building2 className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Logo</span>
+                <span className="hidden xl:inline">Logo</span>
               </button>
 
               <button
@@ -1098,22 +325,57 @@ export const UniversalPrintModal: React.FC = () => {
                 title="Şirket logosu yükle veya değiştir"
               >
                 <Upload className="w-3.5 h-3.5 text-purple-300" />
-                <span className="hidden xl:inline">Logo Yükle</span>
+                <span className="hidden 2xl:inline">Logo Yükle</span>
+              </button>
+
+              {/* Stamp / Kaşe Toggle */}
+              <button
+                type="button"
+                onClick={() =>
+                  setDesign((prev) => ({
+                    ...prev,
+                    showSignatureStamp: prev.showSignatureStamp === false,
+                  }))
+                }
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                  design.showSignatureStamp !== false
+                    ? "bg-slate-800 border-amber-500/50 text-amber-300"
+                    : "bg-slate-800 border-slate-700 text-slate-400"
+                }`}
+                title="Düzenleyen Kaşe / İmza alanını göster / gizle"
+              >
+                <Stamp className="w-3.5 h-3.5" />
+                <span className="hidden xl:inline">Kaşe</span>
               </button>
 
               {/* QR Code Toggle */}
               <button
                 type="button"
-                onClick={() => setShowQrCode((v) => !v)}
+                onClick={() =>
+                  setDesign((prev) => ({ ...prev, showQrCode: prev.showQrCode === false }))
+                }
                 className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
-                  showQrCode
+                  design.showQrCode !== false
                     ? "bg-slate-800 border-purple-500/50 text-purple-300"
                     : "bg-slate-800 border-slate-700 text-slate-400"
                 }`}
-                title="GİB e-Fatura QR kodunu göster / gizle"
+                title="GİB e-Belge QR kodunu göster / gizle"
               >
                 <QrCode className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">QR Kod</span>
+                <span className="hidden xl:inline">QR</span>
+              </button>
+
+              {/* Save Design to Company (Firestore) Button */}
+              <button
+                type="button"
+                onClick={handleSaveDesignToCompany}
+                className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-indigo-600/90 hover:bg-indigo-500 text-white transition-all cursor-pointer flex items-center gap-1"
+                title="Özelleştirilen fatura CSS ve tasarım yapılandırmasını şirket bazlı olarak Firestore'a kaydet"
+              >
+                {savedNotice ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+                <span className="hidden xl:inline">
+                  {savedNotice ? "Firestore'a Kaydedildi!" : "Tasarımı Kaydet"}
+                </span>
               </button>
             </div>
           )}
@@ -1217,9 +479,10 @@ export const UniversalPrintModal: React.FC = () => {
           <span>
             {isInvoiceMode ? (
               <>
-                Şirket logolu ve GİB karekodlu resmi fatura PDF şablonu hazır. Üst bardan{" "}
-                <strong>renk temasını</strong> seçebilir, <strong>logo</strong> yükleyebilir veya doğrudan{" "}
-                <strong>"PDF İndir" / "Yazdır"</strong> butonlarını kullanabilirsiniz.
+                GİB UBL-TR 1.2 standartlarına uygun resmi <strong>e-Fatura</strong> ve{" "}
+                <strong>e-Arşiv Fatura</strong> XSLT şablonu hazır. Üst bardan belge türünü, şablon
+                düzenini, kaşe/logoyu seçip <strong>"Şablonu Kaydet"</strong> veya{" "}
+                <strong>"PDF İndir / Yazdır"</strong> diyebilirsiniz.
               </>
             ) : (
               <>
@@ -1236,22 +499,32 @@ export const UniversalPrintModal: React.FC = () => {
 
       {/* 3. Document Preview Sheet Canvas */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-950/60 custom-scrollbar flex items-start justify-center">
-        {isInvoiceMode ? (
+        {isInvoiceMode && modalData.invoiceData ? (
           <div
-            id="universal-print-preview-paper"
             ref={previewContainerRef}
             style={{
               transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
               transformOrigin: "top center",
               transition: "transform 0.15s ease-out",
             }}
-            className={`bg-white text-slate-900 rounded-2xl shadow-2xl p-6 sm:p-9 border border-slate-200 transition-all ${
+            className={
               currentOrientation === "landscape"
-                ? "w-full max-w-5xl min-h-[600px] landscape-mode"
-                : "w-full max-w-[840px] min-h-[880px]"
-            }`}
+                ? "w-full max-w-5xl landscape-mode"
+                : "w-full max-w-[860px]"
+            }
           >
-            {renderInvoicePdfTemplate()}
+            <OfficialGIBInvoicePaper
+              invoice={modalData.invoiceData.invoice}
+              companySettings={{
+                ...modalData.invoiceData.companySettings,
+                ...(customLogoOverride ? { logoUrl: customLogoOverride } : {}),
+              }}
+              contact={modalData.invoiceData.contact}
+              isDraft={modalData.invoiceData.isDraft}
+              designOverride={design}
+              previewDocTypeOverride={previewDocType}
+              paperId="universal-print-preview-paper"
+            />
           </div>
         ) : (
           <div

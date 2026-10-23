@@ -23,6 +23,7 @@ import {
   FileText,
   Filter,
   Loader2,
+  Printer,
   RefreshCw,
   Search,
   X,
@@ -35,6 +36,8 @@ import {
   type CompanySettings,
   type EDocumentDirection,
   type Invoice,
+  type InvoiceDesignSettings,
+  type InvoiceItem,
   type ManagedCompany,
   type MysoftDocumentFamily,
   type MysoftEDocument,
@@ -61,6 +64,12 @@ import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData } from "../utils/exportUtils";
+import { openInvoicePrintModal } from "../utils/printEngine";
+import {
+  OfficialGIBInvoicePaper,
+  InvoiceDesignCustomizerBar,
+  resolveInvoiceDesignSettings,
+} from "./OfficialGIBInvoicePaper";
 
 export interface EDocumentsProps {
   /** The navigation item controls the API direction without exposing credentials to the browser. */
@@ -1033,6 +1042,309 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       : "Giden e-Faturalar";
   const DirectionIcon =
     activeDirection === "inbox" ? ArrowDownLeft : ArrowUpRight;
+
+  const [previewDocType, setPreviewDocType] = useState<"auto" | "e_fatura" | "e_arsiv">("auto");
+  const [localDesign, setLocalDesign] = useState<InvoiceDesignSettings>(() =>
+    resolveInvoiceDesignSettings(companySettings)
+  );
+
+  useEffect(() => {
+    setLocalDesign(resolveInvoiceDesignSettings(companySettings));
+  }, [companySettings]);
+
+  if (selectedDocument) {
+    const docData = asRecord(selectedDocument);
+    const docNo = String(documentNumber(selectedDocument) || "TASLAK");
+    const cleanDocNo = docNo.replace(/\s*\(TASLAK\)\s*$/i, "").trim();
+    const matchedLocalInvoice = (invoices || []).find(
+      (inv) =>
+        inv.invoiceNumber === docNo ||
+        inv.invoiceNumber === cleanDocNo ||
+        (docData.ettn && inv.eDocumentEttn === docData.ettn)
+    );
+
+    const rawLines = Array.isArray(docData.items)
+      ? docData.items
+      : Array.isArray(docData.lines)
+      ? docData.lines
+      : Array.isArray(docData.invoiceLine)
+      ? docData.invoiceLine
+      : [];
+
+    const mappedItems: InvoiceItem[] =
+      matchedLocalInvoice && matchedLocalInvoice.items?.length > 0
+        ? matchedLocalInvoice.items
+        : rawLines.length > 0
+        ? rawLines.map((ln: any, idx: number) => {
+            const qty = Number(ln.quantity ?? ln.qty ?? 1) || 1;
+            const price = Number(ln.unitPrice ?? ln.price ?? ln.amount ?? 0) || 0;
+            const vatRate = Number(ln.vatRate ?? ln.taxPercent ?? ln.kdvPercent ?? 20);
+            const totalWithoutVat = Number(ln.totalWithoutVat ?? ln.lineExtensionAmount ?? qty * price);
+            const vatAmount = Number(ln.vatAmount ?? ln.taxAmount ?? (totalWithoutVat * vatRate) / 100);
+            return {
+              id: String(ln.id || `line_${idx}`),
+              productCode: ln.productCode || ln.itemCode || undefined,
+              description: String(ln.description || ln.productName || ln.itemName || "Mal / Hizmet Kalemi"),
+              quantity: qty,
+              unit: String(ln.unit || ln.unitCode || "Adet"),
+              unitPrice: price,
+              vatRate,
+              totalWithoutVat,
+              vatAmount,
+              totalWithVat: totalWithoutVat + vatAmount,
+            };
+          })
+        : [
+            {
+              id: "line_1",
+              description: `${documentType(selectedDocument)} - ${documentParty(selectedDocument)}`,
+              quantity: 1,
+              unit: "Adet",
+              unitPrice: Number(docData.subtotal ?? documentAmount(selectedDocument) ?? 0),
+              vatRate: 20,
+              totalWithoutVat: Number(docData.subtotal ?? documentAmount(selectedDocument) ?? 0),
+              vatAmount: Number(docData.vatTotal ?? 0),
+              totalWithVat: Number(documentAmount(selectedDocument) ?? 0),
+            },
+          ];
+
+    const isArchive = isArchiveDocument(selectedDocument);
+    const previewInvoice: Partial<Invoice> = matchedLocalInvoice || {
+      id: documentIdentity(selectedDocument),
+      invoiceNumber: docNo,
+      type: documentDirection(selectedDocument) === "inbox" ? "purchase" : "sales",
+      invoiceScenario: isArchive
+        ? "EARSIVFATURA"
+        : (docData.profile as any) || "TICARIFATURA",
+      invoiceProfileType: "SATIS",
+      eDocumentType: isArchive ? "e_arsiv" : "e_fatura",
+      eDocumentEttn: String(docData.ettn || docData.uuid || ""),
+      contactId: "edoc_party",
+      contactName: String(documentParty(selectedDocument)),
+      taxNumber: String(documentTaxNumber(selectedDocument)),
+      taxOffice: String(docData.taxOffice || docData.receiverTaxOffice || docData.senderTaxOffice || "-"),
+      customerAddress: String(docData.address || docData.receiverAddress || docData.senderAddress || ""),
+      issueDate: String(documentDate(selectedDocument) || new Date().toISOString().slice(0, 10)).slice(0, 10),
+      dueDate: String(docData.dueDate || documentDate(selectedDocument) || new Date().toISOString().slice(0, 10)).slice(0, 10),
+      items: mappedItems,
+      subtotal: Number(docData.subtotal ?? documentAmount(selectedDocument) ?? 0),
+      totalVat: Number(docData.vatTotal ?? 0),
+      grandTotal: Number(documentAmount(selectedDocument) ?? 0),
+      payableAmount: Number(documentAmount(selectedDocument) ?? 0),
+      paidAmount: 0,
+      remainingAmount: Number(documentAmount(selectedDocument) ?? 0),
+      currency: documentCurrency(selectedDocument),
+      status: "sent",
+    };
+
+    const effectiveCompanySettings: CompanySettings =
+      documentDirection(selectedDocument) === "inbox"
+        ? {
+            ...(companySettings || ({} as CompanySettings)),
+            companyName: String(documentParty(selectedDocument)),
+            companyTitle: String(documentParty(selectedDocument)),
+            taxNumber: String(documentTaxNumber(selectedDocument)),
+            taxOffice: String(docData.senderTaxOffice || "-"),
+            address: String(docData.senderAddress || "Merkez Adres"),
+            city: String(docData.senderCity || ""),
+            phone: String(docData.senderPhone || "-"),
+            email: String(docData.senderEmail || "-"),
+            website: "",
+            currency: documentCurrency(selectedDocument),
+          }
+        : companySettings || {
+            companyName: activeCompany?.name || "FİRMA ÜNVANI",
+            companyTitle: activeCompany?.name || "FİRMA ÜNVANI",
+            taxOffice: "-",
+            taxNumber: activeCompany?.taxNumber || activeTenantIdentifierNumber || "-",
+            address: "Merkez",
+            city: "İstanbul",
+            phone: "-",
+            email: "-",
+            website: "",
+            currency: "TRY",
+          };
+
+    const effectiveBuyerContact =
+      documentDirection(selectedDocument) === "inbox"
+        ? {
+            id: "self_buyer",
+            name: companySettings?.companyTitle || companySettings?.companyName || activeCompany?.name || "Alıcı Firma",
+            taxNumber: companySettings?.taxNumber || activeCompany?.taxNumber || activeTenantIdentifierNumber || "-",
+            taxOffice: companySettings?.taxOffice || "-",
+            address: companySettings?.address || "",
+            city: companySettings?.city || "",
+            contactType: "customer" as const,
+            balance: 0,
+            balanceType: "balanced" as const,
+            createdAt: "",
+          }
+        : undefined;
+
+    const tone = statusTone(documentStatus(selectedDocument));
+    const docId = documentIdentity(selectedDocument);
+
+    return (
+      <DetailPageLayout
+        title={`${docNo} — ${documentParty(selectedDocument)}`}
+        subtitle={`Resmi GİB ${isArchive ? "e-Arşiv Fatura" : "e-Fatura"} Görünümü • ETTN: ${docData.ettn || docData.uuid || "-"}`}
+        breadcrumbs={[
+          { label: directionLabel, onClick: handleCloseDetail },
+          { label: docNo, active: true },
+        ]}
+        onBack={handleCloseDetail}
+        statusBadge={
+          <span className={`px-3 py-1 rounded-xl border text-xs font-bold ${tone.className}`}>
+            {tone.label}
+          </span>
+        }
+        headerIcon={<FileText className="w-5 h-5 text-red-700" />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {documentDirection(selectedDocument) === "inbox" && (
+              <>
+                <button
+                  type="button"
+                  disabled={Boolean(actionLoading)}
+                  onClick={() => void runDocumentAction("accept")}
+                  className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Kabul Et</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(actionLoading)}
+                  onClick={() => setIsRejecting((v) => !v)}
+                  className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Reddet</span>
+                </button>
+              </>
+            )}
+
+            {documentDirection(selectedDocument) === "outbox" && isArchive && (
+              <button
+                type="button"
+                disabled={Boolean(actionLoading)}
+                onClick={() => void runDocumentAction("cancel")}
+                className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span>e-Arşiv İptal Et</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void triggerDownload(selectedDocument, "pdf")}
+              disabled={downloading?.id === docId}
+              className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Resmi PDF İndir</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void triggerDownload(selectedDocument, "xml")}
+              disabled={downloading?.id === docId}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <FileCode2 className="w-3.5 h-3.5" />
+              <span>UBL XML İndir</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                openInvoicePrintModal(
+                  {
+                    invoice: previewInvoice,
+                    companySettings: { ...effectiveCompanySettings, invoiceDesign: localDesign },
+                    contact: effectiveBuyerContact,
+                  },
+                  { title: `${docNo}_eBelge` }
+                )
+              }
+              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5 text-purple-300" />
+              <span>Yazdır / Şablon</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCloseDetail}
+              className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer"
+            >
+              Listeye Dön
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-5xl mx-auto space-y-4">
+          {isDetailLoading && (
+            <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-semibold flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Mysoft üzerinden belge kalemleri ve zarf detayları güncelleniyor...</span>
+            </div>
+          )}
+
+          {(detailError || actionError) && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
+              {actionError || detailError}
+            </div>
+          )}
+
+          {isRejecting && (
+            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-2">
+              <label className="block text-xs font-bold text-rose-900">
+                Ticari e-Fatura Red Gerekçesi:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Red sebebini yazınız..."
+                  className="flex-1 bg-white border border-rose-300 rounded-xl px-3 py-2 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => void runDocumentAction("deny")}
+                  disabled={!rejectReason.trim() || Boolean(actionLoading)}
+                  className="px-4 py-2 rounded-xl bg-rose-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                >
+                  Reddi Gönder
+                </button>
+              </div>
+            </div>
+          )}
+
+          <InvoiceDesignCustomizerBar
+            companySettings={effectiveCompanySettings}
+            design={localDesign}
+            previewDocType={previewDocType}
+            onChangePreviewDocType={setPreviewDocType}
+            onChangeDesign={(patch) => setLocalDesign((prev) => ({ ...prev, ...patch }))}
+          />
+
+          <div className="bg-slate-200/60 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center">
+            <OfficialGIBInvoicePaper
+              invoice={previewInvoice}
+              companySettings={effectiveCompanySettings}
+              contact={effectiveBuyerContact}
+              designOverride={localDesign}
+              previewDocTypeOverride={previewDocType}
+              paperId="invoice-preview-paper"
+            />
+          </div>
+        </div>
+      </DetailPageLayout>
+    );
+  }
 
   return (
     <section className="p-4 sm:p-6 max-w-[1500px] mx-auto space-y-6 sm:space-y-7">

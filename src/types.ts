@@ -378,6 +378,7 @@ export interface CompanyItem {
   defaultBankIban?: string;
   logoUrl?: string;
   logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
+  invoiceDesign?: InvoiceDesignSettings;
   createdAt: string;
 }
 
@@ -869,7 +870,77 @@ export interface CompanySettings {
   lastManualBackupAt?: string;
   manualBackupReminderDays?: number;
   manualBackupHistory?: ManualBackupLogEntry[];
+  /** e-Fatura ve e-Arşiv Fatura Görsel XSLT / PDF Tasarım Ayarları */
+  invoiceDesign?: InvoiceDesignSettings;
 }
+
+export type InvoiceTemplateStyle = "gib_standard" | "gib_modern" | "gib_compact";
+export type InvoiceColorTheme = "gib_red" | "navy" | "royal" | "emerald" | "classic";
+
+export interface InvoiceBankAccountItem {
+  id: string;
+  bankName: string;
+  branchName?: string;
+  accountHolder?: string;
+  currency: string;
+  iban: string;
+}
+
+export type GibLogoCssAlign = "left" | "center" | "right";
+export type IssuerSignatureCssZone = "under_gib" | "under_seller" | "bottom_right" | "bottom_left";
+
+export interface InvoicePreviewCssConfig {
+  /** GİB Logosu yatay hizalama */
+  gibLogoAlign: GibLogoCssAlign;
+  /** GİB Logosu yatay CSS kaydırma (px) */
+  gibLogoOffsetX: number;
+  /** GİB Logosu dikey CSS kaydırma (px) */
+  gibLogoOffsetY: number;
+  /** GİB Logosu genişlik/yükseklik boyutu (px) */
+  gibLogoSize: number;
+  /** Kullanıcı imzası (Düzenleyen kaşe/imza) yerleşim bölgesi */
+  signatureZone: IssuerSignatureCssZone;
+  /** Kullanıcı imzası yatay hizalama */
+  signatureAlign: GibLogoCssAlign;
+  /** Kullanıcı imzası yatay CSS kaydırma (px) */
+  signatureOffsetX: number;
+  /** Kullanıcı imzası dikey CSS kaydırma (px) */
+  signatureOffsetY: number;
+  /** Kullanıcı imzası CSS ölçek (1 = %100) */
+  signatureScale: number;
+  /** Kullanıcı imzası çerçeve stili */
+  signatureBorderStyle: "solid" | "dashed" | "none";
+  /** Düzenleyen (Satıcı) bilgisi yatay CSS kaydırma (px) */
+  sellerInfoOffsetX: number;
+  /** Düzenleyen (Satıcı) bilgisi dikey CSS kaydırma (px) */
+  sellerInfoOffsetY: number;
+  /** Düzenleyen (Satıcı) bilgisi metin hizalama */
+  sellerInfoAlign: GibLogoCssAlign;
+  /** İsteğe bağlı özel CSS kuralları (#invoice-preview-paper kapsamında) */
+  customCss?: string;
+}
+
+export interface InvoiceDesignSettings {
+  templateStyle?: InvoiceTemplateStyle;
+  colorTheme?: InvoiceColorTheme;
+  customAccentColor?: string;
+  showGibSeal?: boolean;
+  showQrCode?: boolean;
+  showCompanyLogo?: boolean;
+  logoSize?: "sm" | "md" | "lg";
+  showProductCode?: boolean;
+  showBankIbanTable?: boolean;
+  showTaxBreakdownTable?: boolean;
+  showSignatureStamp?: boolean;
+  autoDigitalStamp?: boolean;
+  stampImageUrl?: string;
+  irsaliyeYerineGecer?: boolean;
+  eFaturaFooterNote?: string;
+  eArsivFooterNote?: string;
+  bankAccounts?: InvoiceBankAccountItem[];
+  cssConfig?: Partial<InvoicePreviewCssConfig>;
+}
+
 
 export interface ManualBackupLogEntry {
   id: string;
