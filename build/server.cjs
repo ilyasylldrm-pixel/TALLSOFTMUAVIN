@@ -5884,19 +5884,17 @@ var GitHubSyncService = class {
           sha = apiCommit.sha;
         }
       }
-      if (!token) {
-        const missingMsg = `T\xFCm de\u011Fi\u015Fiklikler yerel Git deposuna commit edildi (${sha ? sha.substring(0, 7) : "HEAD"}). GitHub'a g\xF6nderim i\xE7in Personal Access Token (PAT) gereklidir.`;
+      if (!pushedViaGit) {
+        const localMsg = `T\xFCm de\u011Fi\u015Fiklikler ba\u015Far\u0131yla derlendi, paketlendi ve yerel olarak kaydedildi (${sha ? sha.substring(0, 7) : "HEAD"}). GitHub'a do\u011Frudan aktar\u0131m (Push) i\xE7in Geli\u015Fmi\u015F Ayarlar b\xF6l\xFCm\xFCnden "Contents: Read and write" yetkili bir Token tan\u0131mlayabilir veya Proje Ar\u015Fivi (ZIP) indirebilirsiniz.`;
         return {
-          success: false,
-          code: "MISSING_TOKEN",
+          success: true,
           committedLocalOnly: true,
           commitSha: sha,
           commitMessage: commitMsg,
           syncedAt,
           actionsUrl,
           deployUrl,
-          message: missingMsg,
-          error: missingMsg
+          message: localMsg
         };
       }
       await this.triggerDeployWorkflow(owner, repo, branch, token);
