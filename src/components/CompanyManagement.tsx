@@ -33,6 +33,8 @@ import {
   parseSeparateAddressFields,
   appendCityDistrictToAddress,
   compileStructuredAddress,
+  getDeletedCompanyIds,
+  PROTECTED_COMPANY_IDS,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import { checkRecipientTaxpayerStatus } from "../services/mysoftEDocumentService";
@@ -162,7 +164,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
   // Multi-Company Local State & Modal
   const [localCompanies, setLocalCompanies] = useState<CompanyItem[]>(() => companies || getCompaniesList());
-  const effectiveCompanies = companies || localCompanies;
+  const deletedIds = new Set(getDeletedCompanyIds());
+  const rawCompanies = companies || localCompanies;
+  const effectiveCompanies = rawCompanies.filter(
+    (c) => c && c.id && (PROTECTED_COMPANY_IDS.has(c.id) || !deletedIds.has(c.id))
+  );
   const currentActiveCompanyId = activeCompanyId || getActiveCompanyId();
 
   React.useEffect(() => {

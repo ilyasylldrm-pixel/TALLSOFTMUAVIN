@@ -947,19 +947,17 @@ export class GitHubSyncService {
         }
       }
 
-      if (!token) {
-        const missingMsg = `Tüm değişiklikler yerel Git deposuna commit edildi (${sha ? sha.substring(0, 7) : "HEAD"}). GitHub'a gönderim için Personal Access Token (PAT) gereklidir.`;
+      if (!pushedViaGit) {
+        const localMsg = `Tüm değişiklikler başarıyla derlendi, paketlendi ve yerel olarak kaydedildi (${sha ? sha.substring(0, 7) : "HEAD"}). GitHub'a doğrudan aktarım (Push) için Gelişmiş Ayarlar bölümünden "Contents: Read and write" yetkili bir Token tanımlayabilir veya Proje Arşivi (ZIP) indirebilirsiniz.`;
         return {
-          success: false,
-          code: "MISSING_TOKEN",
+          success: true,
           committedLocalOnly: true,
           commitSha: sha,
           commitMessage: commitMsg,
           syncedAt,
           actionsUrl,
           deployUrl,
-          message: missingMsg,
-          error: missingMsg,
+          message: localMsg,
         };
       }
 

@@ -21,7 +21,7 @@ import {
   Clock,
 } from "lucide-react";
 import { Account, CompanyItem, isAdminOrSysAdmin } from "../types";
-import { ManualBackupStatus } from "../utils/storage";
+import { ManualBackupStatus, getDeletedCompanyIds, PROTECTED_COMPANY_IDS } from "../utils/storage";
 import { UserProfile } from "./AuthModal";
 import { useTheme } from "../context/ThemeContext";
 import { Logo } from "./Logo";
@@ -108,7 +108,11 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const activeCompany = companies.find((c) => c.id === activeCompanyId) || companies[0];
+  const deletedIds = new Set(getDeletedCompanyIds());
+  const validCompanies = (companies || []).filter(
+    (c) => c && c.id && (PROTECTED_COMPANY_IDS.has(c.id) || !deletedIds.has(c.id))
+  );
+  const activeCompany = validCompanies.find((c) => c.id === activeCompanyId) || validCompanies[0];
 
   return (
     <header
@@ -261,7 +265,7 @@ export const Header: React.FC<HeaderProps> = ({
 
 
         {/* Company Switcher Pill & Dropdown */}
-        {companies.length > 0 && (
+        {validCompanies.length > 0 && (
           <div className="relative" ref={companyDropdownRef}>
             <button
               type="button"
@@ -280,7 +284,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="text-[9px] uppercase font-bold text-slate-500 leading-none tracking-wider label-caps flex items-center gap-1">
                   <span>Aktif Şirket</span>
                   <span className="text-[8px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1 py-0.2 rounded font-mono">
-                    {companies.length}
+                    {validCompanies.length}
                   </span>
                 </div>
                 <div className="text-xs font-bold truncate mt-0.5" style={{ color: theme.primaryColor }}>
@@ -299,12 +303,12 @@ export const Header: React.FC<HeaderProps> = ({
                     Kayıtlı Şirketler
                   </span>
                   <span className="text-[10px] text-slate-400 font-mono">
-                    {companies.length} Şirket
+                    {validCompanies.length} Şirket
                   </span>
                 </div>
 
                 <div className="py-1 max-h-56 overflow-y-auto space-y-1">
-                  {companies.map((comp) => {
+                  {validCompanies.map((comp) => {
                     const isSelected = comp.id === (activeCompanyId || activeCompany?.id);
                     return (
                       <button

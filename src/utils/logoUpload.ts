@@ -142,8 +142,8 @@ export async function readAndOptimizeLogoFile(file: File): Promise<string> {
         const destH = Math.max(1, Math.round(sh * ratio));
 
         const canvas = document.createElement("canvas");
-        canvas.width = destW;
-        canvas.height = destH;
+        canvas.width = targetMaxW; // 400
+        canvas.height = targetMaxH; // 100
         const ctx = canvas.getContext("2d");
         if (!ctx) {
           resolve(rawDataUrl);
@@ -151,8 +151,10 @@ export async function readAndOptimizeLogoFile(file: File): Promise<string> {
         }
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
-        ctx.clearRect(0, 0, destW, destH);
-        ctx.drawImage(tempCanvas, sx, sy, sw, sh, 0, 0, destW, destH);
+        ctx.clearRect(0, 0, targetMaxW, targetMaxH);
+        const offsetX = Math.round((targetMaxW - destW) / 2);
+        const offsetY = Math.round((targetMaxH - destH) / 2);
+        ctx.drawImage(tempCanvas, sx, sy, sw, sh, offsetX, offsetY, destW, destH);
 
         // Önce PNG (şeffaf arka plan korunur) dene, çok büyükse WEBP kullan
         let optimized = canvas.toDataURL("image/png");

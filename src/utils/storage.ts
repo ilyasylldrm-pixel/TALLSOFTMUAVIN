@@ -456,16 +456,16 @@ export function getCompaniesList(): CompanyItem[] {
         if (list.length !== parsed.length) {
           updated = true;
         }
-        // Always guarantee that existing default companies are never missing
+        // Always guarantee that existing default companies are never missing (unless marked deleted)
         if (!list.some((c) => c.id === DEFAULT_COMPANY.id)) {
           list.unshift(DEFAULT_COMPANY);
           updated = true;
         }
-        if (!list.some((c) => c.id === DEFAULT_CORPORATE_COMPANY.id)) {
+        if (!deletedIds.has(DEFAULT_CORPORATE_COMPANY.id) && !list.some((c) => c.id === DEFAULT_CORPORATE_COMPANY.id)) {
           list.push(DEFAULT_CORPORATE_COMPANY);
           updated = true;
         }
-        if (!list.some((c) => c.id === DEFAULT_INDIVIDUAL_COMPANY.id)) {
+        if (!deletedIds.has(DEFAULT_INDIVIDUAL_COMPANY.id) && !list.some((c) => c.id === DEFAULT_INDIVIDUAL_COMPANY.id)) {
           list.push(DEFAULT_INDIVIDUAL_COMPANY);
           updated = true;
         }
@@ -483,7 +483,9 @@ export function getCompaniesList(): CompanyItem[] {
   } catch (e) {
     console.error("Error reading companies list", e);
   }
-  const defaultList = [DEFAULT_COMPANY, DEFAULT_CORPORATE_COMPANY, DEFAULT_INDIVIDUAL_COMPANY];
+  const defaultList = [DEFAULT_COMPANY, DEFAULT_CORPORATE_COMPANY, DEFAULT_INDIVIDUAL_COMPANY].filter(
+    (c) => PROTECTED_COMPANY_IDS.has(c.id) || !deletedIds.has(c.id)
+  );
   safeSetStorageItem("muavin_companies_seeded_v2", "1");
   safeSetStorageItem(STORAGE_KEYS.COMPANIES_LIST, JSON.stringify(defaultList));
   return defaultList;
@@ -517,14 +519,14 @@ export function saveCompaniesList(list: CompanyItem[], allowRemoval = false): vo
     }
   });
 
-  // Always guarantee protected default companies remain present
+  // Always guarantee protected default companies remain present (unless marked deleted)
   if (!mergedMap.has(DEFAULT_COMPANY.id)) {
     mergedMap.set(DEFAULT_COMPANY.id, DEFAULT_COMPANY);
   }
-  if (!mergedMap.has(DEFAULT_CORPORATE_COMPANY.id)) {
+  if (!deletedIds.has(DEFAULT_CORPORATE_COMPANY.id) && !mergedMap.has(DEFAULT_CORPORATE_COMPANY.id)) {
     mergedMap.set(DEFAULT_CORPORATE_COMPANY.id, DEFAULT_CORPORATE_COMPANY);
   }
-  if (!mergedMap.has(DEFAULT_INDIVIDUAL_COMPANY.id)) {
+  if (!deletedIds.has(DEFAULT_INDIVIDUAL_COMPANY.id) && !mergedMap.has(DEFAULT_INDIVIDUAL_COMPANY.id)) {
     mergedMap.set(DEFAULT_INDIVIDUAL_COMPANY.id, DEFAULT_INDIVIDUAL_COMPANY);
   }
 

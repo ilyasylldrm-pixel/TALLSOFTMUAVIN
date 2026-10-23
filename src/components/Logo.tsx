@@ -170,7 +170,7 @@ export const Logo: React.FC<LogoProps> = ({
             maxHeight: "100%",
             ...imageStyle,
           }}
-          className={`object-contain max-h-full object-left shrink-0 ${
+          className={`object-contain max-h-full object-center shrink-0 ${
             isLight ? "bg-white/95 rounded-lg px-2.5 py-1 shadow-2xs border border-white/10" : ""
           } transition-all duration-200 hover:scale-[1.02] ${imageClassName}`}
         />

@@ -65,43 +65,7 @@ export default defineConfig(() => {
       target: 'esnext',
       minify: 'esbuild',
       sourcemap: false,
-      reportCompressedSize: false,
-      cssCodeSplit: true,
-      rollupOptions: {
-        maxParallelFileOps: 2,
-        output: {
-          manualChunks(id) {
-            if (!id.includes('node_modules')) return;
-            // Keep a single React runtime. Splitting lucide-react away from
-            // react/jsx-runtime makes React 19 throw "older version of React".
-            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)([\\/]|$)/.test(id)) {
-              return 'vendor-react';
-            }
-            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('xlsx')) {
-              return 'vendor-pdf-excel';
-            }
-            if (id.includes('exceljs')) {
-              return 'vendor-exceljs';
-            }
-            if (id.includes('firebase')) {
-              return 'vendor-firebase';
-            }
-            if (/[\\/]node_modules[\\/](recharts|d3|d3-[^\\/]+)([\\/]|$)/.test(id)) {
-              return 'vendor-charts';
-            }
-            if (/[\\/]node_modules[\\/](motion)([\\/]|$)/.test(id)) {
-              return 'vendor-motion';
-            }
-            if (id.includes('pdfjs-dist')) {
-              return 'vendor-pdfjs';
-            }
-            if (id.includes('tesseract.js')) {
-              return 'vendor-tesseract';
-            }
-          },
-        },
-      },
-      chunkSizeWarningLimit: 2000,
+      chunkSizeWarningLimit: 3000,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

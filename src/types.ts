@@ -489,6 +489,7 @@ export interface Cheque {
   chequeNumber: string;
   bankName: string;
   branchName?: string;
+  accountNumber?: string;
   drawerName?: string;
   drawer?: string; // Alias for drawerName
   contactId?: string;
@@ -1426,9 +1427,12 @@ export interface FixedAsset {
   brand?: string;
   model?: string;
   serialNumber?: string;
+  serialOrPlate?: string;
   barcode?: string;
   qrCode?: string;
   plateNumber?: string; // Taşıtlar için plaka
+  custodianEmployeeId?: string;
+  custodyStartDate?: string;
 
   // Satın Alma & Maliyet
   acquisitionDate: string; // YYYY-MM-DD
@@ -2884,9 +2888,15 @@ export interface ConstructionProject {
   id: string;
   projectCode: string; // Örn: INS-2026-001
   projectName: string; // Örn: Kartal Panora Konutları - 48 Daire
+  code?: string;
+  name?: string;
   location: string; // Örn: İstanbul / Kartal / Karlıktepe
+  district?: string;
+  city?: string;
+  contractorName?: string;
+  totalCost?: number;
   projectType: "residential" | "commercial" | "villa" | "industrial" | "mixed"; // Konut, Ticari, Villa, Sanayi, Karma
-  status: "planning" | "rough_phase" | "finishing_phase" | "completed";
+  status: "planning" | "rough_phase" | "finishing_phase" | "completed" | "suspended";
   
   // Metraj & Alan Bilgileri
   landAreaM2: number; // Arsa Alanı (m²)
