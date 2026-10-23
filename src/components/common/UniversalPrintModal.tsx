@@ -276,27 +276,40 @@ export const UniversalPrintModal: React.FC = () => {
               </div>
 
               {/* Color Theme Selector */}
-              <div className="bg-slate-800 p-0.5 rounded-xl border border-slate-700 flex items-center">
+              <div className="bg-slate-800 p-0.5 rounded-xl border border-slate-700 flex flex-wrap items-center">
                 {(
                   [
                     { id: "gib_red", label: "GİB Kırmızı" },
+                    { id: "blue", label: "Mavi" },
+                    { id: "sky", label: "Açık Mavi" },
+                    { id: "royal", label: "Koyu Mavi" },
                     { id: "navy", label: "Lacivert" },
-                    { id: "royal", label: "Mavi" },
-                    { id: "classic", label: "Klasik S/B" },
+                    { id: "emerald", label: "Yeşil" },
+                    { id: "classic", label: "Klasik Açık" },
                   ] as { id: InvoiceColorTheme; label: string }[]
                 ).map((tKey) => (
                   <button
                     key={tKey.id}
                     type="button"
-                    onClick={() => setDesign((prev) => ({ ...prev, colorTheme: tKey.id }))}
-                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                      (design.colorTheme || "gib_red") === tKey.id
+                    onClick={() =>
+                      setDesign((prev) => ({
+                        ...prev,
+                        colorTheme: tKey.id,
+                        customAccentColor: undefined,
+                      }))
+                    }
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      !design.customAccentColor && (design.colorTheme || "gib_red") === tKey.id
                         ? "bg-slate-700 text-white shadow-xs border border-slate-500"
                         : "text-slate-400 hover:text-white"
                     }`}
                     title={INVOICE_COLOR_THEMES[tKey.id].label}
                   >
-                    {tKey.label}
+                    <span
+                      style={{ backgroundColor: INVOICE_COLOR_THEMES[tKey.id].headerBg }}
+                      className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0"
+                    />
+                    <span>{tKey.label}</span>
                   </button>
                 ))}
               </div>

@@ -875,7 +875,14 @@ export interface CompanySettings {
 }
 
 export type InvoiceTemplateStyle = "gib_standard" | "gib_modern" | "gib_compact";
-export type InvoiceColorTheme = "gib_red" | "navy" | "royal" | "emerald" | "classic";
+export type InvoiceColorTheme =
+  | "gib_red"
+  | "blue"
+  | "sky"
+  | "navy"
+  | "royal"
+  | "emerald"
+  | "classic";
 
 export interface InvoiceBankAccountItem {
   id: string;

@@ -9,8 +9,8 @@ import { Logo } from "./Logo";
 import {
   GibOfficialSealSvg,
   DigitalCompanyStampSvg,
-  INVOICE_COLOR_THEMES,
   resolveInvoiceDesignSettings,
+  resolveInvoiceThemePalette,
   resolveOfficialEDocumentKind,
   getIndependentInvoiceCssConfig,
   buildInvoicePreviewScopedCss,
@@ -48,8 +48,7 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
     return () => window.removeEventListener("muavin:invoice-css-config-changed", sync);
   }, [design.cssConfig]);
 
-  const palette =
-    INVOICE_COLOR_THEMES[design.colorTheme || "gib_red"] || INVOICE_COLOR_THEMES.gib_red;
+  const palette = resolveInvoiceThemePalette(design);
 
   const isExplicitEArsiv =
     eDocumentLabel.toLowerCase().includes("arşiv") ||
@@ -313,9 +312,16 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
       {/* 4. Bottom Grid: Left (Yalnız, IBAN, Legal) & Right (Totals + Stamp) */}
       <div className="grid grid-cols-12 gap-2 items-start">
         <div className="col-span-6 space-y-1.5">
-          <div className="border border-slate-400 p-1.5 bg-slate-50">
-            <span className="text-[7.5px] font-black uppercase text-slate-500 block">YALNIZ:</span>
-            <p className="font-bold text-slate-900 text-[8.5px]">
+          <div
+            style={{
+              backgroundColor: palette.headerBg,
+              color: palette.headerText,
+              borderColor: palette.border,
+            }}
+            className="border p-1.5"
+          >
+            <span className="text-[7.5px] font-black uppercase opacity-85 block">YALNIZ:</span>
+            <p className="font-bold text-[8.5px]">
               # {numberToTurkishWords(payableAmount)} #
             </p>
           </div>
@@ -328,11 +334,18 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
             </div>
           )}
 
-          <div className="border border-slate-300 p-1.5 text-[8px] text-slate-700 space-y-0.5">
+          <div
+            style={{
+              backgroundColor: palette.headerBg,
+              color: palette.headerText,
+              borderColor: palette.border,
+            }}
+            className="border p-1.5 text-[8px] space-y-0.5"
+          >
             {design.irsaliyeYerineGecer !== false && !docMeta.isReceipt && (
-              <p className="font-black text-slate-900">• İrsaliye yerine geçer.</p>
+              <p className="font-black">• İrsaliye yerine geçer.</p>
             )}
-            <p className="leading-tight">
+            <p className="leading-tight opacity-95">
               •{" "}
               {docMeta.isEArsiv
                 ? "e-Arşiv izni kapsamında elektronik ortamda iletilmiştir."

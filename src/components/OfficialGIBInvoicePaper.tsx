@@ -71,72 +71,164 @@ import { Logo } from "./Logo";
 export interface ThemePalette {
   id: InvoiceColorTheme;
   label: string;
+  shortLabel: string;
   primary: string;
   primaryLight: string;
   border: string;
   headerBg: string;
   headerText: string;
+  isDark: boolean;
   badgeBg: string;
   qrColor: string;
+}
+
+/**
+ * Determines whether a hex color is visually dark (true) or light (false)
+ * using W3C YIQ relative luminance.
+ */
+export function isHexColorDark(hex: string): boolean {
+  const clean = String(hex || "").replace("#", "").trim();
+  if (clean.length !== 6 && clean.length !== 3) return true;
+  const full =
+    clean.length === 3
+      ? clean
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : clean;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return true;
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq < 155;
+}
+
+export function getContrastTextColor(bgHex: string): "#ffffff" | "#0f172a" {
+  return isHexColorDark(bgHex) ? "#ffffff" : "#0f172a";
 }
 
 export const INVOICE_COLOR_THEMES: Record<InvoiceColorTheme, ThemePalette> = {
   gib_red: {
     id: "gib_red",
-    label: "GİB Resmi (Kırmızı / Lacivert)",
+    label: "GİB Resmi Kırmızı (Koyu)",
+    shortLabel: "GİB Kırmızı",
     primary: "#991b1b",
     primaryLight: "#fef2f2",
     border: "#dc2626",
     headerBg: "#7f1d1d",
     headerText: "#ffffff",
+    isDark: true,
     badgeBg: "#991b1b",
-    qrColor: "#0f172a",
+    qrColor: "#000000",
+  },
+  blue: {
+    id: "blue",
+    label: "Mavi (Koyu Tema - Beyaz Açıklama)",
+    shortLabel: "Mavi",
+    primary: "#2563eb",
+    primaryLight: "#eff6ff",
+    border: "#2563eb",
+    headerBg: "#2563eb",
+    headerText: "#ffffff",
+    isDark: true,
+    badgeBg: "#1d4ed8",
+    qrColor: "#000000",
+  },
+  sky: {
+    id: "sky",
+    label: "Açık Mavi (Açık Tema - Koyu Açıklama)",
+    shortLabel: "Açık Mavi",
+    primary: "#0369a1",
+    primaryLight: "#f0f9ff",
+    border: "#38bdf8",
+    headerBg: "#dbeafe",
+    headerText: "#0f172a",
+    isDark: false,
+    badgeBg: "#0284c7",
+    qrColor: "#000000",
   },
   navy: {
     id: "navy",
-    label: "Kurumsal Lacivert",
+    label: "Kurumsal Lacivert (Koyu)",
+    shortLabel: "Lacivert",
     primary: "#0f172a",
     primaryLight: "#f8fafc",
     border: "#334155",
     headerBg: "#0f172a",
     headerText: "#ffffff",
+    isDark: true,
     badgeBg: "#1e293b",
-    qrColor: "#0f172a",
+    qrColor: "#000000",
   },
   royal: {
     id: "royal",
-    label: "Kraliyet Mavisi",
+    label: "Kraliyet Mavisi (Koyu)",
+    shortLabel: "Koyu Mavi",
     primary: "#1e3a8a",
     primaryLight: "#eff6ff",
-    border: "#2563eb",
+    border: "#1d4ed8",
     headerBg: "#1e3a8a",
     headerText: "#ffffff",
-    badgeBg: "#1d4ed8",
-    qrColor: "#1e3a8a",
+    isDark: true,
+    badgeBg: "#1e3a8a",
+    qrColor: "#000000",
   },
   emerald: {
     id: "emerald",
-    label: "Zümrüt Kurumsal",
+    label: "Zümrüt Kurumsal (Koyu)",
+    shortLabel: "Yeşil",
     primary: "#065f46",
     primaryLight: "#ecfdf5",
     border: "#059669",
     headerBg: "#065f46",
     headerText: "#ffffff",
+    isDark: true,
     badgeBg: "#047857",
-    qrColor: "#064e3b",
+    qrColor: "#000000",
   },
   classic: {
     id: "classic",
-    label: "Klasik Siyah / Beyaz (Lazer)",
+    label: "Klasik Açık S/B (Açık Tema - Koyu Açıklama)",
+    shortLabel: "Klasik Açık",
     primary: "#111827",
     primaryLight: "#f9fafb",
     border: "#111827",
     headerBg: "#f3f4f6",
-    headerText: "#111827",
+    headerText: "#0f172a",
+    isDark: false,
     badgeBg: "#111827",
     qrColor: "#000000",
   },
 };
+
+export function resolveInvoiceThemePalette(design?: InvoiceDesignSettings): ThemePalette {
+  const base =
+    INVOICE_COLOR_THEMES[design?.colorTheme || "gib_red"] || INVOICE_COLOR_THEMES.gib_red;
+  if (design?.customAccentColor && /^#[0-9A-Fa-f]{6}$/.test(design.customAccentColor)) {
+    const customHex = design.customAccentColor;
+    const dark = isHexColorDark(customHex);
+    const contrastText = getContrastTextColor(customHex);
+    return {
+      ...base,
+      primary: dark ? customHex : "#0f172a",
+      primaryLight: customHex,
+      border: dark ? customHex : "#475569",
+      headerBg: customHex,
+      headerText: contrastText,
+      isDark: dark,
+      badgeBg: customHex,
+      qrColor: "#000000",
+    };
+  }
+  const dark = isHexColorDark(base.headerBg);
+  return {
+    ...base,
+    headerText: getContrastTextColor(base.headerBg),
+    isDark: dark,
+    qrColor: "#000000",
+  };
+}
 
 export const DEFAULT_INVOICE_PREVIEW_CSS_CONFIG: InvoicePreviewCssConfig = {
   gibLogoAlign: "center",
@@ -847,19 +939,7 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
     [independentCssConfig, design.cssConfig]
   );
 
-  const palette = useMemo(() => {
-    const base = INVOICE_COLOR_THEMES[design.colorTheme || "gib_red"] || INVOICE_COLOR_THEMES.gib_red;
-    if (design.customAccentColor && /^#[0-9A-Fa-f]{6}$/.test(design.customAccentColor)) {
-      return {
-        ...base,
-        primary: design.customAccentColor,
-        border: design.customAccentColor,
-        headerBg: design.customAccentColor,
-        badgeBg: design.customAccentColor,
-      };
-    }
-    return base;
-  }, [design.colorTheme, design.customAccentColor]);
+  const palette = useMemo(() => resolveInvoiceThemePalette(design), [design]);
 
   const docMeta = useMemo(
     () => resolveOfficialEDocumentKind(invoice, companySettings, contact, previewDocTypeOverride),
@@ -1017,7 +1097,7 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
       margin: 1,
       errorCorrectionLevel: "M",
       color: {
-        dark: palette.qrColor,
+        dark: "#000000",
         light: "#ffffff",
       },
     })
@@ -1036,7 +1116,6 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
     totalVat,
     grandTotal,
     payableAmount,
-    palette.qrColor,
   ]);
 
   // Group VAT by rate (%0, %1, %10, %20) for official GİB VAT Breakdown
@@ -1439,7 +1518,8 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
          ===================================================================== */}
       <div
         style={{
-          backgroundColor: palette.primaryLight,
+          backgroundColor: palette.headerBg,
+          color: palette.headerText,
           borderColor: palette.border,
           WebkitPrintColorAdjust: "exact",
           printColorAdjust: "exact",
@@ -1447,16 +1527,16 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
         className="px-3 py-1.5 border rounded flex flex-wrap items-center justify-between gap-2 text-[10px]"
       >
         <div className="flex items-center gap-1.5">
-          <span className="font-black uppercase text-slate-800">ETTN:</span>
-          <span className="font-mono font-bold text-slate-950 tracking-wide">{ettn}</span>
+          <span className="font-black uppercase opacity-90">ETTN:</span>
+          <span className="font-mono font-bold tracking-wide">{ettn}</span>
         </div>
-        <div className="flex items-center gap-3 text-slate-700 font-semibold">
+        <div className="flex items-center gap-3 font-semibold opacity-95">
           <span>
-            Belge Türü: <strong className="text-slate-950 uppercase">{docMeta.docTitle}</strong>
+            Belge Türü: <strong className="uppercase">{docMeta.docTitle}</strong>
           </span>
           <span>•</span>
           <span>
-            Para Birimi: <strong className="font-mono text-slate-950">{currency}</strong>
+            Para Birimi: <strong className="font-mono">{currency}</strong>
           </span>
         </div>
       </div>
@@ -1630,17 +1710,34 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
         {/* LEFT COLUMN (7 cols): YALNIZ, KDV MATRAH TABLOSU, BANKA IBAN, YASAL ŞERHLER */}
         <div className="sm:col-span-7 space-y-2.5">
           {/* Yalnız (Amount in Turkish Words) */}
-          <div className="border border-slate-800 p-2 bg-slate-50/80">
-            <span className="text-[9px] font-black uppercase text-slate-600 block">
+          <div
+            style={{
+              backgroundColor: palette.headerBg,
+              color: palette.headerText,
+              borderColor: palette.border,
+              WebkitPrintColorAdjust: "exact",
+              printColorAdjust: "exact",
+            }}
+            className="border p-2"
+          >
+            <span className="text-[9px] font-black uppercase opacity-85 block">
               YALNIZ (ÖDENECEK TUTAR YAZIYLA):
             </span>
-            <p className="font-black text-slate-950 text-[11px] mt-0.5"># {writtenAmount} #</p>
+            <p className="font-black text-[11px] mt-0.5"># {writtenAmount} #</p>
           </div>
 
           {/* KDV Oran ve Matrah Dağılım Tablosu */}
           {design.showTaxBreakdownTable !== false && vatBreakdown.length > 0 && (
             <div className="border border-slate-400 overflow-hidden">
-              <div className="bg-slate-100 px-2.5 py-1 border-b border-slate-300 text-[9px] font-black uppercase text-slate-700">
+              <div
+                style={{
+                  backgroundColor: palette.headerBg,
+                  color: palette.headerText,
+                  WebkitPrintColorAdjust: "exact",
+                  printColorAdjust: "exact",
+                }}
+                className="px-2.5 py-1 border-b border-slate-300 text-[9px] font-black uppercase"
+              >
                 VERGİ & KDV MATRAH DAĞILIM TABLOSU
               </div>
               <table className="w-full text-[10px] border-collapse">
@@ -1675,7 +1772,15 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
           {/* Banka & IBAN Bilgileri Tablosu */}
           {design.showBankIbanTable !== false && bankRows.length > 0 && (
             <div className="border border-slate-400 overflow-hidden">
-              <div className="bg-slate-100 px-2.5 py-1 border-b border-slate-300 text-[9px] font-black uppercase text-slate-700">
+              <div
+                style={{
+                  backgroundColor: palette.headerBg,
+                  color: palette.headerText,
+                  WebkitPrintColorAdjust: "exact",
+                  printColorAdjust: "exact",
+                }}
+                className="px-2.5 py-1 border-b border-slate-300 text-[9px] font-black uppercase"
+              >
                 BANKA HESAP VE IBAN BİLGİLERİ (HAVALE / EFT)
               </div>
               <table className="w-full text-[10px] border-collapse">
@@ -1703,18 +1808,32 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
             </div>
           )}
 
-          {/* GİB Resmi Vergi / Tevkifat / İstisna ve e-Arşiv / e-Fatura Yasal İbareler Kutusu */}
-          <div className="border border-slate-400 p-2.5 bg-white space-y-1 text-[10px] leading-snug">
-            <span className="text-[9px] font-black uppercase text-slate-700 block border-b border-slate-200 pb-0.5">
-              NOTLAR VE GİB YASAL İBARELER
+          {/* GİB Resmi Vergi / Tevkifat / İstisna ve e-Arşiv / e-Fatura Yasal İbareler (Açıklamalar) Kutusu */}
+          <div
+            style={{
+              backgroundColor: palette.headerBg,
+              color: palette.headerText,
+              borderColor: palette.border,
+              WebkitPrintColorAdjust: "exact",
+              printColorAdjust: "exact",
+            }}
+            className="border p-2.5 space-y-1 text-[10px] leading-snug"
+          >
+            <span
+              style={{
+                borderColor: palette.isDark ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.2)",
+              }}
+              className="text-[9px] font-black uppercase block border-b pb-0.5 opacity-95"
+            >
+              AÇIKLAMALAR, NOTLAR VE GİB YASAL İBARELER
             </span>
 
             {design.irsaliyeYerineGecer !== false && !docMeta.isReceipt && (
-              <p className="font-black text-slate-900">• İrsaliye yerine geçer.</p>
+              <p className="font-black">• İrsaliye yerine geçer.</p>
             )}
 
             {docMeta.isEArsiv && (
-              <p className="text-slate-800 font-semibold">
+              <p className="font-semibold opacity-95">
                 •{" "}
                 {design.eArsivFooterNote ||
                   "e-Arşiv izni kapsamında elektronik ortamda iletilmiştir."}
@@ -1722,7 +1841,7 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
             )}
 
             {docMeta.isEFatura && (
-              <p className="text-slate-800 font-medium">
+              <p className="font-medium opacity-95">
                 •{" "}
                 {design.eFaturaFooterNote ||
                   "İşbu fatura 5070 sayılı Elektronik İmza Kanunu uyarınca elektronik ortamda imzalanmıştır."}
@@ -1730,13 +1849,18 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
             )}
 
             {legalTaxNotes.map((ln, idx) => (
-              <p key={idx} className="text-purple-950 font-semibold">
+              <p key={idx} className="font-semibold">
                 • {ln}
               </p>
             ))}
 
             {invoice.notes && invoice.notes.trim() && (
-              <p className="text-slate-800 whitespace-pre-line pt-1 border-t border-slate-200 mt-1">
+              <p
+                style={{
+                  borderColor: palette.isDark ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.2)",
+                }}
+                className="whitespace-pre-line pt-1 border-t mt-1 font-medium"
+              >
                 {invoice.notes}
               </p>
             )}
@@ -2092,11 +2216,12 @@ export const InvoiceDesignCustomizerBar: React.FC<InvoiceDesignCustomizerBarProp
             ))}
           </div>
 
-          {/* Color Theme Swatches */}
-          <div className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
+          {/* Color Theme Swatches & Labeled Options (Including Mavi, Açık Mavi & Custom Color) */}
+          <div className="inline-flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
             {(Object.keys(INVOICE_COLOR_THEMES) as InvoiceColorTheme[]).map((themeKey) => {
               const t = INVOICE_COLOR_THEMES[themeKey];
-              const isSelected = (design.colorTheme || "gib_red") === themeKey;
+              const isSelected =
+                !design.customAccentColor && (design.colorTheme || "gib_red") === themeKey;
               return (
                 <button
                   key={themeKey}
@@ -2105,15 +2230,49 @@ export const InvoiceDesignCustomizerBar: React.FC<InvoiceDesignCustomizerBarProp
                     onChangeDesign({ colorTheme: themeKey, customAccentColor: undefined })
                   }
                   title={t.label}
-                  style={{ backgroundColor: t.primary }}
-                  className={`w-5 h-5 rounded-full transition-transform cursor-pointer ${
+                  className={`px-2 py-1 rounded-lg text-[10.5px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                     isSelected
-                      ? "ring-2 ring-offset-1 ring-slate-900 scale-110"
-                      : "opacity-75 hover:opacity-100"
+                      ? "bg-white text-slate-900 shadow-2xs ring-1 ring-slate-300"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
                   }`}
-                />
+                >
+                  <span
+                    style={{
+                      backgroundColor: t.headerBg,
+                      borderColor: t.border,
+                    }}
+                    className="w-3.5 h-3.5 rounded-full border shrink-0"
+                  />
+                  <span>{t.shortLabel}</span>
+                </button>
               );
             })}
+
+            {/* Custom Color Picker (Automatically adjusts description text to White if dark, Dark if light) */}
+            <label
+              title="Özel Renk Seçin (Koyu renklerde açıklamalar beyaz, açık renklerde koyu olur)"
+              className={`px-2 py-1 rounded-lg text-[10.5px] font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                design.customAccentColor
+                  ? "bg-white text-slate-900 shadow-2xs ring-1 ring-slate-300"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+              }`}
+            >
+              <input
+                type="color"
+                value={
+                  design.customAccentColor ||
+                  INVOICE_COLOR_THEMES[design.colorTheme || "gib_red"]?.headerBg ||
+                  "#2563eb"
+                }
+                onChange={(e) => onChangeDesign({ customAccentColor: e.target.value })}
+                className="w-4 h-4 rounded border-0 p-0 bg-transparent cursor-pointer"
+              />
+              <span>
+                {design.customAccentColor
+                  ? `Özel (${isHexColorDark(design.customAccentColor) ? "Koyu→Beyaz Yazı" : "Açık→Koyu Yazı"})`
+                  : "Özel Renk"}
+              </span>
+            </label>
           </div>
         </div>
 
