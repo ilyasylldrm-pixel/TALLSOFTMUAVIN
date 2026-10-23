@@ -1205,8 +1205,57 @@ export const Waybills: React.FC<WaybillsProps> = ({
     );
   }
 
+      {/* WhatsApp Share Modal */}
+      if (whatsAppWaybill) {
+        return (
+        <UniversalWhatsAppModal
+          isOpen={!!whatsAppWaybill}
+          onClose={() => setWhatsAppWaybill(null)}
+          title="WhatsApp ile İrsaliye Paylaş"
+          documentTypeLabel={whatsAppWaybill.type === "receipt" ? "Alış İrsaliyesi" : "Sevk İrsaliyesi"}
+          recipientName={whatsAppWaybill.contactName}
+          recipientPhone={contacts.find((c) => c.id === whatsAppWaybill.contactId)?.phone || ""}
+          defaultMessage={formatWaybillWhatsAppMessage(
+            whatsAppWaybill,
+            companySettings,
+            contacts.find((c) => c.id === whatsAppWaybill.contactId)
+          )}
+          documentFileName={`${whatsAppWaybill.waybillNumber}_Irsaliye.pdf`}
+          companySettings={companySettings}
+          onGeneratePdf={async () => {
+            const el = document.getElementById("printable-waybill-sheet");
+            if (el) {
+              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+              return exportElementToPDFWithPrintStyling("printable-waybill-sheet", `${whatsAppWaybill.waybillNumber}_Irsaliye.pdf`, {
+                orientation: "p",
+                margin: 8,
+                scale: 1.6,
+              });
+            }
+            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+            const expData: ExportData = {
+              filename: `${whatsAppWaybill.waybillNumber}_Irsaliye`,
+              title: `${companySettings?.companyName || "Sevk İrsaliyesi"} - ${whatsAppWaybill.waybillNumber}`,
+              subtitle: `Cari: ${whatsAppWaybill.contactName} | Tarih: ${formatDate(whatsAppWaybill.waybillDate)} | Şoför: ${whatsAppWaybill.driverName || "-"} (${whatsAppWaybill.plateNumber || "-"})`,
+              headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
+              rows: (whatsAppWaybill.items || []).map((i) => [
+                i.description,
+                i.quantity,
+                i.unit || "Adet",
+                formatCurrency(i.unitPrice),
+                `%${i.vatRate ?? 20}`,
+                formatCurrency(i.totalWithVat),
+              ]),
+            };
+            return generateAutoTableFromExportData(expData);
+          }}
+        />
+        );
+      }
+
       {/* FULL-PAGE DETAIL VIEW: WAYBILL DOCUMENT PREVIEW */}
-      {selectedWaybillForView && (
+      if (selectedWaybillForView) {
+        return (
         <DetailPageLayout
           title={`${selectedWaybillForView.type === "receipt" ? "Alış İrsaliyesi" : "Sevk İrsaliyesi"} - ${selectedWaybillForView.waybillNumber}`}
           subtitle={`Düzenlenme: ${formatDate(selectedWaybillForView.waybillDate)} • Cari: ${selectedWaybillForView.contactName}`}
@@ -1447,11 +1496,12 @@ export const Waybills: React.FC<WaybillsProps> = ({
             </div>
           </div>
         </DetailPageLayout>
-    );
-  }
+        );
+      }
 
       {/* CONVERT TO INVOICE CONFIRM DETAIL VIEW */}
-      {convertConfirmWaybill && (
+      if (convertConfirmWaybill) {
+        return (
         <DetailPageLayout
           title="İrsaliyeyi Faturalandır"
           subtitle={`İrsaliye No: ${convertConfirmWaybill.waybillNumber} • Cari: ${convertConfirmWaybill.contactName}`}
@@ -1527,55 +1577,8 @@ export const Waybills: React.FC<WaybillsProps> = ({
             </div>
           </div>
         </DetailPageLayout>
-    );
-  }
-
-      {/* WhatsApp Share Modal */}
-      {whatsAppWaybill && (
-        <UniversalWhatsAppModal
-          isOpen={!!whatsAppWaybill}
-          onClose={() => setWhatsAppWaybill(null)}
-          title="WhatsApp ile İrsaliye Paylaş"
-          documentTypeLabel={whatsAppWaybill.type === "receipt" ? "Alış İrsaliyesi" : "Sevk İrsaliyesi"}
-          recipientName={whatsAppWaybill.contactName}
-          recipientPhone={contacts.find((c) => c.id === whatsAppWaybill.contactId)?.phone || ""}
-          defaultMessage={formatWaybillWhatsAppMessage(
-            whatsAppWaybill,
-            companySettings,
-            contacts.find((c) => c.id === whatsAppWaybill.contactId)
-          )}
-          documentFileName={`${whatsAppWaybill.waybillNumber}_Irsaliye.pdf`}
-          companySettings={companySettings}
-          onGeneratePdf={async () => {
-            const el = document.getElementById("printable-waybill-sheet");
-            if (el) {
-              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
-              return exportElementToPDFWithPrintStyling("printable-waybill-sheet", `${whatsAppWaybill.waybillNumber}_Irsaliye.pdf`, {
-                orientation: "p",
-                margin: 8,
-                scale: 1.6,
-              });
-            }
-            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
-            const expData: ExportData = {
-              filename: `${whatsAppWaybill.waybillNumber}_Irsaliye`,
-              title: `${companySettings?.companyName || "Sevk İrsaliyesi"} - ${whatsAppWaybill.waybillNumber}`,
-              subtitle: `Cari: ${whatsAppWaybill.contactName} | Tarih: ${formatDate(whatsAppWaybill.waybillDate)} | Şoför: ${whatsAppWaybill.driverName || "-"} (${whatsAppWaybill.plateNumber || "-"})`,
-              headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
-              rows: (whatsAppWaybill.items || []).map((i) => [
-                i.description,
-                i.quantity,
-                i.unit || "Adet",
-                formatCurrency(i.unitPrice),
-                `%${i.vatRate ?? 20}`,
-                formatCurrency(i.totalWithVat),
-              ]),
-            };
-            return generateAutoTableFromExportData(expData);
-          }}
-        />
-    );
-  }
+        );
+      }
 
 
   return (

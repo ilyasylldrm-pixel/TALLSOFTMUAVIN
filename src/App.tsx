@@ -2750,6 +2750,9 @@ export default function App() {
         documentNo: docNo,
       };
 
+      void saveTransactionToDatabase(txOut, activeCompanyId);
+      void saveTransactionToDatabase(txIn, activeCompanyId);
+
       const updatedAccounts = prev.accounts.map((acc) => {
         let bal = acc.balance;
         if (fromAcc && acc.id === fromAcc.id) {
@@ -2847,6 +2850,7 @@ export default function App() {
             category: isIncome ? "Çek Tahsilatı" : "Çek Ödemesi",
             description: `${cheque.bankName || "Banka"} (${cheque.chequeNumber || "Çek"}) ${isIncome ? "Çek Tahsilatı" : "Çek Ödemesi"}`,
           };
+          void saveTransactionToDatabase(newTx, activeCompanyId);
           updatedAccounts = prev.accounts.map((acc) =>
             acc.id === defaultAcc.id
               ? { ...acc, balance: isIncome ? acc.balance + cheque.amount : acc.balance - cheque.amount }
@@ -4768,6 +4772,7 @@ export default function App() {
 
       {/* FULL-PAGE DETAIL VIEW: QUICK ADD ACTION */}
       {isQuickAddOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-50 overflow-y-auto">
         <DetailPageLayout
           title="Hızlı İşlem Menüsü"
           subtitle="Sistem genelinde hızlı kayıt ve operasyon başlatma"
@@ -4898,6 +4903,7 @@ export default function App() {
             </div>
           </div>
         </DetailPageLayout>
+        </div>
       )}
 
       {/* GitHub & Yayınlama Senkronizasyon Modalı */}

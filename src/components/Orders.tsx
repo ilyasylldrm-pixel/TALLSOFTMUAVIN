@@ -838,6 +838,53 @@ export const Orders: React.FC<OrdersProps> = ({
     );
   }
 
+  if (whatsAppOrder) {
+    return (
+      <UniversalWhatsAppModal
+        isOpen={!!whatsAppOrder}
+        onClose={() => setWhatsAppOrder(null)}
+        title="WhatsApp ile Sipariş Formu Paylaş"
+        documentTypeLabel={whatsAppOrder.type === "sales" ? "Satış Siparişi" : "Satın Alma Siparişi"}
+        recipientName={whatsAppOrder.contactName}
+        recipientPhone={whatsAppOrder.contactPhone || contacts.find((c) => c.id === whatsAppOrder.contactId)?.phone || ""}
+        defaultMessage={formatOrderWhatsAppMessage(
+          whatsAppOrder,
+          companySettings,
+          contacts.find((c) => c.id === whatsAppOrder.contactId)
+        )}
+        documentFileName={`${whatsAppOrder.orderNumber}_Siparis.pdf`}
+        companySettings={companySettings}
+        onGeneratePdf={async () => {
+          const el = document.getElementById("printable-order-sheet");
+          if (el) {
+            const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
+            return exportElementToPDFWithPrintStyling("printable-order-sheet", `${whatsAppOrder.orderNumber}_Siparis.pdf`, {
+              orientation: "p",
+              margin: 8,
+              scale: 1.6,
+            });
+          }
+          const { generateAutoTableFromExportData } = await import("../utils/pdfService");
+          const expData: ExportData = {
+            filename: `${whatsAppOrder.orderNumber}_Siparis`,
+            title: `${companySettings?.companyName || "Sipariş"} - ${whatsAppOrder.orderNumber}`,
+            subtitle: `Cari: ${whatsAppOrder.contactName} | Tarih: ${formatDate(whatsAppOrder.orderDate)} | Toplam: ${formatCurrency(whatsAppOrder.grandTotal)}`,
+            headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
+            rows: (whatsAppOrder.items || []).map((i) => [
+              i.description,
+              i.quantity,
+              i.unit || "Adet",
+              formatCurrency(i.unitPrice),
+              `%${i.vatRate ?? 20}`,
+              formatCurrency(i.totalWithVat),
+            ]),
+          };
+          return generateAutoTableFromExportData(expData);
+        }}
+      />
+    );
+  }
+
   if (selectedOrderForView) {
     return (
         <DetailPageLayout
@@ -1098,7 +1145,8 @@ export const Orders: React.FC<OrdersProps> = ({
   }
 
       {/* CONVERT TO INVOICE CONFIRMATION FULL-PAGE VIEW */}
-      {convertConfirmOrder && (
+      if (convertConfirmOrder) {
+        return (
         <DetailPageLayout
           title="Siparişi Faturaya Dönüştür"
           subtitle={`Sipariş No: ${convertConfirmOrder.orderNumber} • Cari: ${convertConfirmOrder.contactName}`}
@@ -1180,55 +1228,8 @@ export const Orders: React.FC<OrdersProps> = ({
             </div>
           </div>
         </DetailPageLayout>
-    );
-  }
-
-      {/* WhatsApp Share Modal */}
-      {whatsAppOrder && (
-        <UniversalWhatsAppModal
-          isOpen={!!whatsAppOrder}
-          onClose={() => setWhatsAppOrder(null)}
-          title="WhatsApp ile Sipariş Formu Paylaş"
-          documentTypeLabel={whatsAppOrder.type === "sales" ? "Satış Siparişi" : "Satın Alma Siparişi"}
-          recipientName={whatsAppOrder.contactName}
-          recipientPhone={whatsAppOrder.contactPhone || contacts.find((c) => c.id === whatsAppOrder.contactId)?.phone || ""}
-          defaultMessage={formatOrderWhatsAppMessage(
-            whatsAppOrder,
-            companySettings,
-            contacts.find((c) => c.id === whatsAppOrder.contactId)
-          )}
-          documentFileName={`${whatsAppOrder.orderNumber}_Siparis.pdf`}
-          companySettings={companySettings}
-          onGeneratePdf={async () => {
-            const el = document.getElementById("printable-order-sheet");
-            if (el) {
-              const { exportElementToPDFWithPrintStyling } = await import("../utils/pdfService");
-              return exportElementToPDFWithPrintStyling("printable-order-sheet", `${whatsAppOrder.orderNumber}_Siparis.pdf`, {
-                orientation: "p",
-                margin: 8,
-                scale: 1.6,
-              });
-            }
-            const { generateAutoTableFromExportData } = await import("../utils/pdfService");
-            const expData: ExportData = {
-              filename: `${whatsAppOrder.orderNumber}_Siparis`,
-              title: `${companySettings?.companyName || "Sipariş"} - ${whatsAppOrder.orderNumber}`,
-              subtitle: `Cari: ${whatsAppOrder.contactName} | Tarih: ${formatDate(whatsAppOrder.orderDate)} | Toplam: ${formatCurrency(whatsAppOrder.grandTotal)}`,
-              headers: ["Ürün / Açıklama", "Miktar", "Birim", "Birim Fiyat", "KDV %", "Toplam"],
-              rows: (whatsAppOrder.items || []).map((i) => [
-                i.description,
-                i.quantity,
-                i.unit || "Adet",
-                formatCurrency(i.unitPrice),
-                `%${i.vatRate ?? 20}`,
-                formatCurrency(i.totalWithVat),
-              ]),
-            };
-            return generateAutoTableFromExportData(expData);
-          }}
-        />
-    );
-  }
+        );
+      }
 
 
   return (

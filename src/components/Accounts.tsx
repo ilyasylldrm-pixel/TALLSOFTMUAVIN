@@ -443,9 +443,21 @@ export const Accounts: React.FC<AccountsProps> = ({
     setIsAccountModalOpen(false);
     setIsEditAccountModalOpen(false);
     setIsTransferModalOpen(false);
+    setIsChequeModalOpen(false);
+    setIsNoteModalOpen(false);
+    setIsAddTxModalOpen(false);
+    setIsEditTxModalOpen(false);
+    setIsEditChequeModalOpen(false);
+    setIsEditNoteModalOpen(false);
+    setIsEndorseModalOpen(false);
+    setIsBankStatementModalOpen(false);
     setReceiptData(null);
     setIsReceiptWhatsAppOpen(false);
     setEditingAccount(null);
+    setEditingTransaction(null);
+    setEditingCheque(null);
+    setEditingNote(null);
+    setShareConfig((prev) => ({ ...prev, isOpen: false }));
   };
 
   // Modals
@@ -933,7 +945,7 @@ export const Accounts: React.FC<AccountsProps> = ({
         `${preselectedType === "income" ? "THS" : "TDY"}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
       );
     } else if (context === "pos") {
-      const defaultAcc = preselectedAccountId || selectedBankAccountId || accounts.find((a) => a.type === "credit_card" || a.type === "bank")?.id || accounts[0]?.id || "";
+      const defaultAcc = preselectedAccountId || selectedBankAccountId || accounts.find((a) => a.type === "pos" || a.type === "credit_card" || a.type === "bank")?.id || accounts[0]?.id || "";
       setTxAccountId(defaultAcc);
       setTxCategory(preselectedCategory || "POS Tahsilatı (Kredi Kartı)");
       const slipCode = `SLP-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -946,7 +958,7 @@ export const Accounts: React.FC<AccountsProps> = ({
       const defaultAcc =
         preselectedAccountId ||
         selectedBankAccountId ||
-        accounts.find((a) => a.type === "bank" || a.type === "credit_card")?.id ||
+        accounts.find((a) => a.type === "bank" || a.type === "credit_card" || a.type === "pos")?.id ||
         accounts[0]?.id ||
         "";
       setTxAccountId(defaultAcc);
@@ -1202,9 +1214,24 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   // Transfer Form State
   const [fromAccId, setFromAccId] = useState(accounts[0]?.id || "");
-  const [toAccId, setToAccId] = useState(accounts[1]?.id || accounts[0]?.id || "");
+  const [toAccId, setToAccId] = useState(accounts[1]?.id || contacts[0]?.id || accounts[0]?.id || "");
   const [transferAmount, setTransferAmount] = useState<number>(1000);
   const [transferDesc, setTransferDesc] = useState("Kasa Banka Virman Transferi");
+
+  React.useEffect(() => {
+    const allIds = [...accounts.map((a) => a.id), ...contacts.map((c) => c.id)];
+    if (allIds.length === 0) return;
+    const validFrom = allIds.includes(fromAccId) ? fromAccId : allIds[0];
+    if (validFrom !== fromAccId) {
+      setFromAccId(validFrom);
+    }
+    if (!toAccId || !allIds.includes(toAccId) || (toAccId === validFrom && allIds.length > 1)) {
+      const nextTo = allIds.find((id) => id !== validFrom) || validFrom;
+      if (nextTo !== toAccId) {
+        setToAccId(nextTo);
+      }
+    }
+  }, [accounts, contacts, fromAccId, toAccId]);
 
   // New Account Form State
   const [accName, setAccName] = useState("");
@@ -1251,7 +1278,7 @@ export const Accounts: React.FC<AccountsProps> = ({
     .reduce((sum, a) => sum + a.balance, 0);
 
   const totalBankBalance = accounts
-    .filter((a) => a.type === "bank" || a.type === "credit_card")
+    .filter((a) => a.type === "bank" || a.type === "credit_card" || a.type === "pos")
     .reduce((sum, a) => sum + a.balance, 0);
 
   const portfolioChequesTotal = cheques
@@ -1504,7 +1531,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   const bankTransactions = transactions
     .filter((t) => {
       const acc = accounts.find((a) => a.id === t.accountId);
-      if (acc?.type !== "bank" && acc?.type !== "credit_card") return false;
+      if (acc?.type !== "bank" && acc?.type !== "credit_card" && acc?.type !== "pos") return false;
       if (selectedBankAccountId && t.accountId !== selectedBankAccountId) return false;
       if (bankFilterType === "income" && t.type !== "income" && t.type !== "collection") return false;
       if (bankFilterType === "expense" && t.type !== "expense" && t.type !== "payment") return false;
@@ -2695,6 +2722,41 @@ export const Accounts: React.FC<AccountsProps> = ({
                     </div>
                   </>
                 )}
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Güncel Hesap Bakiyesi ({editingAccount.currency || "TRY"})
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingAccount.balance}
+                    onChange={(e) =>
+                      setEditingAccount({
+                        ...editingAccount,
+                        balance: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-sm font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                >
+                  İptal / Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Değişiklikleri Kaydet</span>
+                </button>
               </div>
             </div>
           </form>
@@ -3364,6 +3426,17 @@ export const Accounts: React.FC<AccountsProps> = ({
                 </div>
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Açıklama / Notlar</label>
+                <input
+                  type="text"
+                  placeholder="Örn: Fatura tahsilatına istinaden alınan çek"
+                  value={chqNotes}
+                  onChange={(e) => setChqNotes(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+                />
+              </div>
+
               <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
                 <button
                   type="button"
@@ -3385,164 +3458,176 @@ export const Accounts: React.FC<AccountsProps> = ({
     );
   }
 
-      {/* FULL-PAGE DETAIL VIEW: ADD PROMISSORY NOTE */}
-      {isNoteModalOpen && (
-        <DetailPageLayout
-          title="Yeni Finansal Senet Kaydı"
-          subtitle="Müşteri seneti (alınan) veya borç seneti (verilen) portföy kaydı"
-          breadcrumbs={[
-            { label: "Finans Yönetimi", onClick: handleBackToList },
-            { label: "Çek & Senet Portföyü", onClick: handleBackToList },
-            { label: "Yeni Senet Kaydı", active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
-            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-              {ntType === "received" ? "Alınan Müşteri Seneti" : "Verilen Borç Seneti"}
-            </span>
-          }
-          headerIcon={<Stamp className="w-5 h-5 text-purple-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="submit"
-                form="add-note-form"
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-              >
-                <span>Senet Kaydını Oluştur</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
-            <form id="add-note-form" onSubmit={handleSaveNote} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Senet Tipi *</label>
-                  <select
-                    value={ntType}
-                    onChange={(e) => setNtType(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  >
-                    <option value="received">Müşteri Seneti (Alınan)</option>
-                    <option value="issued">Borç Seneti (Verilen)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Senet Numarası *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ör: SNT-2026-088"
-                    value={ntNumber}
-                    onChange={(e) => setNtNumber(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-slate-900"
-                  />
-                </div>
-              </div>
-
+  /* FULL-PAGE DETAIL VIEW: ADD PROMISSORY NOTE */
+  if (isNoteModalOpen) {
+    return (
+      <DetailPageLayout
+        title="Yeni Finansal Senet Kaydı"
+        subtitle="Müşteri senedi (alınan) veya borç senedi (verilen) portföy kaydı"
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          { label: "Çek & Senet Portföyü", onClick: handleBackToList },
+          { label: "Yeni Senet Kaydı", active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+            {ntType === "received" ? "Alınan Müşteri Senedi" : "Verilen Borç Senedi"}
+          </span>
+        }
+        headerIcon={<Stamp className="w-5 h-5 text-purple-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="add-note-form"
+              className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+            >
+              <span>Senet Kaydını Oluştur</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
+          <form id="add-note-form" onSubmit={handleSaveNote} className="space-y-4 text-xs">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">İlişkili Cari Hesap</label>
+                <label className="block font-bold text-slate-700 mb-1">Senet Tipi *</label>
                 <select
-                  value={ntContactId}
-                  onChange={(e) => setNtContactId(e.target.value)}
+                  value={ntType}
+                  onChange={(e) => setNtType(e.target.value as any)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
                 >
-                  <option value="">-- Cari Seçin --</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                  <option value="received">Müşteri Senedi (Alınan)</option>
+                  <option value="issued">Borç Senedi (Verilen)</option>
                 </select>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Borçlu / Keşideci Adı</label>
+                <label className="block font-bold text-slate-700 mb-1">Senet Numarası *</label>
                 <input
                   type="text"
-                  placeholder="ör: Mavi Derinlik Yayıncılık A.Ş."
-                  value={ntDebtorName}
-                  onChange={(e) => setNtDebtorName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+                  required
+                  placeholder="ör: SNT-2026-088"
+                  value={ntNumber}
+                  onChange={(e) => setNtNumber(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">İlişkili Cari Hesap</label>
+              <select
+                value={ntContactId}
+                onChange={(e) => setNtContactId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+              >
+                <option value="">-- Cari Seçin --</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Borçlu / Keşideci Adı</label>
+              <input
+                type="text"
+                placeholder="ör: Mavi Derinlik Yayıncılık A.Ş."
+                value={ntDebtorName}
+                onChange={(e) => setNtDebtorName(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Düzenleme Tarihi</label>
+                <input
+                  type="date"
+                  value={ntIssueDate}
+                  onChange={(e) => setNtIssueDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Düzenleme Tarihi</label>
-                  <input
-                    type="date"
-                    value={ntIssueDate}
-                    onChange={(e) => setNtIssueDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Vade Tarihi *</label>
+                <input
+                  type="date"
+                  required
+                  value={ntDueDate}
+                  onChange={(e) => setNtDueDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono font-bold"
+                />
+              </div>
+            </div>
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Vade Tarihi *</label>
-                  <input
-                    type="date"
-                    required
-                    value={ntDueDate}
-                    onChange={(e) => setNtDueDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono font-bold"
-                  />
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Senet Tutarı *</label>
+                <input
+                  type="number"
+                  required
+                  value={ntAmount}
+                  onChange={(e) => setNtAmount(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Senet Tutarı *</label>
-                  <input
-                    type="number"
-                    required
-                    value={ntAmount}
-                    onChange={(e) => setNtAmount(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Para Birimi</label>
-                  <select
-                    value={ntCurrency}
-                    onChange={(e) => setNtCurrency(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  >
-                    <option value="TRY">TRY (₺)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={handleBackToList}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold text-xs"
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Para Birimi</label>
+                <select
+                  value={ntCurrency}
+                  onChange={(e) => setNtCurrency(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
                 >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl cursor-pointer text-xs"
-                >
-                  Senet Kaydını Oluştur
-                </button>
+                  <option value="TRY">TRY (₺)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                </select>
               </div>
-            </form>
-          </div>
-        </DetailPageLayout>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Açıklama / Notlar</label>
+              <input
+                type="text"
+                placeholder="Örn: Vadeli satışa istinaden alınan senet"
+                value={ntNotes}
+                onChange={(e) => setNtNotes(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+              />
+            </div>
+
+            <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold text-xs"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl cursor-pointer text-xs"
+              >
+                Senet Kaydını Oluştur
+              </button>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
     );
   }
 
@@ -4082,1003 +4167,1128 @@ export const Accounts: React.FC<AccountsProps> = ({
     );
   }
 
-      {/* ENDORSEMENT (CİRO / CİRANTA) DETAIL VIEW */}
-      {isEndorseModalOpen && (
-        <DetailPageLayout
-          title="Portföydeki Çek / Seneti Ciro Et (Ciranta Yap)"
-          subtitle="Portföydeki kıymetli evrakı üçüncü bir cariye devredin ve ciro bordrosunu oluşturun"
-          breadcrumbs={[
-            { label: "Kasa & Banka", onClick: () => setIsEndorseModalOpen(false) },
-            { label: "Çek / Senet Ciro Et", active: true },
-          ]}
-          onBack={() => setIsEndorseModalOpen(false)}
-          statusBadge={
-            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
-              CİRO İŞLEMİ (CİRANTA)
-            </span>
-          }
-          headerIcon={<ArrowRightLeft className="w-5 h-5 text-indigo-600" />}
-          actions={
-            <div className="flex items-center gap-2">
+  /* ENDORSEMENT (CİRO / CİRANTA) DETAIL VIEW */
+  if (isEndorseModalOpen) {
+    return (
+      <DetailPageLayout
+        title="Portföydeki Çek / Senedi Ciro Et (Ciranta Yap)"
+        subtitle="Portföydeki kıymetli evrakı üçüncü bir cariye devredin ve ciro bordrosunu oluşturun"
+        breadcrumbs={[
+          { label: "Kasa & Banka", onClick: () => setIsEndorseModalOpen(false) },
+          { label: "Çek / Senet Ciro Et", active: true },
+        ]}
+        onBack={() => setIsEndorseModalOpen(false)}
+        statusBadge={
+          <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+            CİRO İŞLEMİ (CİRANTA)
+          </span>
+        }
+        headerIcon={<ArrowRightLeft className="w-5 h-5 text-indigo-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsEndorseModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="endorsement-form"
+              disabled={!endorseSelectedDocId || !endorseContactId}
+              className={`px-5 py-2 text-xs font-bold text-white rounded-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                endorseDocType === "cheque"
+                  ? "bg-indigo-600 hover:bg-indigo-700"
+                  : "bg-purple-600 hover:bg-purple-700"
+              }`}
+            >
+              Ciro İşlemini Onayla
+            </button>
+          </div>
+        }
+      >
+        <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
+          <form id="endorsement-form" onSubmit={handleSaveEndorsement} className="space-y-4 text-xs">
+            {/* Belge Tipi Seçimi (Çek / Senet) */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
               <button
                 type="button"
-                onClick={() => setIsEndorseModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+                onClick={() => {
+                  setEndorseDocType("cheque");
+                  const firstPortCheque = cheques.find((c) => c.status === "portfolio");
+                  setEndorseSelectedDocId(firstPortCheque ? firstPortCheque.id : "");
+                }}
+                className={`py-2 px-3 rounded-lg font-bold text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  endorseDocType === "cheque"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
               >
-                Vazgeç
+                <Banknote className="w-4 h-4" />
+                <span>Portföy Çekleri ({cheques.filter((c) => c.status === "portfolio").length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEndorseDocType("note");
+                  const firstPortNote = promissoryNotes.find((n) => n.status === "portfolio");
+                  setEndorseSelectedDocId(firstPortNote ? firstPortNote.id : "");
+                }}
+                className={`py-2 px-3 rounded-lg font-bold text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  endorseDocType === "note"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Building className="w-4 h-4" />
+                <span>Portföy Senetleri ({promissoryNotes.filter((n) => n.status === "portfolio").length})</span>
               </button>
             </div>
-          }
-        >
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
 
-            <form onSubmit={handleSaveEndorsement} className="space-y-4 text-xs">
-              {/* Belge Tipi Seçimi (Çek / Senet) */}
-              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEndorseDocType("cheque");
-                    const firstPortCheque = cheques.find((c) => c.status === "portfolio");
-                    setEndorseSelectedDocId(firstPortCheque ? firstPortCheque.id : "");
-                  }}
-                  className={`py-2 px-3 rounded-lg font-bold text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    endorseDocType === "cheque"
-                      ? "bg-indigo-600 text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <Banknote className="w-4 h-4" />
-                  <span>Portföy Çekleri ({cheques.filter((c) => c.status === "portfolio").length})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEndorseDocType("note");
-                    const firstPortNote = promissoryNotes.find((n) => n.status === "portfolio");
-                    setEndorseSelectedDocId(firstPortNote ? firstPortNote.id : "");
-                  }}
-                  className={`py-2 px-3 rounded-lg font-bold text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    endorseDocType === "note"
-                      ? "bg-purple-600 text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <Building className="w-4 h-4" />
-                  <span>Portföy Senetleri ({promissoryNotes.filter((n) => n.status === "portfolio").length})</span>
-                </button>
-              </div>
+            {/* Portföydeki Evrak Seçimi */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Ciro Edilecek {endorseDocType === "cheque" ? "Çek" : "Senet"} Seçin (Portföydekiler) *
+              </label>
 
-              {/* Portföydeki Evrak Seçimi */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Ciro Edilecek {endorseDocType === "cheque" ? "Çek" : "Senet"} Seçin (Portföydekiler) *
-                </label>
-
-                {endorseDocType === "cheque" ? (
-                  cheques.filter((c) => c.status === "portfolio").length > 0 ? (
-                    <select
-                      value={endorseSelectedDocId}
-                      onChange={(e) => setEndorseSelectedDocId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                      required
-                    >
-                      <option value="">-- Portföydeki Çeki Seçin --</option>
-                      {cheques
-                        .filter((c) => c.status === "portfolio")
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            [{c.chequeNumber}] {c.bankName} - Keşideci: {c.contactName} - Vade: {c.dueDate} - ₺
-                            {c.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                          </option>
-                        ))}
-                    </select>
-                  ) : (
-                    <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
-                      <span>Portföyünüzde henüz ciro edilebilir (aktif) müşteri çeki bulunmuyor.</span>
-                    </div>
-                  )
+              {endorseDocType === "cheque" ? (
+                cheques.filter((c) => c.status === "portfolio").length > 0 ? (
+                  <select
+                    value={endorseSelectedDocId}
+                    onChange={(e) => setEndorseSelectedDocId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                    required
+                  >
+                    <option value="">-- Portföydeki Çeki Seçin --</option>
+                    {cheques
+                      .filter((c) => c.status === "portfolio")
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          [{c.chequeNumber}] {c.bankName} - Keşideci: {c.contactName} - Vade: {c.dueDate} - ₺
+                          {c.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </option>
+                      ))}
+                  </select>
                 ) : (
-                  promissoryNotes.filter((n) => n.status === "portfolio").length > 0 ? (
-                    <select
-                      value={endorseSelectedDocId}
-                      onChange={(e) => setEndorseSelectedDocId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                      required
-                    >
-                      <option value="">-- Portföydeki Seneti Seçin --</option>
-                      {promissoryNotes
-                        .filter((n) => n.status === "portfolio")
-                        .map((n) => (
-                          <option key={n.id} value={n.id}>
-                            [{n.noteNumber}] Borçlu: {n.debtorName} ({n.contactName}) - Vade: {n.dueDate} - ₺
-                            {n.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                          </option>
-                        ))}
-                    </select>
-                  ) : (
-                    <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
-                      <span>Portföyünüzde henüz ciro edilebilir (aktif) müşteri seneti bulunmuyor.</span>
-                    </div>
-                  )
-                )}
-              </div>
+                  <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                    <span>Portföyünüzde henüz ciro edilebilir (aktif) müşteri çeki bulunmuyor.</span>
+                  </div>
+                )
+              ) : promissoryNotes.filter((n) => n.status === "portfolio").length > 0 ? (
+                <select
+                  value={endorseSelectedDocId}
+                  onChange={(e) => setEndorseSelectedDocId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                  required
+                >
+                  <option value="">-- Portföydeki Senedi Seçin --</option>
+                  {promissoryNotes
+                    .filter((n) => n.status === "portfolio")
+                    .map((n) => (
+                      <option key={n.id} value={n.id}>
+                        [{n.noteNumber}] Borçlu: {n.debtorName} ({n.contactName}) - Vade: {n.dueDate} - ₺
+                        {n.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </option>
+                    ))}
+                </select>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span>Portföyünüzde henüz ciro edilebilir (aktif) müşteri senedi bulunmuyor.</span>
+                </div>
+              )}
+            </div>
 
-              {/* Seçilen Evrak Detay Kartı */}
-              {endorseSelectedDocId && (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-slate-700">
-                  {endorseDocType === "cheque" ? (() => {
+            {/* Seçilen Evrak Detay Kartı */}
+            {endorseSelectedDocId && (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-slate-700">
+                {endorseDocType === "cheque" ? (
+                  (() => {
                     const doc = cheques.find((c) => c.id === endorseSelectedDocId);
                     if (!doc) return null;
                     return (
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
-                        <div><span className="text-slate-400">Çek No:</span> <strong className="text-slate-900 font-mono">{doc.chequeNumber}</strong></div>
-                        <div><span className="text-slate-400">Banka:</span> <strong className="text-slate-900">{doc.bankName}</strong></div>
-                        <div><span className="text-slate-400">Keşideci / Cari:</span> <strong className="text-slate-900">{doc.contactName}</strong></div>
-                        <div><span className="text-slate-400">Vade Tarihi:</span> <strong className="text-slate-900 font-mono">{doc.dueDate}</strong></div>
+                        <div>
+                          <span className="text-slate-400">Çek No:</span>{" "}
+                          <strong className="text-slate-900 font-mono">{doc.chequeNumber}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Banka:</span>{" "}
+                          <strong className="text-slate-900">{doc.bankName}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Keşideci / Cari:</span>{" "}
+                          <strong className="text-slate-900">{doc.contactName}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Vade Tarihi:</span>{" "}
+                          <strong className="text-slate-900 font-mono">{doc.dueDate}</strong>
+                        </div>
                         <div className="col-span-2 pt-1 border-t border-slate-200 flex justify-between items-center">
                           <span className="text-slate-500 font-bold">Çek Tutarı:</span>
-                          <span className="text-base font-black font-mono text-indigo-700">₺{doc.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                          <span className="text-base font-black font-mono text-indigo-700">
+                            ₺{doc.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
                         </div>
                       </div>
                     );
-                  })() : (() => {
+                  })()
+                ) : (
+                  (() => {
                     const doc = promissoryNotes.find((n) => n.id === endorseSelectedDocId);
                     if (!doc) return null;
                     return (
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
-                        <div><span className="text-slate-400">Senet No:</span> <strong className="text-slate-900 font-mono">{doc.noteNumber}</strong></div>
-                        <div><span className="text-slate-400">Borçlu:</span> <strong className="text-slate-900">{doc.debtorName}</strong></div>
-                        <div><span className="text-slate-400">Cari Hesap:</span> <strong className="text-slate-900">{doc.contactName}</strong></div>
-                        <div><span className="text-slate-400">Vade Tarihi:</span> <strong className="text-slate-900 font-mono">{doc.dueDate}</strong></div>
+                        <div>
+                          <span className="text-slate-400">Senet No:</span>{" "}
+                          <strong className="text-slate-900 font-mono">{doc.noteNumber}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Borçlu:</span>{" "}
+                          <strong className="text-slate-900">{doc.debtorName}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Cari Hesap:</span>{" "}
+                          <strong className="text-slate-900">{doc.contactName}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Vade Tarihi:</span>{" "}
+                          <strong className="text-slate-900 font-mono">{doc.dueDate}</strong>
+                        </div>
                         <div className="col-span-2 pt-1 border-t border-slate-200 flex justify-between items-center">
                           <span className="text-slate-500 font-bold">Senet Tutarı:</span>
-                          <span className="text-base font-black font-mono text-purple-700">₺{doc.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                          <span className="text-base font-black font-mono text-purple-700">
+                            ₺{doc.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
                         </div>
                       </div>
                     );
-                  })()}
-                </div>
-              )}
-
-              {/* Ciranta Edilecek Cari Hesap (Hedef Cari) */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Ciranta Edilecek Cari (Devredilecek Müşteri / Tedarikçi) *
-                </label>
-                <select
-                  value={endorseContactId}
-                  onChange={(e) => setEndorseContactId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                  required
-                >
-                  <option value="">-- Ciro Edilecek Cariyı Seçin --</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.type === "customer" ? "Müşteri" : "Tedarikçi"}) - Bakiye: ₺
-                      {c.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                    </option>
-                  ))}
-                </select>
+                  })()
+                )}
               </div>
+            )}
 
-              {/* Ciro Tarihi & Not */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Ciro Tarihi *</label>
-                  <input
-                    type="date"
-                    required
-                    value={endorseDate}
-                    onChange={(e) => setEndorseDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Ciro Notu / Açıklama</label>
-                  <input
-                    type="text"
-                    value={endorseNote}
-                    onChange={(e) => setEndorseNote(e.target.value)}
-                    placeholder="Örn: Fatura borcuna mahsuben"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsEndorseModalOpen(false)}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  disabled={!endorseSelectedDocId || !endorseContactId}
-                  className={`px-5 py-2 font-bold text-white rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                    endorseDocType === "cheque"
-                      ? "bg-indigo-600 hover:bg-indigo-700"
-                      : "bg-purple-600 hover:bg-purple-700"
-                  }`}
-                >
-                  Ciro İşlemini Onayla (Ciranta Et)
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-    );
-  }
-
-      {/* FULL-PAGE DETAIL VIEW: EDIT ACCOUNT (KASA / BANKA DÜZENLE) */}
-      {isEditAccountModalOpen && editingAccount && (
-        <DetailPageLayout
-          title="Finans Hesabını Düzenle"
-          subtitle={`${editingAccount.name} (${editingAccount.type === "bank" ? "Banka Hesabı" : "Nakit Kasa"})`}
-          breadcrumbs={[
-            { label: "Kasa & Banka", onClick: () => setIsEditAccountModalOpen(false) },
-            { label: "Hesap Düzenle", active: true },
-          ]}
-          onBack={() => setIsEditAccountModalOpen(false)}
-          statusBadge={
-            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
-              HESAP DÜZENLEME
-            </span>
-          }
-          headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsEditAccountModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+            {/* Ciranta Edilecek Cari Hesap (Hedef Cari) */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Ciranta Edilecek Cari (Devredilecek Müşteri / Tedarikçi) *
+              </label>
+              <select
+                value={endorseContactId}
+                onChange={(e) => setEndorseContactId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                required
               >
-                Vazgeç
-              </button>
+                <option value="">-- Ciro Edilecek Cariyi Seçin --</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.type === "customer" ? "Müşteri" : "Tedarikçi"}) - Bakiye: ₺
+                    {c.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </option>
+                ))}
+              </select>
             </div>
-          }
-        >
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (onUpdateAccount && editingAccount) {
-                  onUpdateAccount(editingAccount);
-                }
-                setIsEditAccountModalOpen(false);
-              }}
-              className="space-y-4 text-xs"
-            >
+            {/* Ciro Tarihi & Not */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Hesap / Kasa Adı *</label>
+                <label className="block font-bold text-slate-700 mb-1">Ciro Tarihi *</label>
                 <input
-                  type="text"
+                  type="date"
                   required
-                  value={editingAccount.name}
-                  onChange={(e) => setEditingAccount({ ...editingAccount, name: e.target.value })}
+                  value={endorseDate}
+                  onChange={(e) => setEndorseDate(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Hesap Türü</label>
-                  <select
-                    value={editingAccount.type}
-                    onChange={(e) =>
-                      setEditingAccount({
-                        ...editingAccount,
-                        type: e.target.value as "cash" | "bank" | "credit_card" | "pos",
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                  >
-                    <option value="cash">Nakit Kasa</option>
-                    <option value="bank">Banka Vadesiz Hesabı</option>
-                    <option value="credit_card">Kredi Kartı Hesabı</option>
-                    <option value="pos">POS Hesabı</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Para Birimi</label>
-                  <select
-                    value={editingAccount.currency || "TRY"}
-                    onChange={(e) => setEditingAccount({ ...editingAccount, currency: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                  >
-                    <option value="TRY">TRY (₺)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="GBP">GBP (£)</option>
-                  </select>
-                </div>
-              </div>
-
-              {editingAccount.type !== "cash" && (
-                <>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      Banka Hesap Adı / Alıcı Hesap Sahibi Ünvanı
-                    </label>
-                    <input
-                      type="text"
-                      value={editingAccount.accountHolderName ?? editingAccount.name ?? ""}
-                      onChange={(e) =>
-                        setEditingAccount({
-                          ...editingAccount,
-                          accountHolderName: e.target.value,
-                        })
-                      }
-                      placeholder="Örn: Şirket Ünvanı veya Banka Hesap Adı"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Banka Adı</label>
-                      <input
-                        type="text"
-                        value={editingAccount.bankName || ""}
-                        onChange={(e) => setEditingAccount({ ...editingAccount, bankName: e.target.value })}
-                        placeholder="Örn: Garanti BBVA"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Şube Adı / Kodu</label>
-                      <input
-                        type="text"
-                        value={editingAccount.branchName || ""}
-                        onChange={(e) => setEditingAccount({ ...editingAccount, branchName: e.target.value })}
-                        placeholder="Örn: Kadıköy Şubesi (123)"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">IBAN Numarası</label>
-                    <input
-                      type="text"
-                      value={editingAccount.iban || ""}
-                      onChange={(e) => setEditingAccount({ ...editingAccount, iban: e.target.value })}
-                      placeholder="TR00 0000 0000 0000 0000 0000 00"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-slate-900"
-                    />
-                  </div>
-                </>
-              )}
-
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Hesap Bakiyesi (₺)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editingAccount.balance}
-                  onChange={(e) =>
-                    setEditingAccount({ ...editingAccount, balance: parseFloat(e.target.value) || 0 })
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsEditAccountModalOpen(false)}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer"
-                >
-                  Değişiklikleri Kaydet
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-    );
-  }
-
-      {/* FULL-PAGE DETAIL VIEW: EDIT TRANSACTION (HAREKET DÜZENLE) */}
-      {isEditTxModalOpen && editingTransaction && (
-        <DetailPageLayout
-          title="Finans Hareketini / Fişi Düzenle"
-          subtitle={`${editingTransaction.title || "Fiş"} • Tarih: ${editingTransaction.date} • Tutar: ${formatCurrency(editingTransaction.amount, editingTransaction.currency)}`}
-          breadcrumbs={[
-            { label: "Kasa & Banka", onClick: () => setIsEditTxModalOpen(false) },
-            { label: "Fiş / Hareket Düzenle", active: true },
-          ]}
-          onBack={() => setIsEditTxModalOpen(false)}
-          statusBadge={
-            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
-              FİNANS HAREKETİ
-            </span>
-          }
-          headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsEditTxModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (onUpdateTransaction && editingTransaction) {
-                  onUpdateTransaction(editingTransaction);
-                }
-                setIsEditTxModalOpen(false);
-              }}
-              className="space-y-4 text-xs"
-            >
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tarih *</label>
-                  <input
-                    type="date"
-                    required
-                    value={editingTransaction.date}
-                    onChange={(e) =>
-                      setEditingTransaction({ ...editingTransaction, date: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Evrak / Makbuz / Dekont No</label>
-                  <input
-                    type="text"
-                    value={editingTransaction.documentNo || ""}
-                    onChange={(e) =>
-                      setEditingTransaction({ ...editingTransaction, documentNo: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">İşlem Türü</label>
-                  <select
-                    value={editingTransaction.type}
-                    onChange={(e) =>
-                      setEditingTransaction({
-                        ...editingTransaction,
-                        type: e.target.value as any,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                  >
-                    <option value="income">Tahsilat / Giriş (+)</option>
-                    <option value="expense">Ödeme / Çıkış (-)</option>
-                    <option value="collection">Cari Tahsilatı (+)</option>
-                    <option value="payment">Cari Ödemesi (-)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tutar (₺) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={editingTransaction.amount}
-                    onChange={(e) =>
-                      setEditingTransaction({
-                        ...editingTransaction,
-                        amount: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Açıklama / Not</label>
+                <label className="block font-bold text-slate-700 mb-1">Ciro Notu / Açıklama</label>
                 <input
                   type="text"
-                  value={editingTransaction.description || ""}
-                  onChange={(e) =>
-                    setEditingTransaction({ ...editingTransaction, description: e.target.value })
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsEditTxModalOpen(false)}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer"
-                >
-                  Değişiklikleri Kaydet
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-    );
-  }
-
-      {/* FULL-PAGE DETAIL VIEW: EDIT CHEQUE (ÇEK DÜZENLE) */}
-      {isEditChequeModalOpen && editingCheque && (
-        <DetailPageLayout
-          title="Çek Kaydını Düzenle"
-          subtitle={`Çek No: ${editingCheque.chequeNumber} • Vade: ${editingCheque.dueDate} • Tutar: ${formatCurrency(editingCheque.amount, editingCheque.currency)}`}
-          breadcrumbs={[
-            { label: "Kasa & Banka", onClick: () => setIsEditChequeModalOpen(false) },
-            { label: "Çek Düzenle", active: true },
-          ]}
-          onBack={() => setIsEditChequeModalOpen(false)}
-          statusBadge={
-            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
-              ÇEK BİLGİLERİ
-            </span>
-          }
-          headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsEditChequeModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (onUpdateCheque && editingCheque) {
-                  onUpdateCheque(editingCheque);
-                }
-                setIsEditChequeModalOpen(false);
-              }}
-              className="space-y-4 text-xs"
-            >
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Çek No *</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingCheque.chequeNumber}
-                    onChange={(e) =>
-                      setEditingCheque({ ...editingCheque, chequeNumber: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Çek Türü</label>
-                  <select
-                    value={editingCheque.type}
-                    onChange={(e) =>
-                      setEditingCheque({
-                        ...editingCheque,
-                        type: e.target.value as "received" | "issued",
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                  >
-                    <option value="received">Alınan Müşteri Çeki</option>
-                    <option value="issued">Verilen Borç / Firma Çeki</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Banka Adı</label>
-                  <input
-                    type="text"
-                    value={editingCheque.bankName}
-                    onChange={(e) =>
-                      setEditingCheque({ ...editingCheque, bankName: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Şube Adı</label>
-                  <input
-                    type="text"
-                    value={editingCheque.branchName || ""}
-                    onChange={(e) =>
-                      setEditingCheque({ ...editingCheque, branchName: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Vade Tarihi *</label>
-                  <input
-                    type="date"
-                    required
-                    value={editingCheque.dueDate}
-                    onChange={(e) =>
-                      setEditingCheque({ ...editingCheque, dueDate: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tutar (₺) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={editingCheque.amount}
-                    onChange={(e) =>
-                      setEditingCheque({ ...editingCheque, amount: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsEditChequeModalOpen(false)}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer"
-                >
-                  Değişiklikleri Kaydet
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-    );
-  }
-
-      {/* FULL-PAGE DETAIL VIEW: EDIT NOTE (SENET DÜZENLE) */}
-      {isEditNoteModalOpen && editingNote && (
-        <DetailPageLayout
-          title="Senet Kaydını Düzenle"
-          subtitle={`Senet No: ${editingNote.noteNumber} • Vade: ${editingNote.dueDate} • Tutar: ${formatCurrency(editingNote.amount, editingNote.currency)}`}
-          breadcrumbs={[
-            { label: "Kasa & Banka", onClick: () => setIsEditNoteModalOpen(false) },
-            { label: "Senet Düzenle", active: true },
-          ]}
-          onBack={() => setIsEditNoteModalOpen(false)}
-          statusBadge={
-            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
-              SENET BİLGİLERİ
-            </span>
-          }
-          headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsEditNoteModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (onUpdatePromissoryNote && editingNote) {
-                  onUpdatePromissoryNote(editingNote);
-                }
-                setIsEditNoteModalOpen(false);
-              }}
-              className="space-y-4 text-xs"
-            >
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Senet No *</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingNote.noteNumber}
-                    onChange={(e) =>
-                      setEditingNote({ ...editingNote, noteNumber: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Senet Türü</label>
-                  <select
-                    value={editingNote.type}
-                    onChange={(e) =>
-                      setEditingNote({
-                        ...editingNote,
-                        type: e.target.value as "received" | "issued",
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
-                  >
-                    <option value="received">Alınan Müşteri Senedi</option>
-                    <option value="issued">Verilen Borç Senedi</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Borçlu / Keşideci Adı</label>
-                  <input
-                    type="text"
-                    value={editingNote.debtorName || ""}
-                    onChange={(e) =>
-                      setEditingNote({ ...editingNote, debtorName: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Keşide / Düzenleme Tarihi</label>
-                  <input
-                    type="date"
-                    value={editingNote.issueDate || ""}
-                    onChange={(e) =>
-                      setEditingNote({ ...editingNote, issueDate: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Vade Tarihi *</label>
-                  <input
-                    type="date"
-                    required
-                    value={editingNote.dueDate}
-                    onChange={(e) => setEditingNote({ ...editingNote, dueDate: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tutar (₺) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={editingNote.amount}
-                    onChange={(e) =>
-                      setEditingNote({ ...editingNote, amount: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsEditNoteModalOpen(false)}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer"
-                >
-                  Değişiklikleri Kaydet
-                </button>
-              </div>
-            </form>
-          </div>
-        </DetailPageLayout>
-    );
-  }
-
-      {/* MODAL: BANK STATEMENT IMPORT */}
-      <BankStatementImportModal
-        isOpen={isBankStatementModalOpen}
-        onClose={() => setIsBankStatementModalOpen(false)}
-        accounts={accounts}
-        contacts={contacts}
-        transactions={transactions}
-        selectedBankAccountId={selectedBankAccountId}
-        onAddTransaction={onAddTransaction}
-      />
-
-      {/* FULL-PAGE DETAIL VIEW: UNIVERSAL FINANCE & TRANSACTION SHARE */}
-      {shareConfig.isOpen && (
-        <DetailPageLayout
-          title={shareConfig.title || "WhatsApp ile Paylaş"}
-          subtitle={shareConfig.subtitle || "Finans hesabı veya hareket bilgisi iletimi"}
-          breadcrumbs={[
-            { label: "Kasa & Banka", onClick: () => setShareConfig((prev) => ({ ...prev, isOpen: false })) },
-            { label: "WhatsApp Paylaşımı", active: true },
-          ]}
-          onBack={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
-          statusBadge={
-            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl uppercase">
-              WHATSAPP ENTEGRASYONU
-            </span>
-          }
-          headerIcon={<MessageSquare className="w-5 h-5 text-emerald-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={handleSendDirectWhatsApp}
-                disabled={isSendingWa}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-xs active:scale-95"
-              >
-                <Send className="w-4 h-4" />
-                <span>
-                  {isSendingWa
-                    ? "İletiliyor..."
-                    : shareWaMode === "direct"
-                    ? "WhatsApp ile Gönder"
-                    : "WhatsApp Web'de Aç"}
-                </span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl w-full mx-auto p-4 sm:p-6 shadow-sm space-y-4">
-
-            {/* Inputs & Modes */}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  WhatsApp Telefon Numarası
-                </label>
-                <input
-                  type="text"
-                  value={shareConfig.recipientPhone}
-                  onChange={(e) =>
-                    setShareConfig((prev) => ({ ...prev, recipientPhone: e.target.value }))
-                  }
-                  placeholder="Örn: 0532 123 45 67 veya 905321234567"
-                  className="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Gönderim Kanalı
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShareWaMode("direct")}
-                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
-                      shareWaMode === "direct"
-                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-extrabold text-emerald-800">⚡ WhatsApp API</span>
-                      {waConnectionStatus?.status === "connected" ? (
-                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-bold">
-                          Bağlı
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[9px] font-bold">
-                          QR Gerekli
-                        </span>
-                      )}
-                    </div>
-                    <span className="block text-[10px] font-normal text-slate-500 mt-1">
-                      Doğrudan mesaj iletir
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShareWaMode("web")}
-                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
-                      shareWaMode === "web"
-                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    🌐 WhatsApp Web
-                    <span className="block text-[10px] font-normal text-slate-500 mt-1">
-                      Web sohbet penceresini aç
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Message Payload Preview */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  İleti Metni
-                </label>
-                <textarea
-                  rows={5}
-                  value={shareConfig.textPayload}
-                  onChange={(e) =>
-                    setShareConfig((prev) => ({ ...prev, textPayload: e.target.value }))
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  value={endorseNote}
+                  onChange={(e) => setEndorseNote(e.target.value)}
+                  placeholder="Örn: Fatura borcuna mahsuben"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium text-slate-900"
                 />
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+            <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
               <button
                 type="button"
-                onClick={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
-                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 transition-colors cursor-pointer"
+                onClick={() => setIsEndorseModalOpen(false)}
+                className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
               >
                 İptal
               </button>
               <button
-                type="button"
-                onClick={handleSendDirectWhatsApp}
-                disabled={isSendingWa}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-md shadow-emerald-600/20"
+                type="submit"
+                disabled={!endorseSelectedDocId || !endorseContactId}
+                className={`px-5 py-2 font-bold text-white rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  endorseDocType === "cheque"
+                    ? "bg-indigo-600 hover:bg-indigo-700"
+                    : "bg-purple-600 hover:bg-purple-700"
+                }`}
               >
-                <Send className="w-4 h-4" />
-                <span>
-                  {isSendingWa
-                    ? "İletiliyor..."
-                    : shareWaMode === "direct"
-                    ? "🟢 WhatsApp ile Doğrudan Gönder"
-                    : "WhatsApp Web'de Aç"}
-                </span>
+                Ciro İşlemini Onayla (Ciranta Et)
               </button>
             </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  /* FULL-PAGE DETAIL VIEW: EDIT TRANSACTION (HAREKET DÜZENLE) */
+  if (isEditTxModalOpen && editingTransaction) {
+    return (
+      <DetailPageLayout
+        title="Finans Hareketini / Fişi Düzenle"
+        subtitle={`${editingTransaction.accountName || "Fiş"} • Tarih: ${editingTransaction.date} • Tutar: ${formatCurrency(editingTransaction.amount, editingTransaction.currency)}`}
+        breadcrumbs={[
+          { label: "Kasa & Banka", onClick: () => setIsEditTxModalOpen(false) },
+          { label: "Fiş / Hareket Düzenle", active: true },
+        ]}
+        onBack={() => setIsEditTxModalOpen(false)}
+        statusBadge={
+          <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+            FİNANS HAREKETİ
+          </span>
+        }
+        headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            {onDeleteTransaction && (
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteTransaction(editingTransaction.id);
+                  setIsEditTxModalOpen(false);
+                  setEditingTransaction(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Sil</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsEditTxModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="edit-tx-form"
+              className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Kaydet</span>
+            </button>
           </div>
-        </DetailPageLayout>
+        }
+      >
+        <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
+          <form
+            id="edit-tx-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (onUpdateTransaction && editingTransaction) {
+                onUpdateTransaction(editingTransaction);
+              }
+              setIsEditTxModalOpen(false);
+              setEditingTransaction(null);
+            }}
+            className="space-y-4 text-xs"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">İşlem Hesabı (Kasa / Banka) *</label>
+                <select
+                  value={editingTransaction.accountId}
+                  onChange={(e) => {
+                    const selectedAcc = accounts.find((a) => a.id === e.target.value);
+                    setEditingTransaction({
+                      ...editingTransaction,
+                      accountId: e.target.value,
+                      accountName: selectedAcc ? selectedAcc.name : editingTransaction.accountName,
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                >
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.type === "cash" ? "Kasa" : "Banka"})
+                    </option>
+                  ))}
+                  {!accounts.some((a) => a.id === editingTransaction.accountId) && (
+                    <option value={editingTransaction.accountId}>{editingTransaction.accountName}</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">İlgili Cari Hesap</label>
+                <select
+                  value={editingTransaction.contactId || ""}
+                  onChange={(e) => {
+                    const selectedC = contacts.find((c) => c.id === e.target.value);
+                    setEditingTransaction({
+                      ...editingTransaction,
+                      contactId: e.target.value || undefined,
+                      contactName: selectedC ? selectedC.name : undefined,
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                >
+                  <option value="">-- Cari Seçilmedi (Genel İşlem) --</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tarih *</label>
+                <input
+                  type="date"
+                  required
+                  value={editingTransaction.date}
+                  onChange={(e) =>
+                    setEditingTransaction({ ...editingTransaction, date: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Evrak / Makbuz / Dekont No</label>
+                <input
+                  type="text"
+                  value={editingTransaction.documentNo || ""}
+                  onChange={(e) =>
+                    setEditingTransaction({ ...editingTransaction, documentNo: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">İşlem Türü</label>
+                <select
+                  value={editingTransaction.type}
+                  onChange={(e) =>
+                    setEditingTransaction({
+                      ...editingTransaction,
+                      type: e.target.value as any,
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                >
+                  <option value="income">Tahsilat / Giriş (+)</option>
+                  <option value="expense">Ödeme / Çıkış (-)</option>
+                  <option value="collection">Cari Tahsilatı (+)</option>
+                  <option value="payment">Cari Ödemesi (-)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tutar (₺) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editingTransaction.amount}
+                  onChange={(e) =>
+                    setEditingTransaction({
+                      ...editingTransaction,
+                      amount: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">İşlem Kategorisi</label>
+              <input
+                type="text"
+                value={editingTransaction.category || ""}
+                onChange={(e) =>
+                  setEditingTransaction({ ...editingTransaction, category: e.target.value })
+                }
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-semibold text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Açıklama / Not</label>
+              <input
+                type="text"
+                value={editingTransaction.description || ""}
+                onChange={(e) =>
+                  setEditingTransaction({ ...editingTransaction, description: e.target.value })
+                }
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+              />
+            </div>
+
+            <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setIsEditTxModalOpen(false)}
+                className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer"
+              >
+                Değişiklikleri Kaydet
+              </button>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  /* FULL-PAGE DETAIL VIEW: EDIT CHEQUE (ÇEK DÜZENLE) */
+  if (isEditChequeModalOpen && editingCheque) {
+    return (
+      <DetailPageLayout
+        title="Çek Kaydını Düzenle"
+        subtitle={`Çek No: ${editingCheque.chequeNumber} • Vade: ${editingCheque.dueDate} • Tutar: ${formatCurrency(editingCheque.amount, editingCheque.currency)}`}
+        breadcrumbs={[
+          { label: "Kasa & Banka", onClick: () => setIsEditChequeModalOpen(false) },
+          { label: "Çek Düzenle", active: true },
+        ]}
+        onBack={() => setIsEditChequeModalOpen(false)}
+        statusBadge={
+          <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+            ÇEK BİLGİLERİ
+          </span>
+        }
+        headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            {onDeleteCheque && (
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteCheque(editingCheque.id);
+                  setIsEditChequeModalOpen(false);
+                  setEditingCheque(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Sil</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsEditChequeModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="edit-cheque-form"
+              className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Kaydet</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
+          <form
+            id="edit-cheque-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (onUpdateCheque && editingCheque) {
+                onUpdateCheque(editingCheque);
+              }
+              setIsEditChequeModalOpen(false);
+              setEditingCheque(null);
+            }}
+            className="space-y-4 text-xs"
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Çek No *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCheque.chequeNumber}
+                  onChange={(e) =>
+                    setEditingCheque({ ...editingCheque, chequeNumber: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Çek Türü</label>
+                <select
+                  value={editingCheque.type}
+                  onChange={(e) =>
+                    setEditingCheque({
+                      ...editingCheque,
+                      type: e.target.value as "received" | "issued",
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                >
+                  <option value="received">Alınan Müşteri Çeki</option>
+                  <option value="issued">Verilen Borç / Firma Çeki</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Banka Adı</label>
+                <input
+                  type="text"
+                  value={editingCheque.bankName}
+                  onChange={(e) =>
+                    setEditingCheque({ ...editingCheque, bankName: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Şube Adı</label>
+                <input
+                  type="text"
+                  value={editingCheque.branchName || ""}
+                  onChange={(e) =>
+                    setEditingCheque({ ...editingCheque, branchName: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">İlgili Cari Hesap</label>
+                <select
+                  value={editingCheque.contactId || ""}
+                  onChange={(e) => {
+                    const selectedC = contacts.find((c) => c.id === e.target.value);
+                    setEditingCheque({
+                      ...editingCheque,
+                      contactId: e.target.value || undefined,
+                      contactName: selectedC ? selectedC.name : editingCheque.contactName,
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                >
+                  <option value="">-- Cari Seçin --</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Keşideci / Düzenleyen</label>
+                <input
+                  type="text"
+                  value={editingCheque.drawerName || ""}
+                  onChange={(e) =>
+                    setEditingCheque({ ...editingCheque, drawerName: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Keşide Tarihi</label>
+                <input
+                  type="date"
+                  value={editingCheque.issueDate || ""}
+                  onChange={(e) =>
+                    setEditingCheque({ ...editingCheque, issueDate: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Vade Tarihi *</label>
+                <input
+                  type="date"
+                  required
+                  value={editingCheque.dueDate}
+                  onChange={(e) =>
+                    setEditingCheque({ ...editingCheque, dueDate: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tutar (₺) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editingCheque.amount}
+                  onChange={(e) =>
+                    setEditingCheque({ ...editingCheque, amount: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Çek Durumu</label>
+                <select
+                  value={editingCheque.status}
+                  onChange={(e) =>
+                    setEditingCheque({
+                      ...editingCheque,
+                      status: e.target.value as ChequeStatus,
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                >
+                  <option value="portfolio">Portföyde</option>
+                  <option value="collected">Tahsil Edildi</option>
+                  <option value="endorsed">Ciro Edildi</option>
+                  <option value="paid">Ödendi</option>
+                  <option value="bounced">Karşılıksız</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Açıklama / Notlar</label>
+              <input
+                type="text"
+                value={editingCheque.notes || ""}
+                onChange={(e) =>
+                  setEditingCheque({ ...editingCheque, notes: e.target.value })
+                }
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+              />
+            </div>
+
+            <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setIsEditChequeModalOpen(false)}
+                className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer"
+              >
+                Değişiklikleri Kaydet
+              </button>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  /* FULL-PAGE DETAIL VIEW: EDIT NOTE (SENET DÜZENLE) */
+  if (isEditNoteModalOpen && editingNote) {
+    return (
+      <DetailPageLayout
+        title="Senet Kaydını Düzenle"
+        subtitle={`Senet No: ${editingNote.noteNumber} • Vade: ${editingNote.dueDate} • Tutar: ${formatCurrency(editingNote.amount, editingNote.currency)}`}
+        breadcrumbs={[
+          { label: "Kasa & Banka", onClick: () => setIsEditNoteModalOpen(false) },
+          { label: "Senet Düzenle", active: true },
+        ]}
+        onBack={() => setIsEditNoteModalOpen(false)}
+        statusBadge={
+          <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1 rounded-xl">
+            SENET BİLGİLERİ
+          </span>
+        }
+        headerIcon={<Pencil className="w-5 h-5 text-indigo-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            {onDeletePromissoryNote && (
+              <button
+                type="button"
+                onClick={() => {
+                  onDeletePromissoryNote(editingNote.id);
+                  setIsEditNoteModalOpen(false);
+                  setEditingNote(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Sil</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsEditNoteModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="edit-note-form"
+              className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Kaydet</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl mx-auto p-6 shadow-sm space-y-4">
+          <form
+            id="edit-note-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (onUpdatePromissoryNote && editingNote) {
+                onUpdatePromissoryNote(editingNote);
+              }
+              setIsEditNoteModalOpen(false);
+              setEditingNote(null);
+            }}
+            className="space-y-4 text-xs"
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Senet No *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingNote.noteNumber}
+                  onChange={(e) =>
+                    setEditingNote({ ...editingNote, noteNumber: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Senet Türü</label>
+                <select
+                  value={editingNote.type}
+                  onChange={(e) =>
+                    setEditingNote({
+                      ...editingNote,
+                      type: e.target.value as "received" | "issued",
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                >
+                  <option value="received">Alınan Müşteri Senedi</option>
+                  <option value="issued">Verilen Borç Senedi</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">İlgili Cari Hesap</label>
+                <select
+                  value={editingNote.contactId || ""}
+                  onChange={(e) => {
+                    const selectedC = contacts.find((c) => c.id === e.target.value);
+                    setEditingNote({
+                      ...editingNote,
+                      contactId: e.target.value || undefined,
+                      contactName: selectedC ? selectedC.name : editingNote.contactName,
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                >
+                  <option value="">-- Cari Seçin --</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Borçlu / Keşideci Adı</label>
+                <input
+                  type="text"
+                  value={editingNote.debtorName || ""}
+                  onChange={(e) =>
+                    setEditingNote({ ...editingNote, debtorName: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Keşide / Düzenleme Tarihi</label>
+                <input
+                  type="date"
+                  value={editingNote.issueDate || ""}
+                  onChange={(e) =>
+                    setEditingNote({ ...editingNote, issueDate: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Vade Tarihi *</label>
+                <input
+                  type="date"
+                  required
+                  value={editingNote.dueDate}
+                  onChange={(e) => setEditingNote({ ...editingNote, dueDate: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tutar (₺) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editingNote.amount}
+                  onChange={(e) =>
+                    setEditingNote({ ...editingNote, amount: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Senet Durumu</label>
+                <select
+                  value={editingNote.status}
+                  onChange={(e) =>
+                    setEditingNote({
+                      ...editingNote,
+                      status: e.target.value as PromissoryNoteStatus,
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900 cursor-pointer"
+                >
+                  <option value="portfolio">Portföyde</option>
+                  <option value="collected">Tahsil Edildi</option>
+                  <option value="endorsed">Ciro Edildi</option>
+                  <option value="paid">Ödendi</option>
+                  <option value="protested">Protestolu</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Açıklama / Notlar</label>
+              <input
+                type="text"
+                value={editingNote.notes || ""}
+                onChange={(e) =>
+                  setEditingNote({ ...editingNote, notes: e.target.value })
+                }
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+              />
+            </div>
+
+            <div className="pt-3 flex justify-end gap-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setIsEditNoteModalOpen(false)}
+                className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer"
+              >
+                Değişiklikleri Kaydet
+              </button>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
+    );
+  }
+
+  /* FULL-PAGE DETAIL VIEW: UNIVERSAL FINANCE & TRANSACTION SHARE */
+  if (shareConfig.isOpen) {
+    return (
+      <DetailPageLayout
+        title={shareConfig.title || "WhatsApp ile Paylaş"}
+        subtitle={shareConfig.subtitle || "Finans hesabı veya hareket bilgisi iletimi"}
+        breadcrumbs={[
+          { label: "Kasa & Banka", onClick: () => setShareConfig((prev) => ({ ...prev, isOpen: false })) },
+          { label: "WhatsApp Paylaşımı", active: true },
+        ]}
+        onBack={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
+        statusBadge={
+          <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl uppercase">
+            WHATSAPP ENTEGRASYONU
+          </span>
+        }
+        headerIcon={<MessageSquare className="w-5 h-5 text-emerald-600" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              onClick={handleSendDirectWhatsApp}
+              disabled={isSendingWa}
+              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-xs active:scale-95"
+            >
+              <Send className="w-4 h-4" />
+              <span>
+                {isSendingWa
+                  ? "İletiliyor..."
+                  : shareWaMode === "direct"
+                  ? "WhatsApp ile Gönder"
+                  : "WhatsApp Web'de Aç"}
+              </span>
+            </button>
+          </div>
+        }
+      >
+        <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-2xl w-full mx-auto p-4 sm:p-6 shadow-sm space-y-4">
+          {/* Inputs & Modes */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                WhatsApp Telefon Numarası
+              </label>
+              <input
+                type="text"
+                value={shareConfig.recipientPhone}
+                onChange={(e) =>
+                  setShareConfig((prev) => ({ ...prev, recipientPhone: e.target.value }))
+                }
+                placeholder="Örn: 0532 123 45 67 veya 905321234567"
+                className="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Gönderim Kanalı
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShareWaMode("direct")}
+                  className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
+                    shareWaMode === "direct"
+                      ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
+                      : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-emerald-800">⚡ WhatsApp API</span>
+                    {waConnectionStatus?.status === "connected" ? (
+                      <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-bold">
+                        Bağlı
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[9px] font-bold">
+                        QR Gerekli
+                      </span>
+                    )}
+                  </div>
+                  <span className="block text-[10px] font-normal text-slate-500 mt-1">
+                    Doğrudan mesaj iletir
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShareWaMode("web")}
+                  className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
+                    shareWaMode === "web"
+                      ? "bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500 shadow-xs"
+                      : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  🌐 WhatsApp Web
+                  <span className="block text-[10px] font-normal text-slate-500 mt-1">
+                    Web sohbet penceresini aç
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Message Payload Preview */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                İleti Metni
+              </label>
+              <textarea
+                rows={5}
+                value={shareConfig.textPayload}
+                onChange={(e) =>
+                  setShareConfig((prev) => ({ ...prev, textPayload: e.target.value }))
+                }
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setShareConfig((prev) => ({ ...prev, isOpen: false }))}
+              className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              İptal
+            </button>
+            <button
+              type="button"
+              onClick={handleSendDirectWhatsApp}
+              disabled={isSendingWa}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-md shadow-emerald-600/20"
+            >
+              <Send className="w-4 h-4" />
+              <span>
+                {isSendingWa
+                  ? "İletiliyor..."
+                  : shareWaMode === "direct"
+                  ? "🟢 WhatsApp ile Doğrudan Gönder"
+                  : "WhatsApp Web'de Aç"}
+              </span>
+            </button>
+          </div>
+        </div>
+      </DetailPageLayout>
     );
   }
 
@@ -7255,28 +7465,29 @@ export const Accounts: React.FC<AccountsProps> = ({
                                   <MessageCircle className="w-3.5 h-3.5" />
                                 </button>
 
-                                {c.status === "portfolio" ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEndorseModal("cheque", c.id)}
-                                    className="p-1.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
-                                    title="Bu Çeki Ciro Et"
-                                  >
-                                    <ArrowRightLeft className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (onUpdateChequeStatus) {
-                                        onUpdateChequeStatus(c.id, c.type === "received" ? "collected" : "paid");
-                                      }
-                                    }}
-                                    className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
-                                    title={c.type === "received" ? "Tahsil Edildi Olarak İşle" : "Ödendi Olarak İşle"}
-                                  >
-                                    <CreditCard className="w-3.5 h-3.5" />
-                                  </button>
+                                {c.status === "portfolio" && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEndorseModal("cheque", c.id)}
+                                      className="p-1.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
+                                      title="Bu Çeki Ciro Et"
+                                    >
+                                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (onUpdateChequeStatus) {
+                                          onUpdateChequeStatus(c.id, c.type === "received" ? "collected" : "paid");
+                                        }
+                                      }}
+                                      className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
+                                      title={c.type === "received" ? "Tahsil Edildi Olarak İşle" : "Ödendi Olarak İşle"}
+                                    >
+                                      <CreditCard className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
                                 )}
 
                                 <select
@@ -7759,28 +7970,29 @@ export const Accounts: React.FC<AccountsProps> = ({
                                   <MessageCircle className="w-3.5 h-3.5" />
                                 </button>
 
-                                {n.status === "portfolio" ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEndorseModal("note", n.id)}
-                                    className="p-1.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
-                                    title="Bu Senedi Ciro Et"
-                                  >
-                                    <ArrowRightLeft className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (onUpdateNoteStatus) {
-                                        onUpdateNoteStatus(n.id, n.type === "received" ? "collected" : "paid");
-                                      }
-                                    }}
-                                    className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
-                                    title={n.type === "received" ? "Tahsil Edildi Olarak İşle" : "Ödendi Olarak İşle"}
-                                  >
-                                    <CreditCard className="w-3.5 h-3.5" />
-                                  </button>
+                                {n.status === "portfolio" && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEndorseModal("note", n.id)}
+                                      className="p-1.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
+                                      title="Bu Senedi Ciro Et"
+                                    >
+                                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (onUpdateNoteStatus) {
+                                          onUpdateNoteStatus(n.id, n.type === "received" ? "collected" : "paid");
+                                        }
+                                      }}
+                                      className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
+                                      title={n.type === "received" ? "Tahsil Edildi Olarak İşle" : "Ödendi Olarak İşle"}
+                                    >
+                                      <CreditCard className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
                                 )}
 
                                 <select
@@ -8227,6 +8439,19 @@ export const Accounts: React.FC<AccountsProps> = ({
                                   onClick={() => {
                                     setTransferAmount(tx.amount);
                                     setTransferDesc(`Virman Tekrarı: ${tx.description || ""}`);
+                                    const pairedTx = tx.linkedTransactionId
+                                      ? transactions.find((t) => t.id === tx.linkedTransactionId)
+                                      : undefined;
+                                    const outTx = tx.type === "expense" ? tx : pairedTx;
+                                    const inTx = tx.type === "income" ? tx : pairedTx;
+                                    if (outTx) {
+                                      const outId = outTx.contactId || outTx.accountId;
+                                      if (outId && outId !== "virman_cari_bridge") setFromAccId(outId);
+                                    }
+                                    if (inTx) {
+                                      const inId = inTx.contactId || inTx.accountId;
+                                      if (inId && inId !== "virman_cari_bridge") setToAccId(inId);
+                                    }
                                     window.scrollTo({ top: 0, behavior: "smooth" });
                                   }}
                                   className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
@@ -8330,7 +8555,16 @@ export const Accounts: React.FC<AccountsProps> = ({
         </div>
       )}
 
-
+      {/* MODAL: BANK STATEMENT IMPORT */}
+      <BankStatementImportModal
+        isOpen={isBankStatementModalOpen}
+        onClose={() => setIsBankStatementModalOpen(false)}
+        accounts={accounts}
+        contacts={contacts}
+        transactions={transactions}
+        selectedBankAccountId={selectedBankAccountId}
+        onAddTransaction={onAddTransaction}
+      />
     </div>
   );
 };

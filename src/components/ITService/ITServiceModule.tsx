@@ -976,7 +976,8 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
   }
 
       {/* BT SERVİS FATURALANDIRMA MODALI */}
-      {isInvoicingModalOpen && invoicingRecord && (
+      if (isInvoicingModalOpen && invoicingRecord) {
+        return (
         <ServiceInvoicingModal
           isOpen={isInvoicingModalOpen}
           onClose={() => {
@@ -1001,11 +1002,11 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
             handleOpenDeliveryModal(record as ItServiceRecord);
           }}
         />
-    );
-  }
+        );
+      }
 
-  if (isWhatsAppModalOpen && whatsAppRecord) {
-    return (
+      if (isWhatsAppModalOpen && whatsAppRecord) {
+        return (
         <ServiceWhatsAppModal
           isOpen={isWhatsAppModalOpen}
           onClose={() => {
@@ -1017,11 +1018,12 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
           defaultTemplateType={whatsAppTemplateType}
           companySettings={companySettings}
         />
-    );
-  }
+        );
+      }
 
       {/* ÜRÜN & BT CİHAZ TESLİM TUTANAĞI MODALI */}
-      {isDeliveryModalOpen && deliveryRecord && (
+      if (isDeliveryModalOpen && deliveryRecord) {
+        return (
         <ServiceDeliveryModal
           isOpen={isDeliveryModalOpen}
           onClose={() => {
@@ -1041,8 +1043,8 @@ export const ITServiceModule: React.FC<ITServiceModuleProps> = ({
           }}
           onMarkDelivered={handleMarkDelivered}
         />
-    );
-  }
+        );
+      }
 
 
   return (

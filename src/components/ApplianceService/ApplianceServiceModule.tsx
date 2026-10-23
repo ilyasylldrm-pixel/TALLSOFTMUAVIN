@@ -1135,7 +1135,8 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   }
 
       {/* FULL-PAGE DETAIL VIEW: 🖨️ A4 STANDART SERVİS & TESLİM TUTANAĞI */}
-      {printRecord && (
+      if (printRecord) {
+        return (
         <DetailPageLayout
           title="Resmi Servis Formu & Teslim Tutanağı"
           subtitle={`${printRecord.serviceNo} • ${printRecord.contactName} • ${printRecord.brand} ${printRecord.model}`}
@@ -1560,10 +1561,12 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
             </div>
           </div>
         </DetailPageLayout>
-      )}
+        );
+      }
 
       {/* FULL-PAGE DETAIL VIEW: SERVİS KAYDI EKLEME / DÜZENLEME */}
-      {isModalOpen && (
+      if (isModalOpen) {
+        return (
         <DetailPageLayout
           title={editingRecord ? `Servis İş Emrini Düzenle - ${editingRecord.serviceNo}` : "Yeni Servis & Saha İş Emri Aç"}
           subtitle="Beyaz Eşya, İklimlendirme (Klima/Kombi) ve Küçük Ev Aletleri Servis Kaydı"
@@ -2173,7 +2176,8 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
   }
 
       {/* EV ALETLERİ & KLİMA SERVİS FATURALANDIRMA MODALI */}
-      {isInvoicingModalOpen && invoicingRecord && (
+      if (isInvoicingModalOpen && invoicingRecord) {
+        return (
         <ServiceInvoicingModal
           isOpen={isInvoicingModalOpen}
           onClose={() => {
@@ -2198,11 +2202,12 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
             handleOpenDeliveryModal(record as ApplianceServiceRecord);
           }}
         />
-    );
-  }
+        );
+      }
 
       {/* WHATSAPP BİLGİLENDİRME MODALI */}
-      {isWhatsAppModalOpen && whatsAppRecord && (
+      if (isWhatsAppModalOpen && whatsAppRecord) {
+        return (
         <ServiceWhatsAppModal
           isOpen={isWhatsAppModalOpen}
           onClose={() => {
@@ -2214,11 +2219,12 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
           defaultTemplateType={whatsAppTemplateType}
           companySettings={companySettings}
         />
-    );
-  }
+        );
+      }
 
       {/* ÜRÜN & CİHAZ TESLİM TUTANAĞI MODALI */}
-      {isDeliveryModalOpen && deliveryRecord && (
+      if (isDeliveryModalOpen && deliveryRecord) {
+        return (
         <ServiceDeliveryModal
           isOpen={isDeliveryModalOpen}
           onClose={() => {
@@ -2238,8 +2244,8 @@ export const ApplianceServiceModule: React.FC<ApplianceServiceModuleProps> = ({
           }}
           onMarkDelivered={handleMarkDelivered}
         />
-    );
-  }
+        );
+      }
 
 
   return (

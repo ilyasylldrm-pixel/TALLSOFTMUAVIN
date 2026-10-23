@@ -3499,7 +3499,8 @@ export const Contacts: React.FC<ContactsProps> = ({
   }
 
       {/* EMAIL SHARE MODAL */}
-      {shareType === "email" && selectedLedgerContact && (
+      if (shareType === "email" && selectedLedgerContact) {
+        return (
         <EmailExportModal
           isOpen={shareType === "email"}
           onClose={() => setShareType(null)}
@@ -3532,8 +3533,8 @@ export const Contacts: React.FC<ContactsProps> = ({
             },
           ]}
         />
-    );
-  }
+        );
+      }
 
   if (actionModalType && selectedActionContact) {
     return (

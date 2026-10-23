@@ -372,7 +372,11 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
                       <p><strong>Onay Kodu:</strong> GİB-2026-98402910</p>
                     </div>
 
-                    <button className="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold border border-slate-300 py-2 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold border border-slate-300 py-2 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
                       <Download className="w-3.5 h-3.5 text-red-600" /> e-Vergi Levhasını PDF İndir
                     </button>
                   </div>
@@ -457,7 +461,11 @@ export const GibPortalModal: React.FC<GibPortalModalProps> = ({
                       </div>
                     </div>
 
-                    <button className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                    >
                       <Printer className="w-3.5 h-3.5" /> Resmi Belgeyi Yazdır
                     </button>
                   </div>

@@ -928,7 +928,8 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
   }
 
       {/* SERVİS FATURALANDIRMA MODALI */}
-      {isInvoicingModalOpen && invoicingRecord && (
+      if (isInvoicingModalOpen && invoicingRecord) {
+        return (
         <ServiceInvoicingModal
           isOpen={isInvoicingModalOpen}
           onClose={() => {
@@ -953,8 +954,8 @@ export const AutoServiceModule: React.FC<AutoServiceModuleProps> = ({
             handleOpenDeliveryModal(record as AutoServiceRecord);
           }}
         />
-    );
-  }
+        );
+      }
 
   if (isWhatsAppModalOpen && whatsAppRecord) {
     return (

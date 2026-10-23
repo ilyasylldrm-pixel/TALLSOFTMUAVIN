@@ -670,6 +670,7 @@ export const WhatsAppTemplateLibrary: React.FC<WhatsAppTemplateLibraryProps> = (
       {/* FULL-PAGE DETAIL VIEW: Yeni Şablon Oluştur / Düzenle                       */}
       {/* ========================================================================= */}
       {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-50 overflow-y-auto">
         <DetailPageLayout
           title={editingTemplate ? 'Şablonu Düzenle' : 'Yeni Hızlı Mesaj Şablonu Oluştur'}
           subtitle="Özelleştirilebilir dinamik değişkenlerle parametrik WhatsApp mesajı tasarlayın"
@@ -933,6 +934,7 @@ export const WhatsAppTemplateLibrary: React.FC<WhatsAppTemplateLibraryProps> = (
             </form>
           </div>
         </DetailPageLayout>
+        </div>
       )}
     </div>
   );

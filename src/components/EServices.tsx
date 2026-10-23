@@ -1399,6 +1399,15 @@ export const EServices: React.FC<EServicesProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenAddTebligat}
+                    className="text-xs font-bold text-white px-3.5 py-1.5 rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer hover:brightness-110"
+                    style={{ backgroundColor: theme.primaryColor }}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Yeni e-Tebligat Kaydet
+                  </button>
+
                   <a
                     href="https://dijital.gib.gov.tr"
                     target="_blank"
@@ -1736,6 +1745,297 @@ export const EServices: React.FC<EServicesProps> = ({
         companySettings={form}
         onStatusChange={handleTebligatStatusChange}
       />
+
+      {/* Yeni Şube / Depo SGK Şifresi Ekleme Modalı */}
+      {isAddWpModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Yeni Şube / Depo SGK İşyeri Ekle</h3>
+                  <p className="text-[11px] text-slate-500">Tanımlı şube/depolarınızdan seçin veya özel birim adı girin</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseAddWp}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {(unlinkedBranches.length > 0 || unlinkedWarehouses.length > 0) && (
+              <div className="space-y-2">
+                <label className="block font-bold text-slate-700">Kayıtlı Şube veya Depodan Hızlı Ekle</label>
+                <div className="flex flex-wrap gap-2">
+                  {unlinkedBranches.map((br) => (
+                    <button
+                      key={br.id}
+                      type="button"
+                      onClick={() => handleAddWorkplace(br.name, "branch", br.id)}
+                      className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Building className="w-3.5 h-3.5" />
+                      <span>+ {br.name}</span>
+                    </button>
+                  ))}
+                  {unlinkedWarehouses.map((wh) => (
+                    <button
+                      key={wh.id}
+                      type="button"
+                      onClick={() => handleAddWorkplace(wh.name, "warehouse", wh.id)}
+                      className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <WarehouseIcon className="w-3.5 h-3.5" />
+                      <span>+ {wh.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3 pt-2 border-t border-slate-100">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">İşyeri / Şube / Depo Adı *</label>
+                <input
+                  type="text"
+                  value={customWpName}
+                  onChange={(e) => setCustomWpName(e.target.value)}
+                  placeholder="Örn: Ankara Bölge Şubesi / Gebze Lojistik Depo"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white font-semibold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Birim Türü</label>
+                <select
+                  value={customWpType}
+                  onChange={(e) => setCustomWpType(e.target.value as "branch" | "warehouse" | "other")}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white font-semibold text-slate-900"
+                >
+                  <option value="branch">🏢 Şube İşyeri</option>
+                  <option value="warehouse">📦 Depo / Antrepo</option>
+                  <option value="other">📍 Diğer İşyeri / Şantiye</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleCloseAddWp}
+                className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddWorkplace(customWpName, customWpType)}
+                className="px-5 py-2 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+              >
+                İşyerini Listeye Ekle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Yeni e-Tebligat Kaydetme Modalı */}
+      {isAddTebligatModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-xl w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#eaedff] border border-[#dae2fd] text-[#0f6bae] flex items-center justify-center shrink-0">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Yeni Resmi e-Tebligat Kaydet</h3>
+                  <p className="text-[11px] text-slate-500">GİB veya SGK üzerinden gelen tebligatı sisteme işleyin</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseAddTebligat}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tebliğ Eden Kurum *</label>
+                <select
+                  value={newTebligat.authority || "GIB"}
+                  onChange={(e) => setNewTebligat({ ...newTebligat, authority: e.target.value as "GIB" | "SGK" })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-semibold"
+                >
+                  <option value="GIB">🏛️ GİB • Vergi Dairesi</option>
+                  <option value="SGK">🛡️ SGK • Sosyal Güvenlik Kurumu</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Evrak Türü *</label>
+                <input
+                  type="text"
+                  value={newTebligat.documentType || ""}
+                  onChange={(e) => setNewTebligat({ ...newTebligat, documentType: e.target.value })}
+                  placeholder="Örn: Vergi/Ceza İhbarnamesi, Ödeme Emri"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-semibold"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block font-bold text-slate-700 mb-1">Gönderen Birim / Vergi Dairesi / SGK Müdürlüğü *</label>
+                <input
+                  type="text"
+                  value={newTebligat.senderUnit || ""}
+                  onChange={(e) => setNewTebligat({ ...newTebligat, senderUnit: e.target.value })}
+                  placeholder="Örn: Kadıköy Vergi Dairesi Müdürlüğü"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-semibold"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block font-bold text-slate-700 mb-1">Tebligat Konusu / Başlığı *</label>
+                <input
+                  type="text"
+                  value={newTebligat.documentTitle || ""}
+                  onChange={(e) => setNewTebligat({ ...newTebligat, documentTitle: e.target.value })}
+                  placeholder="Örn: 2026/05 Dönemi KDV Beyannamesi İzaha Davet Yazısı"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-semibold"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Barkod / Belge No</label>
+                <input
+                  type="text"
+                  value={newTebligat.barcodeNumber || ""}
+                  onChange={(e) => setNewTebligat({ ...newTebligat, barcodeNumber: e.target.value })}
+                  placeholder="Otomatik veya resmi barkod"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tebliğ Tutarı (₺)</label>
+                <input
+                  type="number"
+                  value={newTebligat.amount || 0}
+                  onChange={(e) => setNewTebligat({ ...newTebligat, amount: Number(e.target.value) })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tebellüğ Tarihi</label>
+                <input
+                  type="date"
+                  value={newTebligat.deliveryDate || ""}
+                  onChange={(e) => setNewTebligat({ ...newTebligat, deliveryDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Yasal Son İtiraz / Ödeme Tarihi</label>
+                <input
+                  type="date"
+                  value={newTebligat.legalDeadlineDate || ""}
+                  onChange={(e) => setNewTebligat({ ...newTebligat, legalDeadlineDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block font-bold text-slate-700 mb-1">Özet & Notlar</label>
+                <textarea
+                  rows={2}
+                  value={newTebligat.contentSummary || ""}
+                  onChange={(e) => setNewTebligat({ ...newTebligat, contentSummary: e.target.value })}
+                  placeholder="Tebligat içeriği hakkında kısa açıklama..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleCloseAddTebligat}
+                className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveNewTebligat}
+                className="px-5 py-2 rounded-xl font-bold text-white shadow-xs cursor-pointer"
+                style={{ backgroundColor: theme.primaryColor }}
+              >
+                Tebligatı Kaydet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Muavin Tarayıcı Eklentisi Kurulum ve Senkronizasyon Modalı */}
+      {isExtensionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-slate-900 text-amber-400 flex items-center justify-center shrink-0">
+                  <Zap className="w-5 h-5 fill-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Muavin Otomatik Giriş Eklentisi (Chrome / Edge)</h3>
+                  <p className="text-[11px] text-slate-500">GİB, SGK ve e-Devlet portallarına tek tıkla otomatik şifre doldurma</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExtensionModalOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-slate-700 leading-relaxed">
+              <div className="font-extrabold text-slate-900">Kurulum Adımları:</div>
+              <ol className="list-decimal list-inside space-y-1.5 text-[11px]">
+                <li>Aşağıdaki <strong>"Şifreleri Eklentiye Senkronize Et"</strong> butonuna tıklayarak güncel kurum şifrelerinizi aktarın.</li>
+                <li>Tarayıcınızda <code>chrome://extensions</code> adresini açıp sağ üstten <strong>Geliştirici Modu</strong>'nu etkinleştirin.</li>
+                <li>Proje dizinindeki <code>chrome-extension</code> klasörünü <strong>"Paketlenmemiş öğe yükle"</strong> ile seçin.</li>
+              </ol>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  syncToExtension(form);
+                  setIsSaved(true);
+                  setTimeout(() => setIsSaved(false), 2500);
+                }}
+                className="px-4 py-2.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Zap className="w-4 h-4" />
+                <span>Şifreleri Eklentiye Senkronize Et</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsExtensionModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

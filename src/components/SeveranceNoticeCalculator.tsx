@@ -821,6 +821,7 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
 
       {/* YAZDIRILABİLİR RESMİ TAZMİNAT VE İBRANAME TAM SAYFA GÖRÜNÜMÜ */}
       {isPrintModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-50 overflow-y-auto">
         <DetailPageLayout
           title="Resmi Kıdem & İhbar Tazminatı Bordrosu / İbraname"
           subtitle={`${selectedEmp?.fullName || "Personel"} • Çıkış Tarihi: ${endDate} • Net Ödenecek Toplam: ${formatTRY(calculation.grandNetPayable)}`}
@@ -989,6 +990,7 @@ export const SeveranceNoticeCalculator: React.FC<SeveranceNoticeCalculatorProps>
           </div>
         </div>
       </DetailPageLayout>
+        </div>
       )}
     </div>
   );

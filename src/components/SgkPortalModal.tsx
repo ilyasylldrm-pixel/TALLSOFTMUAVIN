@@ -762,7 +762,11 @@ Sistem Şifresi: ${currentWp.systemPassword || "-"}
                       </div>
                     </div>
 
-                    <button className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                    >
                       <Printer className="w-3.5 h-3.5" /> Yazdır / PDF
                     </button>
                   </div>
